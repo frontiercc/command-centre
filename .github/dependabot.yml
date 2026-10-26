@@ -3,7 +3,7 @@
 # open-pull-requests-limit: 0 turns off routine version-update pull requests.
 # "Dependabot security updates" is switched on in the repository's settings,
 # so a known advisory gets a pull request that must pass CI before it can be
-# merged. The ignore rules below apply to both.
+# merged.
 version: 2
 updates:
   - package-ecosystem: npm
