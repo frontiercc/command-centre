@@ -1,0 +1,140 @@
+# PostgreSQL is the only database. `docker compose up -d` starts the Hub, the
+# collector and a bundled postgres:16 service, with no external database
+# needed. Data persists in the `ccc-pg-data` volume.
+#
+# To use an external PostgreSQL instead, change DATABASE_URL in the hub service
+# below (it is set here, not read from .env). TLS to it is then on and the
+# certificate verified; set CCC_PG_SSL in .env only to change that.
+services:
+  postgres:
+    image: postgres:16
+    container_name: ccc-postgres
+    environment:
+      - POSTGRES_USER=ccc
+      - POSTGRES_PASSWORD=${CCC_PG_PASSWORD:-ccc-local-dev}
+      - POSTGRES_DB=ccc
+    volumes:
+      - ccc-pg-data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ccc -d ccc"]
+      interval: 5s
+      timeout: 5s
+      retries: 12
+      start_period: 5s
+    restart: unless-stopped
+
+  hub:
+    build: .
+    container_name: ccc-hub
+    # Reachable from this computer only. For your organisation, put a reverse
+    # proxy with HTTPS in front of the Hub and the collector (README, journey 2).
+    ports:
+      - "127.0.0.1:3001:3000"
+    environment:
+      # Claude API key: enter it in the Hub under Admin → Access & Keys. A value here
+      # is used only when nothing is saved there.
+      # Leave blank to run without AI features (dashboard still works)
+      - ANTHROPIC_AI_API_KEY=${ANTHROPIC_AI_API_KEY:-}
+      # Database: PostgreSQL, the only database (see the header above).
+      - DATABASE_URL=postgresql://ccc:${CCC_PG_PASSWORD:-ccc-local-dev}@postgres:5432/ccc
+      - CCC_PG_SSL=${CCC_PG_SSL:-}
+      # Offers the sample data step on the dashboard's Get started panel.
+      - CCC_SAMPLE_DATA=1
+      # Encrypts every config-table secret at rest (API keys, webhooks, SSO client
+      # secret: the SECRET_KEYS registry, lib/config-secrets.ts) and seals the short-lived
+      # MFA/SSO pending cookies. Keep it STABLE: changing it makes every stored
+      # secret unreadable.
+      # No default: instrumentation.ts refuses to boot in production without a
+      # unique key set here (or in .env). The setup command in the README fills it in.
+      - CCC_ENCRYPTION_KEY=${CCC_ENCRYPTION_KEY:-}
+      # The token the collector presents to the Hub with every telemetry batch. The
+      # Hub refuses telemetry in production without it. The setup command in the
+      # README fills it in.
+      - CCC_COLLECTOR_TOKEN=${CCC_COLLECTOR_TOKEN:-}
+      # The bearer token and collector address, shown to admins on Admin → Ingestion so
+      # they can connect Claude without opening .env. Display only: the Hub never
+      # accepts CCC_CLIENT_BEARER_TOKEN as a credential, so telemetry still
+      # has to go through the collector.
+      - CCC_CLIENT_BEARER_TOKEN=${OTEL_ENDPOINT_SECRET:-}
+      - CCC_COLLECTOR_ADDRESS=${CCC_COLLECTOR_ADDRESS:-http://localhost:4318}
+      # Session cookies are Secure by default. Plain HTTP (localhost, or an
+      # on-prem install before TLS is in front of it) needs BOTH of these set to
+      # true in .env, or the browser silently discards the session cookie and
+      # nobody can log in. In production the hub refuses to start with only the
+      # first one set: a lone
+      # CCC_INSECURE_COOKIES=true once leaked into an image and silently turned
+      # the Secure flag off. Remove both once the hub is served over HTTPS.
+      - CCC_INSECURE_COOKIES=${CCC_INSECURE_COOKIES:-}
+      - CCC_ALLOW_INSECURE_COOKIES=${CCC_ALLOW_INSECURE_COOKIES:-}
+      # Sample data only: allow the DEMO-badged FinOps Enterprise figures and Dev
+      # Framework Alignment scores. Empty by default, so a real installation never
+      # shows demo data; set both to 1 in .env only for exploring with sample data.
+      - CCC_FINOPS_ALLOW_MOCK=${CCC_FINOPS_ALLOW_MOCK:-}
+      - CCC_DX_ALLOW_MOCK=${CCC_DX_ALLOW_MOCK:-}
+    depends_on:
+      postgres:
+        condition: service_healthy
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "wget", "-qO-", "http://127.0.0.1:3000/api/health"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 10s
+
+  # OpenTelemetry Collector: Claude Code and Claude Cowork send telemetry here on
+  # port 4318, and it forwards logs and metrics to the Hub. Configuration:
+  # otelcol-config.yaml. Both tokens must be set in .env.
+  otel-collector:
+    build:
+      context: .
+      dockerfile: Dockerfile.collector
+    container_name: ccc-otel-collector
+    ports:
+      - "127.0.0.1:4318:4318"
+    environment:
+      - OTEL_ENDPOINT_SECRET=${OTEL_ENDPOINT_SECRET:?Set OTEL_ENDPOINT_SECRET in .env}
+      - CCC_COLLECTOR_TOKEN=${CCC_COLLECTOR_TOKEN:?Set CCC_COLLECTOR_TOKEN in .env}
+      - HUB_URL=http://hub:3000
+    volumes:
+      - ccc-otel-queue:/var/lib/otelcol
+    depends_on:
+      - hub
+    restart: unless-stopped
+
+  # Sample data (optional): a fictional organisation with nine weeks of activity,
+  # for exploring Command Centre before connecting Claude. Runs only when asked:
+  #   docker compose --profile demo run --rm demo-data
+  # Run it after creating your admin account. See scripts/demo/load.cjs.
+  demo-data:
+    image: node:22-alpine
+    profiles: ["demo"]
+    working_dir: /app
+    volumes:
+      - .:/app
+      - ccc-demo-node-modules:/app/node_modules
+    environment:
+      - DATABASE_URL=postgresql://ccc:${CCC_PG_PASSWORD:-ccc-local-dev}@postgres:5432/ccc
+      - CCC_PG_SSL=disable
+      - CCC_ENCRYPTION_KEY=${CCC_ENCRYPTION_KEY:-}
+      # No "new version of npm available" notice from the install or the loader.
+      - NPM_CONFIG_UPDATE_NOTIFIER=false
+    # Installs only what the loader needs: no developer tools, so no npm warnings.
+    # esbuild's own install step runs its program straight after unpacking it,
+    # and Linux occasionally reports the file as still busy (ETXTBSY); a second
+    # install always succeeds, so the install is tried once more on failure.
+    command: >-
+      sh -c "npm ci --omit=dev --no-audit --no-fund
+      || { echo 'Package install failed; trying once more.'; npm ci --omit=dev --no-audit --no-fund; }
+      && node scripts/demo/load.cjs"
+    depends_on:
+      postgres:
+        condition: service_healthy
+
+volumes:
+  ccc-pg-data:
+    driver: local
+  ccc-otel-queue:
+    driver: local
+  ccc-demo-node-modules:
+    driver: local

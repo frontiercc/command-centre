@@ -1,0 +1,222 @@
+/*
+ * Copyright 2026 Lee James
+ * SPDX-License-Identifier: Apache-2.0
+ */
+
+/* Precision theme: frame and components. Loaded after globals.css (app/layout.tsx).
+   Every rule is scoped to html[data-theme="precision"], which the root layout always sets.
+   Colour tokens (--p-*) are defined in globals.css. */
+
+/* ── Main area beside the 232px sidebar ─────────────────────────────── */
+@media (min-width: 1024px) {
+  html[data-theme="precision"] .ccc-main { margin-left: 232px; }
+}
+
+/* ── Sidebar (components/layout/PrecisionSidebar.tsx) ─────────────── */
+html[data-theme="precision"] .ccc-psidebar {
+  position: fixed; top: 0; bottom: 0; left: 0; z-index: 30;
+  width: 232px; flex-direction: column; gap: 1px;
+  padding: 12px 8px; box-sizing: border-box; overflow-y: auto;
+  background: var(--p-subtle); border-right: 1px solid var(--p-line);
+  font-size: 14px; color: var(--p-ink-3);
+}
+html[data-theme="precision"] .ccc-psb-brand { display: flex; flex-direction: column; gap: 6px; padding: 6px 8px 12px; }
+html[data-theme="precision"] .ccc-psb-brand img { height: 20px; width: auto; align-self: flex-start; }
+html[data-theme="precision"] .ccc-psb-org { font-size: 13px; color: var(--p-faint); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+html[data-theme="precision"] .ccc-psb-search {
+  display: flex; align-items: center; gap: 8px; width: 100%; margin: 0 0 10px; padding: 6px 8px;
+  font: inherit; text-align: left; color: var(--p-mute); cursor: pointer;
+  background: #FFFFFF; border: 1px solid var(--p-line); border-radius: 10px;
+}
+html[data-theme="precision"] .ccc-psb-search:hover { border-color: var(--p-input); }
+html[data-theme="precision"] .ccc-psb-search span { flex-grow: 1; }
+html[data-theme="precision"] .ccc-psb-search kbd {
+  font-family: var(--font-mono), ui-monospace, monospace; font-size: 12px; color: var(--p-faint);
+  border: 1px solid var(--p-line); border-radius: 6px; padding: 0 5px;
+}
+html[data-theme="precision"] .ccc-psb-nav { display: flex; flex-direction: column; gap: 1px; }
+html[data-theme="precision"] .ccc-psb-section { display: flex; flex-direction: column; gap: 1px; }
+html[data-theme="precision"] .ccc-psb-label { padding: 14px 8px 4px; font-size: 12px; font-weight: 500; color: var(--p-faint); }
+html[data-theme="precision"] .ccc-psb-link {
+  display: flex; align-items: center; gap: 8px; width: 100%; padding: 6px 8px;
+  font: inherit; text-align: left; color: var(--p-ink-3); cursor: pointer;
+  background: transparent; border: 0; border-radius: 10px; text-decoration: none;
+}
+html[data-theme="precision"] .ccc-psb-link:hover { background: #F0F0F0; color: var(--p-ink); }
+html[data-theme="precision"] .ccc-psb-link.is-active { background: #EDEDED; color: var(--p-ink); font-weight: 500; }
+html[data-theme="precision"] .ccc-psb-link.is-parent { color: var(--p-ink); font-weight: 500; }
+html[data-theme="precision"] .ccc-psb-badge {
+  margin-left: auto; min-width: 18px; height: 18px; padding: 0 5px; border-radius: 999px;
+  display: inline-flex; align-items: center; justify-content: center;
+  background: var(--p-accent); color: #FFFFFF; font-size: 12px; font-weight: 600; font-variant-numeric: tabular-nums;
+}
+html[data-theme="precision"] .ccc-psb-chev { margin-left: auto; color: #B3B3B3; flex-shrink: 0; }
+html[data-theme="precision"] .ccc-psb-badge + .ccc-psb-chev { margin-left: 6px; }
+html[data-theme="precision"] .ccc-psb-sub { display: flex; flex-direction: column; gap: 1px; margin: 1px 0 4px; }
+html[data-theme="precision"] .ccc-psb-sublink {
+  padding: 5px 8px 5px 32px; border-radius: 10px; color: var(--p-ink-3); text-decoration: none;
+}
+html[data-theme="precision"] .ccc-psb-sublink:hover { background: #F0F0F0; color: var(--p-ink); }
+html[data-theme="precision"] .ccc-psb-sublink.is-active { background: #EDEDED; color: var(--p-ink); font-weight: 500; }
+html[data-theme="precision"] .ccc-psb-foot {
+  margin-top: auto; padding-top: 12px; border-top: 1px solid var(--p-line);
+  display: flex; flex-direction: column; gap: 1px;
+}
+html[data-theme="precision"] .ccc-psb-user { display: flex; align-items: center; gap: 8px; padding: 8px; }
+html[data-theme="precision"] .ccc-psb-avatar {
+  width: 24px; height: 24px; border-radius: 999px; flex-shrink: 0;
+  display: inline-flex; align-items: center; justify-content: center;
+  background: var(--p-ink); color: #FFFFFF; font-size: 12px; font-weight: 600;
+}
+html[data-theme="precision"] .ccc-psb-who { display: flex; flex-direction: column; line-height: 1.3; min-width: 0; }
+html[data-theme="precision"] .ccc-psb-name { color: var(--p-ink); font-weight: 500; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+html[data-theme="precision"] .ccc-psb-role { font-size: 12px; color: var(--p-faint); }
+html[data-theme="precision"] .ccc-psb-logout {
+  margin-left: auto; width: 28px; height: 28px; flex-shrink: 0; cursor: pointer;
+  display: inline-flex; align-items: center; justify-content: center;
+  color: var(--p-faint); background: transparent; border: 0; border-radius: 10px;
+}
+html[data-theme="precision"] .ccc-psb-logout:hover { background: #F0F0F0; color: var(--p-ink); }
+
+/* Jump-to-page search */
+html[data-theme="precision"] .ccc-jump-backdrop {
+  position: fixed; inset: 0; z-index: 60; background: rgba(10, 10, 10, 0.25);
+  display: flex; justify-content: center; align-items: flex-start; padding: 15vh 16px 0;
+}
+html[data-theme="precision"] .ccc-jump {
+  width: 520px; max-width: 100%; background: #FFFFFF; border: 1px solid var(--p-line); border-radius: 16px;
+  box-shadow: 0 16px 40px rgba(10, 10, 10, 0.12); overflow: hidden;
+}
+html[data-theme="precision"] .ccc-jump input {
+  width: 100%; box-sizing: border-box; padding: 14px 16px; border: 0; border-bottom: 1px solid var(--p-line);
+  font: inherit; font-size: 15px; color: var(--p-ink); outline: none;
+}
+html[data-theme="precision"] .ccc-jump ul { list-style: none; margin: 0; padding: 6px; max-height: 340px; overflow-y: auto; }
+html[data-theme="precision"] .ccc-jump li button {
+  width: 100%; text-align: left; padding: 8px 10px; border: 0; border-radius: 10px; background: transparent;
+  font: inherit; color: var(--p-ink); cursor: pointer;
+}
+html[data-theme="precision"] .ccc-jump li button.is-sel { background: var(--p-accent-tint); }
+html[data-theme="precision"] .ccc-jump-empty { padding: 10px; color: var(--p-faint); }
+
+/* ── Page header (components/layout/TopBar.tsx) ──────────────────── */
+html[data-theme="precision"] .ccc-pbar {
+  position: relative; height: 48px; box-sizing: border-box;
+  display: flex; align-items: center; gap: 8px; padding: 0 32px;
+  background: #FFFFFF; border-bottom: 1px solid var(--p-line); font-size: 14px;
+}
+html[data-theme="precision"] .ccc-pbar-crumb { display: inline-flex; align-items: center; gap: 8px; }
+html[data-theme="precision"] .ccc-pbar-muted { color: var(--p-faint); }
+html[data-theme="precision"] .ccc-pbar-sep { color: #D4D4D4; }
+html[data-theme="precision"] .ccc-pbar-current { color: var(--p-ink); font-weight: 500; }
+html[data-theme="precision"] .ccc-ptitle { padding: 24px 32px 0; }
+html[data-theme="precision"] .ccc-ptitle h1 { margin: 0; font-size: 18px; line-height: 26px; font-weight: 600; letter-spacing: -0.02em; color: var(--p-ink); }
+html[data-theme="precision"] .ccc-ptitle p { margin: 2px 0 0; font-size: 14px; color: var(--p-mute); }
+html[data-theme="precision"] .ccc-ptitle + .p-8,
+html[data-theme="precision"] .ccc-ptitle + .p-6 { padding-top: 16px; }
+
+/* ── Admin sub-navigation (app/admin/layout.tsx) ─────────────────── */
+html[data-theme="precision"] .ccc-admin-nav { width: 196px; border-color: var(--p-line); }
+html[data-theme="precision"] .ccc-admin-nav h2 { font-size: 12px; font-weight: 500; color: var(--p-faint); }
+html[data-theme="precision"] .ccc-admin-nav nav a { padding: 5px 8px; font-weight: 400; color: var(--p-ink-3); border-left-width: 0; }
+html[data-theme="precision"] .ccc-admin-nav nav a:hover { background: #F0F0F0; color: var(--p-ink); }
+html[data-theme="precision"] .ccc-admin-nav nav a.bg-blue-50 { background: #EDEDED; color: var(--p-ink); font-weight: 500; }
+
+/* ── Buttons: the page's main action is ink, not blue ─────────────── */
+html[data-theme="precision"] button.bg-\[\#3A58EE\],
+html[data-theme="precision"] a.bg-\[\#3A58EE\],
+html[data-theme="precision"] button.bg-brand,
+html[data-theme="precision"] a.bg-brand { background-color: var(--p-ink); color: #FFFFFF; }
+html[data-theme="precision"] button.bg-\[\#3A58EE\]:hover,
+html[data-theme="precision"] a.bg-\[\#3A58EE\]:hover,
+html[data-theme="precision"] button.bg-brand:hover,
+html[data-theme="precision"] a.bg-brand:hover { background-color: #262626; }
+/* Soft tinted action buttons (Acknowledge, Resolve, Dismiss…) become plain outline buttons */
+html[data-theme="precision"] button.bg-green-50,
+html[data-theme="precision"] button.bg-emerald-50,
+html[data-theme="precision"] button.bg-amber-50,
+html[data-theme="precision"] button.bg-gray-50 {
+  background-color: #FFFFFF; color: var(--p-ink); border: 1px solid var(--p-input);
+}
+html[data-theme="precision"] button.bg-green-50:hover,
+html[data-theme="precision"] button.bg-emerald-50:hover,
+html[data-theme="precision"] button.bg-amber-50:hover,
+html[data-theme="precision"] button.bg-gray-50:hover { background-color: var(--p-subtle); }
+/* Blue small-caps section labels read as ink panel titles */
+html[data-theme="precision"] .uppercase.tracking-widest.text-\[\#3A58EE\],
+html[data-theme="precision"] .uppercase.tracking-wider.text-\[\#3A58EE\],
+html[data-theme="precision"] .uppercase.tracking-wide.text-\[\#3A58EE\] { color: var(--p-ink); font-weight: 600; }
+/* Selected tabs underline in ink */
+html[data-theme="precision"] .border-b-2.border-\[\#3A58EE\],
+html[data-theme="precision"] .border-b-2.border-brand { border-color: var(--p-ink); }
+
+/* ── Panels: white on the grey page, hairline border, 8px corners ─── */
+html[data-theme="precision"] .bg-white.rounded-xl,
+html[data-theme="precision"] .bg-white.rounded-2xl { border-color: var(--p-line); }
+
+/* ── Dark hero cards become white figure panels ──────────────────── */
+html[data-theme="precision"] .bg-gradient-to-br.from-gray-900 {
+  background-image: none; background-color: #FFFFFF; border: 1px solid var(--p-line); color: var(--p-ink);
+}
+html[data-theme="precision"] .from-gray-900 .text-white { color: var(--p-ink); }
+html[data-theme="precision"] .from-gray-900 .text-gray-200,
+html[data-theme="precision"] .from-gray-900 .text-gray-300 { color: var(--p-ink-2); }
+html[data-theme="precision"] .from-gray-900 .text-gray-400,
+html[data-theme="precision"] .from-gray-900 .text-gray-500 { color: var(--p-mute); }
+html[data-theme="precision"] .from-gray-900 .text-\[\#699BFB\],
+html[data-theme="precision"] .from-gray-900 .text-blue-300,
+html[data-theme="precision"] .from-gray-900 .text-blue-400 { color: var(--p-accent); }
+html[data-theme="precision"] .from-gray-900 .text-violet-300,
+html[data-theme="precision"] .from-gray-900 .text-purple-300 { color: var(--p-judged-ink); }
+html[data-theme="precision"] .from-gray-900 .text-emerald-400,
+html[data-theme="precision"] .from-gray-900 .text-green-400 { color: #1A7F37; }
+html[data-theme="precision"] .from-gray-900 .text-amber-400,
+html[data-theme="precision"] .from-gray-900 .text-amber-300 { color: #B54708; }
+html[data-theme="precision"] .from-gray-900 .text-red-400 { color: #B42318; }
+html[data-theme="precision"] .from-gray-900 .border-gray-700,
+html[data-theme="precision"] .from-gray-900 .border-gray-800,
+html[data-theme="precision"] .from-gray-900 .border-white\/10 { border-color: var(--p-line); }
+html[data-theme="precision"] .from-gray-900 .bg-white\/5,
+html[data-theme="precision"] .from-gray-900 .bg-white\/10,
+html[data-theme="precision"] .from-gray-900 .bg-gray-800 { background-color: var(--p-subtle); }
+
+/* ── Figure strips: a row of stat cards joined into one panel ────── */
+/* Tag the grid that holds the cards with ccc-strip (no effect in the default theme). */
+html[data-theme="precision"] .ccc-strip {
+  gap: 0; background: #FFFFFF; border: 1px solid var(--p-line); border-radius: 14px; overflow: hidden;
+}
+html[data-theme="precision"] .ccc-strip > * {
+  border: 0; border-radius: 0; background: transparent; box-shadow: none; padding: 16px;
+}
+html[data-theme="precision"] .ccc-strip > * + * { border-top: 1px solid var(--p-line); }
+@media (min-width: 768px) {
+  html[data-theme="precision"] .ccc-strip > * + * { border-top: 0; border-left: 1px solid var(--p-line); }
+}
+
+/* ── Sign in (app/admin/login/page.tsx) ──────────────────────────── */
+html[data-theme="precision"] .ccc-login { background-color: var(--p-page); }
+html[data-theme="precision"] .ccc-login .bg-gray-900 { background-color: #FFFFFF; border-color: var(--p-line); border-radius: 10px; }
+html[data-theme="precision"] .ccc-login .text-gray-300 { color: var(--p-ink); }
+html[data-theme="precision"] .ccc-login .text-gray-400,
+html[data-theme="precision"] .ccc-login .text-gray-500 { color: var(--p-mute); }
+html[data-theme="precision"] .ccc-login .text-gray-600 { color: var(--p-faint); }
+html[data-theme="precision"] .ccc-login .hover\:text-gray-400:hover,
+html[data-theme="precision"] .ccc-login .hover\:text-gray-500:hover { color: var(--p-ink); }
+html[data-theme="precision"] .ccc-login input.bg-gray-800 { background-color: #FFFFFF; border-color: var(--p-input); color: var(--p-ink); }
+html[data-theme="precision"] .ccc-login input.placeholder-gray-500::placeholder { color: var(--p-faint); }
+html[data-theme="precision"] .ccc-login div.bg-gray-800 { background-color: var(--p-line); }
+html[data-theme="precision"] .ccc-login .border-gray-800 { border-color: var(--p-line); }
+html[data-theme="precision"] .ccc-login .text-amber-400 { color: #B54708; }
+html[data-theme="precision"] .ccc-login .text-red-400 { color: #B42318; }
+html[data-theme="precision"] .ccc-login .text-emerald-400 { color: #146C2E; }
+html[data-theme="precision"] .ccc-login img { height: 24px; }
+/* Pages still pointing at the white wordmark (reset password, setup) show it dark on the light card */
+html[data-theme="precision"] .ccc-login img[src="/frontier-logo.svg"] { filter: brightness(0); }
+
+/* Measured / AI-judged colour key in the page header */
+html[data-theme="precision"] .ccc-pbar-legend { margin-left: auto; display: flex; gap: 14px; font-size: 13px; color: var(--p-mute); }
+html[data-theme="precision"] .ccc-pbar-legend span { display: inline-flex; align-items: center; gap: 6px; }
+html[data-theme="precision"] .ccc-pbar-legend i { width: 8px; height: 8px; border-radius: 2px; display: inline-block; }
+html[data-theme="precision"] .ccc-pbar-legend i.is-measured { background: var(--p-measured); }
+html[data-theme="precision"] .ccc-pbar-legend i.is-judged { background: var(--p-judged); }
+@media (max-width: 767px) { html[data-theme="precision"] .ccc-pbar-legend { display: none; } }

@@ -1,0 +1,68 @@
+# OpenTelemetry Collector configuration for Command Centre.
+#
+# Claude Code and Cowork send OTLP over HTTP to this collector, which batches
+# it and forwards logs and metrics to the Hub's ingest endpoint as JSON (the
+# Hub reads JSON only). It keeps a disk queue and, with no time limit, retries
+# batches that fail with a connection error or HTTP 429, 502, 503 or 504, so
+# telemetry survives a Hub restart. Other errors, such as HTTP 500, are not
+# retried.
+#
+# Environment variables (set in .env; docker-compose.yml passes them in):
+#   OTEL_ENDPOINT_SECRET  token Claude clients present to this collector
+#   CCC_COLLECTOR_TOKEN   token this collector presents to the Hub (the Hub
+#                         must have the same value)
+#   HUB_URL               the Hub's base address; http://hub:3000 inside
+#                         Docker Compose, or https://your-hub.example.com
+#
+# Serving the collector to other machines? Put HTTPS in front of port 4318
+# (for example Caddy or a load balancer), as you would for the Hub.
+
+extensions:
+  bearertokenauth/receiver:
+    token: "${env:OTEL_ENDPOINT_SECRET}"
+  bearertokenauth/exporter:
+    token: "${env:CCC_COLLECTOR_TOKEN}"
+  file_storage:
+    directory: /var/lib/otelcol/storage
+    create_directory: true
+
+receivers:
+  otlp:
+    protocols:
+      http:
+        endpoint: 0.0.0.0:4318
+        auth:
+          authenticator: bearertokenauth/receiver
+
+processors:
+  batch:
+    timeout: 2s
+    send_batch_size: 100
+
+exporters:
+  otlp_http:
+    logs_endpoint: ${env:HUB_URL}/api/otel/ingest
+    metrics_endpoint: ${env:HUB_URL}/api/otel/ingest
+    compression: none
+    encoding: json
+    auth:
+      authenticator: bearertokenauth/exporter
+    sending_queue:
+      enabled: true
+      storage: file_storage
+      queue_size: 120000
+    retry_on_failure:
+      enabled: true
+      max_elapsed_time: 0
+
+service:
+  extensions: [bearertokenauth/receiver, bearertokenauth/exporter, file_storage]
+  pipelines:
+    logs:
+      receivers: [otlp]
+      processors: [batch]
+      exporters: [otlp_http]
+    metrics:
+      receivers: [otlp]
+      processors: [batch]
+      exporters: [otlp_http]

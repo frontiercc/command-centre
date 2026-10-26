@@ -1,0 +1,80 @@
+# OTel Collector config — AWS ECS Fargate (collector service -> Hub through
+# the instance's load balancer, https://${HUB_HOST}/api/otel/ingest).
+# Baked into the image by deploy/aws/Dockerfile.otel-ecs. Same pipeline as
+# deploy/azure/otelcol-azure-config.yaml. Both keep the disk queue in ${OTEL_QUEUE_DIR},
+# a fixed slot (slot-0, slot-1, ...) that deploy/otel-slot-launcher.sh claims
+# at start-up and holds a lock on; only the storage differs:
+#
+#   Azure: an Azure Files share mounted at /var/otel-wal
+#   AWS:   EFS
+#
+# A replacement task adopts a free slot, so a queue left by a stopped task is
+# sent, not stranded (replica names change on every replacement, so
+# name-scoped folders would be orphaned).
+#
+# Env vars (set in the ECS task definition):
+#   OTEL_ENDPOINT_SECRET — clients' bearer token to this collector (secret)
+#   CCC_COLLECTOR_TOKEN  — this collector's bearer token to the Hub (secret)
+#   HUB_HOST             — the Hub's hostname on the load balancer
+#   OTEL_QUEUE_DIR       — set by the slot launcher, not the task definition
+
+extensions:
+  bearertokenauth/receiver:
+    token: "${OTEL_ENDPOINT_SECRET}"
+  bearertokenauth/exporter:
+    token: "${CCC_COLLECTOR_TOKEN}"
+  file_storage:
+    # The queue slot the launcher claimed (deploy/otel-slot-launcher.sh).
+    directory: ${OTEL_QUEUE_DIR}
+    create_directory: true
+  # Unauthenticated health endpoint for the load balancer's target group
+  # (the OTLP receiver requires a bearer token).
+  health_check:
+    endpoint: 0.0.0.0:13133
+    path: /
+
+receivers:
+  otlp:
+    protocols:
+      http:
+        endpoint: 0.0.0.0:4318
+        auth:
+          authenticator: bearertokenauth/receiver
+
+processors:
+  batch:
+    timeout: 2s
+    send_batch_size: 100
+
+exporters:
+  otlphttp:
+    logs_endpoint: https://${HUB_HOST}/api/otel/ingest
+    metrics_endpoint: https://${HUB_HOST}/api/otel/ingest
+    compression: none
+    encoding: json
+    auth:
+      authenticator: bearertokenauth/exporter
+    # Retry until delivered, queue capped at ~3 days of busy traffic per
+    # task (same as the Azure collector). HTTP 500 is permanent to
+    # the exporter; only 429/502/503/504 and connection errors are retried.
+    sending_queue:
+      enabled: true
+      storage: file_storage
+      queue_size: 120000
+    retry_on_failure:
+      enabled: true
+      initial_interval: 5s
+      max_interval: 60s
+      max_elapsed_time: 0
+
+service:
+  extensions: [bearertokenauth/receiver, bearertokenauth/exporter, file_storage, health_check]
+  pipelines:
+    logs:
+      receivers: [otlp]
+      processors: [batch]
+      exporters: [otlphttp]
+    metrics:
+      receivers: [otlp]
+      processors: [batch]
+      exporters: [otlphttp]

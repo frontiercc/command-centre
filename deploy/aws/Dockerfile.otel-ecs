@@ -1,0 +1,11 @@
+# OTel Collector image for AWS ECS Fargate. Same collector as
+# deploy/azure/Dockerfile.otel (Azure), plus a slot launcher that needs a shell: the
+# upstream image has none, so BusyBox's static /bin (sh, flock, mkdir,
+# date, sleep) is copied in. See deploy/otel-slot-launcher.sh.
+FROM busybox:1.38-musl AS shell
+
+FROM otel/opentelemetry-collector-contrib:0.157.0
+COPY --from=shell /bin /bin
+COPY deploy/aws/otelcol-ecs-config.yaml /etc/otelcol-contrib/config.yaml
+COPY deploy/otel-slot-launcher.sh /otel-slot-launcher.sh
+ENTRYPOINT ["/bin/sh", "/otel-slot-launcher.sh"]

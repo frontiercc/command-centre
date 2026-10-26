@@ -1,0 +1,25 @@
+# OTel Collector image for Azure Container Apps. Stock contrib collector +
+# baked-in config, because Container Apps cannot mount a configuration file
+# from the repository the way Docker Compose does. See
+# deploy/azure/otelcol-azure-config.yaml's header comment for the env vars this expects
+# at runtime.
+#
+# Pinned to 0.157.0, the version proven against the Hub's ingest endpoint,
+# rather than an untested `latest`.
+#
+# Queue slots: the same slot launcher as the AWS image
+# (deploy/otel-slot-launcher.sh), which needs a shell, so BusyBox's static
+# /bin is copied in. Each replica claims a fixed slot-N folder on the
+# /var/otel-wal Azure Files share instead of a folder named after the
+# replica, so a replacement replica adopts the queue a previous one left.
+# 4 slots: a deploy runs the old and the new revision's 2 replicas side by
+# side until the old one is deactivated.
+FROM busybox:1.38-musl AS shell
+
+FROM otel/opentelemetry-collector-contrib:0.157.0
+COPY --from=shell /bin /bin
+COPY deploy/azure/otelcol-azure-config.yaml /etc/otelcol-contrib/config.yaml
+COPY deploy/otel-slot-launcher.sh /otel-slot-launcher.sh
+ENV OTEL_QUEUE_ROOT=/var/otel-wal \
+    OTEL_QUEUE_SLOTS=4
+ENTRYPOINT ["/bin/sh", "/otel-slot-launcher.sh"]

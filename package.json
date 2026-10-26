@@ -1,0 +1,72 @@
+{
+  "name": "command-centre",
+  "version": "1.0.0",
+  "description": "Measures whether teams using Claude are becoming more productive, from the telemetry Claude already sends.",
+  "license": "Apache-2.0",
+  "author": "Lee James",
+  "contributors": [
+    "Lee James"
+  ],
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/frontiercc/command-centre.git"
+  },
+  "private": true,
+  "scripts": {
+    "predev": "node -e \"require('fs').rmSync('.next',{recursive:true,force:true})\"",
+    "dev": "next dev",
+    "build": "next build",
+    "start": "next start",
+    "lint": "next lint",
+    "notices": "node scripts/third-party-notices.mjs",
+    "test": "vitest run",
+    "posttest": "node scripts/clean-testcontainers.mjs",
+    "test:cleanup": "node scripts/clean-testcontainers.mjs",
+    "test:watch": "vitest",
+    "reset-password": "node scripts/reset-admin-password.mjs"
+  },
+  "dependencies": {
+    "@anthropic-ai/sdk": "^0.99.0",
+    "@aws-sdk/client-s3": "^3.1019.0",
+    "archiver": "^7.0.1",
+    "drizzle-orm": "^0.45.2",
+    "mammoth": "^1.12.0",
+    "nanoid": "^3.3.19",
+    "next": "15.5.28",
+    "nodemailer": "^10.0.16",
+    "openid-client": "^6.8.4",
+    "pg": "^8.22.0",
+    "qrcode": "^1.5.4",
+    "react": "^18",
+    "react-dom": "^18",
+    "react-markdown": "^10.1.0",
+    "recharts": "^3.8.1",
+    "remark-gfm": "^4.0.1",
+    "tsx": "^4.23.15",
+    "uuid": "^13.0.0"
+  },
+  "devDependencies": {
+    "@testcontainers/postgresql": "^12.0.4",
+    "@types/archiver": "^7.0.0",
+    "@types/node": "^20",
+    "@types/pg": "^8.20.0",
+    "@types/qrcode": "^1.5.6",
+    "@types/react": "^18",
+    "@types/react-dom": "^18",
+    "drizzle-kit": "^0.31.10",
+    "eslint": "^8",
+    "eslint-config-next": "15.5.28",
+    "jose": "^6.2.3",
+    "postcss": "^8.5.31",
+    "tailwindcss": "^3.4.1",
+    "typescript": "^5",
+    "vitest": "^3.0.0"
+  },
+  "overrides": {
+    "fast-xml-parser": "5.10.1",
+    "archiver-utils": {
+      "glob": "^13.0.6"
+    },
+    "postcss": "$postcss"
+  }
+}

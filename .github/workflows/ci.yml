@@ -1,0 +1,146 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+permissions:
+  contents: read
+
+jobs:
+  lint:
+    name: Lint
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
+        with:
+          node-version: '22'
+          cache: 'npm'
+      - run: npm ci
+      - run: npm run lint
+      # THIRD-PARTY-NOTICES.md must match the dependencies.
+      - run: npm run notices -- --check
+
+  test:
+    name: Test (PostgreSQL)
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    services:
+      postgres:
+        image: postgres:16
+        env:
+          POSTGRES_USER: ccc
+          POSTGRES_PASSWORD: ccc-ci
+          POSTGRES_DB: postgres
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U ccc"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 10
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
+        with:
+          node-version: '22'
+          cache: 'npm'
+      - run: npm ci
+      - name: Test
+        env:
+          CCC_TEST_PG_URL: postgresql://ccc:ccc-ci@127.0.0.1:5432/postgres
+          # A closed port, so anything that bypasses the test helper fails loudly.
+          DATABASE_URL: postgresql://nobody:x@127.0.0.1:1/none
+        run: npx vitest run
+
+  build:
+    name: Build
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
+        with:
+          node-version: '22'
+          cache: 'npm'
+      - run: npm ci
+      - run: npm run build
+
+  first-run:
+    # The README quick start, step by step, on a clean machine: settings file,
+    # start, admin account, sample data, then one prompt sent the way Claude
+    # sends it (bearer token, through the collector) and found in the database.
+    name: First run (Docker Compose)
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - name: Create the settings file (quick start step 2)
+        run: docker run --rm -v "${PWD}:/app" -w /app node:22-alpine node scripts/setup.cjs
+      - name: Start Command Centre (step 3)
+        run: docker compose up -d --build
+      - name: Wait for the Hub
+        run: |
+          for i in $(seq 1 90); do
+            if curl -fsS http://localhost:3001/api/health; then exit 0; fi
+            sleep 5
+          done
+          exit 1
+      - name: Create the admin account (step 4)
+        run: |
+          token=$(docker compose logs hub | grep "setup token" | tail -1 | sed 's/.*setup token: //' | tr -d '\r[:space:]')
+          test -n "$token"
+          code=$(curl -sS -o setup.json -w '%{http_code}' -X POST http://localhost:3001/api/admin/setup \
+            -H 'content-type: application/json' \
+            -d "{\"setupToken\":\"$token\",\"email\":\"admin@acmecorp.example\",\"displayName\":\"First Run\",\"password\":\"first-run-check-${GITHUB_RUN_ID}\"}")
+          cat setup.json; echo
+          test "$code" = 201
+      - name: Load the sample data (step 5)
+        run: docker compose --profile demo run --rm demo-data
+      - name: Send a prompt through the collector
+        run: |
+          secret=$(grep '^OTEL_ENDPOINT_SECRET=' .env | cut -d= -f2-)
+          now=$(date +%s)000000000
+          code=$(curl -sS -o collector.json -w '%{http_code}' -X POST http://localhost:4318/v1/logs \
+            -H 'content-type: application/json' -H "Authorization: Bearer ${secret}" \
+            -d '{"resourceLogs":[{"resource":{"attributes":[
+                  {"key":"service.name","value":{"stringValue":"cowork"}},
+                  {"key":"user.email","value":{"stringValue":"first-run@acmecorp.example"}},
+                  {"key":"user.id","value":{"stringValue":"first-run-user"}},
+                  {"key":"organization.id","value":{"stringValue":"first-run-org"}}]},
+                "scopeLogs":[{"logRecords":[{"timeUnixNano":"'"$now"'","attributes":[
+                  {"key":"event.name","value":{"stringValue":"user_prompt"}},
+                  {"key":"session.id","value":{"stringValue":"first-run-session"}},
+                  {"key":"prompt.id","value":{"stringValue":"first-run-prompt"}},
+                  {"key":"prompt","value":{"stringValue":"Draft the weekly status note"}}]}]}]}]}')
+          cat collector.json; echo
+          test "$code" = 200
+          for i in $(seq 1 30); do
+            n=$(docker compose exec -T postgres psql -U ccc -d ccc -tAc "SELECT count(*) FROM cowork_messages WHERE prompt_id = 'first-run-prompt'")
+            if [ "$n" = "1" ]; then echo "Prompt stored"; exit 0; fi
+            sleep 2
+          done
+          echo "The prompt did not reach the database"; exit 1
+      - name: Logs
+        if: failure()
+        run: docker compose logs --tail=200
+
+  sbom:
+    name: Software bill of materials
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
+        with:
+          node-version: '22'
+      # CycloneDX list of every run-time library, from package-lock.json.
+      - run: npm sbom --sbom-format cyclonedx --omit dev --package-lock-only > sbom.cdx.json
+      - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: sbom
+          path: sbom.cdx.json
+          retention-days: 90

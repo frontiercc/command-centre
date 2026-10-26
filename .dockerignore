@@ -1,0 +1,42 @@
+# Dependencies (reinstalled in container)
+node_modules/
+agent/node_modules/
+
+# Build output (rebuilt in container)
+.next/
+agent/dist/
+
+# Agent installer artifacts (90MB+ of embedded runtimes)
+agent/installer/_build/
+agent/installer/.wix/
+
+# Development files
+.git/
+.github/
+.claude/
+.worktrees/
+# All dotenv files, not just *.local — a developer's own .env (e.g. dev
+# secrets, CCC_INSECURE_COOKIES=true for localhost's lack of HTTPS) was
+# getting copied by the builder stage's `COPY . .` and baked into every
+# image, silently overriding nothing set by docker-compose.yml since Next's
+# own dotenv loader only fills gaps in process.env.
+.env*
+*.md
+docs/
+test/
+agent/test/
+
+# Database (created fresh in container)
+data/
+*.db
+*.db-wal
+*.db-shm
+
+# OS files
+.DS_Store
+Thumbs.db
+
+# IDE
+.idea/
+.vscode/
+*.swp

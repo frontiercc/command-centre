@@ -1,0 +1,272 @@
+{
+  "version": "7",
+  "dialect": "postgresql",
+  "entries": [
+    {
+      "idx": 0,
+      "version": "7",
+      "when": 1783673453606,
+      "tag": "0000_naive_darwin",
+      "breakpoints": true
+    },
+    {
+      "idx": 1,
+      "version": "7",
+      "when": 1784000000000,
+      "tag": "0001_oti_v2",
+      "breakpoints": true
+    },
+    {
+      "idx": 2,
+      "version": "7",
+      "when": 1784000001000,
+      "tag": "0002_pulse_audit",
+      "breakpoints": true
+    },
+    {
+      "idx": 3,
+      "version": "7",
+      "when": 1784000002000,
+      "tag": "0003_capability_value",
+      "breakpoints": true
+    },
+    {
+      "idx": 4,
+      "version": "7",
+      "when": 1784000003000,
+      "tag": "0004_chat_assistant_meta",
+      "breakpoints": true
+    },
+    {
+      "idx": 5,
+      "version": "7",
+      "when": 1784000004000,
+      "tag": "0005_chat_messages_source",
+      "breakpoints": true
+    },
+    {
+      "idx": 6,
+      "version": "7",
+      "when": 1784000005000,
+      "tag": "0006_skill_library_install_guide_department",
+      "breakpoints": true
+    },
+    {
+      "idx": 7,
+      "version": "7",
+      "when": 1784000006000,
+      "tag": "0007_backfill_known_anthropic_skills",
+      "breakpoints": true
+    },
+    {
+      "idx": 8,
+      "version": "7",
+      "when": 1784000007000,
+      "tag": "0008_backfill_known_anthropic_skills_namespaced",
+      "breakpoints": true
+    },
+    {
+      "idx": 9,
+      "version": "7",
+      "when": 1785700000000,
+      "tag": "0009_github_user_attribution",
+      "breakpoints": true
+    },
+    {
+      "idx": 10,
+      "version": "7",
+      "when": 1786700000000,
+      "tag": "0010_pulse_defaults",
+      "breakpoints": true
+    },
+    {
+      "idx": 11,
+      "version": "7",
+      "when": 1786700001000,
+      "tag": "0011_code_metrics_active_time_bigint",
+      "breakpoints": true
+    },
+    {
+      "idx": 12,
+      "version": "7",
+      "when": 1786700002000,
+      "tag": "0012_workflow_impact",
+      "breakpoints": true
+    },
+    {
+      "idx": 13,
+      "version": "7",
+      "when": 1786700003000,
+      "tag": "0013_coaching_acks",
+      "breakpoints": true
+    },
+    {
+      "idx": 14,
+      "version": "7",
+      "when": 1786700004000,
+      "tag": "0014_active_time_measure",
+      "breakpoints": true
+    },
+    {
+      "idx": 15,
+      "version": "7",
+      "when": 1786700005000,
+      "tag": "0015_active_time_summary_clear",
+      "breakpoints": true
+    },
+    {
+      "idx": 16,
+      "version": "7",
+      "when": 1786700006000,
+      "tag": "0016_cowork_tool_errors",
+      "breakpoints": true
+    },
+    {
+      "idx": 17,
+      "version": "7",
+      "when": 1786700007000,
+      "tag": "0017_friction_summary_clear",
+      "breakpoints": true
+    },
+    {
+      "idx": 18,
+      "version": "7",
+      "when": 1788825600000,
+      "tag": "0018_dept_process_suggestions",
+      "breakpoints": true
+    },
+    {
+      "idx": 19,
+      "version": "7",
+      "when": 1789430400000,
+      "tag": "0019_totp_consumed_steps",
+      "breakpoints": true
+    },
+    {
+      "idx": 20,
+      "version": "7",
+      "when": 1789516800000,
+      "tag": "0020_session_output",
+      "breakpoints": true
+    },
+    {
+      "idx": 21,
+      "version": "7",
+      "when": 1789603200000,
+      "tag": "0021_code_classifier_attempts",
+      "breakpoints": true
+    },
+    {
+      "idx": 22,
+      "version": "7",
+      "when": 1789689600000,
+      "tag": "0022_pii_verdict_reason",
+      "breakpoints": true
+    },
+    {
+      "idx": 23,
+      "version": "7",
+      "when": 1789776000000,
+      "tag": "0023_use_case_skill_drafts",
+      "breakpoints": true
+    },
+    {
+      "idx": 24,
+      "version": "7",
+      "when": 1789862400000,
+      "tag": "0024_otel_identity_conflicts",
+      "breakpoints": true
+    },
+    {
+      "idx": 25,
+      "version": "7",
+      "when": 1789948800000,
+      "tag": "0025_otel_ingested_events",
+      "breakpoints": true
+    },
+    {
+      "idx": 26,
+      "version": "7",
+      "when": 1790035200000,
+      "tag": "0026_job_runs",
+      "breakpoints": true
+    },
+    {
+      "idx": 27,
+      "version": "7",
+      "when": 1790121600000,
+      "tag": "0027_anthropic_marketplace_connectors",
+      "breakpoints": true
+    },
+    {
+      "idx": 28,
+      "version": "7",
+      "when": 1790208000000,
+      "tag": "0028_cowork_output_names_and_session_descriptions",
+      "breakpoints": true
+    },
+    {
+      "idx": 29,
+      "version": "7",
+      "when": 1790294400000,
+      "tag": "0029_retry_missing_session_descriptions",
+      "breakpoints": true
+    },
+    {
+      "idx": 30,
+      "version": "7",
+      "when": 1790380800000,
+      "tag": "0030_hash_session_tokens_and_idle_timeout",
+      "breakpoints": true
+    },
+    {
+      "idx": 31,
+      "version": "7",
+      "when": 1790467200000,
+      "tag": "0031_human_time_estimates",
+      "breakpoints": true
+    },
+    {
+      "idx": 32,
+      "version": "7",
+      "when": 1790553600000,
+      "tag": "0032_use_case_session_judgements",
+      "breakpoints": true
+    },
+    {
+      "idx": 33,
+      "version": "7",
+      "when": 1790640000000,
+      "tag": "0033_dismiss_one_person_suggestions",
+      "breakpoints": true
+    },
+    {
+      "idx": 34,
+      "version": "7",
+      "when": 1790726400000,
+      "tag": "0034_suggestion_surface_sessions",
+      "breakpoints": true
+    },
+    {
+      "idx": 35,
+      "version": "7",
+      "when": 1790812800000,
+      "tag": "0035_reports_manager_only",
+      "breakpoints": true
+    },
+    {
+      "idx": 36,
+      "version": "7",
+      "when": 1790899200000,
+      "tag": "0036_cowork_subagent_name",
+      "breakpoints": true
+    },
+    {
+      "idx": 37,
+      "version": "7",
+      "when": 1790985600000,
+      "tag": "0037_cowork_skill_name",
+      "breakpoints": true
+    }
+  ]
+}

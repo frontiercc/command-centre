@@ -1,0 +1,17 @@
+# CodeQL findings that have been checked and are not a problem.
+# One line per rule and file: rule <TAB> file (as CodeQL names it) <TAB> how many <TAB> why.
+# The CodeQL workflow fails on any finding beyond these. Reviewed 14 October 2026.
+js/insecure-randomness	scripts/demo/01-organisation.cjs	2	Random choice of fictional sample data, not a secret.
+js/insecure-randomness	scripts/demo/01b-follow-up-2.cjs	2	Random choice of fictional sample data, not a secret.
+js/insecure-randomness	scripts/demo/01c-follow-up-3.cjs	2	Random choice of fictional sample data, not a secret.
+js/insecure-randomness	scripts/demo/02-your-account.cjs	2	Random choice of fictional sample data, not a secret.
+js/insecure-randomness	scripts/demo/04-alerts.cjs	3	Random choice of fictional sample data, not a secret.
+js/xss-through-dom	app/finops/page.tsx	1	Link to a fixed in-app path; the period is a query value. React escapes it and it cannot become a javascript: link.
+js/xss-through-dom	app/finops/spend-review/page.tsx	3	Links to fixed in-app paths with a URL-encoded id and the period. Cannot become a javascript: link.
+js/xss-through-dom	components/finance/Leaderboard.tsx	2	Links to fixed in-app paths with a URL-encoded id and the period. Cannot become a javascript: link.
+js/xss-through-dom	app/library/%5Bid%5D/page.tsx	1	Source link shown only for http or https addresses (isWebUrl), which the server also enforces.
+js/insufficient-password-hash	lib/db/admin-queries.ts	1	The reset token is 32 random bytes, not a password; SHA-256 is the right hash for it.
+js/biased-cryptographic-random	lib/auth/totp.ts	1	Recovery code alphabet has 32 characters and 256 is a multiple of 32, so there is no bias.
+js/polynomial-redos	app/api/ai/report/route.ts	1	Runs on the report the model has just written, not on user input; admin and manager only.
+js/system-prompt-injection	lib/anthropic/ai.ts	1	Reports include stored telemetry text; the prompt-injection position is documented in the AI data flow document. Admin and manager only.
+js/incomplete-sanitization	test/helpers/pg-global-setup.ts	1	Test code; escapes a fixed database-name prefix for LIKE.

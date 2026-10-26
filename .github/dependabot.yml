@@ -1,0 +1,21 @@
+# Dependabot: alerts only, no pull requests.
+#
+# open-pull-requests-limit: 0 turns off version-update pull requests, and
+# "Dependabot security updates" is switched off in the repository's settings,
+# so Dependabot raises alerts for known advisories and opens no pull requests.
+version: 2
+updates:
+  - package-ecosystem: npm
+    directory: /
+    schedule:
+      interval: weekly
+    open-pull-requests-limit: 0
+    ignore:
+      # Major upgrades planned as product work, not taken automatically.
+      # The advisories they would clear are recorded in osv-scanner.toml.
+      - dependency-name: next
+        update-types: ["version-update:semver-major"]
+      - dependency-name: tailwindcss
+        update-types: ["version-update:semver-major"]
+      - dependency-name: vitest
+        update-types: ["version-update:semver-major"]

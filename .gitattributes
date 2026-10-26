@@ -1,0 +1,12 @@
+# macOS installer scripts must have LF line endings
+agent/installer/macos/*.sh text eol=lf
+agent/installer/macos/*.command text eol=lf
+agent/installer/macos/postinstall text eol=lf
+
+# Shell + SQL scripts run on Linux boxes (e.g. the RDS recency cron) must keep
+# LF — a CRLF checkout ships a broken script (bash chokes on `set -o pipefail\r`,
+# psql sees a `\r` in the dbname). Forces LF regardless of core.autocrlf.
+*.sh text eol=lf
+*.sql text eol=lf
+deploy/aws/*.sh text eol=lf
+deploy/aws/*.service text eol=lf

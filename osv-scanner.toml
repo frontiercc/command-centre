@@ -1,0 +1,63 @@
+# Known dependency advisories that do not affect Command Centre, each with the
+# reason. OpenSSF Scorecard and OSV-Scanner read this file. Every entry was
+# checked against the code; fixing any of them needs a major upgrade (Next.js 16,
+# Tailwind 4, vitest 5 or a newer Anthropic SDK), which will clear it. Remove an
+# entry once the upgrade lands, and add one only with a reason that has been
+# checked.
+
+# @anthropic-ai/sdk: both concern the SDK's Memory Tool, which Command Centre never uses.
+[[IgnoredVulns]]
+id = "GHSA-5474-4w2j-mq4c"
+reason = "Anthropic SDK Memory Tool advisory; the Memory Tool is not used anywhere in app/ or lib/."
+
+[[IgnoredVulns]]
+id = "GHSA-p7fg-763f-g4gf"
+reason = "Anthropic SDK Memory Tool advisory; the Memory Tool is not used anywhere in app/ or lib/."
+
+# postcss: Next.js's own pinned copy and Tailwind's, run only at build time on our CSS.
+[[IgnoredVulns]]
+id = "GHSA-6g55-p6wh-862q"
+reason = "postcss runs only at build time on the project's own CSS, never on attacker input. The flagged copy is pinned inside Next.js 15; it clears with Next.js 16."
+
+[[IgnoredVulns]]
+id = "GHSA-r28c-9q8g-f849"
+reason = "postcss runs only at build time on the project's own CSS, never on attacker input. The flagged copy is pinned inside Next.js 15; it clears with Next.js 16."
+
+[[IgnoredVulns]]
+id = "GHSA-fxqj-rqcc-2cmp"
+reason = "postcss runs only at build time on the project's own CSS, never on attacker input."
+
+[[IgnoredVulns]]
+id = "GHSA-qx2v-qp2m-jg93"
+reason = "postcss runs only at build time on the project's own CSS, never on attacker input."
+
+# Tailwind 3's build-time dependencies.
+[[IgnoredVulns]]
+id = "GHSA-vfj7-8cjw-p6xm"
+reason = "braces, used by Tailwind 3 at build time on the project's own CSS, never on attacker input. No patched 3.x; the fix needs Tailwind 4."
+
+[[IgnoredVulns]]
+id = "GHSA-rj75-hqrm-r3gf"
+reason = "postcss-selector-parser, used by Tailwind 3 at build time on the project's own CSS selectors, never on attacker input. The fix needs Tailwind 4."
+
+# Development-only tools, never in the running application or its image.
+[[IgnoredVulns]]
+id = "GHSA-82fw-gwwq-j7x9"
+reason = "vitest and @vitest/mocker are development-only (the test runner) and never in the production image."
+
+[[IgnoredVulns]]
+id = "GHSA-5gmw-xhrv-c9v3"
+reason = "tinypool is vitest 3's worker pool, development-only and never in the production image; exploiting it needs attacker-controlled test-runner options. The fix needs vitest 5."
+
+[[IgnoredVulns]]
+id = "GHSA-85c8-ppgw-ccpr"
+reason = "tinypool is vitest 3's worker pool, development-only and never in the production image; exploiting it needs attacker-controlled test-runner options. The fix needs vitest 5."
+
+[[IgnoredVulns]]
+id = "GHSA-67mh-4wv8-2f99"
+reason = "The advisory is in esbuild's local development server, which is never used; esbuild is a development-only dependency."
+
+# mammoth's command-line tool.
+[[IgnoredVulns]]
+id = "GHSA-hp3w-g68c-fv3c"
+reason = "sprintf-js is reached only through mammoth's command-line tool (via argparse); Command Centre calls mammoth.extractRawText only. No fixed version has been released."

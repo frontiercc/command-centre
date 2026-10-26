@@ -1,0 +1,13 @@
+# Secret scan settings. Every default gitleaks rule stays on.
+[extend]
+useDefault = true
+
+# The sample data's use case suggestions carry signal_key, a 32-character
+# hash the product computes from a department and a title (computeProcessKey
+# in lib/usecases/process-validate.ts). It is not a secret, but the generic
+# API key rule reads it as one. Only a line of exactly that shape is allowed;
+# anything else on the same line or in the same file is still scanned.
+[[allowlists]]
+description = "Use case suggestion hash keys"
+regexTarget = "line"
+regexes = ['''"signal_key": "[0-9a-f]{32}"''']

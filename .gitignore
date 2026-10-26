@@ -1,0 +1,96 @@
+# Dependencies
+node_modules/
+.pnp
+.pnp.js
+.yarn/install-state.gz
+
+# Testing
+/coverage
+
+# Next.js
+.next/
+/out/
+
+# Production build
+/build
+/dist
+
+# OS files
+.DS_Store
+Thumbs.db
+Desktop.ini
+
+# Debug logs
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+
+# Local env files (real keys live here — only the .example files are tracked)
+.env
+.env*.local
+.env.provider-demo
+.env.postgres
+
+# Local-machine Docker Compose override, for your own changes to the setup.
+docker-compose.override.yml
+
+# Certificates and keys (code signing, SSL, etc.)
+*.pem
+*.p12
+*.pfx
+*.key
+*.crt
+*.cer
+*.jks
+
+# Vercel
+.vercel
+
+# TypeScript
+*.tsbuildinfo
+next-env.d.ts
+
+# Database
+/data/
+*.db
+*.db-wal
+*.db-shm
+
+# IDE
+.idea/
+*.swp
+*.swo
+*~
+
+# Claude Code session state — settings.local.json holds per-machine permission
+# grants and launch.json is local dev config, so neither belongs in the repo.
+# Skills under commands/ ARE shared team knowledge and are tracked deliberately:
+# they carry the runbooks, schema traps and honesty rules for recurring work.
+# `.claude/*` (not `.claude/`) is required — git cannot re-include a path whose
+# parent directory is excluded.
+.claude/*
+!.claude/commands/
+
+# Agent compiled output (rebuild from source)
+agent/dist/
+.worktrees/
+
+# Agent runtime logs (may contain hub URLs)
+agent/*.log
+.worktrees/
+
+# Test output
+test-results.log
+
+# Deploy artifacts and local verify logs
+*.tar
+dev-verify*.log
+
+# Superpowers brainstorm visual-companion mockups (not source)
+.superpowers/
+
+# Local business / marketing / working documents & backups — kept on disk, not in the code repo
+docs/*.docx
+docs/*.pdf
+Backup docs/
+

@@ -1,0 +1,9 @@
+# OpenTelemetry Collector for Command Centre: the standard collector image with
+# otelcol-config.yaml baked in. The busybox stage creates the queue directory
+# owned by the collector's user, so a Docker volume mounted there is writable.
+FROM busybox:1.38-musl AS dirs
+RUN mkdir -p /var/lib/otelcol/storage && chown -R 10001:10001 /var/lib/otelcol
+
+FROM otel/opentelemetry-collector-contrib:0.157.0
+COPY --from=dirs --chown=10001:10001 /var/lib/otelcol /var/lib/otelcol
+COPY otelcol-config.yaml /etc/otelcol-contrib/config.yaml

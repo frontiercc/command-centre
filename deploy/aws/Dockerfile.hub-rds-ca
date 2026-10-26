@@ -1,0 +1,15 @@
+# Adds Amazon's RDS CA bundle to an already-built Hub image, for ECS.
+#
+# The Hub verifies the database's certificate (CCC_PG_SSL=require) with
+# NODE_EXTRA_CA_CERTS. Fargate has no host to hold the bundle, so it goes
+# in the image, as a layer on top of the unchanged Dockerfile build (see the
+# docs/running-in-azure-or-aws.md). Set NODE_EXTRA_CA_CERTS=/opt/rds/rds-global-bundle.pem
+# in the Hub task definition.
+ARG BASE_IMAGE
+FROM ${BASE_IMAGE}
+USER root
+# Create the folder first: ADD --chmod would also give a folder it creates
+# mode 644, which the Hub's own user cannot enter.
+RUN mkdir -p -m 755 /opt/rds
+ADD --chmod=644 https://truststore.pki.rds.amazonaws.com/global/global-bundle.pem /opt/rds/rds-global-bundle.pem
+USER ccc

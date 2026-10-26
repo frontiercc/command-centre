@@ -1,0 +1,159 @@
+/*
+ * Copyright 2026 Lee James
+ * SPDX-License-Identifier: Apache-2.0
+ */
+
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+:root {
+  --background: #f9fafb;
+  --foreground: #111827;
+}
+
+body {
+  color: var(--foreground);
+  background: var(--background);
+  font-family: var(--font-sans), Arial, Helvetica, sans-serif;
+}
+
+/* Precision theme, the app's only look (lib/theme.ts sets
+   html[data-theme="precision"]). It remaps the shared Tailwind classes the
+   pages already use, so every page picks up the look without per-page edits:
+   lighter chrome, 14px body text, hairline borders, rounded corners, one accent. */
+html[data-theme="precision"] {
+  --p-ink: #0A0A0A;
+  --p-ink-2: #333333;
+  --p-ink-3: #4D4D4D;
+  --p-mute: #666666;
+  --p-faint: #8F8F8F;
+  --p-line: #EAEAEA;
+  --p-line-2: #F2F2F2;
+  --p-input: #DADADA;
+  --p-subtle: #FAFAFA;
+  --p-fill: #F2F2F2;
+  --p-accent: #245BF3;
+  --p-accent-hover: #1A44C7;
+  --p-accent-tint: #F2F5FF;
+  --p-page: #F7F7F8;
+  --p-judged: #699BFB;
+  --p-judged-ink: #2451F3;
+  --p-measured: #05073F;
+  --background: #F7F7F8;
+  --foreground: var(--p-ink);
+}
+html[data-theme="precision"] body {
+  background: var(--p-page);
+  color: var(--p-ink);
+  /* No letter-spacing on body text: a fractional value stops Chrome on Windows snapping
+     glyphs to whole pixels, so small text at browser zoom (e.g. 80%) renders blurry.
+     Tight tracking is kept only on headings and figures 18px and up. */
+}
+
+/* Text sizes and weights */
+html[data-theme="precision"] .text-sm { font-size: 14px; line-height: 20px; }
+html[data-theme="precision"] .text-xl { font-size: 18px; line-height: 26px; letter-spacing: -0.02em; }
+html[data-theme="precision"] .text-2xl.font-bold,
+html[data-theme="precision"] .text-3xl.font-bold,
+html[data-theme="precision"] .text-3xl.font-extrabold,
+html[data-theme="precision"] .text-4xl.font-extrabold { font-weight: 600; letter-spacing: -0.025em; }
+html[data-theme="precision"] td,
+html[data-theme="precision"] .text-2xl,
+html[data-theme="precision"] .text-3xl,
+html[data-theme="precision"] .text-4xl { font-variant-numeric: tabular-nums; }
+
+/* Small-caps section labels and table headings read as sentence case */
+html[data-theme="precision"] .uppercase.tracking-widest,
+html[data-theme="precision"] .uppercase.tracking-wider,
+html[data-theme="precision"] .uppercase.tracking-wide { text-transform: none; letter-spacing: normal; }
+html[data-theme="precision"] .text-xs.font-semibold.uppercase.tracking-widest { font-size: 14px; }
+html[data-theme="precision"] thead tr.uppercase,
+html[data-theme="precision"] thead th.uppercase { font-size: 13px; color: var(--p-faint); }
+
+/* Text colours */
+html[data-theme="precision"] .text-\[\#1A1A1A\],
+html[data-theme="precision"] .text-gray-900,
+html[data-theme="precision"] .hover\:text-\[\#1A1A1A\]:hover { color: var(--p-ink); }
+html[data-theme="precision"] .text-gray-800 { color: #1F1F1F; }
+html[data-theme="precision"] .text-gray-700 { color: var(--p-ink-2); }
+html[data-theme="precision"] .text-gray-600 { color: var(--p-ink-3); }
+html[data-theme="precision"] .text-gray-500 { color: var(--p-mute); }
+html[data-theme="precision"] .text-gray-400 { color: var(--p-faint); }
+
+/* Accent */
+html[data-theme="precision"] .text-\[\#3A58EE\],
+html[data-theme="precision"] .text-brand,
+html[data-theme="precision"] .hover\:text-\[\#3A58EE\]:hover { color: var(--p-accent); }
+html[data-theme="precision"] .hover\:text-\[\#2A3AB8\]:hover { color: var(--p-accent-hover); }
+html[data-theme="precision"] .bg-\[\#3A58EE\],
+html[data-theme="precision"] .bg-brand,
+html[data-theme="precision"] .hover\:bg-\[\#3A58EE\]:hover { background-color: var(--p-accent); }
+html[data-theme="precision"] .hover\:bg-\[\#2A3AB8\]:hover,
+html[data-theme="precision"] .hover\:bg-\[\#2d48d4\]:hover { background-color: var(--p-accent-hover); }
+html[data-theme="precision"] .border-\[\#3A58EE\],
+html[data-theme="precision"] .border-brand,
+html[data-theme="precision"] .hover\:border-\[\#3A58EE\]:hover { border-color: var(--p-accent); }
+html[data-theme="precision"] .focus\:ring-\[\#3A58EE\]:focus,
+html[data-theme="precision"] .ring-\[\#3A58EE\] { --tw-ring-color: var(--p-accent); }
+
+/* Borders and dividers */
+html[data-theme="precision"] .border-\[\#E2E8F0\],
+html[data-theme="precision"] .border-gray-200,
+html[data-theme="precision"] .hover\:border-\[\#E2E8F0\]:hover { border-color: var(--p-line); }
+html[data-theme="precision"] .border-gray-100,
+html[data-theme="precision"] .border-gray-50,
+html[data-theme="precision"] .border-\[\#F1F5F9\] { border-color: var(--p-line-2); }
+html[data-theme="precision"] .border-gray-300 { border-color: var(--p-input); }
+html[data-theme="precision"] .divide-gray-100 > :not([hidden]) ~ :not([hidden]),
+html[data-theme="precision"] .divide-gray-50 > :not([hidden]) ~ :not([hidden]) { border-color: var(--p-line-2); }
+
+/* Surfaces */
+html[data-theme="precision"] .bg-gray-50,
+html[data-theme="precision"] .bg-\[\#F8FAFC\],
+html[data-theme="precision"] .hover\:bg-gray-50:hover,
+html[data-theme="precision"] .hover\:bg-\[\#F8FAFC\]:hover { background-color: var(--p-subtle); }
+html[data-theme="precision"] body.bg-gray-50 { background-color: var(--p-page); }
+html[data-theme="precision"] .bg-gray-100 { background-color: var(--p-fill); }
+html[data-theme="precision"] .bg-\[\#EEF2FF\],
+html[data-theme="precision"] .bg-\[\#EEF1FD\],
+html[data-theme="precision"] .bg-\[\#F7F8FC\],
+html[data-theme="precision"] .bg-\[\#F8F9FF\],
+html[data-theme="precision"] .hover\:bg-\[\#F8F9FF\]:hover,
+html[data-theme="precision"] .hover\:bg-\[\#F1F5FF\]:hover { background-color: var(--p-accent-tint); }
+/* Dark hero cards become one flat near-black panel */
+html[data-theme="precision"] .bg-gradient-to-br.from-gray-900 { background-image: none; background-color: var(--p-ink); }
+
+/* Corners and elevation: tighter radii, flat cards (focus rings and popover shadows kept) */
+html[data-theme="precision"] .rounded-2xl { border-radius: 18px; }
+html[data-theme="precision"] .rounded-xl { border-radius: 14px; }
+html[data-theme="precision"] .rounded-lg { border-radius: 12px; }
+html[data-theme="precision"] .shadow-sm,
+html[data-theme="precision"] .shadow { --tw-shadow: 0 0 #0000; --tw-shadow-colored: 0 0 #0000; }
+
+/* Page header (components/layout/TopBar.tsx) */
+html[data-theme="precision"] .ccc-topbar { padding: 14px 24px; border-color: var(--p-line); }
+html[data-theme="precision"] .ccc-topbar h2 { font-size: 18px; line-height: 26px; letter-spacing: -0.02em; }
+
+/* Sidebar (components/layout/Sidebar.tsx): light, hairline edge, grey active state */
+html[data-theme="precision"] .ccc-sidebar { background-color: var(--p-subtle); color: var(--p-ink-3); border-right: 1px solid var(--p-line); }
+html[data-theme="precision"] .ccc-sidebar img { height: 22px; }
+html[data-theme="precision"] .ccc-sidebar .border-gray-800 { border-color: var(--p-line); }
+html[data-theme="precision"] .ccc-sidebar .text-gray-500,
+html[data-theme="precision"] .ccc-sidebar .text-gray-400 { color: var(--p-mute); }
+html[data-theme="precision"] .ccc-sidebar nav a,
+html[data-theme="precision"] .ccc-sidebar nav button,
+html[data-theme="precision"] .ccc-sidebar > div > a,
+html[data-theme="precision"] .ccc-sidebar > div > button { padding-top: 6px; padding-bottom: 6px; }
+html[data-theme="precision"] .ccc-sidebar .bg-sidebar-hover { background-color: #EDEDED; color: var(--p-ink); }
+html[data-theme="precision"] .ccc-sidebar .hover\:bg-sidebar-hover:hover { background-color: #F0F0F0; }
+html[data-theme="precision"] .ccc-sidebar .hover\:text-white:hover,
+html[data-theme="precision"] .ccc-sidebar .text-white { color: var(--p-ink); }
+html[data-theme="precision"] .ccc-sidebar .bg-brand.text-white { color: #FFFFFF; }
+html[data-theme="precision"] .ccc-sidebar .border-l-2 { border-left-width: 0; }
+
+/* Mobile header (components/layout/MobileTopBar.tsx) */
+html[data-theme="precision"] .ccc-mobile-top { background-color: #FFFFFF; border-bottom: 1px solid var(--p-line); }
+html[data-theme="precision"] .ccc-mobile-top .text-gray-400 { color: var(--p-mute); }
+html[data-theme="precision"] .ccc-mobile-top .hover\:text-white:hover { color: var(--p-ink); }
+html[data-theme="precision"] .ccc-mobile-top .bg-brand.text-white { color: #FFFFFF; }

@@ -1,0 +1,106 @@
+# OTel Collector config — Azure (Collector Container App → Hub Container App,
+# both inside the same VNet-integrated Container Apps environment, over the
+# Hub's internal managed-TLS endpoint). Baked into the image by deploy/azure/Dockerfile.otel,
+# because Container Apps cannot mount a configuration file from the repository
+# the way Docker Compose does.
+#
+# Env vars (set on the collector container app):
+#   OTEL_ENDPOINT_SECRET — auth clients (Claude Code/Desktop/Cowork) present to
+#                          THIS collector's own receiver.
+#   CCC_COLLECTOR_TOKEN  — auth this collector presents to the Hub; the Hub
+#                          checks incoming OTel posts against the same value.
+#   HUB_HOST             — the Hub's own FQDN: internal Container Apps
+#                          ingress, not the public Application Gateway.
+#
+# Compared with otelcol-config.yaml, the Docker Compose collector (otelcol-contrib 0.157.0):
+#   - Same exporter settings (compression: none, encoding: json), which the
+#     Hub's ingest endpoint expects.
+#   - Same pipelines: logs_endpoint AND metrics_endpoint both post to the
+#     ingest URL, with a matching metrics pipeline.
+#   - With Docker Compose a reverse proxy you provide terminates TLS in
+#     front of the collector; here Container Apps' own ingress terminates TLS
+#     and forwards straight to the container's target port (4318).
+#   - A health_check extension (below) gives App Gateway and the platform
+#     probes an unauthenticated endpoint, since the otlp receiver requires a
+#     bearer token on every request.
+#
+# Disk queue: file_storage.directory is ${OTEL_QUEUE_DIR}, a fixed slot-N
+# folder under the /var/otel-wal Azure Files mount that
+# deploy/otel-slot-launcher.sh claims (and holds a lock on) at start-up, as
+# on AWS. The file_storage extension takes an exclusive lock on its queue
+# file and the share is common to every replica, so each replica needs its
+# own folder; a replica that replaces another adopts its free slot, queue
+# included, so a replaced replica's queue is still sent.
+
+extensions:
+  bearertokenauth/receiver:
+    token: "${OTEL_ENDPOINT_SECRET}"
+  bearertokenauth/exporter:
+    token: "${CCC_COLLECTOR_TOKEN}"
+  file_storage:
+    # The queue slot the launcher claimed (slot-0 .. slot-3 under
+    # /var/otel-wal; see Dockerfile.otel).
+    directory: ${OTEL_QUEUE_DIR}
+    create_directory: true
+  # For App Gateway (and Container Apps' own platform readiness/liveness
+  # probes) to check: the otlp receiver above requires bearer-token auth on
+  # every request, so it cannot serve an external health check. Standard,
+  # unauthenticated OTel Collector extension, purpose-built for exactly
+  # this (Microsoft/OTel's own docs recommend it as the liveness/readiness
+  # probe target). 0.0.0.0, not the default localhost — this needs to be
+  # reachable from outside the container, same reasoning as the otlp
+  # receiver's own 0.0.0.0:4318 above.
+  health_check:
+    endpoint: 0.0.0.0:13133
+    path: /
+
+receivers:
+  otlp:
+    protocols:
+      http:
+        endpoint: 0.0.0.0:4318
+        auth:
+          authenticator: bearertokenauth/receiver
+
+processors:
+  batch:
+    timeout: 2s
+    send_batch_size: 100
+
+exporters:
+  otlphttp:
+    logs_endpoint: https://${HUB_HOST}/api/otel/ingest
+    metrics_endpoint: https://${HUB_HOST}/api/otel/ingest
+    compression: none
+    encoding: json
+    auth:
+      authenticator: bearertokenauth/exporter
+    # Retry until delivered (max_elapsed_time: 0), matching the other
+    # collectors, so queued batches survive a long Hub outage. queue_size
+    # caps each replica's disk queue (~3 days of busy
+    # traffic at one batch per 2s), so a long outage drops the newest data
+    # instead of filling the share. Each replica has its own queue on the
+    # otel-wal share, so the share is sized for two (otel_wal_share_quota_gb
+    # in the infrastructure). HTTP 500 is still treated as permanent by
+    # the exporter; only 429/502/503/504 and connection errors are retried.
+    sending_queue:
+      enabled: true
+      storage: file_storage
+      queue_size: 120000
+    retry_on_failure:
+      enabled: true
+      initial_interval: 5s
+      max_interval: 60s
+      max_elapsed_time: 0
+
+service:
+  extensions: [bearertokenauth/receiver, bearertokenauth/exporter, file_storage, health_check]
+  pipelines:
+    logs:
+      receivers: [otlp]
+      processors: [batch]
+      exporters: [otlphttp]
+    metrics:
+      receivers: [otlp]
+      processors: [batch]
+      exporters: [otlphttp]
