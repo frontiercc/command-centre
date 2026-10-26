@@ -13,7 +13,7 @@ Works with Claude Code, Claude Cowork and Claude Chat.
 
 </div>
 
-https://github.com/user-attachments/assets/1b69cf0e-c9d1-411e-923e-cee1eceecad7
+https://github.com/user-attachments/assets/a8c40ba5-dd3a-4647-9eec-08b2e7ce3263
 
 Command Centre gives organisations a complete picture of how Claude is being used across their business, the work it's delivering, what it costs, where the risks sit and whether their investment is creating measurable value. It brings together productivity, adoption, financial management and governance across Claude Code, Claude Cowork and Claude Chat, providing visibility from individual employees through to departments, engineering teams and the organisation as a whole.
 
