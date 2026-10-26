@@ -9,7 +9,7 @@
 
 Works with Claude Code, Claude Cowork and Claude Chat.
 
-[![CI](https://github.com/frontiercc/command-centre/actions/workflows/ci.yml/badge.svg?branch=main)](https://github.com/frontiercc/command-centre/actions/workflows/ci.yml) [![CodeQL](https://github.com/frontiercc/command-centre/actions/workflows/codeql.yml/badge.svg?branch=main)](https://github.com/frontiercc/command-centre/actions/workflows/codeql.yml) [![OpenSSF Scorecard](https://api.scorecard.dev/projects/github.com/frontiercc/command-centre/badge)](https://scorecard.dev/viewer/?uri=github.com/frontiercc/command-centre) [![Licence: Apache 2.0](https://img.shields.io/badge/licence-Apache%202.0-blue)](LICENSE)
+[![CI](https://github.com/frontiercc/command-centre/actions/workflows/ci.yml/badge.svg?branch=main)](https://github.com/frontiercc/command-centre/actions/workflows/ci.yml) [![CodeQL](https://github.com/frontiercc/command-centre/actions/workflows/codeql.yml/badge.svg?branch=main)](https://github.com/frontiercc/command-centre/actions/workflows/codeql.yml) [![OpenSSF Scorecard](https://api.scorecard.dev/projects/github.com/frontiercc/command-centre/badge)](https://scorecard.dev/viewer/?uri=github.com/frontiercc/command-centre) [![OpenSSF Best Practices](https://www.bestpractices.dev/projects/15963/badge)](https://www.bestpractices.dev/projects/15963) [![Licence: Apache 2.0](https://img.shields.io/badge/licence-Apache%202.0-blue)](LICENSE)
 
 </div>
 
