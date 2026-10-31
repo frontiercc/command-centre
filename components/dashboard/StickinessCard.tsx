@@ -5,8 +5,8 @@
 
 import { useEffect, useState } from 'react';
 import { Panel, PanelFoot, BarRow, Tag } from '@/components/precision/ui';
-import { SURFACE_COLOR } from '@/lib/ui/chart-colours';
-import type { Vendor } from '@/lib/dashboard/vendor';
+import { PRODUCT_COLOR } from '@/lib/ui/chart-colours';
+import { productsShown, type ProductId, type Vendor } from '@/lib/dashboard/vendor';
 
 interface SurfaceStickiness {
   avgDau: number;
@@ -18,29 +18,24 @@ interface StickinessData {
   cowork: SurfaceStickiness;
   code: SurfaceStickiness;
   chat: SurfaceStickiness;
+  /** Each of the six products on its own. */
+  products: Record<ProductId, SurfaceStickiness>;
   computedAt: number;
 }
 
-const SURFACES: Array<{
-  key: keyof Pick<StickinessData, 'cowork' | 'code' | 'chat'>;
-  label: string;
-}> = [
-  { key: 'cowork', label: 'Work' },
-  { key: 'code', label: 'Code' },
-  { key: 'chat', label: 'Chat' },
-];
-
-export default function StickinessCard({ vendor = 'all' }: { vendor?: Vendor }) {
+/** One row per product shown: the chosen vendor's three, or all six. */
+export default function StickinessCard({ vendor = 'all', openaiPresent = false }: { vendor?: Vendor; openaiPresent?: boolean }) {
   const [data, setData] = useState<StickinessData | null>(null);
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
-    fetch(`/api/pulse/stickiness?vendor=${vendor}`)
+    // Every product's figures come back at once; the switch only picks the rows.
+    fetch('/api/pulse/stickiness')
       .then(r => r.ok ? r.json() : Promise.reject())
       .then(setData)
       .catch(() => setData(null))
       .finally(() => setLoading(false));
-  }, [vendor]);
+  }, []);
 
   if (loading) return null;
   if (!data) return null;
@@ -57,21 +52,21 @@ export default function StickinessCard({ vendor = 'all' }: { vendor?: Vendor }) 
         Daily active share of each product&apos;s monthly actives
       </p>
       <div className="flex-1 py-1">
-        {SURFACES.map(({ key, label }) => {
-          const surface = data[key];
+        {productsShown(vendor, openaiPresent).map(({ id: key, label }) => {
+          const surface = data.products[key];
           const pct = surface.stickiness !== null ? Math.round(surface.stickiness * 100) : null;
           return (
             <BarRow
               key={key}
               label={
                 <span className="inline-flex items-center gap-1.5">
-                  <span className="w-2 h-2 rounded-full" style={{ background: SURFACE_COLOR[key] }} />
+                  <span className="w-2 h-2 rounded-full" style={{ background: PRODUCT_COLOR[key] }} />
                   {label}
                 </span>
               }
               value={pct !== null ? `${pct}% DAU/MAU` : '—'}
               pct={pct ?? 0}
-              color={SURFACE_COLOR[key]}
+              color={PRODUCT_COLOR[key]}
               title={`${surface.avgDau.toFixed(1)} daily / ${surface.mau} monthly`}
             />
           );

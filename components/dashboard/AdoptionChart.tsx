@@ -5,13 +5,12 @@
 
 import { smoothPath, smoothAreaPath, type ChartPoint } from '@/lib/charts/smooth-path';
 import { Panel, Muted, Tag } from '@/components/precision/ui';
-import { SURFACE_COLOR } from '@/lib/ui/chart-colours';
+import { SURFACE_COLOR, PRODUCT_COLOR } from '@/lib/ui/chart-colours';
+import type { Product, ProductCounts } from '@/lib/dashboard/vendor';
 
 interface TrendPoint {
   date: string;
-  surface_chat: number;
-  surface_code: number;
-  surface_cowork: number;
+  products: ProductCounts;
 }
 
 const CHART_W = 600;
@@ -21,20 +20,24 @@ const PAD = 10;
 /** Surface colours shared by the dashboard's measured activity views (defined in lib/ui/chart-colours). */
 export { SURFACE_COLOR };
 
-function Legend() {
+function Legend({ products }: { products: readonly Product[] }) {
   return (
-    <span className="flex items-center gap-4 text-[13px] text-[#666666]">
-      {(['chat', 'code', 'cowork'] as const).map(k => (
-        <span key={k} className="flex items-center gap-1.5">
-          <span className="w-2 h-2 rounded-full" style={{ background: SURFACE_COLOR[k] }} />
-          {k === 'chat' ? 'Chat' : k === 'code' ? 'Code' : 'Work'}
+    <span className="flex flex-wrap items-center justify-end gap-x-4 gap-y-1 text-[13px] text-[#666666]">
+      {products.map(p => (
+        <span key={p.id} className="flex items-center gap-1.5">
+          <span className="w-2 h-2 rounded-full" style={{ background: PRODUCT_COLOR[p.id] }} />
+          {p.label}
         </span>
       ))}
     </span>
   );
 }
 
-export default function AdoptionChart({ data }: { data: TrendPoint[] }) {
+/**
+ * One line per product shown. Chat and Code products count prompts a day,
+ * Work products count people a day.
+ */
+export default function AdoptionChart({ data, products }: { data: TrendPoint[]; products: readonly Product[] }) {
   if (data.length === 0) {
     return (
       <Panel title="14-day adoption trend" className="h-full">
@@ -46,7 +49,7 @@ export default function AdoptionChart({ data }: { data: TrendPoint[] }) {
   }
 
   const peak = Math.max(
-    ...data.map(d => Math.max(d.surface_chat, d.surface_code, d.surface_cowork)),
+    ...data.map(d => Math.max(...products.map(p => d.products[p.id]))),
     1
   );
   // Round scale: four equal whole-number steps, so the axis reads 0 / 10 / 20 / 30 / 40.
@@ -70,20 +73,21 @@ export default function AdoptionChart({ data }: { data: TrendPoint[] }) {
     return CHART_H - PAD - ((val / maxVal) * (CHART_H - PAD * 2));
   };
 
-  type SurfaceKey = 'surface_chat' | 'surface_code' | 'surface_cowork';
-  const toPoints = (key: SurfaceKey): ChartPoint[] =>
-    doneData.map((d, i) => ({ x: toX(i), y: toY(d[key]) }));
+  type Key = Product['id'];
+  const toPoints = (key: Key): ChartPoint[] =>
+    doneData.map((d, i) => ({ x: toX(i), y: toY(d.products[key]) }));
 
-  const buildPath = (key: SurfaceKey) => smoothPath(toPoints(key));
+  const buildPath = (key: Key) => smoothPath(toPoints(key));
 
-  const buildArea = (key: SurfaceKey) => smoothAreaPath(toPoints(key), CHART_H - PAD);
+  const buildArea = (key: Key) => smoothAreaPath(toPoints(key), CHART_H - PAD);
 
   // Dashed link from the last full day to today's partial value.
-  const partialSegment = (key: SurfaceKey) => {
+  const partialSegment = (key: Key) => {
     const n = data.length;
-    return `M ${toX(n - 2).toFixed(1)} ${toY(data[n - 2][key]).toFixed(1)} L ${toX(n - 1).toFixed(1)} ${toY(data[n - 1][key]).toFixed(1)}`;
+    return `M ${toX(n - 2).toFixed(1)} ${toY(data[n - 2].products[key]).toFixed(1)} L ${toX(n - 1).toFixed(1)} ${toY(data[n - 1].products[key]).toFixed(1)}`;
   };
-  const SURFACE_KEYS: Array<[SurfaceKey, 'chat' | 'code' | 'cowork']> = [['surface_chat', 'chat'], ['surface_code', 'code'], ['surface_cowork', 'cowork']];
+  // With six lines, area fills would muddy each other, so they are drawn only for three.
+  const fills = products.length <= 3;
 
   // Y-axis grid lines
   const gridLines = [0, 0.25, 0.5, 0.75, 1].map(pct => ({
@@ -95,7 +99,7 @@ export default function AdoptionChart({ data }: { data: TrendPoint[] }) {
     <Panel
       title="14-day adoption trend"
       badge={<Tag tone="measured">Measured</Tag>}
-      right={<Legend />}
+      right={<Legend products={products} />}
       className="h-full"
     >
       <div className="relative" style={{ height: CHART_H + 30 }}>
@@ -112,18 +116,18 @@ export default function AdoptionChart({ data }: { data: TrendPoint[] }) {
           ))}
 
           {/* Area fills (subtle) */}
-          <path d={buildArea('surface_chat')} fill={SURFACE_COLOR.chat} opacity="0.06" />
-          <path d={buildArea('surface_code')} fill={SURFACE_COLOR.code} opacity="0.08" />
-          <path d={buildArea('surface_cowork')} fill={SURFACE_COLOR.cowork} opacity="0.06" />
+          {fills && products.map(p => (
+            <path key={p.id} d={buildArea(p.id)} fill={PRODUCT_COLOR[p.id]} opacity="0.06" />
+          ))}
 
           {/* Lines */}
-          <path d={buildPath('surface_chat')} fill="none" stroke={SURFACE_COLOR.chat} strokeWidth="1.75" vectorEffect="non-scaling-stroke" strokeLinejoin="round" strokeLinecap="round" />
-          <path d={buildPath('surface_code')} fill="none" stroke={SURFACE_COLOR.code} strokeWidth="1.75" vectorEffect="non-scaling-stroke" strokeLinejoin="round" strokeLinecap="round" />
-          <path d={buildPath('surface_cowork')} fill="none" stroke={SURFACE_COLOR.cowork} strokeWidth="1.75" vectorEffect="non-scaling-stroke" strokeLinejoin="round" strokeLinecap="round" />
+          {products.map(p => (
+            <path key={p.id} d={buildPath(p.id)} fill="none" stroke={PRODUCT_COLOR[p.id]} strokeWidth="1.75" vectorEffect="non-scaling-stroke" strokeLinejoin="round" strokeLinecap="round" />
+          ))}
 
           {/* Today so far: dashed, hollow */}
-          {lastIsToday && SURFACE_KEYS.map(([key, s]) => (
-            <path key={key} d={partialSegment(key)} fill="none" stroke={SURFACE_COLOR[s]} strokeWidth="1.5" strokeDasharray="3 3" vectorEffect="non-scaling-stroke" strokeLinecap="round" />
+          {lastIsToday && products.map(p => (
+            <path key={p.id} d={partialSegment(p.id)} fill="none" stroke={PRODUCT_COLOR[p.id]} strokeWidth="1.5" strokeDasharray="3 3" vectorEffect="non-scaling-stroke" strokeLinecap="round" />
           ))}
 
           {/* Data points */}
@@ -131,14 +135,14 @@ export default function AdoptionChart({ data }: { data: TrendPoint[] }) {
             const partial = lastIsToday && i === data.length - 1;
             return (
               <g key={i}>
-                {SURFACE_KEYS.map(([key, s]) => (
+                {products.map(p => (
                   <circle
-                    key={key}
+                    key={p.id}
                     cx={toX(i)}
-                    cy={toY(d[key])}
+                    cy={toY(d.products[p.id])}
                     r="2.5"
-                    fill={partial ? '#FFFFFF' : SURFACE_COLOR[s]}
-                    stroke={partial ? SURFACE_COLOR[s] : 'none'}
+                    fill={partial ? '#FFFFFF' : PRODUCT_COLOR[p.id]}
+                    stroke={partial ? PRODUCT_COLOR[p.id] : 'none'}
                     strokeWidth={partial ? 1.25 : 0}
                     vectorEffect="non-scaling-stroke"
                   />
@@ -168,7 +172,9 @@ export default function AdoptionChart({ data }: { data: TrendPoint[] }) {
           </>
         )}
       </div>
-      {lastIsToday && <p className="m-0 mt-1 text-[12px] text-[#8F8F8F]">Today so far shown dashed</p>}
+      <p className="m-0 mt-1 text-[12px] text-[#8F8F8F]">
+        Chat and Code count prompts a day; Work counts people a day.{lastIsToday && ' Today so far shown dashed.'}
+      </p>
     </Panel>
   );
 }

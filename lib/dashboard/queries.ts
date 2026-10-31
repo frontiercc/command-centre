@@ -10,8 +10,8 @@
 // OpenAI figures are always read live from cowork_messages.
 import { sql } from 'drizzle-orm';
 import { getTypedClient } from '@/lib/db/client';
-import { kindClause, kindExpr, vendorClause, vendorExpr, codeSessionVendorClause } from './product-sql';
-import type { Vendor, VendorSplit, WorkKind } from './vendor';
+import { kindExpr, vendorClause, vendorExpr, codeSessionVendorClause, productExpr } from './product-sql';
+import { zeroCounts, sumShown, type Product, type ProductCounts, type ProductId, type Vendor, type VendorSplit, type WorkKind } from './vendor';
 
 interface RawFacade {
   execute: (q: unknown) => Promise<{ rows: unknown[] }>;
@@ -117,64 +117,59 @@ export async function getFlaggedByProduct(): Promise<Record<WorkKind, VendorSpli
   return out;
 }
 
-export interface TrendDay { date: string; surface_chat: number; surface_code: number; surface_cowork: number }
-
-/** Live daily activity from cowork_messages for one vendor (never 'all'). */
-async function liveTrend(cutoffS: number, vendor: Vendor): Promise<Map<string, Omit<TrendDay, 'date'>>> {
-  const dateExpr = `to_char(to_timestamp(occurred_at) AT TIME ZONE 'UTC', 'YYYY-MM-DD')`;
-  // Same measures as getAdoptionTrend: Work is people a day, Chat and Code are prompts a day.
-  const rows = await rawAll<{ date: string; chat: number | string; work: number | string; code: number | string }>(sql`
-    SELECT ${sql.raw(dateExpr)} AS date,
-           COUNT(CASE WHEN ${sql.raw(kindClause('chat'))} THEN 1 END) AS chat,
-           COUNT(DISTINCT CASE WHEN ${sql.raw(kindClause('work'))} THEN user_id END) AS work,
-           COUNT(CASE WHEN ${sql.raw(kindClause('code'))} THEN 1 END) AS code
-    FROM cowork_messages
-    WHERE occurred_at >= ${cutoffS} AND ${sql.raw(vendorClause(vendor))}
-    GROUP BY 1
-  `);
-  return new Map(rows.map((r) => [r.date, { surface_chat: Number(r.chat), surface_cowork: Number(r.work), surface_code: Number(r.code) }]));
-}
+export interface TrendDay { date: string; products: ProductCounts }
 
 /**
- * The 14-day adoption chart for a vendor. Claude's part prefers
+ * Daily activity for each product over the last `days` days. Chat and Code
+ * products count prompts a day, Work products count people a day (the
+ * measures the trend has always used). Claude's three products prefer
  * analytics_snapshots on the days they cover, as getAdoptionTrend does; the
- * OpenAI part is always live. 'all' adds the two.
+ * OpenAI products are always read live.
  */
-export async function getAdoptionTrendByVendor(days: number, vendor: Vendor): Promise<TrendDay[]> {
+export async function getAdoptionTrendByProduct(days: number): Promise<TrendDay[]> {
   const cutoff = new Date();
   cutoff.setDate(cutoff.getDate() - days);
   const cutoffStr = cutoff.toISOString().split('T')[0];
   const todayStr = new Date().toISOString().split('T')[0];
   const cutoffS = Math.floor(cutoff.getTime() / 1000);
-  const zero = () => ({ surface_chat: 0, surface_code: 0, surface_cowork: 0 });
+  const dateExpr = `to_char(to_timestamp(occurred_at) AT TIME ZONE 'UTC', 'YYYY-MM-DD')`;
 
-  const parts: Array<Map<string, Omit<TrendDay, 'date'>>> = [];
-  if (vendor !== 'openai') {
-    const claude = await liveTrend(cutoffS, 'claude');
-    const snaps = await rawAll<{ date: string; chat: number | string; code: number | string; cowork: number | string }>(sql`
+  const [live, snaps] = await Promise.all([
+    rawAll<{ date: string; product: string; prompts: number | string; people: number | string }>(sql`
+      SELECT ${sql.raw(dateExpr)} AS date, ${sql.raw(productExpr())} AS product,
+             COUNT(*) AS prompts, COUNT(DISTINCT user_id) AS people
+      FROM cowork_messages
+      WHERE occurred_at >= ${cutoffS}
+      GROUP BY 1, 2
+    `),
+    rawAll<{ date: string; chat: number | string; code: number | string; cowork: number | string }>(sql`
       SELECT snapshot_date AS date, SUM(surface_chat) AS chat, SUM(surface_code) AS code, SUM(surface_cowork) AS cowork
       FROM analytics_snapshots
       WHERE snapshot_date >= ${cutoffStr} AND snapshot_date <= ${todayStr}
       GROUP BY snapshot_date
-    `);
-    for (const s of snaps) claude.set(s.date, { surface_chat: Number(s.chat), surface_code: Number(s.code), surface_cowork: Number(s.cowork) });
-    parts.push(claude);
-  }
-  if (vendor !== 'claude') parts.push(await liveTrend(cutoffS, 'openai'));
+    `),
+  ]);
 
-  const merged = new Map<string, Omit<TrendDay, 'date'>>();
-  for (const part of parts) {
-    for (const [date, v] of part) {
-      const e = merged.get(date) ?? zero();
-      e.surface_chat += v.surface_chat;
-      e.surface_code += v.surface_code;
-      e.surface_cowork += v.surface_cowork;
-      merged.set(date, e);
-    }
+  const byDate = new Map<string, ProductCounts>();
+  const day = (date: string) => {
+    let c = byDate.get(date);
+    if (!c) { c = zeroCounts(); byDate.set(date, c); }
+    return c;
+  };
+  const isWork = (id: ProductId) => id === 'claude_cowork' || id === 'chatgpt_work';
+  for (const r of live) {
+    const id = r.product as ProductId;
+    day(r.date)[id] = Number(isWork(id) ? r.people : r.prompts);
   }
-  return Array.from(merged.entries())
+  for (const s of snaps) {
+    const c = day(s.date);
+    c.claude_chat = Number(s.chat);
+    c.claude_code = Number(s.code);
+    c.claude_cowork = Number(s.cowork);
+  }
+  return Array.from(byDate.entries())
     .filter(([date]) => date <= todayStr)
-    .map(([date, v]) => ({ date, ...v }))
+    .map(([date, products]) => ({ date, products }))
     .sort((a, b) => a.date.localeCompare(b.date));
 }
 
@@ -182,42 +177,38 @@ export interface DepartmentRow {
   department: string;
   user_count: number;
   active_users: number;
-  surface_chat: number;
-  surface_code: number;
-  surface_cowork: number;
+  /** People in the department who used each product in the last 7 days. */
+  products: ProductCounts;
 }
 
-/** People per department who used each kind of work from the vendor in the last 7 days. */
-export async function getDepartmentBreakdownByVendor(vendor: Vendor): Promise<DepartmentRow[]> {
+/** People per department who used each product in the last 7 days. */
+export async function getDepartmentBreakdownByProduct(): Promise<DepartmentRow[]> {
   const weekAgo = nowS() - 7 * DAY;
-  const v = sql.raw(vendorClause(vendor));
-  const rows = await rawAll<{
-    department: string; user_count: number | string; active_users: number | string;
-    chat: number | string; code: number | string; work: number | string;
-  }>(sql`
-    SELECT
-      COALESCE(u.department, 'Unassigned') AS department,
-      COUNT(DISTINCT u.id) AS user_count,
-      COUNT(DISTINCT CASE WHEN u.last_seen_at >= ${weekAgo} THEN u.id END) AS active_users,
-      COUNT(DISTINCT chat.user_id) AS chat,
-      COUNT(DISTINCT code.user_id) AS code,
-      COUNT(DISTINCT work.user_id) AS work
-    FROM users u
-    LEFT JOIN (SELECT DISTINCT user_id FROM cowork_messages WHERE ${sql.raw(kindClause('chat'))} AND ${v} AND occurred_at >= ${weekAgo}) chat ON u.id = chat.user_id
-    LEFT JOIN (SELECT DISTINCT user_id FROM cowork_messages WHERE ${sql.raw(kindClause('code'))} AND ${v} AND occurred_at >= ${weekAgo}) code ON u.id = code.user_id
-    LEFT JOIN (SELECT DISTINCT user_id FROM cowork_messages WHERE ${sql.raw(kindClause('work'))} AND ${v} AND occurred_at >= ${weekAgo}) work ON u.id = work.user_id
-    WHERE u.department IS NOT NULL
-    GROUP BY u.department
-    ORDER BY (COUNT(DISTINCT chat.user_id) + COUNT(DISTINCT code.user_id) + COUNT(DISTINCT work.user_id)) DESC
-  `);
-  return rows.map((r) => ({
-    department: r.department,
-    user_count: Number(r.user_count),
-    active_users: Number(r.active_users),
-    surface_chat: Number(r.chat),
-    surface_code: Number(r.code),
-    surface_cowork: Number(r.work),
-  }));
+  const [depts, used] = await Promise.all([
+    rawAll<{ department: string; user_count: number | string; active_users: number | string }>(sql`
+      SELECT u.department, COUNT(*) AS user_count,
+             COUNT(CASE WHEN u.last_seen_at >= ${weekAgo} THEN 1 END) AS active_users
+      FROM users u WHERE u.department IS NOT NULL
+      GROUP BY u.department
+    `),
+    rawAll<{ department: string; product: string; n: number | string }>(sql`
+      SELECT u.department, ${sql.raw(productExpr('cm.'))} AS product, COUNT(DISTINCT cm.user_id) AS n
+      FROM cowork_messages cm JOIN users u ON u.id = cm.user_id
+      WHERE u.department IS NOT NULL AND cm.occurred_at >= ${weekAgo}
+      GROUP BY 1, 2
+    `),
+  ]);
+  const rows = new Map<string, DepartmentRow>(depts.map((d) => [d.department, {
+    department: d.department,
+    user_count: Number(d.user_count),
+    active_users: Number(d.active_users),
+    products: zeroCounts(),
+  }]));
+  for (const r of used) {
+    const row = rows.get(r.department);
+    if (row) row.products[r.product as ProductId] = Number(r.n);
+  }
+  return Array.from(rows.values());
 }
 
 export interface TopUserRow {
@@ -225,77 +216,63 @@ export interface TopUserRow {
   display_name: string | null;
   email: string;
   department: string | null;
+  /** Prompts this week across the products the view shows. */
   total_activity: number;
-  surface_chat: number;
-  surface_code: number;
-  surface_cowork: number;
+  products: ProductCounts;
 }
 
-type Counts = Pick<TopUserRow, 'surface_chat' | 'surface_code' | 'surface_cowork'>;
-interface Person { display_name: string | null; email: string; department: string | null }
-
-/** Prompts per person and kind of work from one vendor (never 'all') in the last 7 days. */
-async function liveUserCounts(vendor: Vendor): Promise<Map<string, Counts & Person>> {
-  const weekAgo = nowS() - 7 * DAY;
-  const rows = await rawAll<{
-    id: string; display_name: string | null; email: string; department: string | null;
-    chat: number | string; code: number | string; work: number | string;
-  }>(sql`
-    SELECT u.id, u.display_name, u.email, u.department,
-           COUNT(CASE WHEN ${sql.raw(kindClause('chat', 'cm.'))} THEN 1 END) AS chat,
-           COUNT(CASE WHEN ${sql.raw(kindClause('code', 'cm.'))} THEN 1 END) AS code,
-           COUNT(CASE WHEN ${sql.raw(kindClause('work', 'cm.'))} THEN 1 END) AS work
-    FROM cowork_messages cm JOIN users u ON u.id = cm.user_id
-    WHERE cm.occurred_at >= ${weekAgo} AND ${sql.raw(vendorClause(vendor, 'cm.'))}
-    GROUP BY u.id, u.display_name, u.email, u.department
-  `);
-  return new Map(rows.map((r) => [r.id, {
-    display_name: r.display_name, email: r.email, department: r.department,
-    surface_chat: Number(r.chat), surface_code: Number(r.code), surface_cowork: Number(r.work),
-  }]));
-}
+interface Person { display_name: string | null; email: string; department: string | null; products: ProductCounts }
 
 /**
- * The week's most active people for a vendor. Claude's part prefers
- * analytics_snapshots when any exist for the week, as getTopUsers does; the
- * OpenAI part is always live. 'all' adds the two for each person.
+ * Prompts per person and product in the last 7 days. Claude's three products
+ * prefer analytics_snapshots when any exist for the week, as getTopUsers does;
+ * the OpenAI products are always read live.
  */
-export async function getTopUsersByVendor(limit: number, vendor: Vendor): Promise<TopUserRow[]> {
-  const parts: Array<Map<string, Counts & Person>> = [];
-  if (vendor !== 'openai') {
-    const cutoff = new Date();
-    cutoff.setDate(cutoff.getDate() - 7);
-    const cutoffStr = cutoff.toISOString().split('T')[0];
-    const snaps = await rawAll<{
-      id: string; display_name: string | null; email: string; department: string | null;
-      chat: number | string; code: number | string; cowork: number | string;
-    }>(sql`
+async function userProductCounts(): Promise<Map<string, Person>> {
+  const weekAgo = nowS() - 7 * DAY;
+  const cutoff = new Date();
+  cutoff.setDate(cutoff.getDate() - 7);
+  const cutoffStr = cutoff.toISOString().split('T')[0];
+  const [live, snaps] = await Promise.all([
+    rawAll<{ id: string; display_name: string | null; email: string; department: string | null; product: string; n: number | string }>(sql`
+      SELECT u.id, u.display_name, u.email, u.department, ${sql.raw(productExpr('cm.'))} AS product, COUNT(*) AS n
+      FROM cowork_messages cm JOIN users u ON u.id = cm.user_id
+      WHERE cm.occurred_at >= ${weekAgo}
+      GROUP BY u.id, u.display_name, u.email, u.department, 5
+    `),
+    rawAll<{ id: string; display_name: string | null; email: string; department: string | null; chat: number | string; code: number | string; cowork: number | string }>(sql`
       SELECT u.id, u.display_name, u.email, u.department,
              COALESCE(SUM(a.surface_chat), 0) AS chat, COALESCE(SUM(a.surface_code), 0) AS code, COALESCE(SUM(a.surface_cowork), 0) AS cowork
       FROM users u JOIN analytics_snapshots a ON u.id = a.user_id AND a.snapshot_date >= ${cutoffStr}
       GROUP BY u.id, u.display_name, u.email, u.department
-    `);
-    parts.push(snaps.length > 0
-      ? new Map(snaps.map((r) => [r.id, {
-          display_name: r.display_name, email: r.email, department: r.department,
-          surface_chat: Number(r.chat), surface_code: Number(r.code), surface_cowork: Number(r.cowork),
-        }]))
-      : await liveUserCounts('claude'));
+    `),
+  ]);
+  const people = new Map<string, Person>();
+  const person = (r: { id: string; display_name: string | null; email: string; department: string | null }) => {
+    let p = people.get(r.id);
+    if (!p) { p = { display_name: r.display_name, email: r.email, department: r.department, products: zeroCounts() }; people.set(r.id, p); }
+    return p;
+  };
+  const useSnaps = snaps.length > 0;
+  for (const r of live) {
+    const id = r.product as ProductId;
+    if (useSnaps && (id === 'claude_chat' || id === 'claude_code' || id === 'claude_cowork')) continue;
+    person(r).products[id] = Number(r.n);
   }
-  if (vendor !== 'claude') parts.push(await liveUserCounts('openai'));
+  for (const s of snaps) {
+    const p = person(s);
+    p.products.claude_chat = Number(s.chat);
+    p.products.claude_code = Number(s.code);
+    p.products.claude_cowork = Number(s.cowork);
+  }
+  return people;
+}
 
-  const merged = new Map<string, Counts & Person>();
-  for (const part of parts) {
-    for (const [id, p] of part) {
-      const e = merged.get(id);
-      if (!e) { merged.set(id, { ...p }); continue; }
-      e.surface_chat += p.surface_chat;
-      e.surface_code += p.surface_code;
-      e.surface_cowork += p.surface_cowork;
-    }
-  }
-  return Array.from(merged.entries())
-    .map(([id, p]) => ({ id, ...p, total_activity: p.surface_chat + p.surface_code + p.surface_cowork }))
+/** The week's most active people across the products shown, with each product's count. */
+export async function getTopUsersByProduct(limit: number, shown: readonly Product[]): Promise<TopUserRow[]> {
+  const people = await userProductCounts();
+  return Array.from(people.entries())
+    .map(([id, p]) => ({ id, display_name: p.display_name, email: p.email, department: p.department, products: p.products, total_activity: sumShown(p.products, shown) }))
     .filter((r) => r.total_activity > 0)
     .sort((a, b) => b.total_activity - a.total_activity)
     .slice(0, limit);

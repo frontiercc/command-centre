@@ -16,6 +16,30 @@ export const SURFACE_COLOR = {
   chat: '#B9507A',   // rose
 } as const;
 
+/**
+ * The six products the dashboard splits into (lib/dashboard/vendor.ts). Each
+ * Claude product keeps its surface colour; its OpenAI counterpart is a lighter
+ * shade of the same hue, so Chat, Work and Code still read as three families.
+ */
+export const PRODUCT_COLOR = {
+  claude_chat: SURFACE_COLOR.chat,
+  chatgpt_chat: '#DE86AA',
+  claude_cowork: SURFACE_COLOR.cowork,
+  chatgpt_work: '#8F8DDA',
+  claude_code: SURFACE_COLOR.code,
+  codex: '#52B8AB',
+} as const;
+
+/** Text colour that reads on a full-strength product fill. */
+export const PRODUCT_INK = {
+  claude_chat: '#FFFFFF',
+  chatgpt_chat: '#0A0A0A',
+  claude_cowork: '#FFFFFF',
+  chatgpt_work: '#0A0A0A',
+  claude_code: '#FFFFFF',
+  codex: '#0A0A0A',
+} as const;
+
 /** Text colour that reads on a full-strength surface fill. */
 export const SURFACE_INK = {
   cowork: '#FFFFFF',

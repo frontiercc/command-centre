@@ -20,16 +20,16 @@ import {
 import { isOtelConfigured, getDataSourceStatus, getConfigValue } from '@/lib/config';
 import { getAdminSession, canAccessCorePlatform } from '@/lib/auth/admin-auth';
 import { logAccess } from '@/lib/audit/log';
-import { parseVendor } from '@/lib/dashboard/vendor';
+import { parseVendor, productsShown } from '@/lib/dashboard/vendor';
 import {
   hasOpenAiData,
   getActiveUsersByVendor,
   getActiveUsersForVendor,
   getSessionsPerWeekByProduct,
   getFlaggedByProduct,
-  getAdoptionTrendByVendor,
-  getDepartmentBreakdownByVendor,
-  getTopUsersByVendor,
+  getAdoptionTrendByProduct,
+  getDepartmentBreakdownByProduct,
+  getTopUsersByProduct,
 } from '@/lib/dashboard/queries';
 
 // Disable Next.js route caching — all API routes read live data from the database
@@ -51,6 +51,9 @@ export async function GET(request: NextRequest) {
     const vendor = parseVendor(request.nextUrl.searchParams.get('vendor'));
     const nowS = Math.floor(Date.now() / 1000);
     const weekAgo = nowS - 7 * 24 * 60 * 60;
+    const openaiPresent = await hasOpenAiData();
+    // The products the charts show: the chosen vendor's, or all six in the All view.
+    const shown = productsShown(vendor, openaiPresent);
     const licensedSeatsRaw = parseInt(await getConfigValue('licensedSeats'), 10);
     const licensedSeats = Number.isFinite(licensedSeatsRaw) && licensedSeatsRaw > 0 ? licensedSeatsRaw : null;
     const [
@@ -69,7 +72,6 @@ export async function GET(request: NextRequest) {
       topUsers,
       chatPrompts,
       codeEvents,
-      openaiPresent,
       activeByVendor,
       sessionsByProduct,
       flaggedByProduct,
@@ -83,13 +85,12 @@ export async function GET(request: NextRequest) {
       getSecurityMetrics(),
       getEventsLast24h(),
       getCoworkSessionCountThisWeek(),
-      getAdoptionTrendByVendor(14, vendor),
+      getAdoptionTrendByProduct(14),
       getSurfaceBreakdown(),
-      getDepartmentBreakdownByVendor(vendor),
-      getTopUsersByVendor(5, vendor),
+      getDepartmentBreakdownByProduct(),
+      getTopUsersByProduct(5, shown),
       getChatMessageCount(),
       getCodeEventCount(),
-      hasOpenAiData(),
       getActiveUsersByVendor(nowS),
       getSessionsPerWeekByProduct(nowS),
       getFlaggedByProduct(),
@@ -119,6 +120,8 @@ export async function GET(request: NextRequest) {
       },
       vendor,
       openaiPresent,
+      // Product ids the charts show, in display order.
+      productsShown: shown.map(p => p.id),
       // Each box's Claude and OpenAI figures, for the line under it in the All view.
       products: { sessions: sessionsByProduct, flagged: flaggedByProduct, activeUsers: activeByVendor },
       adoptionTrend,

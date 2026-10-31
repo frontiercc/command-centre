@@ -70,40 +70,43 @@ describe('dashboard figures by kind of work and vendor', () => {
     expect(await getActiveUsersForVendor('claude', NOW + 1)).toBe(2);
   });
 
-  it('narrows the trend to each vendor, and All adds them', async () => {
-    const { getAdoptionTrendByVendor } = await import('@/lib/dashboard/queries');
-    const sum = (rows: Array<{ surface_chat: number; surface_code: number; surface_cowork: number }>) =>
-      rows.reduce((a, r) => ({ chat: a.chat + r.surface_chat, code: a.code + r.surface_code, work: a.work + r.surface_cowork }), { chat: 0, code: 0, work: 0 });
-    const claude = sum(await getAdoptionTrendByVendor(14, 'claude'));
-    const openai = sum(await getAdoptionTrendByVendor(14, 'openai'));
-    const all = sum(await getAdoptionTrendByVendor(14, 'all'));
+  it('gives each product its own line on the trend', async () => {
+    const { getAdoptionTrendByProduct } = await import('@/lib/dashboard/queries');
+    const rows = await getAdoptionTrendByProduct(14);
+    const sum = (id: keyof typeof rows[number]['products']) => rows.reduce((n, r) => n + r.products[id], 0);
     // Chat and Code count prompts; Work counts people a day.
-    expect(openai.chat).toBe(2);
-    expect(openai.code).toBe(2);
-    expect(claude.chat).toBe(1);
-    expect(claude.code).toBe(1);
-    expect(all.chat).toBe(claude.chat + openai.chat);
-    expect(all.code).toBe(claude.code + openai.code);
-    expect(all.work).toBe(claude.work + openai.work);
+    expect(sum('claude_chat')).toBe(1);
+    expect(sum('chatgpt_chat')).toBe(2);
+    expect(sum('claude_cowork')).toBe(1);
+    expect(sum('chatgpt_work')).toBe(1);
+    expect(sum('claude_code')).toBe(1);
+    expect(sum('codex')).toBe(2);
   });
 
-  it('ranks top people per vendor and adds both for All', async () => {
-    const { getTopUsersByVendor } = await import('@/lib/dashboard/queries');
-    const openai = await getTopUsersByVendor(5, 'openai');
-    expect(openai.map(u => [u.id, u.surface_chat, u.surface_cowork, u.surface_code])).toEqual([
-      ['u-openai', 2, 0, 2],
-      ['u-both', 0, 1, 0],
-    ]);
-    const all = await getTopUsersByVendor(5, 'all');
-    expect(all.find(u => u.id === 'u-both')).toMatchObject({ surface_cowork: 1, surface_code: 1, total_activity: 2 });
+  it('ranks top people across the products shown, with each product counted', async () => {
+    const { getTopUsersByProduct } = await import('@/lib/dashboard/queries');
+    const { productsShown } = await import('@/lib/dashboard/vendor');
+    const openai = await getTopUsersByProduct(5, productsShown('openai', true));
+    expect(openai.map(u => [u.id, u.total_activity])).toEqual([['u-openai', 4], ['u-both', 1]]);
+    expect(openai[0].products).toMatchObject({ chatgpt_chat: 2, codex: 2 });
+    const all = await getTopUsersByProduct(5, productsShown('all', true));
+    expect(all.find(u => u.id === 'u-both')).toMatchObject({ total_activity: 2, products: { chatgpt_work: 1, claude_code: 1 } });
   });
 
-  it('counts people per department per kind for a vendor', async () => {
-    const { getDepartmentBreakdownByVendor } = await import('@/lib/dashboard/queries');
-    const finance = (await getDepartmentBreakdownByVendor('openai')).find(d => d.department === 'Finance')!;
-    expect(finance).toMatchObject({ surface_chat: 1, surface_cowork: 0, surface_code: 1 });
-    const claudeFinance = (await getDepartmentBreakdownByVendor('claude')).find(d => d.department === 'Finance')!;
-    expect(claudeFinance).toMatchObject({ surface_chat: 1, surface_cowork: 1, surface_code: 0 });
+  it('counts people per department for each product', async () => {
+    const { getDepartmentBreakdownByProduct } = await import('@/lib/dashboard/queries');
+    const finance = (await getDepartmentBreakdownByProduct()).find(d => d.department === 'Finance')!;
+    expect(finance.products).toEqual({ claude_chat: 1, chatgpt_chat: 1, claude_cowork: 1, chatgpt_work: 0, claude_code: 0, codex: 1 });
+  });
+
+  it('measures stickiness for each product', async () => {
+    const { getStickinessByProduct } = await import('@/lib/pulse/stickiness');
+    const s = await getStickinessByProduct(NOW);
+    expect(s.claude_chat.mau).toBe(1);
+    expect(s.chatgpt_chat.mau).toBe(1);
+    expect(s.chatgpt_work.mau).toBe(1);
+    expect(s.codex.mau).toBe(1);
+    expect(s.claude_code.mau).toBe(1);
   });
 
   it('measures stickiness for the chosen vendor, with ChatGPT Chat under Chat', async () => {

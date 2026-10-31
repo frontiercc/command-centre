@@ -15,7 +15,7 @@ import AiBriefing from '@/components/dashboard/AiBriefing';
 import { DataSourceIndicator } from '@/components/dashboard/DataSourceIndicator';
 import Link from 'next/link';
 import { PageBody, Toolbar, Strip, Panel, Tag, Notice, B, Segmented } from '@/components/precision/ui';
-import { VENDORS, VENDOR_LABELS, parseVendor, type Vendor, type VendorSplit } from '@/lib/dashboard/vendor';
+import { VENDORS, VENDOR_LABELS, PRODUCTS, parseVendor, type Vendor, type VendorSplit, type ProductCounts, type ProductId } from '@/lib/dashboard/vendor';
 import PulseBand from '@/components/pulse/PulseBand';
 import CodePulseBand from '@/components/pulse/code/CodePulseBand';
 import { useCorePlatformGuard } from '@/components/shared/useCorePlatformGuard';
@@ -45,20 +45,13 @@ interface DashboardData {
     flagged: Record<'chat' | 'work' | 'code', VendorSplit>;
     activeUsers: { claude: number; openai: number };
   };
-  adoptionTrend: Array<{
-    date: string;
-    surface_chat: number;
-    surface_code: number;
-    surface_cowork: number;
-  }>;
+  adoptionTrend: Array<{ date: string; products: ProductCounts }>;
   surfaceBreakdown: { chat: number; code: number; cowork: number };
   departmentBreakdown: Array<{
     department: string;
     user_count: number;
     active_users: number;
-    surface_chat: number;
-    surface_code: number;
-    surface_cowork: number;
+    products: ProductCounts;
   }>;
   topUsers: Array<{
     id: string;
@@ -66,10 +59,10 @@ interface DashboardData {
     email: string;
     department: string | null;
     total_activity: number;
-    surface_chat: number;
-    surface_code: number;
-    surface_cowork: number;
+    products: ProductCounts;
   }>;
+  /** Product ids the charts show, in display order. */
+  productsShown: ProductId[];
   securityMetrics: {
     openAlerts: number;
     resolvedThisWeek: number;
@@ -208,6 +201,8 @@ export default function DashboardPage() {
   // The switch shows once OpenAI data exists (or while a narrowed view is chosen).
   const showSwitch = data.openaiPresent || vendor !== 'all';
   const split = vendor === 'all' && data.openaiPresent;
+  // The products the charts show, in display order.
+  const shownProducts = PRODUCTS.filter(p => data.productsShown.includes(p.id));
   const allProducts = vendor === 'all' ? '' : ' · all products';
   const seats = data.licensedSeats;
   const activeSub = seats == null
@@ -362,10 +357,10 @@ export default function DashboardPage() {
                 />
               </Panel>
             ) : (
-              <AdoptionChart data={data.adoptionTrend} />
+              <AdoptionChart data={data.adoptionTrend} products={shownProducts} />
             )}
           </div>
-          <StickinessCard vendor={vendor} />
+          <StickinessCard vendor={vendor} openaiPresent={data.openaiPresent} />
         </div>
 
         {/* Department adoption (2/3) + top users this week (1/3) */}
@@ -381,10 +376,10 @@ export default function DashboardPage() {
                 />
               </Panel>
             ) : (
-              <DepartmentHeatmap data={data.departmentBreakdown} />
+              <DepartmentHeatmap data={data.departmentBreakdown} products={shownProducts} />
             )}
           </div>
-          <TopUsers users={data.topUsers} />
+          <TopUsers users={data.topUsers} products={shownProducts} />
         </div>
 
         {/* Work Pulse band with the Developer Pulse strip nested directly below its signal strip */}

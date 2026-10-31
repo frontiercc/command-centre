@@ -5,20 +5,21 @@
 
 import Link from 'next/link';
 import { Panel, PanelFoot, Muted } from '@/components/precision/ui';
-import { SURFACE_COLOR } from '@/components/dashboard/AdoptionChart';
+import { PRODUCT_COLOR } from '@/lib/ui/chart-colours';
+import type { Product, ProductCounts } from '@/lib/dashboard/vendor';
 
 interface TopUser {
   id: string;
   display_name: string | null;
   email: string;
   department: string | null;
+  /** Prompts this week across the products shown. */
   total_activity: number;
-  surface_chat: number;
-  surface_code: number;
-  surface_cowork: number;
+  products: ProductCounts;
 }
 
-export default function TopUsers({ users }: { users: TopUser[] }) {
+/** Each person's bar splits their week across the products shown. */
+export default function TopUsers({ users, products }: { users: TopUser[]; products: readonly Product[] }) {
   if (users.length === 0) {
     return (
       <Panel title="Top users this week">
@@ -36,10 +37,7 @@ export default function TopUsers({ users }: { users: TopUser[] }) {
     >
       <ul className="m-0 p-0 list-none">
         {users.map((user, i) => {
-          const total = user.surface_chat + user.surface_code + user.surface_cowork;
-          const chatPct = total > 0 ? (user.surface_chat / total) * 100 : 0;
-          const codePct = total > 0 ? (user.surface_code / total) * 100 : 0;
-          const coworkPct = total > 0 ? (user.surface_cowork / total) * 100 : 0;
+          const total = user.total_activity;
 
           return (
             <li key={user.id} className="px-4 py-2.5 flex items-center gap-3 border-t border-[#F2F2F2] first:border-t-0">
@@ -55,9 +53,9 @@ export default function TopUsers({ users }: { users: TopUser[] }) {
               {/* Surface split */}
               <div className="w-20 shrink-0">
                 <div className="flex h-1.5 rounded-full overflow-hidden bg-[#F2F2F2] gap-px">
-                  {chatPct > 0 && <div style={{ width: `${chatPct}%`, background: SURFACE_COLOR.chat }} />}
-                  {codePct > 0 && <div style={{ width: `${codePct}%`, background: SURFACE_COLOR.code }} />}
-                  {coworkPct > 0 && <div style={{ width: `${coworkPct}%`, background: SURFACE_COLOR.cowork }} />}
+                  {total > 0 && products.map(p => user.products[p.id] > 0 && (
+                    <div key={p.id} style={{ width: `${(user.products[p.id] / total) * 100}%`, background: PRODUCT_COLOR[p.id] }} title={`${p.label}: ${user.products[p.id]}`} />
+                  ))}
                 </div>
               </div>
 
@@ -70,10 +68,10 @@ export default function TopUsers({ users }: { users: TopUser[] }) {
       </ul>
 
       <PanelFoot>
-        <span className="flex items-center gap-4">
-          <span className="flex items-center gap-1.5"><span className="w-2 h-2 rounded-full" style={{ background: SURFACE_COLOR.chat }} /> Chat</span>
-          <span className="flex items-center gap-1.5"><span className="w-2 h-2 rounded-full" style={{ background: SURFACE_COLOR.code }} /> Code</span>
-          <span className="flex items-center gap-1.5"><span className="w-2 h-2 rounded-full" style={{ background: SURFACE_COLOR.cowork }} /> Work</span>
+        <span className="flex flex-wrap items-center gap-x-4 gap-y-1">
+          {products.map(p => (
+            <span key={p.id} className="flex items-center gap-1.5"><span className="w-2 h-2 rounded-full" style={{ background: PRODUCT_COLOR[p.id] }} /> {p.label}</span>
+          ))}
         </span>
       </PanelFoot>
     </Panel>

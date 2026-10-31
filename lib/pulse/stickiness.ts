@@ -20,8 +20,8 @@
  */
 import { sql } from 'drizzle-orm';
 import { getTypedClient } from '@/lib/db/client';
-import { kindClause, vendorClause } from '@/lib/dashboard/product-sql';
-import type { Vendor, WorkKind } from '@/lib/dashboard/vendor';
+import { kindClause, vendorClause, productExpr } from '@/lib/dashboard/product-sql';
+import { PRODUCT_IDS, type ProductId, type Vendor, type WorkKind } from '@/lib/dashboard/vendor';
 
 const DAY = 86400;
 
@@ -108,4 +108,14 @@ export async function getProductStickiness(nowEpochS: number = Math.floor(Date.n
     computeSurfaceStickiness(client, surfaceQuery('chat', vendor), nowEpochS),
   ]);
   return { cowork, code, chat };
+}
+
+/** Stickiness for each of the six products the dashboard shows (lib/dashboard/vendor.ts). */
+export async function getStickinessByProduct(nowEpochS: number = Math.floor(Date.now() / 1000)): Promise<Record<ProductId, SurfaceStickiness>> {
+  const client = await getTypedClient();
+  const results = await Promise.all(PRODUCT_IDS.map((id) => computeSurfaceStickiness(client, {
+    table: 'cowork_messages',
+    where: `${productExpr()} = '${id}' AND user_id IS NOT NULL`,
+  }, nowEpochS)));
+  return Object.fromEntries(PRODUCT_IDS.map((id, i) => [id, results[i]])) as Record<ProductId, SurfaceStickiness>;
 }

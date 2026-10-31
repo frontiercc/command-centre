@@ -42,3 +42,13 @@ export function codeSessionVendorClause(vendor: Vendor, p = ''): string {
   if (vendor === 'claude') return `${p}session_id NOT LIKE 'codex:%'`;
   return 'TRUE';
 }
+
+/** SQL expression naming a cowork_messages row's product (lib/dashboard/vendor.ts PRODUCTS). */
+export function productExpr(p = ''): string {
+  return `CASE WHEN ${p}source = 'chatgpt_chat' THEN 'chatgpt_chat'`
+    + ` WHEN ${p}source = 'chatgpt_work' THEN 'chatgpt_work'`
+    + ` WHEN ${p}source = 'codex' THEN 'codex'`
+    + ` WHEN ${p}surface = 'chat' THEN 'claude_chat'`
+    + ` WHEN ${p}surface = 'code' THEN 'claude_code'`
+    + ` ELSE 'claude_cowork' END`;
+}
