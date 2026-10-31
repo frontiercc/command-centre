@@ -300,3 +300,59 @@ export async function getTopUsersByVendor(limit: number, vendor: Vendor): Promis
     .sort((a, b) => b.total_activity - a.total_activity)
     .slice(0, limit);
 }
+
+export interface ProductSessions {
+  chat: { claudeChat: number; chatgptChat: number };
+  work: { claudeCowork: number; chatgptWork: number };
+  code: { claudeCode: number; codex: number };
+}
+
+/**
+ * Sessions in the 7 days ending at `endS`, for each product: conversations and
+ * sessions in cowork_messages for Chat and Work, code_session_stats rows
+ * active in the window for Code (as code_metrics counts them).
+ */
+export async function getSessionsThisWeekByProduct(endS = nowS()): Promise<ProductSessions> {
+  const startS = endS - 7 * DAY;
+  const [promptRows, codeRows] = await Promise.all([
+    rawAll<{ kind: string; vendor: string; n: number | string }>(sql`
+      SELECT ${sql.raw(kindExpr())} AS kind, ${sql.raw(vendorExpr())} AS vendor, COUNT(DISTINCT session_id) AS n
+      FROM cowork_messages
+      WHERE session_id <> '' AND surface IS DISTINCT FROM 'code' AND occurred_at >= ${startS} AND occurred_at < ${endS}
+      GROUP BY 1, 2
+    `),
+    rawAll<{ vendor: string; n: number | string }>(sql`
+      SELECT CASE WHEN ${sql.raw(codeSessionVendorClause('openai'))} THEN 'openai' ELSE 'claude' END AS vendor, COUNT(*) AS n
+      FROM code_session_stats WHERE last_at >= ${startS} AND first_at < ${endS}
+      GROUP BY 1
+    `),
+  ]);
+  const out: ProductSessions = {
+    chat: { claudeChat: 0, chatgptChat: 0 },
+    work: { claudeCowork: 0, chatgptWork: 0 },
+    code: { claudeCode: 0, codex: 0 },
+  };
+  for (const r of promptRows) {
+    const openai = r.vendor === 'openai';
+    if (r.kind === 'chat') out.chat[openai ? 'chatgptChat' : 'claudeChat'] = Number(r.n);
+    else out.work[openai ? 'chatgptWork' : 'claudeCowork'] = Number(r.n);
+  }
+  for (const r of codeRows) out.code[r.vendor === 'openai' ? 'codex' : 'claudeCode'] = Number(r.n);
+  return out;
+}
+
+/** Classified prompts a tier in the 7 days ending at `endS`, for each vendor. */
+export async function getTierMixThisWeekByVendor(endS = nowS()): Promise<Record<'claude' | 'openai', { tier1: number; tier2: number; tier3: number }>> {
+  const rows = await rawAll<{ vendor: string; t1: number | string; t2: number | string; t3: number | string }>(sql`
+    SELECT ${sql.raw(vendorExpr('cm.'))} AS vendor,
+           SUM(CASE WHEN pc.tier = 1 THEN 1 ELSE 0 END) AS t1,
+           SUM(CASE WHEN pc.tier = 2 THEN 1 ELSE 0 END) AS t2,
+           SUM(CASE WHEN pc.tier = 3 THEN 1 ELSE 0 END) AS t3
+    FROM pulse_classifications pc JOIN cowork_messages cm ON cm.id = pc.cowork_message_id
+    WHERE pc.classifier_status = 'classified' AND cm.occurred_at >= ${endS - 7 * DAY} AND cm.occurred_at < ${endS}
+    GROUP BY 1
+  `);
+  const out = { claude: { tier1: 0, tier2: 0, tier3: 0 }, openai: { tier1: 0, tier2: 0, tier3: 0 } };
+  for (const r of rows) out[r.vendor as 'claude' | 'openai'] = { tier1: Number(r.t1), tier2: Number(r.t2), tier3: Number(r.t3) };
+  return out;
+}

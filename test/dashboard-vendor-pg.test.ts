@@ -116,6 +116,26 @@ describe('dashboard figures by kind of work and vendor', () => {
     expect(all.chat.mau).toBe(2);
   });
 
+  it('counts this week’s sessions for each product, for the briefing', async () => {
+    const { getSessionsThisWeekByProduct } = await import('@/lib/dashboard/queries');
+    expect(await getSessionsThisWeekByProduct(NOW + 1)).toEqual({
+      chat: { claudeChat: 1, chatgptChat: 2 },
+      work: { claudeCowork: 1, chatgptWork: 1 },
+      code: { claudeCode: 1, codex: 1 },
+    });
+  });
+
+  it('splits the week’s tier mix by vendor', async () => {
+    const { getTierMixThisWeekByVendor } = await import('@/lib/dashboard/queries');
+    await sql.run(`INSERT INTO pulse_classifications (cowork_message_id, user_id, tier, task_type, classifier_confidence, classifier_model, classified_at) VALUES
+      ('m1', 'u-claude', 2, 'analysis', 0.9, 'test', ?), ('m4', 'u-claude', 3, 'analysis', 0.9, 'test', ?),
+      ('m2', 'u-openai', 1, 'drafting', 0.9, 'test', ?), ('m5', 'u-both', 2, 'analysis', 0.9, 'test', ?)`, [NOW, NOW, NOW, NOW]);
+    expect(await getTierMixThisWeekByVendor(NOW + 1)).toEqual({
+      claude: { tier1: 0, tier2: 1, tier3: 1 },
+      openai: { tier1: 1, tier2: 1, tier3: 0 },
+    });
+  });
+
   it('knows when OpenAI data exists', async () => {
     const { hasOpenAiData } = await import('@/lib/dashboard/queries');
     expect(await hasOpenAiData()).toBe(true);
