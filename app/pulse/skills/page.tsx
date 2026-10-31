@@ -3,12 +3,13 @@
 
 'use client';
 
-import { useEffect, useState } from 'react';
+import { useEffect, useState, type ReactNode } from 'react';
 import TopBar from '@/components/layout/TopBar';
 import LoadingSpinner from '@/components/shared/LoadingSpinner';
 import type { DiscoveredSkill } from '@/lib/pulse/skills-discover';
 import { PageBody, Panel, BarRow, Tag, Notice, Muted, B } from '@/components/precision/ui';
 import { isWebUrl } from '@/lib/library/source-url';
+import { VENDOR_LABELS } from '@/lib/dashboard/vendor';
 
 function formatSkillName(name: string): string {
   return name.replace(':', ' · ');
@@ -18,18 +19,33 @@ function formatConnectorName(name: string): string {
   return name.replace(/^mcp__/, '').replace(/_/g, ' ');
 }
 
+type RowVendor = 'claude' | 'openai';
+
+/** The name, with a Claude or OpenAI tag once both vendors appear on the page. */
+function toolLabel(name: string, vendor: RowVendor | undefined, showVendor: boolean): ReactNode {
+  if (!showVendor || !vendor) return name;
+  return (
+    <span className="inline-flex items-center gap-1.5 min-w-0">
+      <span className="truncate">{name}</span>
+      <Tag tone="neutral">{VENDOR_LABELS[vendor]}</Tag>
+    </span>
+  );
+}
+
 function RankedList({
   title,
   items,
   nameKey,
   emptyMessage,
   formatName,
+  showVendor,
 }: {
   title: string;
-  items: Array<{ usage_count: number; user_count: number; [k: string]: unknown }>;
+  items: Array<{ usage_count: number; user_count: number; vendor?: RowVendor; [k: string]: unknown }>;
   nameKey: string;
   emptyMessage: string;
   formatName: (n: string) => string;
+  showVendor: boolean;
 }) {
   const max = items[0]?.usage_count ?? 1;
   return (
@@ -43,9 +59,9 @@ function RankedList({
             const barPct = Math.round((item.usage_count / max) * 100);
             return (
               <BarRow
-                key={name}
+                key={`${name}|${item.vendor ?? ''}`}
                 rank={i + 1}
-                label={formatName(name)}
+                label={toolLabel(formatName(name), item.vendor, showVendor)}
                 value={`${item.usage_count}× · ${item.user_count} ${item.user_count === 1 ? 'user' : 'users'}`}
                 pct={barPct}
                 tone="measured"
@@ -65,13 +81,15 @@ function GapList({
   nameKey,
   emptyMessage,
   formatName,
+  showVendor,
 }: {
   title: string;
   subtitle: string;
-  items: Array<{ usage_count: number; user_count: number; [k: string]: unknown }>;
+  items: Array<{ usage_count: number; user_count: number; vendor?: RowVendor; [k: string]: unknown }>;
   nameKey: string;
   emptyMessage: string;
   formatName: (n: string) => string;
+  showVendor: boolean;
 }) {
   return (
     <Panel title={title} subtitle={subtitle} flush={items.length > 0}>
@@ -82,8 +100,8 @@ function GapList({
           {items.map(item => {
             const name = item[nameKey] as string;
             return (
-              <li key={name} className="px-4 py-2 border-t border-[#F2F2F2] first:border-t-0 flex items-center justify-between gap-3">
-                <span className="text-[14px] text-[#0A0A0A] truncate">{formatName(name)}</span>
+              <li key={`${name}|${item.vendor ?? ''}`} className="px-4 py-2 border-t border-[#F2F2F2] first:border-t-0 flex items-center justify-between gap-3">
+                <span className="text-[14px] text-[#0A0A0A] truncate">{toolLabel(formatName(name), item.vendor, showVendor)}</span>
                 <span className="text-[13px] text-[#666666] tabular-nums shrink-0">
                   {item.user_count} {item.user_count === 1 ? 'teammate' : 'teammates'} use this
                 </span>
@@ -175,10 +193,10 @@ function DiscoverFeed({
 }
 
 interface OverviewData {
-  topSkills: Array<{ skill_name: string; usage_count: number; user_count: number }>;
-  topConnectors: Array<{ mcp_server: string; usage_count: number; user_count: number }>;
-  skillGap: Array<{ skill_name: string; usage_count: number; user_count: number }>;
-  connectorGap: Array<{ mcp_server: string; usage_count: number; user_count: number }>;
+  topSkills: Array<{ skill_name: string; vendor?: RowVendor; usage_count: number; user_count: number }>;
+  topConnectors: Array<{ mcp_server: string; vendor?: RowVendor; usage_count: number; user_count: number }>;
+  skillGap: Array<{ skill_name: string; vendor?: RowVendor; usage_count: number; user_count: number }>;
+  connectorGap: Array<{ mcp_server: string; vendor?: RowVendor; usage_count: number; user_count: number }>;
 }
 
 interface DiscoverData {
@@ -243,6 +261,9 @@ export default function SkillsPage() {
     </>
   );
 
+  // Tag each row Claude or OpenAI once OpenAI tools appear on the page.
+  const showVendor = [...(overview?.topSkills ?? []), ...(overview?.topConnectors ?? [])].some(i => i.vendor === 'openai');
+
   return (
     <>
       <TopBar title="Tool usage" subtitle="Adoption, gaps, and ecosystem discovery" />
@@ -256,6 +277,7 @@ export default function SkillsPage() {
             nameKey="skill_name"
             emptyMessage="No skill invocations captured yet."
             formatName={formatSkillName}
+            showVendor={showVendor}
           />
           <RankedList
             title="Top connectors"
@@ -263,6 +285,7 @@ export default function SkillsPage() {
             nameKey="mcp_server"
             emptyMessage="No connector invocations captured yet."
             formatName={formatConnectorName}
+            showVendor={showVendor}
           />
         </div>
 
@@ -275,6 +298,7 @@ export default function SkillsPage() {
             nameKey="skill_name"
             emptyMessage="You've used all the top skills your org uses. Nice."
             formatName={formatSkillName}
+            showVendor={showVendor}
           />
           <GapList
             title="Connectors you haven't tried"
@@ -283,6 +307,7 @@ export default function SkillsPage() {
             nameKey="mcp_server"
             emptyMessage="You've used all the top connectors your org uses."
             formatName={formatConnectorName}
+            showVendor={showVendor}
           />
         </div>
 

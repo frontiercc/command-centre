@@ -14,6 +14,7 @@ import { getTypedClient } from '@/lib/db/client';
 import { schema } from '@/lib/db/schema';
 import { getWeeklySeries, type WeeklyPoint } from '@/lib/pulse/trends';
 import { getCoworkCostUsd } from '@/lib/pulse/aggregator';
+import { kindClause } from '@/lib/dashboard/product-sql';
 
 export type SeriesPoint = WeeklyPoint;
 
@@ -108,13 +109,13 @@ export async function getPerson360(userId: string): Promise<Person360> {
       }
     : null;
 
-  // Chat — message count in the last 7 days.
-  // Claude Chat prompts: cowork_messages, surface 'chat'.
+  // Chat — message count in the last 7 days: Claude Chat (surface 'chat') and
+  // ChatGPT Chat (source 'chatgpt_chat'), the dashboard's Chat kind of work.
   const chat_t = schema.coworkMessages;
   const chatRows = await client
     .select({ cnt: sql<number | string>`count(*)` })
     .from(chat_t)
-    .where(and(eq(chat_t.user_id, userId), eq(chat_t.surface, 'chat'), gte(chat_t.occurred_at, sevenDaysAgo)));
+    .where(and(eq(chat_t.user_id, userId), sql.raw(kindClause('chat', 'cowork_messages.')), gte(chat_t.occurred_at, sevenDaysAgo)));
   // Policy B: COUNT(*) comes back as a string on pg.
   const chat = { messages7d: Number(chatRows[0]?.cnt ?? 0) };
 

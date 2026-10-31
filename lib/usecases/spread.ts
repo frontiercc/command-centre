@@ -25,6 +25,7 @@ import { schema } from '@/lib/db/schema';
 import { getConfigValue } from '@/lib/config';
 import { weekStart } from '@/lib/pulse/period';
 import { signalMatches } from '@/lib/usecases/signal-match';
+import { skillVendor } from '@/lib/pulse/vendor-filter';
 import { activityPhrase, type MatchedSignalEvidence } from '@/lib/usecases/spread-format';
 
 import type { UseCase } from '@/lib/usecases/queries';
@@ -165,7 +166,11 @@ async function readWorkActivity(ucId: string, nowS: number): Promise<ActivityRow
   });
 }
 
-/** Everyone who has ever run the skill (exact or marketplace-prefixed name), with a per-department count. */
+/**
+ * Everyone who has ever run the skill (exact or marketplace-prefixed name), with a per-department count.
+ * The skill is the use case's own Claude skill, so a ChatGPT skill that happens
+ * to share its name does not count as having used it.
+ */
 async function readSkillUsers(skillName: string): Promise<{ users: Set<string>; adoptersByDept: Map<string, number> }> {
   const client = await getTypedClient();
   const si = schema.coworkSkillInvocations;
@@ -173,7 +178,10 @@ async function readSkillUsers(skillName: string): Promise<{ users: Set<string>; 
   const rows = await client
     .selectDistinct({ user_id: si.user_id, name: si.skill_name })
     .from(si)
-    .where(sql`lower(${si.skill_name}) = ${lc} OR lower(${si.skill_name}) LIKE ${'%:' + lc}`);
+    .where(and(
+      sql`(lower(${si.skill_name}) = ${lc} OR lower(${si.skill_name}) LIKE ${'%:' + lc})`,
+      skillVendor('claude'),
+    ));
   const users = new Set(
     rows.filter(r => r.user_id && signalMatches(new Set([skillName]), r.name)).map(r => r.user_id as string),
   );

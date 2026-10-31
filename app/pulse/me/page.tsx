@@ -20,6 +20,8 @@ import GenerateBriefingButton from '@/components/pulse/GenerateBriefingButton';
 import { cleanTitle } from '@/components/pulse/CapabilityLog';
 import HumanTimeCard, { type HumanTimeSummary } from '@/components/pulse/HumanTimeCard';
 import { PageBody, Toolbar, Panel, Strip, Figure, BarRow, Tag, Notice, Dot, B, C } from '@/components/precision/ui';
+import { useVendor, VendorSwitch } from '@/components/shared/VendorSwitch';
+import { VENDOR_LABELS } from '@/lib/dashboard/vendor';
 
 interface PersonalPulseData {
   humanTime?: HumanTimeSummary | null;
@@ -58,6 +60,7 @@ interface PersonalPulseData {
   coworkFrictionIndex?: number | null;
   topNativeTools?: Array<{ tool_name: string; usage_count: number }>;
   otiUnderReview?: boolean;
+  openaiPresent?: boolean;
 }
 
 const TITLE = 'My Pulse';
@@ -80,11 +83,15 @@ export default function PersonalPulsePage() {
   const [error, setError] = useState<string | null>(null);
   const [refreshKey, setRefreshKey] = useState(0);
   const [pulseStartAt, setPulseStartAt] = useState<number | null>(null);
+  // The All / Claude / OpenAI switch, shared with the dashboard and Executive View.
+  const [vendor, setVendor] = useVendor();
 
   useEffect(() => {
     setLoading(true);
     setError(null);
-    const meUrl = viewingUserId ? `/api/pulse/me?userId=${encodeURIComponent(viewingUserId)}` : '/api/pulse/me';
+    const meUrl = viewingUserId
+      ? `/api/pulse/me?userId=${encodeURIComponent(viewingUserId)}&vendor=${vendor}`
+      : `/api/pulse/me?vendor=${vendor}`;
     Promise.all([
       fetch(meUrl).then(r => { if (!r.ok) throw new Error("Couldn't load this page. Try again."); return r.json(); }),
       fetch('/api/pulse/user-prefs').then(r => r.ok ? r.json() : { pulse_start_at: null }),
@@ -104,7 +111,7 @@ export default function PersonalPulsePage() {
       })
       .catch(e => setError(e.message))
       .finally(() => setLoading(false));
-  }, [refreshKey, viewingUserId]);
+  }, [refreshKey, viewingUserId, vendor]);
 
   if (loading) return (
     <>
@@ -142,7 +149,7 @@ export default function PersonalPulsePage() {
       <PageBody>
 
         {/* Active since + Spend Review link */}
-        {(pulseStartAt || (data.canSeeSpendReview && data.userId)) && (
+        {(pulseStartAt || (data.canSeeSpendReview && data.userId) || data.openaiPresent || vendor !== 'all') && (
           <Toolbar
             left={pulseStartAt ? (
               <Dot color={C.good}>
@@ -155,7 +162,13 @@ export default function PersonalPulsePage() {
                 {viewingUserId ? 'Spend review' : 'Your spend review'}
               </Link>
             )}
+            <VendorSwitch vendor={vendor} onChange={setVendor} openaiPresent={data.openaiPresent ?? false} />
           </Toolbar>
+        )}
+        {vendor !== 'all' && (
+          <p className="m-0 -mt-2 text-[13px] text-[#8F8F8F]">
+            Showing {VENDOR_LABELS[vendor]} only{vendor === 'openai' ? ': ChatGPT Chat and ChatGPT Work' : ': Claude Cowork and Claude Chat'}.
+          </p>
         )}
 
         {/* 1. Frontier Push hero */}

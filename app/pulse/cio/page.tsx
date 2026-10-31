@@ -326,12 +326,12 @@ export default function CioPulsePage() {
   }, [refreshKey, vendor]);
 
   useEffect(() => {
-    fetch('/api/pulse/depts')
+    fetch(`/api/pulse/depts?vendor=${vendor}`)
       .then(r => r.ok ? r.json() : Promise.reject(r.status))
       .then(d => setDepts(d.depts ?? []))
       .catch(() => setDepts([]))
       .finally(() => setDeptsLoading(false));
-  }, []);
+  }, [vendor]);
 
   if (loading) return (
     <>

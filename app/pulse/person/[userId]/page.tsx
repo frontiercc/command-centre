@@ -92,14 +92,14 @@ export default function Person360Page() {
 
   if (loading) return (
     <>
-      <TopBar title="Person 360" subtitle="Cross-surface view: Cowork, Code, Chat" />
+      <TopBar title="Person 360" subtitle="Cross-product view: Work Pulse, Developer Pulse, Chat" />
       <LoadingSpinner />
     </>
   );
 
   if (error) return (
     <>
-      <TopBar title="Person 360" subtitle="Cross-surface view: Cowork, Code, Chat" />
+      <TopBar title="Person 360" subtitle="Cross-product view: Work Pulse, Developer Pulse, Chat" />
       <PageBody>
         <Notice tone="error" title="Failed to load.">{error}</Notice>
       </PageBody>
@@ -139,7 +139,7 @@ export default function Person360Page() {
           <FigureGrid cols={3}>
             {fig('Total', combinedSpend.totalUsd === null ? '—' : formatCurrency(combinedSpend.totalUsd), undefined, 'measured')}
             {fig('Code', combinedSpend.codeUsd === null ? '—' : formatCurrency(combinedSpend.codeUsd))}
-            {fig('Cowork', formatCurrency(combinedSpend.coworkUsd))}
+            {fig('Claude Cowork', formatCurrency(combinedSpend.coworkUsd))}
           </FigureGrid>
           {combinedSpend.totalIsPartial && (
             <PanelFoot tone="warn">Excludes unpriced models, so the total is an underestimate.</PanelFoot>
@@ -169,11 +169,11 @@ export default function Person360Page() {
                     ))}
                   </div>
                 </div>
-                <SparkBlock label="Cowork events, 8 weeks">
+                <SparkBlock label="Classified prompts, Claude and ChatGPT, 8 weeks">
                   <Sparkline
                     data={weekly.coworkEvents.map(p => p.value)}
                     partialLast={weekly.coworkEvents.at(-1)?.partial ?? false}
-                    label="Cowork events, weekly"
+                    label="Classified prompts, weekly"
                   />
                 </SparkBlock>
               </>
@@ -214,7 +214,7 @@ export default function Person360Page() {
         </div>
 
         {/* Chat */}
-        <Panel title="Chat" flush>
+        <Panel title="Chat" subtitle="Claude Chat and ChatGPT Chat" flush>
           <Figure
             label="Messages, last 7 days"
             value={chat ? chat.messages7d : <span className="text-[15px] font-medium text-[#8F8F8F] tracking-normal">Not measured</span>}

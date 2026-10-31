@@ -24,6 +24,8 @@ import DelegationBands, { type BandSegment, type PersonDelegation } from '@/comp
 import CoachingPrompts, { type CoachingPromptItem } from '@/components/pulse/CoachingPrompts';
 import HumanTimeCard, { type HumanTimeSummary } from '@/components/pulse/HumanTimeCard';
 import { PageBody, Toolbar, Strip, Figure, Notice, B, cx } from '@/components/precision/ui';
+import { useVendor, VendorSwitch } from '@/components/shared/VendorSwitch';
+import { VENDOR_LABELS } from '@/lib/dashboard/vendor';
 
 // Based on DeptPulseData from app/pulse/dept/[dept]/page.tsx (a redirect-only
 // legacy page) but intentionally diverges: `delegation?` exists only here.
@@ -52,6 +54,7 @@ interface DeptData {
   deptBriefing: { body: string; suggestion: string | null; generated_at: number } | null;
   coworkCostUsd?: number;
   coworkFrictionIndex?: number | null;
+  openaiPresent?: boolean;
   docSessions?: { sessions_with_uploads: number; total_uploads: number };
   delegation?: {
     window: 13 | 26 | 52;
@@ -86,6 +89,8 @@ export default function DeptPickerPage() {
   const [dataLoading, setDataLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [delegationWeeks, setDelegationWeeks] = useState<13 | 26 | 52>(13);
+  // The All / Claude / OpenAI switch, shared with the dashboard and Executive View.
+  const [vendor, setVendor] = useVendor();
 
   const selectedDept = searchParams.get('dept') ?? '';
 
@@ -119,7 +124,7 @@ export default function DeptPickerPage() {
     if (!dept) return;
     if (loadedDeptRef.current !== dept) setDataLoading(true);
     setError(null);
-    fetch(`/api/pulse/dept/${encodeURIComponent(dept)}?weeks=${delegationWeeks}`)
+    fetch(`/api/pulse/dept/${encodeURIComponent(dept)}?weeks=${delegationWeeks}&vendor=${vendor}`)
       .then(r => {
         if (!r.ok) throw new Error("Couldn't load this page. Try again.");
         return r.json();
@@ -127,7 +132,7 @@ export default function DeptPickerPage() {
       .then(d => { loadedDeptRef.current = dept; setDeptData(d); })
       .catch(e => setError(e.message))
       .finally(() => setDataLoading(false));
-  }, [delegationWeeks]);
+  }, [delegationWeeks, vendor]);
 
   useEffect(() => {
     if (selectedDept) loadDept(selectedDept);
@@ -172,7 +177,13 @@ export default function DeptPickerPage() {
               ))}
             </select>
           )}
+          <VendorSwitch vendor={vendor} onChange={setVendor} openaiPresent={deptData?.openaiPresent ?? false} />
         </Toolbar>
+        {vendor !== 'all' && (
+          <p className="m-0 -mt-2 text-[13px] text-[#8F8F8F]">
+            Showing {VENDOR_LABELS[vendor]} only{vendor === 'openai' ? ': ChatGPT Chat and ChatGPT Work' : ': Claude Cowork and Claude Chat'}.
+          </p>
+        )}
 
         {/* Content */}
         {dataLoading && <LoadingSpinner />}
