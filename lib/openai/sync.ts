@@ -41,7 +41,7 @@ import { CONTENT_PREVIEW_CHARS, CONTENT_FULL_CHARS } from '@/lib/otel/content-li
 import { resolveOtelUser } from '@/lib/otel/resolve-user';
 import { isPlainEmail } from '@/lib/email/address';
 import { listLogFiles, downloadLogFile, parseJsonl, type LogScope, type OpenAiEventType } from './client';
-import { OPENAI_USER_SOURCE, type OpenAiSource } from './sources';
+import { OPENAI_SOURCE_LABELS, OPENAI_USER_SOURCE, type OpenAiSource } from './sources';
 
 type TypedClient = Awaited<ReturnType<typeof getTypedClient>>;
 
@@ -208,6 +208,7 @@ function displayNameFromEmail(email: string): string {
 
 interface PendingAlert {
   userId: string;
+  source: OpenAiSource;
   surface: 'cowork' | 'code';
   messageId: string;
   text: string;
@@ -312,7 +313,7 @@ async function storeRecords(
       }
 
       if (piiMatches.length > 0 || intentMatches.length > 0) {
-        pending.push({ userId, surface: row.surface, messageId: row.id, text: row.text, pii: piiMatches, intent: intentMatches });
+        pending.push({ userId, source: row.source, surface: row.surface, messageId: row.id, text: row.text, pii: piiMatches, intent: intentMatches });
       }
     }
   });
@@ -324,7 +325,7 @@ async function storeRecords(
 function raiseAlerts(alerts: PendingAlert[]): void {
   for (const a of alerts) {
     if (a.pii.length > 0) {
-      createPiiAlertsWithDedup(a.userId, a.pii, a.text, a.messageId, a.surface).catch((e: Error) => {
+      createPiiAlertsWithDedup(a.userId, a.pii, a.text, a.messageId, a.surface, `${OPENAI_SOURCE_LABELS[a.source]} (OpenAI export)`).catch((e: Error) => {
         console.error('[openai-sync] pii alert error:', e.message);
         void recordPiiAlertFailure(a.surface, a.messageId, e);
       });
@@ -386,14 +387,18 @@ export async function runOpenAiSync(opts: RunOptions = {}): Promise<OpenAiSyncSt
   const scope: LogScope = { kind: 'workspace', id: workspaceId };
   const userCache = new Map<string, string>();
 
-  for (const eventType of SYNCED_TYPES) {
+  for (const [index, eventType] of SYNCED_TYPES.entries()) {
+    // Each type gets a fair share of what is left, so a long backfill of one
+    // log never holds the other back; a type that needs less leaves the rest
+    // to the types after it.
+    let share = Math.ceil(budget / (SYNCED_TYPES.length - index));
     let after = cursors[eventType] || firstAfter;
     try {
-      while (budget > 0) {
-        const page = await listLogFiles(apiKey, scope, eventType, after, Math.min(100, budget));
+      while (share > 0) {
+        const page = await listLogFiles(apiKey, scope, eventType, after, Math.min(100, share));
         if (page.data.length === 0) break;
         for (const file of page.data) {
-          if (budget <= 0) break;
+          if (share <= 0) break;
           if (stats.files > 0 && gap > 0) await new Promise(r => setTimeout(r, gap));
           const text = await downloadLogFile(apiKey, scope, file.id);
           const { records, badLines } = parseJsonl(text);
@@ -401,6 +406,7 @@ export async function runOpenAiSync(opts: RunOptions = {}): Promise<OpenAiSyncSt
           const alerts = await storeRecords(client, records, floors, stats, userCache);
           stats.files++;
           budget--;
+          share--;
           after = file.end_time;
           cursors[eventType] = after;
           await setConfigValue('openaiSyncCursors', JSON.stringify(cursors));

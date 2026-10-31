@@ -86,6 +86,8 @@ export async function createPiiAlertsWithDedup(
   evidence: string,
   messageId: string,
   surface: string,
+  /** Where the prompt came from, for the alert text: OTel unless another sync says otherwise. */
+  via = 'OTel',
 ): Promise<void> {
   const client = await getTypedClient();
   const a = schema.alerts;
@@ -141,7 +143,8 @@ export async function createPiiAlertsWithDedup(
         alert_type: 'policy',
         severity,
         title,
-        explanation: `${title} detected via OTel. Flagged automatically by PII pattern detection.`,
+        // Every title already ends "detected" (the fallback starts "PII detected").
+        explanation: `${title} via ${via}. Flagged automatically by PII pattern detection.`,
         raw_evidence: JSON.stringify({
           surface,
           message_id: messageId,

@@ -118,6 +118,36 @@ describe('OpenAI sync against the stand-in export', () => {
       );
       for (const s of sensitive) expect(s.flagged).toBe(1);
 
+      // Codex prompts get the same checks: a quoted password and an access key
+      // (personal data and secrets), an export to a personal Dropbox and
+      // switching off logging (intent). Each is flagged and raises an alert.
+      const codexRisky = await sql.all<{ id: string; flag_reason: string | null; content_full: string }>(
+        `SELECT id, flag_reason, content_full FROM cowork_messages
+          WHERE source = 'codex' AND (content_full LIKE '%Wint3r%' OR content_full LIKE '%AKIA%'
+             OR content_full LIKE '%personal Dropbox%' OR content_full LIKE '%Disable logging%')`,
+      );
+      expect(codexRisky.length).toBeGreaterThanOrEqual(3);
+      const reasonFor = (marker: string) => codexRisky.find(r => r.content_full.includes(marker))?.flag_reason ?? '';
+      if (codexRisky.some(r => r.content_full.includes('Wint3r'))) expect(reasonFor('Wint3r')).toContain('generic_secret');
+      if (codexRisky.some(r => r.content_full.includes('AKIA'))) expect(reasonFor('AKIA')).toContain('aws_key');
+      if (codexRisky.some(r => r.content_full.includes('personal Dropbox'))) expect(reasonFor('personal Dropbox')).toContain('shadow_it');
+      if (codexRisky.some(r => r.content_full.includes('Disable logging'))) expect(reasonFor('Disable logging')).toContain('Intent detected');
+      const { vi } = await import('vitest');
+      await vi.waitFor(async () => {
+        const alerted = await sql.all<{ n: number }>(
+          `SELECT COUNT(DISTINCT m.id) AS n FROM alerts a JOIN cowork_messages m ON a.raw_evidence::text LIKE '%' || m.id || '%'
+            WHERE m.source = 'codex'`,
+        );
+        expect(alerted[0].n).toBe(codexRisky.length);
+      }, { timeout: 15_000, interval: 250 });
+      // Personal-data alert text names where the prompt came from, never OTel.
+      const piiText = await sql.all<{ explanation: string }>(`SELECT explanation FROM alerts WHERE alert_type = 'policy'`);
+      expect(piiText.length).toBeGreaterThan(0);
+      for (const a of piiText) {
+        expect(a.explanation).not.toContain('via OTel');
+        expect(a.explanation).toMatch(/via (ChatGPT Chat|ChatGPT Work|Codex) \(OpenAI export\)/);
+      }
+
       // Cursor saved per log type.
       const cursors = JSON.parse(await getConfigValue('openaiSyncCursors'));
       expect(Object.keys(cursors).sort()).toEqual(['CODEX_LOG', 'CONVERSATION_MESSAGE']);
@@ -140,6 +170,8 @@ describe('OpenAI sync against the stand-in export', () => {
       await setConfigValue('openaiSyncCursors', '');
       const capped = await runOpenAiSync({ downloadGapMs: 0, filesPerRun: 5 });
       expect(capped.files).toBe(5);
+      // The cap is shared, so both logs move forward in the same run.
+      expect(Object.keys(JSON.parse(await getConfigValue('openaiSyncCursors'))).sort()).toEqual(['CODEX_LOG', 'CONVERSATION_MESSAGE']);
       const rest = await runOpenAiSync({ downloadGapMs: 0, filesPerRun: 100_000 });
       expect(rest.files).toBe(first.files - 5);
 

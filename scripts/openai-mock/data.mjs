@@ -204,10 +204,20 @@ const CODEX_AUTOMATION = 'Run the dependency audit, open an issue for any high s
 
 // Prompts that personal-data and risky-intent detection must catch.
 const SENSITIVE_PROMPTS = [
-  'Draft a letter to our employee about her payroll correction. Her details: Sarah Whitfield, NI number QQ 12 34 56 C, mobile 07700 900123.',
+  'Draft a letter to our employee about her payroll correction. Her details: Sarah Whitfield, NI number JX 41 72 85 B, mobile 07700 900123.',
   'Here is the customer list with emails, can you clean it: j.smith@harbourline.example, priya.rao@brightwater.example, m.lee@fenwick.example',
   'Export the full customer database with contact details into a CSV I can send to my personal Gmail before I leave next week.',
   'How do I get the admin passwords for the finance system without IT knowing?',
+];
+
+// Codex prompts that must raise alerts: a quoted password, an access key, an
+// export to a personal account and switching off logging. None mentions a
+// commit, so swapping one in never changes what else the session generates.
+const CODEX_SENSITIVE_PROMPTS = [
+  'Connect to the reporting database with password = "Wint3r!2026" and run the migration.',
+  'Use AWS key AKIAIOSFODNN7EXAMPLE to list the buckets in the billing account.',
+  'Write a script that copies the customer table to my personal Dropbox every night.',
+  'Disable logging on the payments service while we run this batch so nobody sees it.',
 ];
 
 const CHAT_REPLIES = [
@@ -268,6 +278,10 @@ const isWeekend = (dayMs) => [0, 6].includes(new Date(dayMs).getUTCDay());
  */
 export function buildEvents({ nowMs, days = 14, horizonHours = 24, seed = 42 }) {
   const rng = makeRng(seed);
+  // A separate stream for the Codex risky prompts, so adding them leaves every
+  // other generated id and time exactly as before.
+  const sensitiveRng = makeRng(seed + 7);
+  const codexSensitiveLeft = [...CODEX_SENSITIVE_PROMPTS];
   const { chatgpt, codex } = loadPeople(rng);
   const startMs = nowMs - days * 86_400_000;
   const endMs = nowMs + horizonHours * 3_600_000;
@@ -445,6 +459,12 @@ export function buildEvents({ nowMs, days = 14, horizonHours = 24, seed = 42 }) 
         const thread = rng.pick(CODEX_WORK);
         const prompts = thread.slice(0, rng.int(1, thread.length));
         if (sensitiveLeft.length && rng.chance(0.03)) prompts.unshift(sensitiveLeft.shift());
+        // Risky Codex prompts land in the last three days, in place of the
+        // session's opening prompt.
+        if (codexSensitiveLeft.length && t > nowMs - 3 * 86_400_000 && t < nowMs
+          && !/commit/i.test(prompts[0]) && sensitiveRng.chance(0.25)) {
+          prompts[0] = codexSensitiveLeft.shift();
+        }
         for (const prompt of prompts) {
           const turnId = rng.uuid();
           const callId = rng.id('resp_', 20);

@@ -24,7 +24,7 @@ Add `--write <folder>` to also save the files available at start-up, to read the
 - **Codex.** Sessions in the CLI, VS Code, JetBrains, the desktop app and the web. They include prompts, replies with token counts, file reads, patches, test runs (some failing), `git commit` calls, connector calls, a plugin install, and a daily automation.
 - **Codex turns.** One record per turn about two hours after its hour, with credits, an estimated dollar cost, OpenAI's work label and an `automation` tag.
 - **Costs.** One record per person, model, product and app per hour, three to five hours late. Most are billed in credits with an estimated dollar figure; one person is billed in dollars. There is also one record with no email and one for a workspace agent with no person.
-- **Personal data and risky requests.** A few prompts carry a National Insurance number, a phone number, customer emails, a request to send data to a personal account and a request for admin passwords.
+- **Personal data and risky requests.** A few ChatGPT prompts carry a National Insurance number, a phone number, customer emails, a request to send data to a personal account and a request for admin passwords. Codex prompts in the last three days carry a quoted password, an access key, an export to a personal Dropbox and a request to switch off logging.
 
 ## How it behaves like the real export
 

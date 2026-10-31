@@ -595,7 +595,8 @@ export default function AuditPage() {
             <span><span className="font-semibold">Claude Code:</span> Prompts, models, cost and tool use.</span>
             <span><span className="font-semibold">Cowork:</span> Prompts, models, cost and tool use.</span>
             <span><span className="font-semibold">Chat:</span> Prompts, through the Compliance API (Enterprise plan).</span>
-            <span>Claude&apos;s replies are never stored.</span>
+            <span><span className="font-semibold">ChatGPT and Codex:</span> Prompts, through OpenAI&apos;s compliance export (ChatGPT Enterprise or Edu).</span>
+            <span>Replies from Claude, ChatGPT and Codex are never stored.</span>
           </div>
         </Notice>
 
