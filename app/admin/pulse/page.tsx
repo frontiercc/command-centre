@@ -36,6 +36,7 @@ interface ModuleConfig {
   /** '' = follow the Core AI model. */
   pulseUserBriefingModel: string;
   pulseSessionDescriptionsEnabled: string;
+  pulseClassifyChatgpt: string;
   humanTimeEnabled: string;
   /** Read-only here (set on Admin → Developer Pulse): the spot-check shows when either surface is on. */
   humanTimeCodeEnabled: string;
@@ -64,6 +65,7 @@ export default function AdminPulsePage() {
     pulseBriefingModel: BRIEFING_DEFAULT_MODEL,
     pulseUserBriefingModel: '',
     pulseSessionDescriptionsEnabled: 'true',
+    pulseClassifyChatgpt: 'true',
     humanTimeEnabled: 'false',
     humanTimeCodeEnabled: '',
     coreAiModel: '',
@@ -92,6 +94,7 @@ export default function AdminPulsePage() {
         pulseBriefingModel: String(configData.pulseBriefingModel ?? BRIEFING_DEFAULT_MODEL),
         pulseUserBriefingModel: String(configData.pulseUserBriefingModel ?? ''),
         pulseSessionDescriptionsEnabled: String(configData.pulseSessionDescriptionsEnabled ?? 'true'),
+        pulseClassifyChatgpt: String(configData.pulseClassifyChatgpt ?? 'true'),
         humanTimeEnabled: String(configData.humanTimeEnabled ?? 'false'),
         humanTimeCodeEnabled: String(configData.humanTimeCodeEnabled ?? ''),
         coreAiModel: String(configData.coreAiModel ?? ''),
@@ -113,6 +116,7 @@ export default function AdminPulsePage() {
           pulseBriefingModel: config.pulseBriefingModel,
           pulseUserBriefingModel: config.pulseUserBriefingModel,
           pulseSessionDescriptionsEnabled: config.pulseSessionDescriptionsEnabled,
+          pulseClassifyChatgpt: config.pulseClassifyChatgpt,
           humanTimeEnabled: config.humanTimeEnabled,
         }),
       });

@@ -145,6 +145,7 @@ export async function POST(request: NextRequest) {
     'pulseBriefingModel',
     'pulseUserBriefingModel',
     'pulseSessionDescriptionsEnabled',
+    'pulseClassifyChatgpt',
     'humanTimeEnabled',
     'humanTimeCodeEnabled',
     'systemHealthAlertsEnabled',

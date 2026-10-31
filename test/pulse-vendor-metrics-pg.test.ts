@@ -151,6 +151,33 @@ describe('Work Pulse figures by vendor', () => {
     }
   }, 120_000);
 
+  it('leaves ChatGPT prompts out of the classifier queue when its switch is off', async () => {
+    const { sql, cleanup } = await createTestDatabase();
+    try {
+      await seed(sql, MIXED);
+      // Unjudged prompts: one Claude Cowork, two ChatGPT.
+      for (const [id, user, source] of [['q1', 'u-claude', 'otel'], ['q2', 'u-openai', 'chatgpt_chat'], ['q3', 'u-openai', 'chatgpt_work']]) {
+        await sql.run(`INSERT INTO cowork_messages (id, session_id, user_id, message_type, surface, source, content_full, occurred_at)
+          VALUES (?, ?, ?, 'cowork_user_message', 'cowork', ?, 'Draft the summary', ?)`, [id, `s-${id}`, user, source, NOW - 60]);
+      }
+      const { NextRequest } = await import('next/server');
+      const { GET } = await import('../app/api/pulse/admin/health/route');
+      const health = async () => (await GET(new NextRequest('http://localhost/api/pulse/admin/health'))).json();
+
+      expect((await health()).queueDepth).toBe(3);
+      const { setConfigValue } = await import('@/lib/config');
+      await setConfigValue('pulseClassifyChatgpt', 'false');
+      const off = await health();
+      expect(off.queueDepth).toBe(1);
+      expect(off.classifyChatgpt).toBe(false);
+      // The per-product table still shows the ChatGPT prompts being left alone.
+      const waiting = Object.fromEntries(off.byProduct.map((r: { product: string; waiting: number }) => [r.product, r.waiting]));
+      expect(waiting).toMatchObject({ claude_cowork: 1, chatgpt_chat: 1, chatgpt_work: 1 });
+    } finally {
+      await cleanup();
+    }
+  }, 120_000);
+
   it('saves nothing per vendor on a Claude-only hub', async () => {
     const { sql, cleanup } = await createTestDatabase();
     try {

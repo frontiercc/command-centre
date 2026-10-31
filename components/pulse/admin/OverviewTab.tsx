@@ -17,6 +17,7 @@ interface ModuleConfig {
   /** '' = follow the Core AI model. */
   pulseUserBriefingModel: string;
   pulseSessionDescriptionsEnabled: string;
+  pulseClassifyChatgpt: string;
   humanTimeEnabled: string;
   coreAiModel: string;
 }
@@ -140,6 +141,12 @@ export default function OverviewTab({
           hint={<>One AI-written sentence on the frontier boxes saying what a piece of work was, written by the Core AI model from the session&apos;s scrubbed prompts. Admins and managers see everyone&apos;s; each person sees their own. Off stops new descriptions and hides existing ones.</>}
           checked={config.pulseSessionDescriptionsEnabled !== 'false'}
           onChange={on => onConfigChange({ pulseSessionDescriptionsEnabled: on ? 'true' : 'false' })}
+        />
+        <ToggleRow
+          label="Classify ChatGPT prompts"
+          hint={<>The classifier judges ChatGPT Chat and ChatGPT Work prompts from OpenAI&apos;s export the same way as Claude prompts, using the Anthropic API key and the classifier model below, so Work Pulse can show how deeply people hand work to ChatGPT. Off stops new ChatGPT prompts being judged; those already judged stay. Applies once ChatGPT prompts arrive.</>}
+          checked={config.pulseClassifyChatgpt !== 'false'}
+          onChange={on => onConfigChange({ pulseClassifyChatgpt: on ? 'true' : 'false' })}
         />
         <ToggleRow
           label="Human time vs Claude time · Claude Cowork"

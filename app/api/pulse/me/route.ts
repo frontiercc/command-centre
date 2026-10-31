@@ -25,7 +25,7 @@ import { getPublishedAgreement } from '@/lib/pulse/audit/cycle';
 import { readHumanTime } from '@/lib/pulse/human-time-summary';
 import { getAllConfig } from '@/lib/config';
 import { canViewSpendReview } from '@/lib/finance/spend-review-access';
-import { isWorkPulseSurface } from '@/lib/pulse/work-surfaces';
+import { isWorkPulseSurface, classifiableSource, classifyChatgptOn } from '@/lib/pulse/work-surfaces';
 
 // OTI's interpretive status line is gated on the classifier accuracy audit
 // clearing its substantial-agreement floor. No scored audit yet, or below the
@@ -290,6 +290,7 @@ export async function GET(request: NextRequest) {
     WHERE ${isWorkPulseSurface(sql`cm.surface`)} AND cm.user_id = ${userId}
       AND cm.message_type = 'cowork_user_message'
       AND ${sql.raw(vendorClause(vendor, 'cm.'))}
+      AND ${classifiableSource(sql`cm.source`, await classifyChatgptOn())}
       AND cm.id NOT IN (
         SELECT cowork_message_id FROM pulse_classifications
         WHERE classifier_status = 'classified' OR classifier_attempts >= 5
