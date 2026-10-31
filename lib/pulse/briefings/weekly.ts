@@ -9,6 +9,7 @@ import { createGroundedJson, GroundingRejectedError, paragraphsShape } from '@/l
 import { and, desc, eq, gte, lt, sql } from 'drizzle-orm';
 import { buildFrontierView } from '@/lib/pulse/frontier-view';
 import { describeWork, kindText } from '@/lib/pulse/briefings/deep-work-facts';
+import { buildProductFacts } from '@/lib/pulse/briefings/product-facts';
 import { getTypedClient } from '@/lib/db/client';
 import { schema } from '@/lib/db/schema';
 import { getConfigValue } from '@/lib/config';
@@ -108,6 +109,7 @@ export async function generateUserWeeklyBriefing(
     oti: metrics?.oti ?? null,
     deep_work: deepWork,
     task_types_used: taskTypeRows.map(r => r.task_type),
+    products: await buildProductFacts({ periodStart, periodEnd, userIds: [userId] }),
   };
 
   const userMessage = buildWeeklyBriefingUserMessage(ctx);

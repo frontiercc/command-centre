@@ -8,6 +8,7 @@ import { createGroundedJson, paragraphsShape } from '@/lib/anthropic/grounded-js
 import { and, eq, gte, isNotNull, lt, sql } from 'drizzle-orm';
 import { getTypedClient } from '@/lib/db/client';
 import { schema } from '@/lib/db/schema';
+import { buildProductFacts } from '@/lib/pulse/briefings/product-facts';
 import { buildDeepWorkSummary, deepWorkLines } from '@/lib/pulse/briefings/deep-work-facts';
 import { getAllConfig, getConfigValue } from '@/lib/config';
 import { listOpenDeptBoxes } from '@/lib/usecases/suggestion-store';
@@ -188,6 +189,7 @@ export async function generateCioBriefing(
     teams_with_ors_below_threshold: lowOrsTeams.map(r => r.scope_id),
     departments_with_ors_count: scoredDepts.length,
     dept_process_opportunities: deptProcessOpportunities,
+    products: await buildProductFacts({ periodStart, periodEnd }),
   };
 
   const userMessage = buildCioBriefingUserMessage(ctx);

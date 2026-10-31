@@ -122,6 +122,35 @@ describe('Work Pulse figures by vendor', () => {
     }
   }, 120_000);
 
+  it('gives briefings per-product facts, and none on a Claude-only window', async () => {
+    const { sql, cleanup } = await createTestDatabase();
+    try {
+      await seed(sql, MIXED);
+      const { buildProductFacts, productFactsBlock } = await import('@/lib/pulse/briefings/product-facts');
+      const lines = await buildProductFacts({ periodStart: NOW - 3600, periodEnd: NOW + 1 });
+      expect(lines).toEqual([
+        'Claude Chat: 1 classified prompts, 1 person',
+        'ChatGPT Chat: 2 classified prompts, 2 people',
+        'Claude Cowork: 2 classified prompts, 1 person',
+        'ChatGPT Work: 1 classified prompts, 1 person',
+        'Share of work at Tier 2 or 3: Claude 100%, OpenAI 0%',
+      ]);
+      // One person who used Claude only: no facts, so the briefing is unchanged.
+      expect(await buildProductFacts({ periodStart: NOW - 3600, periodEnd: NOW + 1, userIds: ['u-claude'] })).toEqual([]);
+      const { buildCioBriefingUserMessage } = await import('@/lib/pulse/briefings/prompts/cio');
+      const msg = buildCioBriefingUserMessage({
+        period_label: 'October 2026', weekly_active_users: 3, total_classified_events: 6,
+        tier_1_pct: 50, tier_2_pct: 17, tier_3_pct: 33, avg_dds: 1.5, avg_oti: null,
+        confirmed_capability_creation_count: 0, concentration_risk_count: 0, deep_work: [],
+        teams_with_ors_below_threshold: [], departments_with_ors_count: 0, dept_process_opportunities: [],
+        products: lines,
+      });
+      expect(msg).toContain(productFactsBlock(lines).trim());
+    } finally {
+      await cleanup();
+    }
+  }, 120_000);
+
   it('saves nothing per vendor on a Claude-only hub', async () => {
     const { sql, cleanup } = await createTestDatabase();
     try {

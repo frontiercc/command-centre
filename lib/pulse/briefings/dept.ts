@@ -8,6 +8,7 @@ import { createGroundedJson, paragraphsShape } from '@/lib/anthropic/grounded-js
 import { and, eq, gte, inArray, isNotNull, lt, sql } from 'drizzle-orm';
 import { getTypedClient } from '@/lib/db/client';
 import { schema } from '@/lib/db/schema';
+import { buildProductFacts } from '@/lib/pulse/briefings/product-facts';
 import { buildDeepWorkSummary, deepWorkLines } from '@/lib/pulse/briefings/deep-work-facts';
 import { getConfigValue } from '@/lib/config';
 import {
@@ -139,6 +140,7 @@ export async function generateDeptBriefing(
     confirmed_capabilities: capCount,
     deep_work: deepWork,
     concentration_risk_count: concentrationCount,
+    products: await buildProductFacts({ periodStart, periodEnd, userIds: memberIds }),
   };
 
   // Every number in the reply must come from the prompt; one retry, then

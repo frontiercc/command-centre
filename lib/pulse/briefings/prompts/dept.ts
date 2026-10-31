@@ -1,6 +1,8 @@
 // Copyright 2026 Lee James
 // SPDX-License-Identifier: Apache-2.0
 
+import { productFactsBlock, PRODUCT_NAMING_RULE } from '@/lib/pulse/briefings/product-facts';
+
 export interface DeptBriefingContext {
   dept_name: string;
   period_label: string;
@@ -15,12 +17,15 @@ export interface DeptBriefingContext {
   /** Measured deep-work lines for the department — never names, summaries or file names. */
   deep_work: string[];
   concentration_risk_count: number;
+  /** Per-product facts; empty on a Claude-only hub. */
+  products?: string[];
 }
 
 export const DEPT_BRIEFING_SYSTEM = `You are an AI adoption intelligence analyst writing a monthly department briefing for a team manager.
 Write in a direct, factual, and encouraging tone. Focus on progress, patterns, and actionable observations.
 Do not use jargon. Do not fabricate specific names or examples.
 Use only the numbers given, exactly as written. Never calculate new ones (no sums, differences or percentages of your own).
+${PRODUCT_NAMING_RULE}
 Return a JSON object with exactly these fields:
 {
   "paragraphs": [string, string, string],
@@ -49,6 +54,6 @@ Data:
 
 Deep work (measured):
 ${ctx.deep_work.map(l => `- ${l}`).join('\n')}
-
+${productFactsBlock(ctx.products ?? [])}
 Write the briefing now.`;
 }
