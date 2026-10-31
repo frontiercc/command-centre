@@ -89,7 +89,7 @@ The table lists every model call in the application. Defaults are the values a f
 
 | Feature | Trigger | Model setting (default) | Data sent | Switch off |
 |---|---|---|---|---|
-| Cowork work classifier | Every 5 minutes, batches of 25 prompts | Cowork classifier model (Haiku) | Claude Cowork and Claude Chat prompts, masked, up to 4,000 characters; tool, skill and connector names; pseudonymous ids | Work Pulse off |
+| Cowork work classifier | Every 5 minutes, batches of 25 prompts | Cowork classifier model (Haiku) | Claude Cowork, Claude Chat, ChatGPT Work and ChatGPT Chat prompts, masked, up to 4,000 characters; tool, skill and connector names; pseudonymous ids | Work Pulse off; Classify ChatGPT prompts off (ChatGPT prompts only) |
 | Claude Code session classifier | Every 30 minutes | Code classifier model (Haiku) | Session metadata; first prompt masked, up to 200 characters | Classifier or Developer Pulse off; prompts off sends metadata only |
 | Session descriptions | Hourly, up to 400 sessions | Core AI model (Haiku) | Up to 8 prompts per session, masked, 600 characters each | Session descriptions off |
 | Human time estimates | Hourly (Claude Cowork); with the classifier (Claude Code) | Core AI model; Code classifier model | Up to 8 masked prompts, output file names, connector names, department name | Human time off, per surface |
@@ -129,7 +129,7 @@ Where a call needs to distinguish people or sessions, it uses internal identifie
 
 ### Cowork work classifier
 
-Each Claude Cowork and Claude Chat prompt is classified once for its tier of delegation and its kind of work. A batch carries each prompt's stored text (stored prompts are capped at 4,000 characters at ingest) after masking, the session's connector, skill and tool names and counts, and for each person their previously observed tiers and kinds of work, keyed by pseudonymous identifier. Stored tiers are limited to 1, 2 and 3, and the kind of work must come from the configured taxonomy: any other kind of work is recorded as a failed classification and retried, never coerced into a plausible value. Confidence is clamped to the range 0 to 1. From a successful reply, only the labels, the capability flags and the confidence are stored. Switching off Work Pulse stops the classifier.
+Each Claude Cowork and Claude Chat prompt, and each ChatGPT Work and ChatGPT Chat prompt from OpenAI's export, is classified once for its tier of delegation and its kind of work, so ChatGPT prompt text is sent to Anthropic for this call. Switching off **Classify ChatGPT prompts** under **Admin → Work Pulse** stops new ChatGPT prompts being sent; those already classified keep their labels. A batch carries each prompt's stored text (stored prompts are capped at 4,000 characters at ingest) after masking, the session's connector, skill and tool names and counts, and for each person their previously observed tiers and kinds of work, keyed by pseudonymous identifier. Stored tiers are limited to 1, 2 and 3, and the kind of work must come from the configured taxonomy: any other kind of work is recorded as a failed classification and retried, never coerced into a plausible value. Confidence is clamped to the range 0 to 1. From a successful reply, only the labels, the capability flags and the confidence are stored. Switching off Work Pulse stops the classifier.
 
 ### Claude Code session classifier
 
@@ -145,7 +145,7 @@ For each Tier 2 or 3 Claude Cowork session in the last 30 days that has measured
 
 ### Briefings
 
-Four briefings are written by a model: a personal weekly briefing for each person with Claude Cowork work classified in the past week (Sunday evening), a monthly executive briefing (first of the month), department briefings (on request by an administrator or manager) and a weekly Claude Code briefing. They receive figures computed in code: tier counts, kinds of work, measured deep-work facts, department names, spend and shipping figures, with every percentage and week-on-week change worked out before the call. Department and executive briefings never receive names; the personal briefing receives the person's display name and their own figures. No prompt text, AI summary or file name is included.
+Four briefings are written by a model: a personal weekly briefing for each person with Claude Cowork work classified in the past week (Sunday evening), a monthly executive briefing (first of the month), department briefings (on request by an administrator or manager) and a weekly Claude Code briefing. They receive figures computed in code: tier counts, kinds of work, measured deep-work facts, department names, spend and shipping figures, and, when ChatGPT prompts were classified in the period, classified prompts and people for each product with each vendor's share of work at Tier 2 or 3, with every percentage and week-on-week change worked out before the call. Department and executive briefings never receive names; the personal briefing receives the person's display name and their own figures. No prompt text, AI summary or file name is included.
 
 Every briefing is number-checked: each number in the reply must appear in the data sent (rounded forms allowed). A refused reply gets one retry naming the offending numbers. If the retry is also refused, sentences carrying unchecked numbers are removed provided at least half the text survives; failing that, the exchange is repeated once more from the start, and if it still fails nothing is stored and the previous briefing remains on screen. Briefings are stored in the Hub database. Scheduled briefings run only while Work Pulse (or, for the Claude Code briefing, Developer Pulse) is on; administrators and managers can also request a briefing.
 
@@ -266,6 +266,7 @@ Every model call depends on the Claude API key. Without a key, no model call is 
 | Session descriptions off | No descriptions written; existing ones hidden |
 | Human time off (Cowork, Code) | No estimates |
 | Work Pulse off | No Cowork work classifier, session descriptions, Claude Cowork human time estimates or scheduled Work Pulse briefings |
+| Classify ChatGPT prompts off | No ChatGPT prompt sent to the Cowork work classifier |
 | Highlights off | No Highlights drafts |
 
 With no key, the following continue to work in full: telemetry capture and the Audit Log; personal-data detection and its alerts, without the confirmation step; intent detection, with alerts at each category's default severity; measured Claude Cowork and Claude Code figures (sessions, active time, commits, pull requests, lines, spend, session output); FinOps chargeback and Spend Review cost figures; the Skills and Connectors Board; the Weekly Digest; the Metrics Connector; use case tracking through codified skills; alerts to Slack; and retention, export and erasure.

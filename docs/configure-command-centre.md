@@ -140,9 +140,9 @@ Three further settings shape alerting. **Admin → Risk Scoring → Developer Pu
 
 Work Pulse shows the depth of work people hand to Claude in Claude Cowork: a judged tier for each prompt, whether that depth is growing and spreading by department, and what capability the organisation has built. The tiers are AI-judged and labelled as such; time and session counts are measured.
 
-1. In **Admin → Work Pulse → Overview → Module settings**, confirm **Pulse enabled** is on, choose the **Classifier model**, **Organisation briefing model** and **Personal briefing model**, set **Human time vs Claude time · Cowork** and **Session descriptions** to your decision, and select **Save**.
+1. In **Admin → Work Pulse → Overview → Module settings**, confirm **Pulse enabled** is on, choose the **Classifier model**, **Organisation briefing model** and **Personal briefing model**, set **Human time vs Claude time · Claude Cowork**, **Session descriptions** and **Classify ChatGPT prompts** to your decision, and select **Save**. **Classify ChatGPT prompts** applies once ChatGPT prompts arrive from OpenAI's export.
 2. Review the rubric in **Admin → Work Pulse → Tier config**: the tier definitions, the task type taxonomy and the detection criteria. The page previews the exact instructions the classifier receives. Changes apply from the next classification onward and never rewrite history.
-3. Leave **Classifier health** open for the first day. Classifier health shows the queue awaiting classification and any failures, with a control to retry them.
+3. Leave **Classifier health** open for the first day. Classifier health shows the queue awaiting classification and any failures, with a control to retry them; once ChatGPT prompts exist, a table shows classified, waiting and failed prompts for each product.
 
 Once a month, use **Admin → Work Pulse → Audit** to start an audit cycle with **Draw sample**: a reproducible sample of classifications for a person to score, giving you a measured agreement rate between the classifier and a human reviewer. When human time is on, the same tab carries the spot-check for human time estimates.
 

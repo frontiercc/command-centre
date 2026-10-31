@@ -361,7 +361,7 @@ export async function GET(
     frontier = await buildFrontierView({ dept }, now, {
       seeAllDetail: canAccessPulseAdmin(session.role),
       ownUserId: await resolveViewerUserId(session.email),
-    });
+    }, vendor);
   } catch (err) {
     console.error('[pulse/dept] frontier view failed', err);
   }
