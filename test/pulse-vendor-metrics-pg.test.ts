@@ -12,6 +12,18 @@ vi.mock('@anthropic-ai/sdk', () => ({
   default: vi.fn().mockImplementation(() => ({ messages: { create: vi.fn() } })),
 }));
 
+vi.mock('@/lib/auth/admin-auth', async (orig) => {
+  const actual = await orig<typeof import('@/lib/auth/admin-auth')>();
+  return { ...actual, getAdminSession: async () => ({ authenticated: true, role: 'admin', email: 'me@example.org' }) };
+});
+
+async function cio(vendor: string) {
+  const { NextRequest } = await import('next/server');
+  const { GET } = await import('../app/api/pulse/cio/route');
+  const res = await GET(new NextRequest(`http://localhost/api/pulse/cio?vendor=${vendor}`));
+  return res.json();
+}
+
 const NOW = Math.floor(Date.now() / 1000);
 
 // [message id, user, surface, source, tier]
@@ -83,6 +95,22 @@ describe('Work Pulse figures by vendor', () => {
         `SELECT vendor, COUNT(*) AS n FROM pulse_metrics_vendor
           WHERE granularity = 'week' AND scope_type = 'function' GROUP BY vendor ORDER BY vendor`);
       expect(weekly).toEqual([{ vendor: 'claude', n: 1 }, { vendor: 'openai', n: 1 }]);
+
+      // The Executive View follows the switch, and the All view carries each part.
+      const openai = await cio('openai');
+      expect(openai.adoptionHero.weeklyActive).toBe(2);
+      expect(openai.adoptionHero.meaningfulWorkPct).toBe(0);
+      expect(openai.adoptionHero.avgDds).toBe(1);
+      expect(openai.coworkCostUsd).toBeUndefined();
+      const claude = await cio('claude');
+      expect(claude.adoptionHero.weeklyActive).toBe(2);
+      expect(claude.adoptionHero.meaningfulWorkPct).toBe(100);
+      expect(claude.adoptionHero.avgDds).toBe(2.5);
+      const allView = await cio('all');
+      expect(allView.openaiPresent).toBe(true);
+      expect(allView.adoptionHero.weeklyActive).toBe(3);
+      expect(allView.heroSplit.claude.weeklyActive).toBe(2);
+      expect(allView.heroSplit.openai.weeklyActive).toBe(2);
 
       // A person's erasure removes their per-vendor rows too.
       const { deleteUserData } = await import('@/lib/db/queries');

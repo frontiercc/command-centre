@@ -175,7 +175,7 @@ export default function PulseBand({ children, vendor = 'all', showVendor = false
           {/* Row 1: the four Cowork signals in plain English + tier bar */}
           {vendor !== 'all' && (
             <p className="m-0 -mb-2 text-[13px] text-[#8F8F8F]">
-              These four figures and Developer Pulse cover every product. The tier mix, skills and connectors show {VENDOR_LABELS[vendor]} only.
+              Work Pulse shows {VENDOR_LABELS[vendor]} only. Developer Pulse below covers every product.
             </p>
           )}
           <div className="grid grid-cols-1 lg:grid-cols-[minmax(0,3fr)_minmax(0,1fr)] gap-4">

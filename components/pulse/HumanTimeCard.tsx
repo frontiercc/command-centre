@@ -56,7 +56,8 @@ export default function HumanTimeCard({ summary, surface, scope, className = '' 
     <Panel
       className={className}
       title="By hand vs with Claude"
-      subtitle={scope}
+      // Work Pulse's figures come from Claude Cowork sessions only: ChatGPT has no measured time.
+      subtitle={surface === 'cowork' ? `Claude Cowork · ${scope}` : scope}
       right={<><Tag tone="judged">Estimate</Tag><Tag tone="measured">Measured</Tag></>}
     >
       <div className={summary.byKind.length > 0 ? 'grid grid-cols-1 md:grid-cols-[minmax(0,2fr)_minmax(0,3fr)] gap-6' : ''}>

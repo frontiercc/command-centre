@@ -247,9 +247,9 @@ export default function DeptPulsePage() {
           <Strip cols={activityCols as 2 | 4}>
             {showSpend && (
               <Figure
-                label="Dept Cowork spend, 7 days"
+                label="Dept Claude Cowork spend, 7 days"
                 value={spendValue(data.coworkCostUsd)}
-                sub="Total API cost of Cowork (OTel) sessions"
+                sub="Total API cost of Claude Cowork sessions. ChatGPT spend is not recorded yet."
               />
             )}
             {showSpend && (
@@ -266,7 +266,7 @@ export default function DeptPulsePage() {
                 label="Document sessions, 30 days"
                 value={data.docSessions!.sessions_with_uploads}
                 unit="sessions with uploads"
-                sub="Cowork sessions where one or more files were attached"
+                sub="Sessions where one or more files were attached, Claude and ChatGPT"
               />
             )}
             {showDocs && (

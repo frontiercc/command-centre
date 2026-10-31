@@ -205,9 +205,9 @@ export default function PersonalPulsePage() {
         {(data.coworkCostUsd !== undefined || data.coworkFrictionIndex !== undefined) && (
           <Strip cols={2}>
             <Figure
-              label="Cowork spend, 7 days"
+              label="Claude Cowork spend, 7 days"
               value={spendValue(data.coworkCostUsd)}
-              sub="API cost of Cowork (OTel) sessions"
+              sub="API cost of Claude Cowork sessions. ChatGPT spend is not recorded yet."
             />
             <Figure
               label="Friction index, 7 days"
@@ -242,7 +242,7 @@ export default function PersonalPulsePage() {
           <Panel
             title="Capabilities to review"
             badge={<Tag tone="warn">{pending.length}</Tag>}
-            subtitle="Claude may have taken on these types of work for the first time. Confirm to track them."
+            subtitle="AI may have taken on these types of work for the first time. Confirm to track them."
             flush
           >
             <ul className="m-0 p-0 list-none">

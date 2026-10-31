@@ -131,7 +131,7 @@ export default function Person360Page() {
           </Link>
         </Toolbar>
 
-        <HumanTimeCard summary={data.humanTime?.cowork} surface="cowork" scope="Cowork" />
+        <HumanTimeCard summary={data.humanTime?.cowork} surface="cowork" scope="Personal" />
         <HumanTimeCard summary={data.humanTime?.code} surface="code" scope="Code" />
 
         {/* Combined AI Spend — measured, blue */}

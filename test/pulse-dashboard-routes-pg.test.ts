@@ -315,9 +315,9 @@ async function runSpec(): Promise<void> {
     expect(orgSummaryBody.tierCounts).toEqual({ t1: 1, t2: 1, t3: 2 });
 
     // Work Mix (30d) — same classified rows grouped by task_type instead of flattened by tier.
-    expect(orgSummaryBody.workMix).toContainEqual({ task_type: 'coding', messages: 2, tier3: 2, tier2: 0, tier1: 0 });
-    expect(orgSummaryBody.workMix).toContainEqual({ task_type: 'drafting', messages: 1, tier3: 0, tier2: 1, tier1: 0 });
-    expect(orgSummaryBody.workMix).toContainEqual({ task_type: 'chat', messages: 1, tier3: 0, tier2: 0, tier1: 1 });
+    expect(orgSummaryBody.workMix).toContainEqual({ task_type: 'coding', messages: 2, tier3: 2, tier2: 0, tier1: 0, claude: 2, openai: 0 });
+    expect(orgSummaryBody.workMix).toContainEqual({ task_type: 'drafting', messages: 1, tier3: 0, tier2: 1, tier1: 0, claude: 1, openai: 0 });
+    expect(orgSummaryBody.workMix).toContainEqual({ task_type: 'chat', messages: 1, tier3: 0, tier2: 0, tier1: 1, claude: 1, openai: 0 });
 
     // GROUP BY + COUNT(DISTINCT) coercion — topSkills/topConnectors.
     expect(orgSummaryBody.topSkills).toContainEqual({ skill_name: 'brand-review', vendor: 'claude', usage_count: 3, user_count: 1 });

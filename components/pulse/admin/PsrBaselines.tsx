@@ -66,7 +66,7 @@ export default function PsrBaselines() {
   return (
     <Panel title="Process baselines" flush>
       <p className="m-0 px-4 pt-3 pb-3 text-[13px] text-[#666666] leading-5">
-        The share of each department&apos;s processes handed to Claude needs a baseline process count: the number
+        The share of each department&apos;s processes handed to AI needs a baseline process count: the number
         of manual or recurring processes a department could plausibly substitute with AI. Set it here,
         or use the suggestion drawn from distinct task types that department has actually run in
         the last 30 days.

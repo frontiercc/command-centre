@@ -28,7 +28,7 @@ export default function SkillExchange({ skills }: SkillExchangeProps) {
     <Panel title="Skill exchange" subtitle="Who on the team uses each skill" flush={skills.length > 0}>
       {skills.length === 0 ? (
         <Muted>
-          No team skills logged yet. Skills appear here when team members invoke Claude Code skills during Cowork sessions.
+          No team skills logged yet. Skills appear here when team members use skills in Claude or ChatGPT.
         </Muted>
       ) : (
         <ul className="m-0 p-0 list-none">

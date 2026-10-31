@@ -24,6 +24,8 @@ import ActNextPanel, { type ActNextItem, type DeptProcessBoxItem } from '@/compo
 import { PageBody, Toolbar, Panel, Strip, Figure, BarRow, Tag, Dot, Muted, Notice, B, deltaTone, type Tone } from '@/components/precision/ui';
 import SessionOutputCard, { type SessionOutputReport } from '@/components/pulse/SessionOutputCard';
 import HumanTimeCard, { type HumanTimeSummary } from '@/components/pulse/HumanTimeCard';
+import { useVendor, VendorSwitch, formatSplit } from '@/components/shared/VendorSwitch';
+import { VENDOR_LABELS, type Vendor } from '@/lib/dashboard/vendor';
 
 interface WorkMixItem {
   task_type: string;
@@ -31,11 +33,15 @@ interface WorkMixItem {
   tier3: number;
   tier2: number;
   tier1: number;
+  claude?: number;
+  openai?: number;
 }
 
+type RowVendor = 'claude' | 'openai';
+
 interface OrgSummarySlice {
-  topSkills: Array<{ skill_name: string; usage_count: number; user_count: number }>;
-  topConnectors: Array<{ mcp_server: string; usage_count: number; user_count: number }>;
+  topSkills: Array<{ skill_name: string; vendor?: RowVendor; usage_count: number; user_count: number }>;
+  topConnectors: Array<{ mcp_server: string; vendor?: RowVendor; usage_count: number; user_count: number }>;
   topNativeTools?: Array<{ tool_name: string; usage_count: number; user_count: number }>;
   docSessions?: { sessions_with_uploads: number; total_uploads: number };
   workMix?: WorkMixItem[];
@@ -55,12 +61,13 @@ function formatConnectorName(name: string): string {
   return name.replace(/^mcp__/, '').replace(/_/g, ' ');
 }
 
-function InvocationList({ title, items, nameKey, emptyMessage, formatName }: {
+function InvocationList({ title, items, nameKey, emptyMessage, formatName, showVendor }: {
   title: string;
-  items: Array<{ usage_count: number; user_count: number; [k: string]: unknown }>;
+  items: Array<{ usage_count: number; user_count: number; vendor?: RowVendor; [k: string]: unknown }>;
   nameKey: string;
   emptyMessage: string;
   formatName: (n: string) => string;
+  showVendor: boolean;
 }) {
   return (
     <Panel title={title} subtitle="30 days" flush={items.length > 0}>
@@ -72,9 +79,14 @@ function InvocationList({ title, items, nameKey, emptyMessage, formatName }: {
           const maxUsage = items[0].usage_count;
           return (
             <BarRow
-              key={name}
+              key={`${name}|${item.vendor ?? ''}`}
               rank={i + 1}
-              label={formatName(name)}
+              label={showVendor && item.vendor ? (
+                <span className="inline-flex items-center gap-1.5 min-w-0">
+                  <span className="truncate">{formatName(name)}</span>
+                  <Tag tone="neutral">{VENDOR_LABELS[item.vendor]}</Tag>
+                </span>
+              ) : formatName(name)}
               value={`${item.usage_count}× · ${item.user_count} ${item.user_count === 1 ? 'user' : 'users'}`}
               pct={Math.round((item.usage_count / maxUsage) * 100)}
               tone="measured"
@@ -86,20 +98,25 @@ function InvocationList({ title, items, nameKey, emptyMessage, formatName }: {
   );
 }
 
+interface HeroFigures {
+  weeklyActive: number;
+  totalActive: number;
+  meaningfulWorkPct: number | null;
+  avgDds: number | null;
+  avgOti: number | null;
+  priorWeeklyActive: number;
+  priorMeaningfulWorkPct: number | null;
+  priorAvgDds: number | null;
+  priorAvgOti: number | null;
+}
+
 interface CioData {
+  vendor: Vendor;
+  openaiPresent: boolean;
   adoptionFunnel: FunnelMonth[];
-  adoptionHero: {
-    weeklyActive: number;
-    totalActive: number;
-    meaningfulWorkPct: number;
-    avgDds: number | null;
-    avgOti: number | null;
-    concentrationPct: number;
-    priorWeeklyActive: number;
-    priorMeaningfulWorkPct: number | null;
-    priorAvgDds: number | null;
-    priorAvgOti: number | null;
-  };
+  adoptionHero: HeroFigures & { concentrationPct: number };
+  /** The All view's headline figures, split into Claude and OpenAI. */
+  heroSplit: { claude: HeroFigures; openai: HeroFigures } | null;
   signalCards: {
     oti: number | null; dds: number | null;
     psr: number | null; ors: number | null;
@@ -228,17 +245,17 @@ function readDds(dds: number | null, prior: number | null): SignalRead {
         ? `Down from ${prior.toFixed(2)} last period. Delegation complexity has dropped.`
         : null
     : null;
-  if (dds === null) return { question, status: 'Not yet measurable', plain: 'Requires 14 days of classified Cowork sessions.', why: null, statusColor: 'text-gray-400', dotColor: 'bg-gray-300' };
+  if (dds === null) return { question, status: 'Not yet measurable', plain: 'Requires 14 days of classified work.', why: null, statusColor: 'text-gray-400', dotColor: 'bg-gray-300' };
   if (dds >= 2.0) return { question, status: 'Frontier depth', plain: `Team is operating at the frontier: work that genuinely extends human capability. This is not task automation. It is a structurally different operating model.`, why, statusColor: 'text-emerald-600', dotColor: 'bg-emerald-500' };
   if (dds >= 1.5) return { question, status: 'Meaningful depth', plain: `Delegation is going beyond routine tasks. The operating model is beginning to shift: not just productivity, but how work gets structured and who does what.`, why, statusColor: 'text-blue-500', dotColor: 'bg-blue-400' };
   return { question, status: 'Surface use', plain: `AI is being used for simple tasks. The most common pattern in enterprise deployment. The tool is active but the operating model has not changed, and this is invisible to every other measurement approach.`, why, statusColor: 'text-amber-500', dotColor: 'bg-amber-400' };
 }
 
 function readCapabilitiesCreated(count: number | null): SignalRead {
-  const question = 'How many new types of work has the team handed to Claude?';
-  if (count === null) return { question, status: 'None confirmed yet', plain: 'Capability candidates appear automatically when Claude handles a new type of task. Review and confirm them to start tracking.', why: null, statusColor: 'text-gray-400', dotColor: 'bg-gray-300' };
+  const question = 'How many new types of work has the team handed to AI?';
+  if (count === null) return { question, status: 'None confirmed yet', plain: 'Capability candidates appear automatically when AI handles a new type of task. Review and confirm them to start tracking.', why: null, statusColor: 'text-gray-400', dotColor: 'bg-gray-300' };
   if (count === 0) return { question, status: 'None confirmed yet', plain: 'Candidates detected. Confirm them in the capability queue to start counting.', why: null, statusColor: 'text-gray-400', dotColor: 'bg-gray-300' };
-  return { question, status: `${count} ${count === 1 ? 'capability' : 'capabilities'} created`, plain: `The team has confirmed ${count} distinct types of work now handled by Claude. Each confirmed capability represents a repeatable shift in how work gets done.`, why: null, statusColor: 'text-emerald-600', dotColor: 'bg-emerald-500' };
+  return { question, status: `${count} ${count === 1 ? 'capability' : 'capabilities'} created`, plain: `The team has confirmed ${count} distinct types of work now handled by AI. Each confirmed capability represents a repeatable shift in how work gets done.`, why: null, statusColor: 'text-emerald-600', dotColor: 'bg-emerald-500' };
 }
 
 function readOrs(ors: number | null): SignalRead {
@@ -283,9 +300,11 @@ export default function CioPulsePage() {
   const [copied, setCopied] = useState(false);
   const [orgSummary, setOrgSummary] = useState<OrgSummarySlice | null>(null);
   const [delegationWeeks, setDelegationWeeks] = useState<13 | 26 | 52>(13);
+  // The All / Claude / OpenAI switch, shared with the dashboard.
+  const [vendor, setVendor] = useVendor();
 
   useEffect(() => {
-    fetch(`/api/pulse/cio?weeks=${delegationWeeks}`)
+    fetch(`/api/pulse/cio?weeks=${delegationWeeks}&vendor=${vendor}`)
       .then(r => {
         if (!r.ok) throw new Error("Couldn't load this page. Try again.");
         return r.json();
@@ -293,18 +312,18 @@ export default function CioPulsePage() {
       .then(setData)
       .catch(e => setError(e.message))
       .finally(() => setLoading(false));
-  }, [refreshKey, delegationWeeks]);
+  }, [refreshKey, delegationWeeks, vendor]);
 
   useEffect(() => {
     fetch('/api/pulse/governance-health')
       .then(r => r.ok ? r.json() : null)
       .then(d => { if (d) setGovHealth(d); })
       .catch(() => {});
-    fetch('/api/pulse/org-summary')
+    fetch(`/api/pulse/org-summary?vendor=${vendor}`)
       .then(r => r.ok ? r.json() : null)
       .then(d => { if (d) setOrgSummary({ topSkills: d.topSkills ?? [], topConnectors: d.topConnectors ?? [], topNativeTools: d.topNativeTools ?? [], docSessions: d.docSessions, workMix: d.workMix ?? [], sessionOutput: d.sessionOutput ?? null, humanTime: d.humanTime ?? null }); })
       .catch(() => {});
-  }, [refreshKey]);
+  }, [refreshKey, vendor]);
 
   useEffect(() => {
     fetch('/api/pulse/depts')
@@ -316,14 +335,14 @@ export default function CioPulsePage() {
 
   if (loading) return (
     <>
-      <TopBar title="Work Pulse: Executive View" subtitle="How deeply people are handing work to Claude, what it produces, and where to act" />
+      <TopBar title="Work Pulse: Executive View" subtitle="How deeply people are handing work to AI, what it produces, and where to act" />
       <LoadingSpinner />
     </>
   );
 
   if (error) return (
     <>
-      <TopBar title="Work Pulse: Executive View" subtitle="How deeply people are handing work to Claude, what it produces, and where to act" />
+      <TopBar title="Work Pulse: Executive View" subtitle="How deeply people are handing work to AI, what it produces, and where to act" />
       <PageBody><Notice tone="error" title="Couldn’t load this page.">{error}</Notice></PageBody>
     </>
   );
@@ -331,32 +350,52 @@ export default function CioPulsePage() {
   if (!data) return null;
 
   const h = data.adoptionHero;
+  const hs = data.heroSplit;
+  // Shown under a headline figure in the All view: its Claude and OpenAI parts.
+  const splitLine = (pick: (f: HeroFigures) => number | null, fmt: (v: number) => string) => {
+    if (!hs) return null;
+    const c = pick(hs.claude);
+    const o = pick(hs.openai);
+    return `Claude ${c === null ? 'n/a' : fmt(c)} · OpenAI ${o === null ? 'n/a' : fmt(o)}`;
+  };
+  const usingLabel = vendor === 'claude' ? 'Using Claude for work weekly'
+    : vendor === 'openai' ? 'Using ChatGPT for work weekly'
+      : 'Using AI for work weekly';
   const briefingText = data.briefing
     ? [data.briefing.body, data.briefing.suggestion ? `\nRecommendation: ${data.briefing.suggestion}` : ''].join('')
     : '';
 
   return (
     <>
-      <TopBar title="Work Pulse: Executive View" subtitle="How deeply people are handing work to Claude, what it produces, and where to act" />
+      <TopBar title="Work Pulse: Executive View" subtitle="How deeply people are handing work to AI, what it produces, and where to act" />
       <PageBody>
         <Toolbar left="Last 14 days unless a panel says otherwise">
-          <Link href="/admin/pulse" className={B.secondary}>Pulse settings</Link>
+          <span className="flex flex-wrap items-center justify-end gap-3">
+            <VendorSwitch vendor={vendor} onChange={setVendor} openaiPresent={data.openaiPresent} />
+            <Link href="/admin/pulse" className={B.secondary}>Pulse settings</Link>
+          </span>
         </Toolbar>
+        {vendor !== 'all' && (
+          <p className="m-0 -mt-2 text-[13px] text-[#8F8F8F]">
+            Showing {VENDOR_LABELS[vendor]} only{vendor === 'openai' ? ': ChatGPT Chat and ChatGPT Work' : ': Claude Cowork and Claude Chat'}.
+          </p>
+        )}
 
         {/* Headline figures */}
         <Strip cols={5}>
           <Figure
-            label="Using Cowork weekly"
+            label={usingLabel}
             value={String(h.weeklyActive)}
             unit="people"
             delta={herodelta(h.weeklyActive, h.priorWeeklyActive)}
             deltaTone={heroTone(h.weeklyActive, h.priorWeeklyActive)}
+            sub={splitLine(f => f.weeklyActive, v => String(v))}
           />
           <Figure
             label="Meaningful work"
-            value={`${h.meaningfulWorkPct}%`}
+            value={h.meaningfulWorkPct !== null ? `${h.meaningfulWorkPct}%` : '—'}
             tone="judged"
-            sub="of work at Tier 2 or 3"
+            sub={<>of work at Tier 2 or 3{hs && <><br />{splitLine(f => f.meaningfulWorkPct, v => `${v}%`)}</>}</>}
             delta={herodelta(h.meaningfulWorkPct, h.priorMeaningfulWorkPct, '%')}
             deltaTone={heroTone(h.meaningfulWorkPct, h.priorMeaningfulWorkPct)}
           />
@@ -364,7 +403,7 @@ export default function CioPulsePage() {
             label="More valuable work"
             value={h.avgOti !== null ? `${h.avgOti.toFixed(2)}×` : '—'}
             tone="judged"
-            sub="output against baseline"
+            sub={<>output against baseline{hs && <><br />{splitLine(f => f.avgOti, v => `${v.toFixed(2)}×`)}</>}</>}
             delta={herodelta(h.avgOti, h.priorAvgOti, '×')}
             deltaTone={heroTone(h.avgOti, h.priorAvgOti)}
           />
@@ -372,7 +411,7 @@ export default function CioPulsePage() {
             label="Delegation depth"
             value={h.avgDds !== null ? h.avgDds.toFixed(2) : '—'}
             tone="judged"
-            sub="average, 14 days"
+            sub={<>average, 14 days{hs && <><br />{splitLine(f => f.avgDds, v => v.toFixed(2))}</>}</>}
             delta={herodelta(h.avgDds, h.priorAvgDds)}
             deltaTone={heroTone(h.avgDds, h.priorAvgDds)}
           />
@@ -461,7 +500,7 @@ export default function CioPulsePage() {
 
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
             {data.coworkCostUsd !== undefined && (
-              <Panel title="Cowork spend" subtitle="7 days">
+              <Panel title="Claude Cowork spend" subtitle="7 days">
                 <p className="m-0 text-[24px] leading-7 font-semibold tabular-nums text-[#0A0A0A]">
                   {data.coworkCostUsd === 0
                     ? <span className="text-[#8F8F8F]">$0.00</span>
@@ -469,7 +508,7 @@ export default function CioPulsePage() {
                       ? `$${data.coworkCostUsd.toFixed(0)}`
                       : `$${data.coworkCostUsd.toFixed(2)}`}
                 </p>
-                <p className="m-0 mt-1 text-[13px] text-[#8F8F8F]">API cost of every Cowork session, measured</p>
+                <p className="m-0 mt-1 text-[13px] text-[#8F8F8F]">API cost of every Claude Cowork session, measured. ChatGPT spend is not recorded yet.</p>
               </Panel>
             )}
             {orgSummary?.docSessions && orgSummary.docSessions.sessions_with_uploads > 0 && (
@@ -495,6 +534,7 @@ export default function CioPulsePage() {
               nameKey="skill_name"
               emptyMessage="No skill invocations captured yet."
               formatName={formatSkillName}
+              showVendor={data.openaiPresent && vendor === 'all'}
             />
             <InvocationList
               title="Top connectors"
@@ -502,6 +542,7 @@ export default function CioPulsePage() {
               nameKey="mcp_server"
               emptyMessage="No connector invocations captured yet."
               formatName={formatConnectorName}
+              showVendor={data.openaiPresent && vendor === 'all'}
             />
             {orgSummary.sessionOutput && <SessionOutputCard report={orgSummary.sessionOutput} />}
             {(orgSummary.workMix ?? []).length > 0 && (
@@ -511,8 +552,13 @@ export default function CioPulsePage() {
                   return (
                     <BarRow
                       key={w.task_type}
-                      label={formatTaskType(w.task_type)}
-                      value={`${w.messages} msg${w.messages === 1 ? '' : 's'}${w.tier3 > 0 ? ` · ${w.tier3} frontier` : ''}`}
+                      label={vendor === 'all' && data.openaiPresent && w.claude !== undefined && w.openai !== undefined ? (
+                        <span className="flex flex-col min-w-0">
+                          <span className="truncate">{formatTaskType(w.task_type)}</span>
+                          <span className="text-[12px] text-[#8F8F8F]">{formatSplit({ claude: w.claude, openai: w.openai })}</span>
+                        </span>
+                      ) : formatTaskType(w.task_type)}
+                      value={`${w.messages} prompt${w.messages === 1 ? '' : 's'}${w.tier3 > 0 ? ` · ${w.tier3} frontier` : ''}`}
                       pct={(w.messages / max) * 100}
                       tone="judged"
                     />

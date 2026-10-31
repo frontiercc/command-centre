@@ -30,7 +30,7 @@ export default function FrontierHero({ view, canOpenUseCases }: FrontierHeroProp
 
   if (view.scope === 'person') {
     const item = view.bestWork[0];
-    if (!item) return <EmptyHero text="No Cowork work in the last 7 days" />;
+    if (!item) return <EmptyHero text="No work in the last 7 days" />;
     return (
       <Panel
         title={TITLE}
@@ -43,7 +43,7 @@ export default function FrontierHero({ view, canOpenUseCases }: FrontierHeroProp
     );
   }
 
-  if (view.bestWork.length === 0) return <EmptyHero text="No Cowork work in the last 7 days" />;
+  if (view.bestWork.length === 0) return <EmptyHero text="No work in the last 7 days" />;
   const n = view.tier3People;
   return (
     <Panel

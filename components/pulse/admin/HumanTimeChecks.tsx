@@ -92,7 +92,7 @@ export default function HumanTimeChecks() {
           label="Surface"
           value={surface}
           onChange={setSurface}
-          options={[{ value: 'cowork', label: 'Cowork' }, { value: 'code', label: 'Code' }]}
+          options={[{ value: 'cowork', label: 'Claude Cowork' }, { value: 'code', label: 'Code' }]}
         />
       }
       flush

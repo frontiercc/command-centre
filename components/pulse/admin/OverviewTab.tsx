@@ -142,8 +142,8 @@ export default function OverviewTab({
           onChange={on => onConfigChange({ pulseSessionDescriptionsEnabled: on ? 'true' : 'false' })}
         />
         <ToggleRow
-          label="Human time vs Claude time · Cowork"
-          hint={<>For each Tier 2 and 3 Cowork session, an AI estimate of how long the same result would take by hand, shown beside the measured time with Claude on Work Pulse, and in the weekly digest, Highlights, Reports and the Metrics Connector. Code has its own switch on Admin → Developer Pulse. Admins and managers see everyone&apos;s; each person sees their own. Off stops new Cowork estimates and hides the Cowork figures.</>}
+          label="Human time vs Claude time · Claude Cowork"
+          hint={<>For each Tier 2 and 3 Claude Cowork session, an AI estimate of how long the same result would take by hand, shown beside the measured time with Claude on Work Pulse, and in the weekly digest, Highlights, Reports and the Metrics Connector. Code has its own switch on Admin → Developer Pulse. Admins and managers see everyone&apos;s; each person sees their own. Off stops new Cowork estimates and hides the Cowork figures. ChatGPT sessions are not estimated: OpenAI&apos;s export carries no measured time.</>}
           checked={config.humanTimeEnabled === 'true'}
           onChange={on => onConfigChange({ humanTimeEnabled: on ? 'true' : 'false' })}
         />

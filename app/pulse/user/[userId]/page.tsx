@@ -178,7 +178,7 @@ export default function UserPulsePage() {
           <Panel
             title="Capabilities to review"
             badge={<Tag tone="warn">{data.capabilitiesDetail.pending.length}</Tag>}
-            subtitle="Claude may have taken on these types of work for the first time. Confirm to track them."
+            subtitle="AI may have taken on these types of work for the first time. Confirm to track them."
             flush
           >
             <ul className="m-0 p-0 list-none">

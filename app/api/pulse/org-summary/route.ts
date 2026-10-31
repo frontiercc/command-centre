@@ -17,6 +17,8 @@ import { buildSessionOutputRate } from '@/lib/pulse/cowork/session-output-rate';
 import { readHumanTime } from '@/lib/pulse/human-time-summary';
 import { parseVendor } from '@/lib/dashboard/vendor';
 import { vendorClause, vendorExpr } from '@/lib/dashboard/product-sql';
+import { messageVendor } from '@/lib/pulse/vendor-filter';
+import { getDocSessions } from '@/lib/pulse/cowork/doc-sessions';
 
 export const dynamic = 'force-dynamic';
 
@@ -41,9 +43,13 @@ export async function GET(request: NextRequest) {
   }
 
   const client = await getTypedClient();
-  // The dashboard's vendor switch narrows the tier mix and the top skills and
-  // connectors; the four signals are per-person figures across every product.
+  // The vendor switch narrows every figure here: the four signals read the
+  // aggregator's per-vendor figures (pulse_metrics_vendor) in a vendor view.
   const vendor = parseVendor(request.nextUrl.searchParams.get('vendor'));
+  const pm = schema.pulseMetrics;
+  const pmv = schema.pulseMetricsVendor;
+  const mt = vendor === 'all' ? pm : pmv as unknown as typeof pm;
+  const mtOnly = vendor === 'all' ? sql`TRUE` : eq(pmv.vendor, vendor);
   const vendorSql = sql.raw(vendorClause(vendor, 'cm.'));
   const now = Math.floor(Date.now() / 1000);
   const sevenDaysAgo = now - 7 * 24 * 3600;
@@ -51,31 +57,36 @@ export async function GET(request: NextRequest) {
 
   // Org-level signal averages from latest pulse_metrics snapshots
   const ddsRows = await client
-    .select({ v: sql<number | string | null>`AVG(${schema.pulseMetrics.dds})` })
-    .from(schema.pulseMetrics)
+    .select({ v: sql<number | string | null>`AVG(${mt.dds})` })
+    .from(mt)
     .where(and(
-      eq(schema.pulseMetrics.scope_type, 'user'),
-      isNotNull(schema.pulseMetrics.dds),
-      eq(schema.pulseMetrics.granularity, 'rolling'),
-      gte(schema.pulseMetrics.computed_at, sevenDaysAgo),
+      mtOnly,
+      eq(mt.scope_type, 'user'),
+      isNotNull(mt.dds),
+      eq(mt.granularity, 'rolling'),
+      gte(mt.computed_at, sevenDaysAgo),
     ));
   const ddsAvg = ddsRows[0]?.v;
 
   const otiRows = await client
-    .select({ v: sql<number | string | null>`AVG(${schema.pulseMetrics.oti})` })
-    .from(schema.pulseMetrics)
+    .select({ v: sql<number | string | null>`AVG(${mt.oti})` })
+    .from(mt)
     .where(and(
-      eq(schema.pulseMetrics.scope_type, 'user'),
-      isNotNull(schema.pulseMetrics.oti),
-      eq(schema.pulseMetrics.granularity, 'rolling'),
-      gte(schema.pulseMetrics.computed_at, sevenDaysAgo),
+      mtOnly,
+      eq(mt.scope_type, 'user'),
+      isNotNull(mt.oti),
+      eq(mt.granularity, 'rolling'),
+      gte(mt.computed_at, sevenDaysAgo),
     ));
   const otiAvg = otiRows[0]?.v;
 
+  // Confirmed capabilities; in a vendor view, those detected on that vendor's prompts.
   const psrRows = await client
     .select({ v: sql<number | string>`COUNT(*)` })
     .from(schema.pulseEvents)
-    .where(and(eq(schema.pulseEvents.event_type, 'capability_creation'), eq(schema.pulseEvents.status, 'confirmed')));
+    .leftJoin(schema.coworkMessages, eq(schema.coworkMessages.id, schema.pulseEvents.cowork_message_id))
+    .where(and(eq(schema.pulseEvents.event_type, 'capability_creation'), eq(schema.pulseEvents.status, 'confirmed'),
+      vendor === 'all' ? undefined : messageVendor(vendor)));
   const psrCount = Number(psrRows[0]?.v ?? 0);
 
   // scope_type='team' (keyed by users.team_id) never has rows in any real
@@ -83,13 +94,14 @@ export async function GET(request: NextRequest) {
   // default). 'function' (keyed by admin_users.department) is the group-level
   // scope that's actually written by lib/pulse/aggregator.ts.
   const orsRows = await client
-    .select({ v: sql<number | string | null>`AVG(${schema.pulseMetrics.ors})` })
-    .from(schema.pulseMetrics)
+    .select({ v: sql<number | string | null>`AVG(${mt.ors})` })
+    .from(mt)
     .where(and(
-      eq(schema.pulseMetrics.scope_type, 'function'),
-      isNotNull(schema.pulseMetrics.ors),
-      eq(schema.pulseMetrics.granularity, 'rolling'),
-      gte(schema.pulseMetrics.computed_at, sevenDaysAgo),
+      mtOnly,
+      eq(mt.scope_type, 'function'),
+      isNotNull(mt.ors),
+      eq(mt.granularity, 'rolling'),
+      gte(mt.computed_at, sevenDaysAgo),
     ));
   const orsAvg = orsRows[0]?.v;
 
@@ -119,12 +131,14 @@ export async function GET(request: NextRequest) {
       tier3: sql<number | string>`SUM(CASE WHEN ${schema.pulseClassifications.tier} = 3 THEN 1 ELSE 0 END)`,
       tier2: sql<number | string>`SUM(CASE WHEN ${schema.pulseClassifications.tier} = 2 THEN 1 ELSE 0 END)`,
       tier1: sql<number | string>`SUM(CASE WHEN ${schema.pulseClassifications.tier} = 1 THEN 1 ELSE 0 END)`,
+      openai: sql<number | string>`SUM(CASE WHEN ${messageVendor('openai')} THEN 1 ELSE 0 END)`,
     })
     .from(schema.pulseClassifications)
     .innerJoin(schema.coworkMessages, eq(schema.coworkMessages.id, schema.pulseClassifications.cowork_message_id))
     .where(and(
       eq(schema.pulseClassifications.classifier_status, 'classified'),
       gte(schema.coworkMessages.occurred_at, thirtyDaysAgo),
+      messageVendor(vendor),
     ))
     .groupBy(schema.pulseClassifications.task_type)
     .orderBy(desc(sql`COUNT(*)`));
@@ -132,6 +146,8 @@ export async function GET(request: NextRequest) {
     task_type: r.task_type,
     messages: Number(r.messages),
     tier3: Number(r.tier3), tier2: Number(r.tier2), tier1: Number(r.tier1),
+    claude: Number(r.messages) - Number(r.openai),
+    openai: Number(r.openai),
   }));
 
   // Top 5 skills org-wide (30 days). A skill of the same name from Claude and
@@ -230,19 +246,8 @@ export async function GET(request: NextRequest) {
       : null,
   };
 
-  // Document-upload sessions org-wide (30 days)
-  const docSessionRow = await rawGet<{ sessions_with_uploads: number | string; total_uploads: number | string }>(client, sql`
-    SELECT COUNT(*) AS sessions_with_uploads,
-           COALESCE(SUM(css.upload_count), 0) AS total_uploads
-    FROM cowork_session_stats css
-    JOIN cowork_sessions cs ON cs.id = css.session_id
-    WHERE css.upload_count > 0
-      AND cs.started_at >= ${thirtyDaysAgo}
-  `);
-  const docSessions = {
-    sessions_with_uploads: Number(docSessionRow?.sessions_with_uploads ?? 0),
-    total_uploads: Number(docSessionRow?.total_uploads ?? 0),
-  };
+  // Document-upload sessions org-wide (30 days), Claude Cowork and ChatGPT alike.
+  const docSessions = await getDocSessions({ since: thirtyDaysAgo, vendor });
 
   // Session output rate — additive, own module, 13 completed Monday-UTC weeks.
   // Never throws the whole route: a failure here returns null and the card hides,

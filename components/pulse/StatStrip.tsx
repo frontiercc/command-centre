@@ -158,7 +158,7 @@ export default function StatStrip({ oti, dds, psr, ors, otiDelta, ddsDelta, psrD
     {
       label: 'Capabilities',
       fullName: 'New process automations',
-      sublabel: 'Workflows Claude now handles end-to-end',
+      sublabel: 'Workflows AI now handles end-to-end',
       formulaHint: 'Confirmed capability creation events',
       value: psr,
       format: 'count',

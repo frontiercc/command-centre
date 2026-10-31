@@ -15,11 +15,12 @@
 // getCoworkFrictionIndex's COUNT(*) FILTER (WHERE ...) idiom (native on
 // Postgres).
 import { NextRequest, NextResponse } from 'next/server';
-import { and, desc, eq, gt, gte, inArray, lt, lte, notInArray, sql } from 'drizzle-orm';
+import { and, desc, eq, gte, inArray, lt, lte, notInArray, sql } from 'drizzle-orm';
 import { getAdminSession, isDeptScoped, canAccessCoworkPulse, canAccessPulseAdmin } from '@/lib/auth/admin-auth';
 import { buildFrontierView, resolveViewerUserId } from '@/lib/pulse/frontier-view';
 import { getTypedClient } from '@/lib/db/client';
 import { schema } from '@/lib/db/schema';
+import { getDocSessions } from '@/lib/pulse/cowork/doc-sessions';
 import { getCoworkCostUsd } from '@/lib/pulse/aggregator';
 import { weekStart, weekStarts } from '@/lib/pulse/period';
 import {
@@ -77,8 +78,6 @@ export async function GET(
   const csi = schema.coworkSkillInvocations;
   const cmi = schema.coworkMcpInvocations;
   const pb = schema.pulseBriefings;
-  const css = schema.coworkSessionStats;
-  const cs = schema.coworkSessions;
 
   // Department members
   const members = await client
@@ -364,19 +363,8 @@ export async function GET(
     .limit(1);
   const deptBriefing = deptBriefingRows[0];
 
-  // Document-upload sessions for dept members (30 days)
-  const deptDocSessionRows = await client
-    .select({
-      sessions_with_uploads: sql<number | string>`COUNT(*)`,
-      total_uploads: sql<number | string>`COALESCE(SUM(${css.upload_count}), 0)`,
-    })
-    .from(css)
-    .innerJoin(cs, eq(cs.id, css.session_id))
-    .where(and(gt(css.upload_count, 0), gte(cs.started_at, thirtyDaysAgo), inArray(cs.user_id, memberIds)));
-  const docSessions = {
-    sessions_with_uploads: Number(deptDocSessionRows[0]?.sessions_with_uploads ?? 0),
-    total_uploads: Number(deptDocSessionRows[0]?.total_uploads ?? 0),
-  };
+  // Document-upload sessions for dept members (30 days), Claude Cowork and ChatGPT alike.
+  const docSessions = await getDocSessions({ since: thirtyDaysAgo, memberIds });
 
   // OTel cowork enrichments — sum cost and aggregate friction across dept members
   const sevenDaysAgoOtel = now - 7 * 24 * 3600;

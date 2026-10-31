@@ -14,8 +14,9 @@ import LoadingSpinner from '@/components/shared/LoadingSpinner';
 import AiBriefing from '@/components/dashboard/AiBriefing';
 import { DataSourceIndicator } from '@/components/dashboard/DataSourceIndicator';
 import Link from 'next/link';
-import { PageBody, Toolbar, Strip, Panel, Tag, Notice, B, Segmented } from '@/components/precision/ui';
-import { VENDORS, VENDOR_LABELS, PRODUCTS, parseVendor, type Vendor, type VendorSplit, type ProductCounts, type ProductId } from '@/lib/dashboard/vendor';
+import { PageBody, Toolbar, Strip, Panel, Tag, Notice, B } from '@/components/precision/ui';
+import { useVendor, VendorSwitch, formatSplit } from '@/components/shared/VendorSwitch';
+import { PRODUCTS, type Vendor, type VendorSplit, type ProductCounts, type ProductId } from '@/lib/dashboard/vendor';
 import PulseBand from '@/components/pulse/PulseBand';
 import CodePulseBand from '@/components/pulse/code/CodePulseBand';
 import { useCorePlatformGuard } from '@/components/shared/useCorePlatformGuard';
@@ -109,17 +110,9 @@ function formatChange(current: number, previous: number): string {
   return 'no change';
 }
 
-/** "Claude 12.3 · OpenAI 4" under a box in the All view. */
-function formatSplit(s: VendorSplit): string {
-  const n = (v: number) => v.toLocaleString('en-GB');
-  return `Claude ${n(s.claude)} · OpenAI ${n(s.openai)}`;
-}
-
 function flaggedLine(n: number): string {
   return n > 0 ? `${n} flagged for PII` : 'no PII flags';
 }
-
-const VENDOR_KEY = 'ccc-dashboard-vendor';
 
 function formatAlertSeverity(bySeverity: Record<string, number>): string {
   const parts: string[] = [];
@@ -139,14 +132,8 @@ export default function DashboardPage() {
   const [briefingRefreshKey, setBriefingRefreshKey] = useState(0);
   const [, setTick] = useState(0);
   const [pulseEnabled, setPulseEnabled] = useState(false);
-  // The vendor switch, remembered per browser.
-  const [vendor, setVendorState] = useState<Vendor>(() => {
-    try { return typeof window === 'undefined' ? 'all' : parseVendor(window.localStorage.getItem(VENDOR_KEY)); } catch { return 'all'; }
-  });
-  const setVendor = (v: Vendor) => {
-    setVendorState(v);
-    try { window.localStorage.setItem(VENDOR_KEY, v); } catch { /* not remembered */ }
-  };
+  // The vendor switch, remembered per browser and shared with Work Pulse.
+  const [vendor, setVendor] = useVendor();
 
   // Manual Refresh click refreshes both dashboard data AND briefing
   const refreshDashboard = () => {
@@ -199,7 +186,6 @@ export default function DashboardPage() {
 
   const { stats } = data;
   // The switch shows once OpenAI data exists (or while a narrowed view is chosen).
-  const showSwitch = data.openaiPresent || vendor !== 'all';
   const split = vendor === 'all' && data.openaiPresent;
   // The products the charts show, in display order.
   const shownProducts = PRODUCTS.filter(p => data.productsShown.includes(p.id));
@@ -234,14 +220,7 @@ export default function DashboardPage() {
           }
         >
           <span className="flex flex-wrap items-center justify-end gap-3">
-            {showSwitch && (
-              <Segmented
-                label="Show products from"
-                options={VENDORS.map(v => ({ value: v, label: VENDOR_LABELS[v] }))}
-                value={vendor}
-                onChange={setVendor}
-              />
-            )}
+            <VendorSwitch vendor={vendor} onChange={setVendor} openaiPresent={data.openaiPresent} />
             <DataSourceIndicator status={data.dataSourceStatus} />
           </span>
         </Toolbar>
@@ -270,7 +249,7 @@ export default function DashboardPage() {
             value={stats.activeUsersThisWeek}
             change={formatChange(stats.activeUsersThisWeek, stats.activeUsersLastWeek)}
             subtitle={activeSub}
-            action={split ? formatSplit({ total: 0, ...data.products.activeUsers }) : undefined}
+            action={split ? formatSplit(data.products.activeUsers) : undefined}
           />
           <StatCard
             title="Events ingested"
