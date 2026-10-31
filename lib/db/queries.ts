@@ -1844,6 +1844,7 @@ export async function deleteUserData(userId: string): Promise<{
       async (h) => { await h.delete(schema.pulseTeamAssessments).where(eq(schema.pulseTeamAssessments.assessed_by, userId)); },
       async (h) => { await h.delete(schema.pulseBaselines).where(eq(schema.pulseBaselines.set_by, userId)); },
       async (h) => { await h.delete(schema.pulseMetrics).where(and(eq(schema.pulseMetrics.scope_type, 'user'), eq(schema.pulseMetrics.scope_id, userId))); },
+      async (h) => { await h.delete(schema.pulseMetricsVendor).where(and(eq(schema.pulseMetricsVendor.scope_type, 'user'), eq(schema.pulseMetricsVendor.scope_id, userId))); },
       // Blocker-class NO ACTION FKs: these must go
       // before the users row or the whole erasure fails on the constraint.
       // NOTE: these load-bearing deletes are tolerated (savepointEach) by

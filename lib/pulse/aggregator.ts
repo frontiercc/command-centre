@@ -11,6 +11,9 @@ import { computeTeamOrsDetail, computeDeptOrsDetail } from '@/lib/pulse/metrics/
 import { detectFrontierPushes } from '@/lib/pulse/events/frontier';
 import { detectCapabilityCreation } from '@/lib/pulse/events/capability';
 import { weekStart } from '@/lib/pulse/period';
+import { messageVendor, SPLIT_VENDORS, type SplitVendor } from '@/lib/pulse/vendor-filter';
+import { hasOpenAiData } from '@/lib/dashboard/queries';
+import type { Vendor } from '@/lib/dashboard/vendor';
 
 type TypedClient = Awaited<ReturnType<typeof getTypedClient>>;
 
@@ -54,7 +57,10 @@ async function writeMetric(client: TypedClient, params: {
   metricVersion?: number;
   otiEarlyRead?: boolean;
   otiActiveDays?: number | null;
+  /** Set for one vendor's figures, saved to pulse_metrics_vendor; absent for all products. */
+  vendor?: SplitVendor;
 }): Promise<void> {
+  if (params.vendor) return writeVendorMetric(client, params.vendor, params);
   const t = schema.pulseMetrics;
   const now = Math.floor(Date.now() / 1000);
   const granularity = params.granularity ?? 'rolling';
@@ -123,6 +129,73 @@ async function writeMetric(client: TypedClient, params: {
 }
 
 /**
+ * One vendor's figures, the same shape and upsert rule as writeMetric, in
+ * pulse_metrics_vendor. Kept out of pulse_metrics so every existing reader of
+ * that table still sees all products only.
+ */
+async function writeVendorMetric(
+  client: TypedClient,
+  vendor: SplitVendor,
+  params: Omit<Parameters<typeof writeMetric>[1], 'vendor'>,
+): Promise<void> {
+  const t = schema.pulseMetricsVendor;
+  const now = Math.floor(Date.now() / 1000);
+  const granularity = params.granularity ?? 'rolling';
+  const values = {
+    vendor,
+    scope_type: params.scopeType,
+    scope_id: params.scopeId,
+    period_start: params.periodStart,
+    period_end: params.periodEnd,
+    oti: params.oti,
+    dds: params.dds,
+    psr: params.psr,
+    ors: params.ors,
+    event_count: params.eventCount,
+    tier_1_count: params.tier1Count,
+    tier_2_count: params.tier2Count,
+    tier_3_count: params.tier3Count,
+    ors_breadth: params.orsBreadth ?? null,
+    ors_overlap: params.orsOverlap ?? null,
+    ors_propagation: params.orsPropagation ?? null,
+    computed_at: now,
+    metric_version: params.metricVersion ?? 2,
+    oti_early_read: params.otiEarlyRead ? 1 : 0,
+    oti_active_days: params.otiActiveDays ?? null,
+  };
+  if (granularity === 'rolling') {
+    await client.insert(t).values({ ...values, granularity: 'rolling' });
+    return;
+  }
+  const set = {
+    period_end: values.period_end,
+    oti: values.oti,
+    dds: values.dds,
+    psr: values.psr,
+    ors: values.ors,
+    event_count: values.event_count,
+    tier_1_count: values.tier_1_count,
+    tier_2_count: values.tier_2_count,
+    tier_3_count: values.tier_3_count,
+    ors_breadth: values.ors_breadth,
+    ors_overlap: values.ors_overlap,
+    ors_propagation: values.ors_propagation,
+    computed_at: values.computed_at,
+    metric_version: values.metric_version,
+    oti_early_read: values.oti_early_read,
+    oti_active_days: values.oti_active_days,
+  };
+  await client
+    .insert(t)
+    .values({ ...values, granularity: 'week' })
+    .onConflictDoUpdate({
+      target: [t.vendor, t.scope_type, t.scope_id, t.period_start],
+      targetWhere: sql`granularity = 'week'`,
+      set,
+    });
+}
+
+/**
  * Fetch tier counts for a user or group of users over a window.
  */
 async function getTierCountsForUsers(
@@ -130,6 +203,7 @@ async function getTierCountsForUsers(
   userIds: string[],
   windowStart: number,
   windowEnd: number,
+  vendor: Vendor = 'all',
 ): Promise<{ t1: number; t2: number; t3: number; total: number }> {
   if (userIds.length === 0) return { t1: 0, t2: 0, t3: 0, total: 0 };
 
@@ -150,6 +224,7 @@ async function getTierCountsForUsers(
       eq(pc.classifier_status, 'classified'),
       gte(cm.occurred_at, windowStart),
       lt(cm.occurred_at, windowEnd),
+      messageVendor(vendor),
     ));
 
   const row = rows[0];
@@ -215,13 +290,20 @@ function otiValueMap(batch: Map<string, OtiResult | null>): Map<string, number |
   return m;
 }
 
-async function countConfirmedCapabilities(client: TypedClient, userIds: string[]): Promise<number> {
+async function countConfirmedCapabilities(client: TypedClient, userIds: string[], vendor: Vendor = 'all'): Promise<number> {
   if (userIds.length === 0) return 0;
   const pe = schema.pulseEvents;
+  const where = and(inArray(pe.user_id, userIds), eq(pe.event_type, 'capability_creation'), eq(pe.status, 'confirmed'));
+  if (vendor === 'all') {
+    const rows = await client.select({ cnt: sql<number | string>`COUNT(*)` }).from(pe).where(where);
+    return Number(rows[0]?.cnt ?? 0);
+  }
+  // A capability belongs to the vendor of the prompt it was detected on.
   const rows = await client
     .select({ cnt: sql<number | string>`COUNT(*)` })
     .from(pe)
-    .where(and(inArray(pe.user_id, userIds), eq(pe.event_type, 'capability_creation'), eq(pe.status, 'confirmed')));
+    .innerJoin(schema.coworkMessages, eq(schema.coworkMessages.id, pe.cowork_message_id))
+    .where(and(where, messageVendor(vendor)));
   return Number(rows[0]?.cnt ?? 0);
 }
 
@@ -503,6 +585,13 @@ export async function runHourlyAggregation(): Promise<void> {
     });
   }
 
+  // ── Per-vendor rows (Claude / OpenAI), only while OpenAI data exists ──────
+  if (await hasOpenAiData()) {
+    for (const vendor of SPLIT_VENDORS) {
+      await aggregateVendor(client, vendor, now, startDateMap, departments);
+    }
+  }
+
   // ── Event detection ───────────────────────────────────────────────────────
   // detectFrontierPushes/detectCapabilityCreation each open their OWN withTx
   // internally (3.7a) — kept here as sequential top-level awaited calls, NOT
@@ -519,6 +608,122 @@ export async function runHourlyAggregation(): Promise<void> {
 
   await setConfigValue('pulseAggregatorLastRun', new Date().toISOString());
   console.log('[PulseAggregator] Hourly aggregation complete.');
+}
+
+/**
+ * The per-user and per-department figures above, for one vendor's prompts
+ * only, saved to pulse_metrics_vendor: rolling OTI, DDS, PSR, ORS and tier
+ * counts, plus the weekly tier rows. Same windows and rules as the
+ * all-products pass; teams are left out (users.team_id is never populated).
+ */
+async function aggregateVendor(
+  client: TypedClient,
+  vendor: SplitVendor,
+  now: number,
+  startDateMap: Map<string, number>,
+  departments: string[],
+): Promise<void> {
+  const SEVEN_DAYS = 7 * 24 * 60 * 60;
+  const periodStart = now - SEVEN_DAYS;
+  const wkStart = weekStart(now);
+  const weeklyDds = (t1: number, t2: number, t3: number, total: number): number | null =>
+    total > 0 ? (3 * t3 + 2 * t2 + t1) / total : null;
+
+  const pc = schema.pulseClassifications;
+  const userIds = (await client
+    .selectDistinct({ user_id: pc.user_id })
+    .from(pc)
+    .innerJoin(schema.coworkMessages, eq(schema.coworkMessages.id, pc.cowork_message_id))
+    .where(and(eq(pc.classifier_status, 'classified'), messageVendor(vendor))))
+    .map(r => r.user_id);
+
+  const otiByUser = await computeOtiForUsers(userIds, vendor);
+  const ddsByUser = await computeDdsForUsers(userIds, vendor);
+  for (const user_id of userIds) {
+    const otiRes = otiByUser.get(user_id) ?? null;
+    const pulseStartAt = startDateMap.get(user_id) ?? null;
+    const effectiveStart = pulseStartAt !== null ? Math.max(periodStart, pulseStartAt) : periodStart;
+    const counts = await getTierCountsForUsers(client, [user_id], effectiveStart, now + 1, vendor);
+    await writeMetric(client, {
+      vendor,
+      scopeType: 'user',
+      scopeId: user_id,
+      periodStart: effectiveStart,
+      periodEnd: now,
+      oti: otiRes && otiRes.value !== null ? otiRes.value : null,
+      otiEarlyRead: otiRes?.earlyRead ?? false,
+      otiActiveDays: otiRes?.activeDaysCurrent ?? null,
+      dds: ddsByUser.get(user_id) ?? null,
+      psr: await countConfirmedCapabilities(client, [user_id], vendor),
+      ors: null,
+      tier1Count: counts.t1,
+      tier2Count: counts.t2,
+      tier3Count: counts.t3,
+      eventCount: counts.total,
+    });
+    const week = await getTierCountsForUsers(client, [user_id], wkStart, now + 1, vendor);
+    await writeMetric(client, {
+      vendor,
+      scopeType: 'user',
+      scopeId: user_id,
+      periodStart: wkStart,
+      periodEnd: now,
+      oti: null,
+      dds: weeklyDds(week.t1, week.t2, week.t3, week.total),
+      psr: null,
+      ors: null,
+      tier1Count: week.t1,
+      tier2Count: week.t2,
+      tier3Count: week.t3,
+      eventCount: week.total,
+      granularity: 'week',
+    });
+  }
+
+  for (const department of departments) {
+    const memberIds = (await client
+      .select({ id: schema.adminUsers.linked_cowork_user_id })
+      .from(schema.adminUsers)
+      .where(and(eq(schema.adminUsers.department, department), isNotNull(schema.adminUsers.linked_cowork_user_id))))
+      .map(r => r.id as string);
+    const orsDetail = await computeDeptOrsDetail(department, vendor);
+    const counts = await getTierCountsForUsers(client, memberIds, periodStart, now + 1, vendor);
+    await writeMetric(client, {
+      vendor,
+      scopeType: 'function',
+      scopeId: department,
+      periodStart,
+      periodEnd: now,
+      oti: averageOfBatch(otiValueMap(await computeOtiForUsers(memberIds, vendor)), memberIds),
+      dds: averageOfBatch(await computeDdsForUsers(memberIds, vendor), memberIds),
+      psr: await countConfirmedCapabilities(client, memberIds, vendor),
+      ors: orsDetail?.ors ?? null,
+      tier1Count: counts.t1,
+      tier2Count: counts.t2,
+      tier3Count: counts.t3,
+      eventCount: counts.total,
+      orsBreadth: orsDetail?.breadth ?? null,
+      orsOverlap: orsDetail?.overlap ?? null,
+      orsPropagation: orsDetail?.propagation ?? null,
+    });
+    const week = await getTierCountsForUsers(client, memberIds, wkStart, now + 1, vendor);
+    await writeMetric(client, {
+      vendor,
+      scopeType: 'function',
+      scopeId: department,
+      periodStart: wkStart,
+      periodEnd: now,
+      oti: null,
+      dds: weeklyDds(week.t1, week.t2, week.t3, week.total),
+      psr: null,
+      ors: null,
+      tier1Count: week.t1,
+      tier2Count: week.t2,
+      tier3Count: week.t3,
+      eventCount: week.total,
+      granularity: 'week',
+    });
+  }
 }
 
 // ─── Daily aggregation ────────────────────────────────────────────────────────

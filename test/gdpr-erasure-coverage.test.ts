@@ -80,6 +80,7 @@ const COVERAGE: Record<string, { status: Status; why: string }> = {
   'pulse_team_assessments.assessed_by':  { status: 'deleted', why: 'preOps' },
   'pulse_baselines.set_by':              { status: 'deleted', why: 'preOps' },
   'pulse_metrics.scope_id':              { status: 'deleted', why: 'user-scope rows only (scope_type=user)' },
+  'pulse_metrics_vendor.scope_id':       { status: 'deleted', why: 'user-scope rows only (scope_type=user), per-vendor twin of pulse_metrics' },
   'pulse_briefings.scope_id':            { status: 'deleted', why: 'user-scope LLM briefing prose (contains display name); org/dept rows survive' },
   'github_user_repo_stats.user_id':      { status: 'deleted', why: 'preOps' },
   'github_identity_map.user_id':         { status: 'deleted', why: 'preOps' },

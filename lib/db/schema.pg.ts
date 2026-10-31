@@ -814,6 +814,36 @@ export const pulseMetrics = pgTable('pulse_metrics', {
     index('idx_pulse_metrics_scope').on(t.scope_type, t.scope_id, t.period_end),
 ]);
 
+// Work Pulse figures for one vendor ('claude' or 'openai'), beside the
+// all-products figures in pulse_metrics (migration 0039).
+export const pulseMetricsVendor = pgTable('pulse_metrics_vendor', {
+    id: integer().generatedByDefaultAsIdentity().primaryKey(),
+    vendor: text().notNull(),
+    scope_type: text().notNull(),
+    scope_id: text().notNull(),
+    period_start: bigint({ mode: 'number' }).notNull(),
+    period_end: bigint({ mode: 'number' }).notNull(),
+    oti: doublePrecision(),
+    dds: doublePrecision(),
+    psr: doublePrecision(),
+    ors: doublePrecision(),
+    event_count: integer().notNull().default(0),
+    tier_1_count: integer().notNull().default(0),
+    tier_2_count: integer().notNull().default(0),
+    tier_3_count: integer().notNull().default(0),
+    computed_at: bigint({ mode: 'number' }).notNull(),
+    granularity: text().notNull().default('rolling'),
+    ors_breadth: doublePrecision(),
+    ors_overlap: doublePrecision(),
+    ors_propagation: doublePrecision(),
+    metric_version: integer().notNull().default(2),
+    oti_early_read: integer().notNull().default(0),
+    oti_active_days: integer(),
+}, (t) => [
+    uniqueIndex('idx_pulse_metrics_vendor_week').on(t.vendor, t.scope_type, t.scope_id, t.period_start).where(sql`granularity = 'week'`),
+    index('idx_pulse_metrics_vendor_scope').on(t.vendor, t.scope_type, t.scope_id, t.period_end),
+]);
+
 export const pulseRubricVersions = pgTable('pulse_rubric_versions', {
     id: integer().generatedByDefaultAsIdentity().primaryKey(),
     changed_by: text().notNull(),
@@ -1224,6 +1254,7 @@ export const pgSchema = {
   pulseClassifications,
   pulseEvents,
   pulseMetrics,
+  pulseMetricsVendor,
   pulseRubricVersions,
   pulseAuditCycles,
   pulseAuditItems,

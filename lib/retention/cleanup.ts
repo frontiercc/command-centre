@@ -504,6 +504,16 @@ export async function runRetentionCleanup(): Promise<CleanupResult> {
     );
     codeMetricsAffected += pulseMetricsRollingDeleted + pulseMetricsWeeklyDeleted + pulseMetricsFutureDeleted;
 
+    // The same three cuts for the per-vendor Work Pulse figures.
+    const pmv = schema.pulseMetricsVendor;
+    codeMetricsAffected += rowsAffected(
+      await tx.delete(pmv).where(and(eq(pmv.granularity, 'rolling'), lt(pmv.computed_at, rollingCutoff)))
+    ) + rowsAffected(
+      await tx.delete(pmv).where(and(eq(pmv.granularity, 'week'), lt(pmv.computed_at, weeklyCutoff)))
+    ) + rowsAffected(
+      await tx.delete(pmv).where(gt(pmv.computed_at, nowSeconds))
+    );
+
     // Use-case tracking history — weekly rows + junction, same 400-day horizon.
     // week_start is epoch SECONDS (matches weeklyCutoff, also in seconds).
     const useCaseWeeksDeleted = rowsAffected(
