@@ -5,8 +5,8 @@
 
 import type { CSSProperties } from 'react';
 import { Panel, Muted, T, Bar, Tag } from '@/components/precision/ui';
-import { PRODUCT_COLOR, PRODUCT_INK } from '@/lib/ui/chart-colours';
-import { sumShown, type Product, type ProductCounts, type ProductId } from '@/lib/dashboard/vendor';
+import { PRODUCT_COLOR, SHARE_BAR } from '@/lib/ui/chart-colours';
+import { sumShown, type Product, type ProductCounts } from '@/lib/dashboard/vendor';
 
 interface DeptStats {
   department: string;
@@ -16,16 +16,16 @@ interface DeptStats {
   products: ProductCounts;
 }
 
-// Each product column is shaded in its own colour, light to full, so the products
-// can be told apart at a glance. Hex alpha suffixes: 1A = 10%, 40 = 25%, 99 = 60%.
-function intensity(value: number, max: number, product: ProductId): CSSProperties {
+// Every cell is shaded on one grey scale against the busiest cell in the table,
+// so darker only ever means more people; the product colour is on the column
+// heading alone. Hex alpha suffixes: 1A = 10%, 40 = 25%, 99 = 60%.
+function intensity(value: number, max: number): CSSProperties {
   if (max === 0 || value === 0) return { background: '#FAFAFA', color: '#B3B3B3' };
   const pct = value / max;
-  const hex = PRODUCT_COLOR[product];
-  if (pct > 0.7) return { background: hex, color: PRODUCT_INK[product] };
-  if (pct > 0.4) return { background: `${hex}99`, color: product === 'claude_cowork' ? '#FFFFFF' : '#05073F' };
-  if (pct > 0.15) return { background: `${hex}40`, color: '#0A0A0A' };
-  return { background: `${hex}1A`, color: '#4D4D4D' };
+  if (pct > 0.7) return { background: SHARE_BAR, color: '#FFFFFF' };
+  if (pct > 0.4) return { background: `${SHARE_BAR}99`, color: '#FFFFFF' };
+  if (pct > 0.15) return { background: `${SHARE_BAR}40`, color: '#0A0A0A' };
+  return { background: `${SHARE_BAR}1A`, color: '#4D4D4D' };
 }
 
 function Legend() {
@@ -57,11 +57,11 @@ export default function DepartmentHeatmap({ data: all, products }: { data: DeptS
     );
   }
 
-  const max = Object.fromEntries(products.map(p => [p.id, Math.max(...data.map(d => d.products[p.id]), 1)])) as Record<ProductId, number>;
+  const max = Math.max(...data.flatMap(d => products.map(p => d.products[p.id])), 1);
   const colWidth = products.length > 3 ? 'w-[10%]' : 'w-[14%]';
 
-  const cell = (value: number, product: ProductId) => (
-    <div className="rounded-[6px] text-center py-1 text-[13px] font-medium tabular-nums" style={intensity(value, max[product], product)}>
+  const cell = (value: number) => (
+    <div className="rounded-[6px] text-center py-1 text-[13px] font-medium tabular-nums" style={intensity(value, max)}>
       {value > 0 ? value.toLocaleString() : '–'}
     </div>
   );
@@ -98,7 +98,7 @@ export default function DepartmentHeatmap({ data: all, products }: { data: DeptS
                   <td className={`${T.td} font-medium text-[#0A0A0A]`}>{dept.department}</td>
                   <td className={`${T.tdRight} text-[#666666]`}>{dept.active_users}/{dept.user_count}</td>
                   {products.map(p => (
-                    <td key={p.id} className="px-1 py-1.5">{cell(dept.products[p.id], p.id)}</td>
+                    <td key={p.id} className="px-1 py-1.5">{cell(dept.products[p.id])}</td>
                   ))}
                   <td className={T.td}>
                     <div className="flex items-center gap-2">

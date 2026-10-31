@@ -18,26 +18,18 @@ export const SURFACE_COLOR = {
 
 /**
  * The six products the dashboard splits into (lib/dashboard/vendor.ts). Each
- * Claude product keeps its surface colour; its OpenAI counterpart is a lighter
- * shade of the same hue, so Chat, Work and Code still read as three families.
+ * Claude product keeps its surface colour; each OpenAI product has its own hue
+ * in the same temperature as its Claude partner (warm Chat, cool Work, green
+ * Code), chosen with the dataviz validator so every pair stays apart in normal
+ * vision (at least 15) and for protan and deutan readers (at least 13).
  */
 export const PRODUCT_COLOR = {
   claude_chat: SURFACE_COLOR.chat,
-  chatgpt_chat: '#DE86AA',
+  chatgpt_chat: '#883C04',  // burnt orange
   claude_cowork: SURFACE_COLOR.cowork,
-  chatgpt_work: '#8F8DDA',
+  chatgpt_work: '#6975D8',  // periwinkle
   claude_code: SURFACE_COLOR.code,
-  codex: '#52B8AB',
-} as const;
-
-/** Text colour that reads on a full-strength product fill. */
-export const PRODUCT_INK = {
-  claude_chat: '#FFFFFF',
-  chatgpt_chat: '#0A0A0A',
-  claude_cowork: '#FFFFFF',
-  chatgpt_work: '#0A0A0A',
-  claude_code: '#FFFFFF',
-  codex: '#0A0A0A',
+  codex: '#A58E27',         // olive
 } as const;
 
 /** Text colour that reads on a full-strength surface fill. */
