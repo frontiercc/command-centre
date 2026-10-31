@@ -147,13 +147,19 @@ describe('OpenAI sync against the stand-in export', () => {
       if (codexRisky.some(r => r.content_full.includes('AKIA'))) expect(reasonFor('AKIA')).toContain('aws_key');
       if (codexRisky.some(r => r.content_full.includes('personal Dropbox'))) expect(reasonFor('personal Dropbox')).toContain('shadow_it');
       if (codexRisky.some(r => r.content_full.includes('Disable logging'))) expect(reasonFor('Disable logging')).toContain('Intent detected');
+      // Every flagged ChatGPT and Codex prompt raises an alert. How many risky
+      // ChatGPT prompts fall inside the 2-day window depends on the date.
+      const flaggedBySource = await sql.all<{ source: string; n: number }>(
+        `SELECT source, COUNT(*) AS n FROM cowork_messages WHERE flagged = 1 GROUP BY source`,
+      );
+      expect(flaggedBySource.find(r => r.source === 'chatgpt_chat')?.n ?? 0).toBeGreaterThanOrEqual(1);
       const { vi } = await import('vitest');
       await vi.waitFor(async () => {
-        const alerted = await sql.all<{ n: number }>(
-          `SELECT COUNT(DISTINCT m.id) AS n FROM alerts a JOIN cowork_messages m ON a.raw_evidence::text LIKE '%' || m.id || '%'
-            WHERE m.source = 'codex'`,
+        const alerted = await sql.all<{ source: string; n: number }>(
+          `SELECT m.source, COUNT(DISTINCT m.id) AS n FROM alerts a JOIN cowork_messages m ON a.raw_evidence::text LIKE '%' || m.id || '%'
+            GROUP BY m.source`,
         );
-        expect(alerted[0].n).toBe(codexRisky.length);
+        for (const f of flaggedBySource) expect(alerted.find(a => a.source === f.source)?.n ?? 0).toBe(f.n);
       }, { timeout: 15_000, interval: 250 });
       // Personal-data alert text names where the prompt came from, never OTel.
       const piiText = await sql.all<{ explanation: string }>(`SELECT explanation FROM alerts WHERE alert_type = 'policy'`);
@@ -162,6 +168,10 @@ describe('OpenAI sync against the stand-in export', () => {
         expect(a.explanation).not.toContain('via OTel');
         expect(a.explanation).toMatch(/via (ChatGPT Chat|ChatGPT Work|Codex) \(OpenAI export\)/);
       }
+      const chatPii = await sql.all<{ n: number }>(
+        `SELECT COUNT(*) AS n FROM cowork_messages WHERE source = 'chatgpt_chat' AND flag_reason LIKE 'PII detected:%'`,
+      );
+      if (chatPii[0].n > 0) expect(piiText.some(a => a.explanation.includes('via ChatGPT Chat (OpenAI export)'))).toBe(true);
 
       // Cursor saved per log type.
       const cursors = JSON.parse(await getConfigValue('openaiSyncCursors'));
