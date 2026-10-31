@@ -7,7 +7,7 @@
 import { describe, it, expect } from 'vitest';
 import { interpretRecord } from '@/lib/openai/sync';
 import { parseJsonl } from '@/lib/openai/client';
-import { isOpenAiSource, OPENAI_SOURCE_LABELS } from '@/lib/openai/sources';
+import { isOpenAiSource, OPENAI_SOURCE_LABELS, surfaceLabel } from '@/lib/openai/sources';
 
 const NOW = Date.parse('2026-10-20T12:00:00Z') / 1000;
 const FLOORS = { cowork: NOW - 30 * 86400, code: NOW - 30 * 86400 };
@@ -142,5 +142,14 @@ describe('OpenAI sources', () => {
     expect(isOpenAiSource('codex')).toBe(true);
     expect(isOpenAiSource('otel')).toBe(false);
     expect(isOpenAiSource(null)).toBe(false);
+  });
+
+  it('labels the surface by product for OpenAI rows and leaves Claude rows as stored', () => {
+    expect(surfaceLabel('cowork', 'chatgpt_chat')).toBe('chat');
+    expect(surfaceLabel('cowork', 'chatgpt_work')).toBe('work');
+    expect(surfaceLabel('code', 'codex')).toBe('codex');
+    expect(surfaceLabel('cowork', 'otel')).toBe('cowork');
+    expect(surfaceLabel('code', 'otel')).toBe('code');
+    expect(surfaceLabel('chat', 'compliance')).toBe('chat');
   });
 });

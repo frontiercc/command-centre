@@ -14,7 +14,7 @@ import { useCorePlatformGuard } from '@/components/shared/useCorePlatformGuard';
 import { PageBody, Panel, PanelFoot, Notice, Empty, Tag, Dot, T, B, SEVERITY_COLOR } from '@/components/precision/ui';
 import WhereMoneyWent, { SplitLine, spendMoney } from '@/components/finance/WhereMoneyWent';
 import { hasBreakdown, type SpendSplit } from '@/lib/finance/where-money-went';
-import { isOpenAiSource, OPENAI_SOURCE_LABELS } from '@/lib/openai/sources';
+import { isOpenAiSource, OPENAI_SOURCE_LABELS, surfaceLabel } from '@/lib/openai/sources';
 
 interface AuditEvent {
   id: string;
@@ -735,7 +735,7 @@ export default function AuditPage() {
                           </td>
                           <td className={`${T.tdMute} hidden md:table-cell`}>{event.department ?? '—'}</td>
                           <td className={`${T.td} whitespace-nowrap`}>
-                            <Tag>{event.surface}</Tag>
+                            <Tag>{surfaceLabel(event.surface, event._source)}</Tag>
                             {event.surface === 'cowork_partial' && (
                               <span className="ml-1 text-[13px] text-[#8F8F8F]">Metadata only</span>
                             )}
@@ -812,7 +812,7 @@ export default function AuditPage() {
                 <dt className="text-[#8F8F8F]">User</dt>
                 <dd className="m-0 font-medium text-[#0A0A0A] break-all">{selectedEvent.user_id}</dd>
                 <dt className="text-[#8F8F8F]">Surface</dt>
-                <dd className="m-0"><Tag>{selectedEvent.surface}</Tag></dd>
+                <dd className="m-0"><Tag>{surfaceLabel(selectedEvent.surface, selectedEvent._source)}</Tag></dd>
                 <dt className="text-[#8F8F8F]">Time</dt>
                 <dd className="m-0 tabular-nums">{new Date(selectedEvent.occurred_at * 1000).toLocaleString('en-GB')}</dd>
                 <dt className="text-[#8F8F8F]">Event</dt>
