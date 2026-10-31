@@ -22,6 +22,7 @@ import { getCustomCategories } from '@/lib/intent/custom';
 import { getConfigValue, setConfigValue } from '@/lib/config';
 import { CONTENT_PREVIEW_CHARS } from '@/lib/otel/content-limits';
 import { getChatMessages, listChats, ComplianceApiError, type ComplianceChatSummary, type ComplianceChatMessage, type ComplianceTextBlock, type ComplianceToolUseBlock } from './client';
+import { noteFirstTelemetry } from '@/lib/setup/first-telemetry';
 
 type TypedClient = Awaited<ReturnType<typeof getTypedClient>>;
 
@@ -329,6 +330,7 @@ export async function runChatSync(): Promise<{ chatsProcessed: number; prompts: 
         try {
           const r = await syncChat(client, apiKey, chat, minOccurredAtS);
           result.prompts += r.prompts;
+          if (r.prompts > 0) await noteFirstTelemetry('chat');
           result.assistantMeta += r.assistantMeta;
           result.connectors += r.connectors;
           result.chatsProcessed++;

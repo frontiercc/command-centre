@@ -20,6 +20,8 @@
  */
 import { sql } from 'drizzle-orm';
 import { getTypedClient } from '@/lib/db/client';
+import { kindClause, vendorClause } from '@/lib/dashboard/product-sql';
+import type { Vendor, WorkKind } from '@/lib/dashboard/vendor';
 
 const DAY = 86400;
 
@@ -34,20 +36,17 @@ interface SurfaceQuery {
   where: string;
 }
 
-const SURFACE_QUERIES: Record<'cowork' | 'code' | 'chat', SurfaceQuery> = {
-  cowork: {
+/**
+ * One kind of work (lib/dashboard/vendor.ts) from the vendor: Chat is Claude
+ * Chat and ChatGPT Chat, Work is Claude Cowork and ChatGPT Work, Code is
+ * Claude Code and Codex.
+ */
+function surfaceQuery(kind: WorkKind, vendor: Vendor): SurfaceQuery {
+  return {
     table: 'cowork_messages',
-    where: `(surface = 'cowork' OR surface IS NULL) AND user_id IS NOT NULL`,
-  },
-  code: {
-    table: 'cowork_messages',
-    where: `surface = 'code' AND user_id IS NOT NULL`,
-  },
-  chat: {
-    table: 'cowork_messages',
-    where: `surface = 'chat' AND user_id IS NOT NULL`,
-  },
-};
+    where: `${kindClause(kind)} AND ${vendorClause(vendor)} AND user_id IS NOT NULL`,
+  };
+}
 
 interface RawFacade {
   execute: (q: unknown) => Promise<{ rows: unknown[]; rowCount: number | null }>;
@@ -96,16 +95,17 @@ async function computeSurfaceStickiness(
   return { avgDau, mau, stickiness };
 }
 
-export async function getProductStickiness(nowEpochS: number = Math.floor(Date.now() / 1000)): Promise<{
+/** `cowork` is the Work kind of work; the key is kept for the route's callers. */
+export async function getProductStickiness(nowEpochS: number = Math.floor(Date.now() / 1000), vendor: Vendor = 'all'): Promise<{
   cowork: SurfaceStickiness;
   code: SurfaceStickiness;
   chat: SurfaceStickiness;
 }> {
   const client = await getTypedClient();
   const [cowork, code, chat] = await Promise.all([
-    computeSurfaceStickiness(client, SURFACE_QUERIES.cowork, nowEpochS),
-    computeSurfaceStickiness(client, SURFACE_QUERIES.code, nowEpochS),
-    computeSurfaceStickiness(client, SURFACE_QUERIES.chat, nowEpochS),
+    computeSurfaceStickiness(client, surfaceQuery('work', vendor), nowEpochS),
+    computeSurfaceStickiness(client, surfaceQuery('code', vendor), nowEpochS),
+    computeSurfaceStickiness(client, surfaceQuery('chat', vendor), nowEpochS),
   ]);
   return { cowork, code, chat };
 }

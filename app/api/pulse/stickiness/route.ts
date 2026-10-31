@@ -4,6 +4,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { getAdminSession, canAccessOrgOverview } from '@/lib/auth/admin-auth';
 import { getProductStickiness } from '@/lib/pulse/stickiness';
+import { parseVendor } from '@/lib/dashboard/vendor';
 
 export const dynamic = 'force-dynamic';
 
@@ -13,7 +14,8 @@ export async function GET(request: NextRequest) {
     return NextResponse.json({ error: 'Forbidden' }, { status: 403 });
   }
 
-  const { cowork, code, chat } = await getProductStickiness();
+  const vendor = parseVendor(request.nextUrl.searchParams.get('vendor'));
+  const { cowork, code, chat } = await getProductStickiness(undefined, vendor);
 
   return NextResponse.json({
     cowork,

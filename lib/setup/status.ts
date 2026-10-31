@@ -4,8 +4,8 @@
 /**
  * What the dashboard's "Get started" panel shows: five setup steps, each
  * worked out from what the install already holds or marked as done by an
- * admin, plus an optional sample data step on installs that ship the sample
- * data command.
+ * admin, plus optional steps that do not count towards the five: Claude Chat,
+ * ChatGPT and Codex, and sample data on installs that ship its command.
  */
 import { and, ne, isNotNull, like, sql } from 'drizzle-orm';
 import { getTypedClient } from '@/lib/db/client';
@@ -25,6 +25,9 @@ export interface SetupStatus {
   /** Epoch seconds the first real telemetry arrived, or null. */
   claudeCodeAt: number | null;
   coworkAt: number | null;
+  /** Optional steps: the first Claude Chat prompt, the first ChatGPT or Codex prompt. */
+  chatAt: number | null;
+  openaiAt: number | null;
   /** The tiers were saved at least once, or an admin marked them as reviewed. */
   rubricReviewed: boolean;
   departmentsSet: boolean;
@@ -56,13 +59,15 @@ export async function getSetupStatus(): Promise<SetupStatus> {
   const client = await getTypedClient();
   const exists = async (q: Promise<unknown[]>) => (await q).length > 0;
 
-  const [hidden, key, codeAt, coworkAt, markedReviewed, stepsDone] = await Promise.all([
+  const [hidden, key, codeAt, coworkAt, markedReviewed, stepsDone, chatAt, openaiAt] = await Promise.all([
     getConfigValue('setupGuideHidden'),
     getConfigValue('anthropicAiApiKey'),
     getConfigValue('setupFirstCodeAt'),
     getConfigValue('setupFirstCoworkAt'),
     getConfigValue('setupRubricReviewed'),
     getConfigValue('setupStepsDone'),
+    getConfigValue('setupFirstChatAt'),
+    getConfigValue('setupFirstOpenaiAt'),
   ]);
   const markedDone = parseStepsDone(stepsDone);
   const marked = (step: SetupStep) => markedDone.includes(step);
@@ -86,6 +91,8 @@ export async function getSetupStatus(): Promise<SetupStatus> {
     apiKey: key.length > 0 || marked('api-key'),
     claudeCodeAt: toEpoch(codeAt),
     coworkAt: toEpoch(coworkAt),
+    chatAt: toEpoch(chatAt),
+    openaiAt: toEpoch(openaiAt),
     rubricReviewed: rubricSaved || markedReviewed === 'true' || marked('rubric'),
     departmentsSet,
     markedDone,

@@ -15,6 +15,8 @@ import { getTypedClient } from '@/lib/db/client';
 import { schema } from '@/lib/db/schema';
 import { buildSessionOutputRate } from '@/lib/pulse/cowork/session-output-rate';
 import { readHumanTime } from '@/lib/pulse/human-time-summary';
+import { parseVendor } from '@/lib/dashboard/vendor';
+import { vendorClause, vendorExpr } from '@/lib/dashboard/product-sql';
 
 export const dynamic = 'force-dynamic';
 
@@ -39,6 +41,10 @@ export async function GET(request: NextRequest) {
   }
 
   const client = await getTypedClient();
+  // The dashboard's vendor switch narrows the tier mix and the top skills and
+  // connectors; the four signals are per-person figures across every product.
+  const vendor = parseVendor(request.nextUrl.searchParams.get('vendor'));
+  const vendorSql = sql.raw(vendorClause(vendor, 'cm.'));
   const now = Math.floor(Date.now() / 1000);
   const sevenDaysAgo = now - 7 * 24 * 3600;
   const thirtyDaysAgo = now - 30 * 24 * 3600;
@@ -99,6 +105,7 @@ export async function GET(request: NextRequest) {
     .where(and(
       eq(schema.pulseClassifications.classifier_status, 'classified'),
       gte(schema.coworkMessages.occurred_at, thirtyDaysAgo),
+      sql.raw(vendorClause(vendor, 'cowork_messages.')),
     ));
   const tierRow = tierRows[0];
 
@@ -127,35 +134,39 @@ export async function GET(request: NextRequest) {
     tier3: Number(r.tier3), tier2: Number(r.tier2), tier1: Number(r.tier1),
   }));
 
-  // Top 5 skills org-wide (30 days)
-  const topSkills = await rawAll<{ skill_name: string; usage_count: number | string; user_count: number | string }>(client, sql`
-    SELECT skill_name,
+  // Top 5 skills org-wide (30 days). A skill of the same name from Claude and
+  // from OpenAI is two different skills, so each row carries its vendor.
+  const topSkills = await rawAll<{ skill_name: string; vendor: string; usage_count: number | string; user_count: number | string }>(client, sql`
+    SELECT cm.skill_name, ${sql.raw(vendorExpr('cm.'))} AS vendor,
            COUNT(*) AS usage_count,
-           COUNT(DISTINCT user_id) AS user_count
-    FROM cowork_skill_invocations
-    WHERE occurred_at >= ${thirtyDaysAgo}
-    GROUP BY skill_name
+           COUNT(DISTINCT cm.user_id) AS user_count
+    FROM cowork_skill_invocations cm
+    WHERE cm.occurred_at >= ${thirtyDaysAgo} AND ${vendorSql}
+    GROUP BY 1, 2
     ORDER BY usage_count DESC
     LIMIT 5
   `).then(rows => rows.map(r => ({
     skill_name: r.skill_name,
+    vendor: r.vendor as 'claude' | 'openai',
     usage_count: Number(r.usage_count),
     user_count: Number(r.user_count),
   })));
 
-  // Top 5 connectors org-wide (30 days)
-  const topConnectors = await rawAll<{ mcp_server: string; usage_count: number | string; user_count: number | string }>(client, sql`
-    SELECT mcp_server,
+  // Top 5 connectors org-wide (30 days), each with its vendor.
+  const topConnectors = await rawAll<{ mcp_server: string; vendor: string; usage_count: number | string; user_count: number | string }>(client, sql`
+    SELECT cm.mcp_server, ${sql.raw(vendorExpr('cm.'))} AS vendor,
            COUNT(*) AS usage_count,
-           COUNT(DISTINCT user_id) AS user_count
-    FROM cowork_mcp_invocations
-    WHERE occurred_at >= ${thirtyDaysAgo}
-      AND mcp_server NOT IN ('workspace', 'cowork')
-    GROUP BY mcp_server
+           COUNT(DISTINCT cm.user_id) AS user_count
+    FROM cowork_mcp_invocations cm
+    WHERE cm.occurred_at >= ${thirtyDaysAgo}
+      AND cm.mcp_server NOT IN ('workspace', 'cowork')
+      AND ${vendorSql}
+    GROUP BY 1, 2
     ORDER BY usage_count DESC
     LIMIT 5
   `).then(rows => rows.map(r => ({
     mcp_server: r.mcp_server,
+    vendor: r.vendor as 'claude' | 'openai',
     usage_count: Number(r.usage_count),
     user_count: Number(r.user_count),
   })));

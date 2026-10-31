@@ -10,23 +10,27 @@ import {
   getOpenAlertCount,
   getOpenAlertsBySeverity,
   getCoworkSessionCountThisWeek,
-  getAdoptionTrend,
   getSurfaceBreakdown,
-  getDepartmentBreakdown,
-  getTopUsers,
   getSecurityMetrics,
   getChatMessageCount,
-  getChatFlaggedCount,
   getCodeEventCount,
-  getCoworkFlaggedCount,
-  getCodeFlaggedCount,
-  getAvgSessionsPerWeek,
   getCoworkActiveProjectCount,
   getCoworkProjectStats,
 } from '@/lib/db/queries';
 import { isOtelConfigured, getDataSourceStatus, getConfigValue } from '@/lib/config';
 import { getAdminSession, canAccessCorePlatform } from '@/lib/auth/admin-auth';
 import { logAccess } from '@/lib/audit/log';
+import { parseVendor } from '@/lib/dashboard/vendor';
+import {
+  hasOpenAiData,
+  getActiveUsersByVendor,
+  getActiveUsersForVendor,
+  getSessionsPerWeekByProduct,
+  getFlaggedByProduct,
+  getAdoptionTrendByVendor,
+  getDepartmentBreakdownByVendor,
+  getTopUsersByVendor,
+} from '@/lib/dashboard/queries';
 
 // Disable Next.js route caching — all API routes read live data from the database
 export const dynamic = 'force-dynamic';
@@ -41,7 +45,12 @@ export async function GET(request: NextRequest) {
   }
   await logAccess({ actorId: session.userId!, actorEmail: session.email!, actorIp: request.headers.get('x-forwarded-for') || undefined, resource: 'dashboard', action: 'READ', outcome: 'success' });
   try {
-    const weekAgo = Math.floor(Date.now() / 1000) - 7 * 24 * 60 * 60;
+    // The vendor switch: 'all' keeps every reader as it was; 'claude' or
+    // 'openai' narrows the people, the three boxes and the charts. Events
+    // ingested and open alerts always cover every product.
+    const vendor = parseVendor(request.nextUrl.searchParams.get('vendor'));
+    const nowS = Math.floor(Date.now() / 1000);
+    const weekAgo = nowS - 7 * 24 * 60 * 60;
     const licensedSeatsRaw = parseInt(await getConfigValue('licensedSeats'), 10);
     const licensedSeats = Number.isFinite(licensedSeatsRaw) && licensedSeatsRaw > 0 ? licensedSeatsRaw : null;
     const [
@@ -59,32 +68,34 @@ export async function GET(request: NextRequest) {
       departmentBreakdown,
       topUsers,
       chatPrompts,
-      chatFlagged,
-      coworkFlagged,
       codeEvents,
-      codeFlagged,
-      avgSessionsPerWeek,
+      openaiPresent,
+      activeByVendor,
+      sessionsByProduct,
+      flaggedByProduct,
     ] = await Promise.all([
       getCoworkActiveProjectCount(weekAgo),
       getCoworkProjectStats(weekAgo),
-      getActiveUsersThisWeek(),
-      getActiveUsersLastWeek(),
+      vendor === 'all' ? getActiveUsersThisWeek() : getActiveUsersForVendor(vendor, nowS),
+      vendor === 'all' ? getActiveUsersLastWeek() : getActiveUsersForVendor(vendor, weekAgo),
       getOpenAlertCount(),
       getOpenAlertsBySeverity(),
       getSecurityMetrics(),
       getEventsLast24h(),
       getCoworkSessionCountThisWeek(),
-      getAdoptionTrend(14),
+      getAdoptionTrendByVendor(14, vendor),
       getSurfaceBreakdown(),
-      getDepartmentBreakdown(),
-      getTopUsers(5),
+      getDepartmentBreakdownByVendor(vendor),
+      getTopUsersByVendor(5, vendor),
       getChatMessageCount(),
-      getChatFlaggedCount(),
-      getCoworkFlaggedCount(),
       getCodeEventCount(),
-      getCodeFlaggedCount(),
-      getAvgSessionsPerWeek(),
+      hasOpenAiData(),
+      getActiveUsersByVendor(nowS),
+      getSessionsPerWeekByProduct(nowS),
+      getFlaggedByProduct(),
     ]);
+    // A box's figure for the chosen vendor.
+    const pick = (s: { total: number; claude: number; openai: number }) => (vendor === 'all' ? s.total : s[vendor]);
     return NextResponse.json({
       stats: {
         activeUsersThisWeek,
@@ -94,13 +105,22 @@ export async function GET(request: NextRequest) {
         alertsBySeverity,
         coworkSessions,
         chatPrompts,
-        chatFlagged,
-        coworkFlagged,
+        chatFlagged: pick(flaggedByProduct.chat),
+        coworkFlagged: pick(flaggedByProduct.work),
         codeEvents,
-        codeFlagged,
-        avgSessionsPerWeek,
+        codeFlagged: pick(flaggedByProduct.code),
+        // cowork is the Work box: Claude Cowork and ChatGPT Work.
+        avgSessionsPerWeek: {
+          cowork: pick(sessionsByProduct.work),
+          code: pick(sessionsByProduct.code),
+          chat: pick(sessionsByProduct.chat),
+        },
         otelConfigured: await isOtelConfigured(),
       },
+      vendor,
+      openaiPresent,
+      // Each box's Claude and OpenAI figures, for the line under it in the All view.
+      products: { sessions: sessionsByProduct, flagged: flaggedByProduct, activeUsers: activeByVendor },
       adoptionTrend,
       surfaceBreakdown,
       departmentBreakdown,

@@ -23,7 +23,7 @@ This section lists the parts of Command Centre in the order of the app's menu. A
 
 **Dashboard**
 
-Command Centre opens on the dashboard. An AI briefing explains what changed this week and what to do next, with recommendations and an organisation risk score beside it. Below are activity over the last 14 days, how it splits across Claude Code, Claude Cowork and Claude Chat, each department's activity, and the five most active people. On a new installation, its Get started panel walks you through setup.
+Command Centre opens on the dashboard. An AI briefing explains what changed this week and what to do next, with recommendations and an organisation risk score beside it. Below are activity over the last 14 days, how it splits across Chat, Work and Code, each department's activity, and the five most active people. Chat is Claude Chat and ChatGPT Chat, Work is Claude Cowork and ChatGPT Work, and Code is Claude Code and Codex. Once ChatGPT or Codex data arrives, a switch above the dashboard shows All, Claude or OpenAI, and each box shows its Claude and OpenAI figures under the total. On a new installation, its Get started panel walks you through setup.
 
 ![The dashboard: an AI briefing, the organisation risk score and AI recommendations](images/dashboard.png)
 

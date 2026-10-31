@@ -6,6 +6,7 @@
 import { useEffect, useState } from 'react';
 import { Panel, PanelFoot, BarRow, Tag } from '@/components/precision/ui';
 import { SURFACE_COLOR } from '@/lib/ui/chart-colours';
+import type { Vendor } from '@/lib/dashboard/vendor';
 
 interface SurfaceStickiness {
   avgDau: number;
@@ -24,22 +25,22 @@ const SURFACES: Array<{
   key: keyof Pick<StickinessData, 'cowork' | 'code' | 'chat'>;
   label: string;
 }> = [
-  { key: 'cowork', label: 'Cowork' },
+  { key: 'cowork', label: 'Work' },
   { key: 'code', label: 'Code' },
   { key: 'chat', label: 'Chat' },
 ];
 
-export default function StickinessCard() {
+export default function StickinessCard({ vendor = 'all' }: { vendor?: Vendor }) {
   const [data, setData] = useState<StickinessData | null>(null);
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
-    fetch('/api/pulse/stickiness')
+    fetch(`/api/pulse/stickiness?vendor=${vendor}`)
       .then(r => r.ok ? r.json() : Promise.reject())
       .then(setData)
       .catch(() => setData(null))
       .finally(() => setLoading(false));
-  }, []);
+  }, [vendor]);
 
   if (loading) return null;
   if (!data) return null;

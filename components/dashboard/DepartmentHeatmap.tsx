@@ -19,7 +19,7 @@ interface DeptStats {
 }
 
 // Each surface column is shaded in its own colour, light to full, so Chat, Code and
-// Cowork can be told apart at a glance. Hex alpha suffixes: 1A = 10%, 40 = 25%, 99 = 60%.
+// Work can be told apart at a glance. Hex alpha suffixes: 1A = 10%, 40 = 25%, 99 = 60%.
 function intensity(value: number, max: number, surface: Surface): CSSProperties {
   if (max === 0 || value === 0) return { background: '#FAFAFA', color: '#B3B3B3' };
   const pct = value / max;
@@ -82,7 +82,7 @@ export default function DepartmentHeatmap({ data }: { data: DeptStats[] }) {
               <th scope="col" className={T.thRight}>Users</th>
               <th scope="col" className={`${T.th} text-center w-[14%]`}><SurfaceHead surface="chat" label="Chat" /></th>
               <th scope="col" className={`${T.th} text-center w-[14%]`}><SurfaceHead surface="code" label="Code" /></th>
-              <th scope="col" className={`${T.th} text-center w-[14%]`}><SurfaceHead surface="cowork" label="Cowork" /></th>
+              <th scope="col" className={`${T.th} text-center w-[14%]`}><SurfaceHead surface="cowork" label="Work" /></th>
               <th scope="col" className={`${T.th} w-[22%]`}>Adoption</th>
             </tr>
           </thead>

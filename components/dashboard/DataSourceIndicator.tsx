@@ -4,13 +4,15 @@
 'use client';
 
 // Capture-path indicator for the dashboard header: OTLP push is the path for
-// Cowork and Code, Chat comes from the Compliance API on an Enterprise plan.
+// Cowork and Code, Chat comes from the Compliance API on an Enterprise plan,
+// and ChatGPT and Codex from OpenAI's export once its key is saved.
 
 interface DataSourceStatus {
   coworkContent: boolean;
   otelCowork?: boolean;
   complianceApi: boolean;
   analyticsApi: boolean;
+  openai?: boolean;
   mode: 'max' | 'enterprise';
 }
 
@@ -20,6 +22,7 @@ export function DataSourceIndicator({ status }: { status: DataSourceStatus }) {
       <SourceChip label="OTel" active={Boolean(status.otelCowork)} />
       <SourceChip label="Compliance API" active={status.complianceApi} />
       <SourceChip label="Analytics API" active={status.analyticsApi} />
+      {status.openai && <SourceChip label="OpenAI" active />}
     </div>
   );
 }

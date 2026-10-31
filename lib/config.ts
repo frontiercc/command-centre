@@ -129,6 +129,10 @@ export interface AppConfig {
   // telemetry arrives (epoch seconds). Never by sample data. Not admin-editable.
   setupFirstCodeAt: string;
   setupFirstCoworkAt: string;
+  // The same, for the optional steps: the first Claude Chat prompt from the
+  // Compliance API sync and the first ChatGPT or Codex prompt from the OpenAI sync.
+  setupFirstChatAt: string;
+  setupFirstOpenaiAt: string;
   // Sessions needing both figures before a ratio ("about 7x faster") is shown. Default '20'.
   humanTimeMinSessionsForRatio: string;
   // Core AI model — the four original AI consumers (Intelligence Briefing,
@@ -401,6 +405,8 @@ export const CONFIG_KEYS: Record<keyof AppConfig, string> = {
   setupStepsDone: 'setup_steps_done',
   setupFirstCodeAt: 'setup_first_code_at',
   setupFirstCoworkAt: 'setup_first_cowork_at',
+  setupFirstChatAt: 'setup_first_chat_at',
+  setupFirstOpenaiAt: 'setup_first_openai_at',
   humanTimeMinSessionsForRatio: 'human_time_min_sessions_for_ratio',
   coreAiModel: 'core_ai_model',
   otiThresholds: 'oti_thresholds',
@@ -786,6 +792,8 @@ export async function getAllConfig(): Promise<AppConfig> {
     setupStepsDone: resolve('setupStepsDone', '[]'),
     setupFirstCodeAt: resolve('setupFirstCodeAt'),
     setupFirstCoworkAt: resolve('setupFirstCoworkAt'),
+    setupFirstChatAt: resolve('setupFirstChatAt'),
+    setupFirstOpenaiAt: resolve('setupFirstOpenaiAt'),
     humanTimeMinSessionsForRatio: resolve('humanTimeMinSessionsForRatio', '20'),
     coreAiModel: resolve('coreAiModel', CLAUDE_MODEL),
     otiThresholds: resolve('otiThresholds', '{"progress":1.2,"uplift":1.5}'),
@@ -977,6 +985,8 @@ export interface DataSourceStatus {
   complianceApi: boolean;
   analyticsApi: boolean;
   aiFeatures: boolean;
+  /** An OpenAI Admin API key is saved, so the ChatGPT and Codex sync runs. */
+  openai: boolean;
   mode: 'max' | 'enterprise';
 }
 
@@ -996,6 +1006,7 @@ export async function getDataSourceStatus(): Promise<DataSourceStatus> {
 
   const aiKey = await getConfigValue('anthropicAiApiKey');
   const aiFeatures = !!aiKey;
+  const openai = !!(await getConfigValue('openaiAdminApiKey'));
   const mode = complianceApi || analyticsApi ? 'enterprise' : 'max';
 
   // Check if OTel Cowork data is present (users with source='otel')
@@ -1009,5 +1020,5 @@ export async function getDataSourceStatus(): Promise<DataSourceStatus> {
     otelCowork = otelUserRows.length > 0;
   } catch { /* users table may not have source column yet */ }
 
-  return { coworkContent, otelCowork, complianceApi, analyticsApi, aiFeatures, mode };
+  return { coworkContent, otelCowork, complianceApi, analyticsApi, aiFeatures, openai, mode };
 }

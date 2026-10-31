@@ -12,6 +12,12 @@
 //     message_type 'code_user_message', one session per Codex session,
 //     source 'codex'
 //
+// Two kinds of activity are kept beside the prompts, for Top skills and Top
+// connectors (no text is stored):
+//   ChatGPT assistant messages' skills_used_names → cowork_skill_invocations
+//   Codex APP_MCP_CALL                            → cowork_mcp_invocations
+//     (a CODEX_WORK_* app's call is ChatGPT Work's, as for prompts)
+//
 // Prompts are checked for personal data and risky intent exactly as the OTel
 // receivers check Claude prompts, and alert once, on the first insert.
 // Assistant replies, token counts and costs are later phases; reply TEXT is
@@ -42,6 +48,7 @@ import { resolveOtelUser } from '@/lib/otel/resolve-user';
 import { isPlainEmail } from '@/lib/email/address';
 import { listLogFiles, downloadLogFile, parseJsonl, type LogScope, type OpenAiEventType } from './client';
 import { OPENAI_SOURCE_LABELS, OPENAI_USER_SOURCE, type OpenAiSource } from './sources';
+import { noteFirstTelemetry } from '@/lib/setup/first-telemetry';
 
 type TypedClient = Awaited<ReturnType<typeof getTypedClient>>;
 
@@ -70,6 +77,9 @@ export interface OpenAiSyncStats {
   noPerson: number;
   /** Records older than the backfill or retention window. */
   tooOld: number;
+  /** Skill uses (ChatGPT) and connector calls (Codex, ChatGPT Work) stored. */
+  skillUses: number;
+  connectorCalls: number;
   badLines: number;
   errors: string[];
 }
@@ -77,7 +87,7 @@ export interface OpenAiSyncStats {
 export function emptyStats(): OpenAiSyncStats {
   return {
     files: 0, records: 0, prompts: { chatgpt_chat: 0, chatgpt_work: 0, codex: 0 },
-    repeats: 0, workInCodexLog: 0, noPerson: 0, tooOld: 0, badLines: 0, errors: [],
+    repeats: 0, workInCodexLog: 0, noPerson: 0, tooOld: 0, skillUses: 0, connectorCalls: 0, badLines: 0, errors: [],
   };
 }
 
@@ -92,7 +102,7 @@ interface ConversationMessageRecord extends Envelope {
   message?: {
     id?: string;
     created_at?: string;
-    author?: { type?: string; client_type?: string; model?: string };
+    author?: { type?: string; client_type?: string; model?: string; skills_used_names?: string[] };
     content?: { type?: string; value?: string | null };
     files?: Array<{ id?: string; name?: string }>;
   };
@@ -101,7 +111,11 @@ interface ConversationMessageRecord extends Envelope {
 interface CodexLogRecord extends Envelope {
   event_type?: string;
   client_id?: string;
-  event_details?: { session_id?: string; prompt_text?: string; model?: string };
+  event_details?: {
+    session_id?: string; prompt_text?: string; model?: string;
+    // APP_MCP_CALL: the MCP tool's name and optional metadata naming its connector.
+    name?: string; tool_meta?: { connector?: unknown };
+  };
 }
 
 /** A prompt ready to store, after every check that needs no database. */
@@ -201,6 +215,74 @@ export function interpretRecord(raw: unknown, floors: { cowork: number; code: nu
   return { kind: 'skip', reason: 'not_a_prompt' };
 }
 
+/** Skills a ChatGPT reply used, or a connector call from the Codex log. No text. */
+export type ActivityRow =
+  | {
+      kind: 'skills';
+      messageId: string; sessionId: string; source: OpenAiSource; surface: 'cowork';
+      email: string; occurredAt: number; skills: string[];
+    }
+  | {
+      kind: 'connector';
+      id: string; sessionId: string; source: OpenAiSource; surface: 'cowork' | 'code';
+      email: string; occurredAt: number; server: string; tool: string;
+    };
+
+/**
+ * Decides whether a record that is not a prompt carries a skill use or a
+ * connector call. Pure, like interpretRecord.
+ *
+ * APP_MCP_CALL documents the MCP tool name and optional tool_meta "such as
+ * connector"; the connector is read from tool_meta.connector, else from the
+ * tool name's prefix before the first dot ("linear.create_issue"). A call
+ * naming neither is not kept. It documents no session, so a call carrying
+ * none is stored under its own id.
+ */
+export function interpretActivity(raw: unknown, floors: { cowork: number; code: number }): ActivityRow | null {
+  const rec = raw as Envelope;
+  if (!rec || typeof rec !== 'object') return null;
+  const email = rec.actor?.user_email ?? '';
+  if (!isPlainEmail(email)) return null;
+
+  if (rec.type === 'CONVERSATION_MESSAGE') {
+    const r = rec as ConversationMessageRecord;
+    const m = r.message;
+    if (m?.author?.type !== 'assistant' || !m.id || !r.conversation?.id) return null;
+    const skills = Array.from(new Set((m.author.skills_used_names ?? [])
+      .filter((n): n is string => typeof n === 'string' && n.trim().length > 0).map((n) => n.trim())));
+    if (skills.length === 0) return null;
+    const occurredAt = toSeconds(m.created_at) ?? toSeconds(r.timestamp);
+    if (occurredAt === null || occurredAt < floors.cowork) return null;
+    return {
+      kind: 'skills', messageId: m.id, sessionId: `chatgpt:${r.conversation.id}`,
+      source: r.conversation.mode === 'work' ? 'chatgpt_work' : 'chatgpt_chat', surface: 'cowork',
+      email, occurredAt, skills,
+    };
+  }
+
+  if (rec.type === 'CODEX_LOG') {
+    const r = rec as CodexLogRecord;
+    if (r.event_type !== 'APP_MCP_CALL' || !r.event_id) return null;
+    const name = (r.event_details?.name ?? '').trim();
+    const meta = r.event_details?.tool_meta?.connector;
+    const dot = name.indexOf('.');
+    const server = (typeof meta === 'string' && meta.trim()) ? meta.trim() : dot > 0 ? name.slice(0, dot) : '';
+    if (!server || !name) return null;
+    const tool = dot > 0 && name.slice(0, dot) === server ? name.slice(dot + 1) : name;
+    const work = (r.client_id ?? '').startsWith('CODEX_WORK_');
+    const occurredAt = toSeconds(r.timestamp);
+    if (occurredAt === null || occurredAt < (work ? floors.cowork : floors.code)) return null;
+    const session = r.event_details?.session_id;
+    return {
+      kind: 'connector', id: `codex-mcp:${r.event_id}`,
+      sessionId: session ? (work ? `chatgpt-work:${session}` : `codex:${session}`) : `codex-mcp:${r.event_id}`,
+      source: work ? 'chatgpt_work' : 'codex', surface: work ? 'cowork' : 'code',
+      email, occurredAt, server, tool,
+    };
+  }
+  return null;
+}
+
 function displayNameFromEmail(email: string): string {
   const local = email.split('@')[0];
   return local.split(/[._-]/).filter(Boolean).map(p => p.charAt(0).toUpperCase() + p.slice(1)).join(' ');
@@ -233,6 +315,24 @@ async function storeRecords(
   const pending: PendingAlert[] = [];
 
   await withTx(client, async (tx) => {
+    const personFor = async (email: string, surface: 'cowork' | 'code'): Promise<string> => {
+      const key = email.trim().toLowerCase();
+      const cached = userCache.get(key);
+      if (cached) return cached;
+      const resolved = await resolveOtelUser(tx, {
+        email,
+        installationId: null,
+        displayName: displayNameFromEmail(email),
+        department: null,
+        surface,
+        nowS,
+        eventCount: 1,
+        userSource: OPENAI_USER_SOURCE,
+      });
+      userCache.set(key, resolved.userId);
+      return resolved.userId;
+    };
+
     for (const raw of records) {
       stats.records++;
       const it = interpretRecord(raw, floors);
@@ -240,26 +340,14 @@ async function storeRecords(
         if (it.reason === 'work_in_codex_log') stats.workInCodexLog++;
         else if (it.reason === 'no_person') stats.noPerson++;
         else if (it.reason === 'too_old') stats.tooOld++;
+        else {
+          const activity = interpretActivity(raw, floors);
+          if (activity) await storeActivity(tx, activity, await personFor(activity.email, activity.surface), stats);
+        }
         continue;
       }
       const row = it.row;
-
-      const key = row.email.trim().toLowerCase();
-      let userId = userCache.get(key);
-      if (!userId) {
-        const resolved = await resolveOtelUser(tx, {
-          email: row.email,
-          installationId: null,
-          displayName: displayNameFromEmail(row.email),
-          department: null,
-          surface: row.surface,
-          nowS,
-          eventCount: 1,
-          userSource: OPENAI_USER_SOURCE,
-        });
-        userId = resolved.userId;
-        userCache.set(key, userId);
-      }
+      const userId = await personFor(row.email, row.surface);
 
       const piiMatches = detectPiiWithMatches(row.text);
       const intentMatches = detectIntent(row.text, customCategories);
@@ -319,6 +407,38 @@ async function storeRecords(
   });
 
   return pending;
+}
+
+/** Stores a skill use or connector call; a repeated delivery is a no-op. */
+async function storeActivity(tx: TypedClient, a: ActivityRow, userId: string, stats: OpenAiSyncStats): Promise<void> {
+  if (a.kind === 'skills') {
+    for (const skill of a.skills) {
+      const inserted = await tx.insert(schema.coworkSkillInvocations).values({
+        id: `chatgpt-skill:${a.messageId}:${skill}`,
+        user_id: userId,
+        session_id: a.sessionId,
+        skill_name: skill,
+        occurred_at: a.occurredAt,
+        // ChatGPT picks a skill for its reply; nobody typed it.
+        invocation_type: 'agent_chained',
+        source: a.source,
+        surface: a.surface,
+      }).onConflictDoNothing().returning({ id: schema.coworkSkillInvocations.id });
+      if (inserted.length > 0) stats.skillUses++;
+    }
+    return;
+  }
+  const inserted = await tx.insert(schema.coworkMcpInvocations).values({
+    id: a.id,
+    user_id: userId,
+    session_id: a.sessionId,
+    mcp_server: a.server,
+    mcp_tool: a.tool,
+    occurred_at: a.occurredAt,
+    source: a.source,
+    surface: a.surface,
+  }).onConflictDoNothing().returning({ id: schema.coworkMcpInvocations.id });
+  if (inserted.length > 0) stats.connectorCalls++;
 }
 
 /** Same as the OTel receivers: never awaited inside the sync, never lost silently. */
@@ -420,5 +540,6 @@ export async function runOpenAiSync(opts: RunOptions = {}): Promise<OpenAiSyncSt
       userCache.clear();
     }
   }
+  if (Object.values(stats.prompts).some((n) => n > 0)) await noteFirstTelemetry('openai');
   return stats;
 }

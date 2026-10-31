@@ -5,7 +5,7 @@
 // become prompts, which surface and source each takes, and the ids that make a
 // repeated delivery a no-op. The end-to-end run is in openai-sync-pg.test.ts.
 import { describe, it, expect } from 'vitest';
-import { interpretRecord } from '@/lib/openai/sync';
+import { interpretRecord, interpretActivity } from '@/lib/openai/sync';
 import { parseJsonl } from '@/lib/openai/client';
 import { isOpenAiSource, OPENAI_SOURCE_LABELS, surfaceLabel } from '@/lib/openai/sources';
 
@@ -151,5 +151,53 @@ describe('OpenAI sources', () => {
     expect(surfaceLabel('cowork', 'otel')).toBe('cowork');
     expect(surfaceLabel('code', 'otel')).toBe('code');
     expect(surfaceLabel('chat', 'compliance')).toBe('chat');
+  });
+});
+
+describe('interpretActivity', () => {
+  it('keeps the skills a ChatGPT reply used, with its conversation and mode', () => {
+    const reply = chatMessage({
+      message: {
+        id: 'msg-2', created_at: '2026-10-20T10:01:00.000000Z',
+        author: { type: 'assistant', model: 'gpt-5.5', skills_used: ['skill-1'], skills_used_names: ['pdfs', 'pdfs', ' '] },
+        content: { type: 'text', value: 'Here it is.' },
+      },
+    }, 'work');
+    expect(interpretActivity(reply, FLOORS)).toEqual({
+      kind: 'skills', messageId: 'msg-2', sessionId: 'chatgpt:conv-1', source: 'chatgpt_work', surface: 'cowork',
+      email: 'pat@example.org', occurredAt: Date.parse('2026-10-20T10:01:00Z') / 1000, skills: ['pdfs'],
+    });
+  });
+
+  it('ignores a reply with no skills and a user message', () => {
+    const reply = chatMessage({ message: { id: 'm', created_at: '2026-10-20T10:01:00Z', author: { type: 'assistant', model: 'x', tools_used: ['browser'] }, content: { type: 'text', value: 'x' } } });
+    expect(interpretActivity(reply, FLOORS)).toBeNull();
+    expect(interpretActivity(chatMessage(), FLOORS)).toBeNull();
+  });
+
+  it('keeps a Codex connector call, naming the connector from tool_meta or the tool name', () => {
+    const call = codexLog({
+      event_id: 'evt-m1', event_type: 'APP_MCP_CALL',
+      event_details: { detail_type: 'APP_MCP_CALL', call_id: 'mcp_1', name: 'linear.create_issue', arguments: { title: 'x' }, tool_meta: { connector: 'linear' } },
+    });
+    expect(interpretActivity(call, FLOORS)).toMatchObject({
+      kind: 'connector', id: 'codex-mcp:evt-m1', sessionId: 'codex-mcp:evt-m1', source: 'codex', surface: 'code',
+      server: 'linear', tool: 'create_issue',
+    });
+    const noMeta = codexLog({ event_id: 'evt-m2', event_type: 'APP_MCP_CALL', event_details: { name: 'github.open_pr', session_id: 's9' } });
+    expect(interpretActivity(noMeta, FLOORS)).toMatchObject({ server: 'github', tool: 'open_pr', sessionId: 'codex:s9' });
+    const unnamed = codexLog({ event_id: 'evt-m3', event_type: 'APP_MCP_CALL', event_details: { name: 'create_issue' } });
+    expect(interpretActivity(unnamed, FLOORS)).toBeNull();
+  });
+
+  it('files a ChatGPT Work app connector call under ChatGPT Work', () => {
+    const call = codexLog({ event_id: 'evt-w1', event_type: 'APP_MCP_CALL', client_id: 'CODEX_WORK_WEB', event_details: { name: 'drive.search' } });
+    expect(interpretActivity(call, FLOORS)).toMatchObject({ source: 'chatgpt_work', surface: 'cowork', server: 'drive' });
+  });
+
+  it('ignores Codex tool calls that are not connector calls, and old records', () => {
+    expect(interpretActivity(codexLog({ event_type: 'TOOL_CALL_COMPLETED', event_details: { tool_name: 'shell' } }), FLOORS)).toBeNull();
+    const old = codexLog({ event_id: 'evt-o', event_type: 'APP_MCP_CALL', timestamp: '2026-08-01T00:00:00Z', event_details: { name: 'linear.x' } });
+    expect(interpretActivity(old, FLOORS)).toBeNull();
   });
 });

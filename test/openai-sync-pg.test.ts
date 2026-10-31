@@ -73,6 +73,22 @@ describe('OpenAI sync against the stand-in export', () => {
         { source: 'codex', surface: 'code', message_type: 'code_user_message', n: first.prompts.codex },
       ]);
 
+      // Skills ChatGPT replies used, and connector calls from the Codex log,
+      // join the skill and connector tables under their OpenAI source.
+      expect(first.skillUses).toBeGreaterThan(0);
+      expect(first.connectorCalls).toBeGreaterThan(0);
+      const skills = await sql.all<{ source: string; surface: string; n: number }>(
+        `SELECT source, surface, COUNT(*) AS n FROM cowork_skill_invocations GROUP BY source, surface ORDER BY source`,
+      );
+      expect(skills.every(r => r.surface === 'cowork' && r.source.startsWith('chatgpt'))).toBe(true);
+      expect(skills.reduce((n, r) => n + r.n, 0)).toBe(first.skillUses);
+      const connectors = await sql.all<{ source: string; surface: string; mcp_server: string; n: number }>(
+        `SELECT source, surface, mcp_server, COUNT(*) AS n FROM cowork_mcp_invocations GROUP BY source, surface, mcp_server`,
+      );
+      expect(connectors).toEqual([{ source: 'codex', surface: 'code', mcp_server: 'linear', n: first.connectorCalls }]);
+      // The Get started panel's optional step ticks on the first OpenAI prompt.
+      expect(Number(await getConfigValue('setupFirstOpenaiAt'))).toBeGreaterThanOrEqual(syncStartS);
+
       // No Work prompt was stored twice under Codex.
       const workTwice = await sql.all<{ n: number }>(
         `SELECT COUNT(*) AS n FROM cowork_messages w JOIN cowork_messages c
@@ -161,6 +177,8 @@ describe('OpenAI sync against the stand-in export', () => {
       const replay = await runOpenAiSync({ downloadGapMs: 0, filesPerRun: 100_000 });
       expect(replay.errors).toEqual([]);
       expect(replay.prompts).toEqual({ chatgpt_chat: 0, chatgpt_work: 0, codex: 0 });
+      expect(replay.skillUses).toBe(0);
+      expect(replay.connectorCalls).toBe(0);
       const total = await sql.all<{ n: number }>(`SELECT COUNT(*) AS n FROM cowork_messages`);
       expect(total[0].n).toBe(first.prompts.chatgpt_chat + first.prompts.chatgpt_work + first.prompts.codex);
 

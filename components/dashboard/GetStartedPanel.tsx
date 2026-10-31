@@ -132,8 +132,14 @@ export default function GetStartedPanel() {
         <Step n={5} done={s.departmentsSet} title="Set people's departments" link={{ href: '/admin/users', label: 'Go to User Insights' }} onDone={done('departments')} busy={busy}>
           Most views and briefings group people by department.
         </Step>
+        <Step n={6} optional done={s.chatAt !== null} title="Connect Claude Chat" link={{ href: '/admin/security', label: 'Go to Access & Keys' }}>
+          Claude Enterprise plans only. Add a Compliance Access Key under Enterprise APIs, and Claude Chat prompts join Work Pulse. This ticks when the first prompt arrives.
+        </Step>
+        <Step n={7} optional done={s.openaiAt !== null} title="Connect ChatGPT and Codex" link={{ href: '/admin/security', label: 'Go to Access & Keys' }}>
+          ChatGPT Enterprise only. Add an OpenAI Admin API key with your workspace ID, and ChatGPT prompts join Work Pulse and Codex prompts join Developer Pulse. This ticks when the first prompt arrives.
+        </Step>
         {s.sampleData.available && noTelemetry && (
-          <Step n={6} optional done={s.sampleData.loaded} title="Explore with sample data">
+          <Step n={8} optional done={s.sampleData.loaded} title="Explore with sample data">
             Fills this install with a fictional organisation, so every page has something to show. Use it only on an install for exploring. Run:
             <code className="block mt-1.5 px-2 py-1.5 rounded-[8px] bg-[#F5F5F5] text-[12px] text-[#0A0A0A] font-mono overflow-x-auto">{SAMPLE_COMMAND}</code>
           </Step>

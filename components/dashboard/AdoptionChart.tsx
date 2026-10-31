@@ -27,7 +27,7 @@ function Legend() {
       {(['chat', 'code', 'cowork'] as const).map(k => (
         <span key={k} className="flex items-center gap-1.5">
           <span className="w-2 h-2 rounded-full" style={{ background: SURFACE_COLOR[k] }} />
-          {k === 'chat' ? 'Chat' : k === 'code' ? 'Code' : 'Cowork'}
+          {k === 'chat' ? 'Chat' : k === 'code' ? 'Code' : 'Work'}
         </span>
       ))}
     </span>

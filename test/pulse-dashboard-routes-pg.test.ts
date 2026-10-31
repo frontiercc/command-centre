@@ -320,8 +320,8 @@ async function runSpec(): Promise<void> {
     expect(orgSummaryBody.workMix).toContainEqual({ task_type: 'chat', messages: 1, tier3: 0, tier2: 0, tier1: 1 });
 
     // GROUP BY + COUNT(DISTINCT) coercion — topSkills/topConnectors.
-    expect(orgSummaryBody.topSkills).toContainEqual({ skill_name: 'brand-review', usage_count: 3, user_count: 1 });
-    expect(orgSummaryBody.topConnectors).toContainEqual({ mcp_server: 'slack', usage_count: 2, user_count: 1 });
+    expect(orgSummaryBody.topSkills).toContainEqual({ skill_name: 'brand-review', vendor: 'claude', usage_count: 3, user_count: 1 });
+    expect(orgSummaryBody.topConnectors).toContainEqual({ mcp_server: 'slack', vendor: 'claude', usage_count: 2, user_count: 1 });
 
     // modelMix GROUP BY count coercion.
     const modelCnt = new Map(orgSummaryBody.modelMix.map((m: { model: string; cnt: number }) => [m.model, m.cnt]));

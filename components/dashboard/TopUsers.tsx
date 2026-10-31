@@ -73,7 +73,7 @@ export default function TopUsers({ users }: { users: TopUser[] }) {
         <span className="flex items-center gap-4">
           <span className="flex items-center gap-1.5"><span className="w-2 h-2 rounded-full" style={{ background: SURFACE_COLOR.chat }} /> Chat</span>
           <span className="flex items-center gap-1.5"><span className="w-2 h-2 rounded-full" style={{ background: SURFACE_COLOR.code }} /> Code</span>
-          <span className="flex items-center gap-1.5"><span className="w-2 h-2 rounded-full" style={{ background: SURFACE_COLOR.cowork }} /> Cowork</span>
+          <span className="flex items-center gap-1.5"><span className="w-2 h-2 rounded-full" style={{ background: SURFACE_COLOR.cowork }} /> Work</span>
         </span>
       </PanelFoot>
     </Panel>

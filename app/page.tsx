@@ -14,7 +14,8 @@ import LoadingSpinner from '@/components/shared/LoadingSpinner';
 import AiBriefing from '@/components/dashboard/AiBriefing';
 import { DataSourceIndicator } from '@/components/dashboard/DataSourceIndicator';
 import Link from 'next/link';
-import { PageBody, Toolbar, Strip, Panel, Tag, Notice, B } from '@/components/precision/ui';
+import { PageBody, Toolbar, Strip, Panel, Tag, Notice, B, Segmented } from '@/components/precision/ui';
+import { VENDORS, VENDOR_LABELS, parseVendor, type Vendor, type VendorSplit } from '@/lib/dashboard/vendor';
 import PulseBand from '@/components/pulse/PulseBand';
 import CodePulseBand from '@/components/pulse/code/CodePulseBand';
 import { useCorePlatformGuard } from '@/components/shared/useCorePlatformGuard';
@@ -33,8 +34,16 @@ interface DashboardData {
     coworkFlagged: number;
     codeEvents: number;
     codeFlagged: number;
+    /** cowork is the Work box: Claude Cowork and ChatGPT Work. */
     avgSessionsPerWeek: { cowork: number; code: number; chat: number };
     otelConfigured: boolean;
+  };
+  vendor: Vendor;
+  openaiPresent: boolean;
+  products: {
+    sessions: Record<'chat' | 'work' | 'code', VendorSplit>;
+    flagged: Record<'chat' | 'work' | 'code', VendorSplit>;
+    activeUsers: { claude: number; openai: number };
   };
   adoptionTrend: Array<{
     date: string;
@@ -83,6 +92,7 @@ interface DashboardData {
     complianceApi: boolean;
     analyticsApi: boolean;
     aiFeatures: boolean;
+    openai?: boolean;
     mode: 'max' | 'enterprise';
   };
   licensedSeats: number | null;
@@ -106,6 +116,18 @@ function formatChange(current: number, previous: number): string {
   return 'no change';
 }
 
+/** "Claude 12.3 · OpenAI 4" under a box in the All view. */
+function formatSplit(s: VendorSplit): string {
+  const n = (v: number) => v.toLocaleString('en-GB');
+  return `Claude ${n(s.claude)} · OpenAI ${n(s.openai)}`;
+}
+
+function flaggedLine(n: number): string {
+  return n > 0 ? `${n} flagged for PII` : 'no PII flags';
+}
+
+const VENDOR_KEY = 'ccc-dashboard-vendor';
+
 function formatAlertSeverity(bySeverity: Record<string, number>): string {
   const parts: string[] = [];
   if (bySeverity.critical) parts.push(`${bySeverity.critical} critical`);
@@ -124,6 +146,14 @@ export default function DashboardPage() {
   const [briefingRefreshKey, setBriefingRefreshKey] = useState(0);
   const [, setTick] = useState(0);
   const [pulseEnabled, setPulseEnabled] = useState(false);
+  // The vendor switch, remembered per browser.
+  const [vendor, setVendorState] = useState<Vendor>(() => {
+    try { return typeof window === 'undefined' ? 'all' : parseVendor(window.localStorage.getItem(VENDOR_KEY)); } catch { return 'all'; }
+  });
+  const setVendor = (v: Vendor) => {
+    setVendorState(v);
+    try { window.localStorage.setItem(VENDOR_KEY, v); } catch { /* not remembered */ }
+  };
 
   // Manual Refresh click refreshes both dashboard data AND briefing
   const refreshDashboard = () => {
@@ -132,7 +162,7 @@ export default function DashboardPage() {
   };
 
   useEffect(() => {
-    fetch('/api/dashboard')
+    fetch(`/api/dashboard?vendor=${vendor}`)
       .then(r => {
         if (!r.ok) throw new Error("Couldn't load this page. Try again.");
         return r.json();
@@ -142,7 +172,7 @@ export default function DashboardPage() {
       })
       .catch(console.error)
       .finally(() => setLoading(false));
-  }, [refreshKey]);
+  }, [refreshKey, vendor]);
 
   useEffect(() => {
     fetch('/api/config')
@@ -160,14 +190,14 @@ export default function DashboardPage() {
 
   if (loading) return (
     <>
-      <TopBar title="Dashboard" subtitle="How Claude is changing the work across your organisation" />
+      <TopBar title="Dashboard" subtitle="How AI is changing the work across your organisation" />
       <LoadingSpinner />
     </>
   );
 
   if (!data) return (
     <>
-      <TopBar title="Dashboard" subtitle="How Claude is changing the work across your organisation" />
+      <TopBar title="Dashboard" subtitle="How AI is changing the work across your organisation" />
       <PageBody>
         <Notice tone="error">Failed to load dashboard data.</Notice>
       </PageBody>
@@ -175,10 +205,22 @@ export default function DashboardPage() {
   );
 
   const { stats } = data;
+  // The switch shows once OpenAI data exists (or while a narrowed view is chosen).
+  const showSwitch = data.openaiPresent || vendor !== 'all';
+  const split = vendor === 'all' && data.openaiPresent;
+  const allProducts = vendor === 'all' ? '' : ' · all products';
+  const seats = data.licensedSeats;
+  const activeSub = seats == null
+    ? 'this week'
+    : vendor === 'openai'
+      ? 'this week'
+      : split
+        ? `${data.products.activeUsers.claude} of ${seats} Claude seats`
+        : `${stats.activeUsersThisWeek} of ${seats} seats`;
 
   return (
     <>
-      <TopBar title="Dashboard" subtitle="How Claude is changing the work across your organisation" />
+      <TopBar title="Dashboard" subtitle="How AI is changing the work across your organisation" />
       <PageBody>
         {/* Last refreshed + data source status */}
         <Toolbar
@@ -196,7 +238,17 @@ export default function DashboardPage() {
             </span>
           }
         >
-          <DataSourceIndicator status={data.dataSourceStatus} />
+          <span className="flex flex-wrap items-center justify-end gap-3">
+            {showSwitch && (
+              <Segmented
+                label="Show products from"
+                options={VENDORS.map(v => ({ value: v, label: VENDOR_LABELS[v] }))}
+                value={vendor}
+                onChange={setVendor}
+              />
+            )}
+            <DataSourceIndicator status={data.dataSourceStatus} />
+          </span>
         </Toolbar>
 
         {/* Setup steps for a new install (admins only; renders nothing otherwise) */}
@@ -222,25 +274,39 @@ export default function DashboardPage() {
             title="Active users"
             value={stats.activeUsersThisWeek}
             change={formatChange(stats.activeUsersThisWeek, stats.activeUsersLastWeek)}
-            subtitle={data.licensedSeats != null ? `${stats.activeUsersThisWeek} of ${data.licensedSeats} seats` : 'this week'}
+            subtitle={activeSub}
+            action={split ? formatSplit({ total: 0, ...data.products.activeUsers }) : undefined}
           />
           <StatCard
             title="Events ingested"
             value={stats.eventsLast24h}
-            subtitle="last 24 hours"
+            subtitle={`last 24 hours${allProducts}`}
           />
           <StatCard
             title="Open alerts"
             value={stats.openAlertCount}
-            subtitle={formatAlertSeverity(stats.alertsBySeverity)}
+            subtitle={`${formatAlertSeverity(stats.alertsBySeverity)}${allProducts}`}
           />
         </Strip>
+        {/* Chat, Work and Code: each box adds Claude and OpenAI in the All view */}
         <Strip cols={3}>
           <StatCard
-            title="Cowork sessions"
+            title="Chat conversations"
+            value={stats.avgSessionsPerWeek.chat}
+            change="avg / week"
+            subtitle={flaggedLine(stats.chatFlagged)}
+            pill="Prompts only"
+            pillVariant="blue"
+            pillTooltip={data.openaiPresent
+              ? 'Claude Chat prompts from the Compliance API and ChatGPT Chat prompts from OpenAI’s export. User input only. Replies are not stored.'
+              : 'Claude Chat prompts from the Compliance API. User input only. Replies are not stored.'}
+            action={split ? formatSplit(data.products.sessions.chat) : undefined}
+          />
+          <StatCard
+            title="Work sessions"
             value={stats.avgSessionsPerWeek.cowork}
             change="avg / week"
-            subtitle={stats.coworkFlagged > 0 ? `${stats.coworkFlagged} flagged for PII` : 'no PII flags'}
+            subtitle={flaggedLine(stats.coworkFlagged)}
             pill={
               data.dataSourceStatus.otelCowork
                 ? 'Prompts, skills + connectors'
@@ -256,14 +322,16 @@ export default function DashboardPage() {
                 : undefined
             }
             pillTooltip={
-              data.dataSourceStatus.otelCowork
-                ? 'Cowork data captured via OpenTelemetry integration.'
+              (data.dataSourceStatus.otelCowork
+                ? 'Claude Cowork data captured via OpenTelemetry integration.'
                 : data.dataSourceStatus.coworkContent
                 ? 'User messages, MCP connector activity, and skill invocations captured from Claude Code sessions.'
-                : 'Cowork conversation content is not available. Tool calls and file access are captured via OpenTelemetry.'
+                : 'Cowork conversation content is not available. Tool calls and file access are captured via OpenTelemetry.')
+              + (data.openaiPresent ? ' ChatGPT Work prompts come from OpenAI’s export.' : '')
             }
             action={
-              !data.dataSourceStatus.otelCowork ? (
+              split ? formatSplit(data.products.sessions.work)
+                : !data.dataSourceStatus.otelCowork && vendor !== 'openai' ? (
                 <span>Connect OpenTelemetry for Cowork visibility</span>
               ) : undefined
             }
@@ -272,19 +340,12 @@ export default function DashboardPage() {
             title="Code sessions"
             value={stats.avgSessionsPerWeek.code}
             change="avg / week"
-            subtitle={stats.codeFlagged > 0 ? `${stats.codeFlagged} flagged for PII` : 'no PII flags'}
+            subtitle={flaggedLine(stats.codeFlagged)}
             pill="Prompts, skills + connectors"
             pillVariant="purple"
-            pillTooltip="User prompts, MCP connector activity, and skill invocations from Claude Code project sessions."
-          />
-          <StatCard
-            title="Chat conversations"
-            value={stats.avgSessionsPerWeek.chat}
-            change="avg / week"
-            subtitle={stats.chatFlagged > 0 ? `${stats.chatFlagged} flagged for PII` : 'no PII flags'}
-            pill="Prompts only"
-            pillVariant="blue"
-            pillTooltip="Chat prompts captured from Claude Desktop. User input only. Responses are not stored."
+            pillTooltip={'User prompts, MCP connector activity, and skill invocations from Claude Code project sessions.'
+              + (data.openaiPresent ? ' Codex prompts and connector calls come from OpenAI’s export.' : '')}
+            action={split ? formatSplit(data.products.sessions.code) : undefined}
           />
         </Strip>
 
@@ -304,7 +365,7 @@ export default function DashboardPage() {
               <AdoptionChart data={data.adoptionTrend} />
             )}
           </div>
-          <StickinessCard />
+          <StickinessCard vendor={vendor} />
         </div>
 
         {/* Department adoption (2/3) + top users this week (1/3) */}
@@ -328,7 +389,7 @@ export default function DashboardPage() {
 
         {/* Work Pulse band with the Developer Pulse strip nested directly below its signal strip */}
         {pulseEnabled ? (
-          <PulseBand>
+          <PulseBand vendor={vendor} showVendor={data.openaiPresent}>
             <CodePulseBand />
           </PulseBand>
         ) : (
