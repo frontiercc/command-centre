@@ -22,6 +22,7 @@ import { weekStart, weekStarts } from '@/lib/pulse/period';
 import { chunk } from '@/lib/usecases/impact-rollup';
 import { gatherSessionFacts } from '@/lib/usecases/process-corpus';
 import type { SkillCorpusStats } from '@/lib/usecases/skill-readiness';
+import { isWorkPulseSurface } from '@/lib/pulse/work-surfaces';
 
 export type { SkillCorpusStats };
 
@@ -179,7 +180,7 @@ export async function gatherSkillCorpus(useCaseId: string, nowS: number): Promis
     const r = await client
       .select({ user_id: cm.user_id, session_id: cm.session_id, content_full: cm.content_full, occurred_at: cm.occurred_at })
       .from(cm)
-      .where(and(inArray(cm.session_id, ids), eq(cm.surface, 'cowork'), eq(cm.message_type, 'cowork_user_message')));
+      .where(and(inArray(cm.session_id, ids), isWorkPulseSurface(cm.surface), eq(cm.message_type, 'cowork_user_message')));
     for (const row of r) {
       if (!row.user_id) continue;
       if (row.content_full && row.content_full.trim() !== '') {

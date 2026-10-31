@@ -43,7 +43,6 @@ describe('getSystemHealth (postgres)', () => {
     await run(`DELETE FROM error_events`);
     await run(`DELETE FROM cowork_messages`);
     await run(`DELETE FROM code_otel_metrics`);
-    await run(`DELETE FROM chat_messages`);
   });
 
   it('an empty hub reads not yet run and nothing received — never healthy', async () => {
@@ -86,6 +85,17 @@ describe('getSystemHealth (postgres)', () => {
     config.complianceAccessKey = 'sk-ant-api01-test';
     const h = await health.getSystemHealth(NOW);
     expect(h.surfaces.find(s => s.key === 'chat')).toMatchObject({ lastEventAt: null });
+  });
+
+  it('Chat reads the newest received Claude Chat prompt (cowork_messages, surface chat), without a key', async () => {
+    await run(`INSERT INTO users (id, email) VALUES ('u1', 'u1@test.local') ON CONFLICT DO NOTHING`);
+    await run(`INSERT INTO cowork_messages (id, user_id, session_id, message_type, surface, source, content_preview, content_full, occurred_at, ingested_at) VALUES
+               ('ch1', 'u1', 'conv1', 'cowork_user_message', 'chat', 'compliance', 'hi', 'hi', ${NOW - 900}, ${NOW - 600}),
+               ('ch2', 'u1', 'conv1', 'cowork_user_message', 'chat', 'compliance', 'again', 'again', ${NOW - 800}, ${NOW - 120})`);
+    const h = await health.getSystemHealth(NOW);
+    expect(h.surfaces.find(s => s.key === 'chat')).toMatchObject({ lastEventAt: NOW - 120 });
+    // Claude Chat prompts share cowork_messages but are not Cowork telemetry.
+    expect(h.surfaces.find(s => s.key === 'cowork')!.lastEventAt).toBeNull();
   });
 
   it('counts only ingest failures, over 24 hours and 7 days', async () => {

@@ -109,11 +109,12 @@ export async function getPerson360(userId: string): Promise<Person360> {
     : null;
 
   // Chat — message count in the last 7 days.
-  const chat_t = schema.chatMessages;
+  // Claude Chat prompts: cowork_messages, surface 'chat'.
+  const chat_t = schema.coworkMessages;
   const chatRows = await client
     .select({ cnt: sql<number | string>`count(*)` })
     .from(chat_t)
-    .where(and(eq(chat_t.user_id, userId), gte(chat_t.occurred_at, sevenDaysAgo)));
+    .where(and(eq(chat_t.user_id, userId), eq(chat_t.surface, 'chat'), gte(chat_t.occurred_at, sevenDaysAgo)));
   // Policy B: COUNT(*) comes back as a string on pg.
   const chat = { messages7d: Number(chatRows[0]?.cnt ?? 0) };
 

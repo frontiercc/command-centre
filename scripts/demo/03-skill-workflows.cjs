@@ -337,7 +337,8 @@ async function clean(c) {
   // The nine seeded people are deliberately NOT deleted. Other daily seeders
   // (chat, alert evidence) attach rows to whichever users exist, and every one
   // of those tables carries a NO ACTION FK to users.id — an earlier run
-  // failed on chat_messages after the earlier fix covered alerts. Keeping the
+  // failed on chat_messages after the earlier fix covered alerts (Claude Chat
+  // prompts are now cowork_messages rows, surface 'chat'). Keeping the
   // users (re-upserted below, ON CONFLICT DO NOTHING) removes the whole class.
   // SEED_CLEAN=1 / --clean also leaves them; a genuine removal is a manual
   // step that deletes their dependants first.

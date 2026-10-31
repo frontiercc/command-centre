@@ -4,9 +4,12 @@
 // lib/compliance/chat-sync.ts (part 1: resolveUserByEmail + syncChat).
 //
 // Covers, against a mocked getChatMessages (global.fetch dispatched by URL):
-//   1. Prompts inserted: user messages -> chat_messages (prompt_text/length,
-//      conversation_id, attachments_count = files.length, agent_id NULL,
-//      occurred_at from created_at).
+//   1. Prompts inserted: user messages -> cowork_messages with surface 'chat'
+//      (content_full = the whole prompt, content_preview its first 250
+//      chars, session_id = the conversation id, agent_id NULL, occurred_at
+//      from created_at), plus one cowork_sessions row per conversation
+//      (started at its earliest prompt, attached file names in
+//      files_uploaded).
 //   2. Assistant metadata: assistant messages -> chat_assistant_meta (model
 //      from the CHAT object, artifacts/generated_files counts) — no text
 //      column exists on that table at all, so "no text stored" is structural.
@@ -15,7 +18,8 @@
 //   4. Alert-once gating: syncChat run twice for the same fixture creates the
 //      flagged row once and does not create a second alert.
 //   5. Retention/backfill floor: a message older than minOccurredAtS is
-//      skipped entirely (no row in chat_messages or chat_assistant_meta).
+//      skipped entirely (no Claude Chat row in cowork_messages, none in
+//      chat_assistant_meta).
 //   6. User resolution: an existing users.email matches case-insensitively
 //      and reuses that row's id; an unknown email creates both a users row
 //      (id = claude.ai user id) and an admin_users row with password_hash
@@ -171,13 +175,15 @@ async function runSpec(): Promise<void> {
     expect(result1.assistantMeta).toBe(1);
     expect(result1.connectors).toBe(0); // no tool_use blocks in this fixture
 
-    // Behaviour 1 — prompt fields.
-    const m1Row = (await db.select().from(schema.chatMessages).where(eq(schema.chatMessages.id, 'm1')))[0];
+    // Behaviour 1 — prompt fields. Claude Chat prompts are cowork_messages
+    // rows with surface 'chat', keyed to the conversation as their session.
+    const m1Row = (await db.select().from(schema.coworkMessages).where(eq(schema.coworkMessages.id, 'm1')))[0];
     expect(m1Row).toBeTruthy();
-    expect(m1Row.prompt_text).toBe('Please summarise this document');
-    expect(m1Row.prompt_length).toBe('Please summarise this document'.length);
-    expect(m1Row.conversation_id).toBe('chat-a');
-    expect(m1Row.attachments_count).toBe(1);
+    expect(m1Row.surface).toBe('chat');
+    expect(m1Row.message_type).toBe('cowork_user_message');
+    expect(m1Row.content_full).toBe('Please summarise this document');
+    expect(m1Row.content_preview).toBe('Please summarise this document');
+    expect(m1Row.session_id).toBe('chat-a');
     expect(m1Row.agent_id).toBeNull();
     expect(m1Row.source).toBe('compliance'); // CT9: explicit provenance, not inferred from agent_id
     expect(Number(m1Row.occurred_at)).toBe(NOW - 100);
@@ -185,6 +191,17 @@ async function runSpec(): Promise<void> {
     // Behaviour 6 (known-email branch) — case-insensitive match reused the
     // EXISTING row id, not the chat's claude.ai user id.
     expect(m1Row.user_id).toBe('user-exist');
+
+    // Behaviour 1 (session) — one cowork_sessions row for the conversation,
+    // started at its earliest synced prompt (m1), carrying m1's attached
+    // file name in place of the old attachments_count.
+    const chatASessions = await db.select().from(schema.coworkSessions).where(eq(schema.coworkSessions.id, 'chat-a'));
+    expect(chatASessions.length).toBe(1);
+    expect(chatASessions[0].conversation_id).toBe('chat-a');
+    expect(chatASessions[0].user_id).toBe('user-exist');
+    expect(chatASessions[0].source).toBe('compliance');
+    expect(Number(chatASessions[0].started_at)).toBe(NOW - 100);
+    expect(JSON.parse(chatASessions[0].files_uploaded)).toEqual(['a.pdf']);
 
     // Behaviour 2 — assistant metadata only, no text column exists on the
     // table at all (structural guarantee), model/counts from the chat + arrays.
@@ -201,7 +218,7 @@ async function runSpec(): Promise<void> {
     // NOTE: 4111 1111 1111 1111 with single spaces between groups matches
     // lib/pii/detect.ts's credit_card pattern (\d{4}[\s-]?\d{4}[\s-]?\d{4}
     // [\s-]?\d{4}) exactly — no fixture adaptation needed.
-    const m3Row = (await db.select().from(schema.chatMessages).where(eq(schema.chatMessages.id, 'm3')))[0];
+    const m3Row = (await db.select().from(schema.coworkMessages).where(eq(schema.coworkMessages.id, 'm3')))[0];
     expect(m3Row).toBeTruthy();
     expect(m3Row.flagged).toBe(1);
     expect(m3Row.flag_reason).toContain('PII detected');
@@ -213,13 +230,14 @@ async function runSpec(): Promise<void> {
 
     // Behaviour 5 — retention/backfill floor: m4 (older than minOccurredAtS)
     // produced no row in either table.
-    const m4Rows = await db.select().from(schema.chatMessages).where(eq(schema.chatMessages.id, 'm4'));
+    const m4Rows = await db.select().from(schema.coworkMessages).where(eq(schema.coworkMessages.id, 'm4'));
     expect(m4Rows.length).toBe(0);
 
     // Behaviour 7 (page 2) — m5 landed too.
-    const m5Row = (await db.select().from(schema.chatMessages).where(eq(schema.chatMessages.id, 'm5')))[0];
+    const m5Row = (await db.select().from(schema.coworkMessages).where(eq(schema.coworkMessages.id, 'm5')))[0];
     expect(m5Row).toBeTruthy();
-    expect(m5Row.prompt_text).toBe('Another normal prompt');
+    expect(m5Row.content_full).toBe('Another normal prompt');
+    expect(m5Row.session_id).toBe('chat-a');
 
     // ════════════════════════════════════════════════════════════════════
     // Behaviour 4 — alert-once gating: re-run syncChat for the SAME chat-A
@@ -229,8 +247,13 @@ async function runSpec(): Promise<void> {
     const result2 = await syncChat(db, 'test-key', chatA, minOccurredAtS);
     expect(result2.prompts).toBe(0); // all three user messages already exist -> exists-gate skips each
 
-    const chatMessagesCount = await db.select().from(schema.chatMessages);
-    expect(chatMessagesCount.length).toBe(3); // m1, m3, m5 — still exactly one row each, no duplicates
+    const chatPromptRows = await db.select().from(schema.coworkMessages).where(eq(schema.coworkMessages.surface, 'chat'));
+    expect(chatPromptRows.length).toBe(3); // m1, m3, m5 — still exactly one row each, no duplicates
+
+    // The re-run neither duplicates the session nor repeats its file name.
+    const chatASessionsAfterRerun = await db.select().from(schema.coworkSessions).where(eq(schema.coworkSessions.id, 'chat-a'));
+    expect(chatASessionsAfterRerun.length).toBe(1);
+    expect(JSON.parse(chatASessionsAfterRerun[0].files_uploaded)).toEqual(['a.pdf']);
 
     const alertsAfterSecondRun = await db.select().from(schema.alerts);
     expect(alertsAfterSecondRun.length).toBe(1); // NOT 2 — alert-once gating held
@@ -785,7 +808,7 @@ async function runRunChatSyncSpec(): Promise<void> {
     // the insertion floor to min(backfillDays, retentionChatDays) = 5 days.
     // A message 10 days old is within the 30-day backfill window but past
     // the 5-day retention window: it must be SKIPPED at insert (never
-    // written to chat_messages at all), because inserting it would just be
+    // written to cowork_messages at all), because inserting it would just be
     // immediately eligible for retention pruning — i.e. a purge-then-resync
     // cycle can never resurrect content retention already deleted. A
     // message 1 day old (within both windows) is inserted normally.
@@ -817,10 +840,10 @@ async function runRunChatSyncSpec(): Promise<void> {
     expect(resultRetentionGuard.chatsProcessed).toBe(1);
     expect(resultRetentionGuard.prompts).toBe(1); // only the newer message inserted
 
-    const oldMsgRows = await db.select().from(schema.chatMessages).where(eq(schema.chatMessages.id, 'retention-old-msg'));
+    const oldMsgRows = await db.select().from(schema.coworkMessages).where(eq(schema.coworkMessages.id, 'retention-old-msg'));
     expect(oldMsgRows.length).toBe(0); // skipped by the narrowed floor — never resurrected
 
-    const newMsgRows = await db.select().from(schema.chatMessages).where(eq(schema.chatMessages.id, 'retention-new-msg'));
+    const newMsgRows = await db.select().from(schema.coworkMessages).where(eq(schema.coworkMessages.id, 'retention-new-msg'));
     expect(newMsgRows.length).toBe(1);
   } finally {
     global.fetch = originalFetch;

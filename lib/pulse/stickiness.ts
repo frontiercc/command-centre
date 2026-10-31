@@ -30,7 +30,7 @@ export interface SurfaceStickiness {
 }
 
 interface SurfaceQuery {
-  table: 'cowork_messages' | 'chat_messages';
+  table: 'cowork_messages';
   where: string;
 }
 
@@ -44,8 +44,8 @@ const SURFACE_QUERIES: Record<'cowork' | 'code' | 'chat', SurfaceQuery> = {
     where: `surface = 'code' AND user_id IS NOT NULL`,
   },
   chat: {
-    table: 'chat_messages',
-    where: `user_id IS NOT NULL`,
+    table: 'cowork_messages',
+    where: `surface = 'chat' AND user_id IS NOT NULL`,
   },
 };
 

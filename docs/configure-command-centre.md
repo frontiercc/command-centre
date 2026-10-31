@@ -33,7 +33,7 @@ Most features with their own model offer a drop-down filled from your key's mode
 
 ## Claude Chat capture through the Compliance API
 
-Command Centre captures Claude Chat by pulling it from the Anthropic Compliance API, which requires Claude for Enterprise. Command Centre stores each person's prompts in full, subject to personal-data and intent flagging, with the number of files they attach. For Claude's replies it stores metadata only: the model and the number of artifacts and files Claude made, never the reply text. Command Centre also records which named connectors a chat used.
+Command Centre captures Claude Chat by pulling it from the Anthropic Compliance API, which requires Claude for Enterprise. Command Centre stores each person's prompts in full, subject to personal-data and intent flagging, with the names of any files they attach, and Work Pulse sorts them into tiers alongside Claude Cowork work. For Claude's replies it stores metadata only: the model and the number of artifacts and files Claude made, never the reply text. Command Centre also records which named connectors a chat used.
 
 1. In claude.ai, open [Organization settings → API](https://claude.ai/admin-settings/api-access). The Primary Owner turns the Compliance API on there; a Primary Owner or Owner then creates a Compliance Access Key with the scopes `read:compliance_activities` and `read:compliance_user_data`.
 2. In **Admin → Access & Keys → Enterprise APIs**, paste it into **Compliance Access Key**, select **Test**, then **Save settings** below the Endpoint security panel.

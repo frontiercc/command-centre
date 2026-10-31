@@ -120,11 +120,10 @@ describe('OpenAI sync against the stand-in export', () => {
 
       // Codex prompts get the same checks: a quoted password and an access key
       // (personal data and secrets), an export to a personal Dropbox and
-      // switching off logging (intent). Each is flagged and raises an alert.
+      // switching off logging (intent). Which risky prompts the stand-in sends
+      // depends on the date, so every flagged Codex prompt must raise an alert.
       const codexRisky = await sql.all<{ id: string; flag_reason: string | null; content_full: string }>(
-        `SELECT id, flag_reason, content_full FROM cowork_messages
-          WHERE source = 'codex' AND (content_full LIKE '%Wint3r%' OR content_full LIKE '%AKIA%'
-             OR content_full LIKE '%personal Dropbox%' OR content_full LIKE '%Disable logging%')`,
+        `SELECT id, flag_reason, content_full FROM cowork_messages WHERE source = 'codex' AND flagged = 1`,
       );
       expect(codexRisky.length).toBeGreaterThanOrEqual(3);
       const reasonFor = (marker: string) => codexRisky.find(r => r.content_full.includes(marker))?.flag_reason ?? '';

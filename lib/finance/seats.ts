@@ -13,9 +13,8 @@
  * never in lib/finance/chargeback.ts).
  *
  * "Active" is measured, not judged — a plain COUNT(DISTINCT user_id) union
- * across cowork_messages and chat_messages, the same two capture surfaces
- * CCC has first-party telemetry for (Code activity lives in cowork_messages
- * too, under surface='code', so it is already covered by that table).
+ * over cowork_messages, which holds every captured prompt: Cowork, Code
+ * (surface='code') and Claude Chat (surface='chat').
  */
 import { sql } from 'drizzle-orm';
 import { getTypedClient } from '@/lib/db/client';
@@ -77,11 +76,8 @@ export async function getSeatsSummary(nowS: number): Promise<SeatsSummary | null
   // COUNT/UNION come back as bigint -> STRING on Postgres; Number()-coerce.
   const rows = await rawAll<{ c: number | string | null }>(
     db,
-    sql`SELECT COUNT(DISTINCT user_id) AS c FROM (
-          SELECT user_id FROM cowork_messages WHERE occurred_at >= ${cutoff} AND user_id IS NOT NULL
-          UNION
-          SELECT user_id FROM chat_messages WHERE occurred_at >= ${cutoff} AND user_id IS NOT NULL
-        ) AS active_users`
+    sql`SELECT COUNT(DISTINCT user_id) AS c FROM cowork_messages
+        WHERE occurred_at >= ${cutoff} AND user_id IS NOT NULL`
   );
   const active = Number(rows[0]?.c ?? 0);
 

@@ -8,11 +8,12 @@
 // who did Tier 3 work, which kinds, and new capabilities. MEASURED ONLY — kinds
 // of work, counts, systems. Never a name (the model must not attribute), never
 // an AI summary, never a file name, never prompt text.
-import { and, eq, gte, inArray, isNull, lt, or, sql } from 'drizzle-orm';
+import { and, eq, gte, inArray, lt, sql } from 'drizzle-orm';
 import { getTypedClient } from '@/lib/db/client';
 import { schema } from '@/lib/db/schema';
 import { MECHANISM_TASK_TYPES } from '@/lib/finance/model-efficiency';
 import type { WorkItem } from '@/lib/pulse/frontier-view';
+import { isWorkPulseSurface } from '@/lib/pulse/work-surfaces';
 
 const TOOL_LABELS = new Set([...MECHANISM_TASK_TYPES, 'capability_creation']);
 
@@ -70,7 +71,7 @@ export async function buildDeepWorkSummary(userIds: string[] | null, sinceS: num
     .where(and(
       ...who, eq(pc.tier, 3), eq(pc.classifier_status, 'classified'),
       gte(cm.occurred_at, sinceS), lt(cm.occurred_at, untilS),
-      or(eq(cm.surface, 'cowork'), isNull(cm.surface)),
+      isWorkPulseSurface(cm.surface, true),
     ));
 
   const people = new Set<string>();

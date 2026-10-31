@@ -246,7 +246,7 @@ export default function AdminDataPage() {
 
             <Field
               label="Chat retention (days)"
-              hint="Covers Compliance-API-synced chat prompts (chat_messages) and assistant metadata (chat_assistant_meta)."
+              hint="Covers Compliance-API-synced Claude Chat prompts and assistant metadata (chat_assistant_meta)."
             >
               <input
                 type="number"

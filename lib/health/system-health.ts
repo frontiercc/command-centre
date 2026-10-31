@@ -135,8 +135,7 @@ export async function getSystemHealth(nowS: number = Math.floor(Date.now() / 100
   };
   const com = schema.codeOtelMetrics;
   const metricsRows = await client.select({ v: sql<number | string | null>`MAX(${com.occurred_at})` }).from(com);
-  const chat = schema.chatMessages;
-  const chatRows = await client.select({ v: sql<number | string | null>`MAX(${chat.ingested_at})` }).from(chat);
+  const chatRows = await client.select({ v: sql<number | string | null>`MAX(${cm.ingested_at})` }).from(cm).where(eq(cm.surface, 'chat'));
 
   const surfaces: SurfaceHealth[] = [
     { key: 'cowork', label: 'Cowork', lastEventAt: await maxOccurred('cowork') },

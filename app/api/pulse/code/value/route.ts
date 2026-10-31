@@ -32,7 +32,6 @@ export async function GET(request: NextRequest) {
   const cam = schema.codeAssistantMeta;
   const cm = schema.codeMetrics;
   const cwMsg = schema.coworkMessages;
-  const chat = schema.chatMessages;
 
   const now = Math.floor(Date.now() / 1000);
   const d30 = now - 30 * 24 * 3600;
@@ -104,9 +103,9 @@ export async function GET(request: NextRequest) {
   const coworkSessions = Number(coworkSessionRows[0]?.c ?? 0);
 
   const chatConversationRows = await client
-    .select({ c: sql<number | string>`COUNT(DISTINCT ${chat.conversation_id})` })
-    .from(chat)
-    .where(and(isNotNull(chat.conversation_id), ne(chat.conversation_id, ''), gte(chat.occurred_at, d30)));
+    .select({ c: sql<number | string>`COUNT(DISTINCT ${cwMsg.session_id})` })
+    .from(cwMsg)
+    .where(and(eq(cwMsg.surface, 'chat'), ne(cwMsg.session_id, ''), gte(cwMsg.occurred_at, d30)));
   const chatConversations = Number(chatConversationRows[0]?.c ?? 0);
 
   const timeSavedAssumptions = resolveTimeSavedAssumptions({

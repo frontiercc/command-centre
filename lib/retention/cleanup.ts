@@ -139,7 +139,8 @@ export async function runRetentionCleanup(): Promise<CleanupResult> {
       const codeRows = await client.select().from(schema.coworkMessages).where(and(lt(schema.coworkMessages.occurred_at, codeCutoff), eq(schema.coworkMessages.surface, 'code'))) as { occurred_at: number; [key: string]: unknown }[];
       const otelRows = await client.select().from(schema.otelEvents).where(lt(schema.otelEvents.occurred_at, otelCutoff)) as { occurred_at: number; [key: string]: unknown }[];
       const complianceRows = await client.select().from(schema.complianceEvents).where(lt(schema.complianceEvents.occurred_at, complianceCutoff)) as { occurred_at: number; [key: string]: unknown }[];
-      const chatRows = await client.select().from(schema.chatMessages).where(lt(schema.chatMessages.occurred_at, chatCutoff)) as { occurred_at: number; [key: string]: unknown }[];
+      // Claude Chat prompts: cowork_messages surface 'chat', on the Chat window.
+      const chatRows = await client.select().from(schema.coworkMessages).where(and(lt(schema.coworkMessages.occurred_at, chatCutoff), eq(schema.coworkMessages.surface, 'chat'))) as { occurred_at: number; [key: string]: unknown }[];
       const chatMetaRows = await client.select().from(schema.chatAssistantMeta).where(lt(schema.chatAssistantMeta.occurred_at, chatCutoff)) as { occurred_at: number; [key: string]: unknown }[];
       const errorRows = await client.select().from(schema.errorEvents).where(lt(schema.errorEvents.occurred_at, errorCutoff)) as { occurred_at: number; [key: string]: unknown }[];
 
@@ -150,7 +151,7 @@ export async function runRetentionCleanup(): Promise<CleanupResult> {
         ['cowork_messages_code', codeRows, codeCutoff],
         ['otel_events', otelRows, otelCutoff],
         ['compliance_events', complianceRows, complianceCutoff],
-        ['chat_messages', chatRows, chatCutoff],
+        ['cowork_messages_chat', chatRows, chatCutoff],
         ['chat_assistant_meta', chatMetaRows, chatCutoff],
         ['error_events', errorRows, errorCutoff],
       ] as [string, { occurred_at: number; [key: string]: unknown }[], number][]) {
@@ -266,6 +267,7 @@ export async function runRetentionCleanup(): Promise<CleanupResult> {
 
     await purgePulseChildren('cowork', coworkCutoff);
     await purgePulseChildren('code', codeCutoff);
+    await purgePulseChildren('chat', chatCutoff);
 
     // Session descriptions are model-written from the session's prompts, so
     // they go with those prompts in BOTH modes, on the Cowork window
@@ -353,15 +355,20 @@ export async function runRetentionCleanup(): Promise<CleanupResult> {
         ));
       errorAffected = rowsAffected(errorResult);
 
-      // chat_messages — strip content. prompt_text is NOT NULL (unlike
-      // cowork's content_full), so it takes the SAME marker used for
-      // cowork's content_preview rather than a null — the row/metadata
-      // (prompt_length, flagged, occurred_at, etc.) stays untouched.
-      const chatResult = await tx.update(schema.chatMessages)
-        .set({ prompt_text: STRIPPED_MARKER })
+      // Claude Chat prompts — same strip, own window (retentionChatDays).
+      const chatResult = await tx.update(schema.coworkMessages)
+        .set({
+          content_full: null,
+          content_preview: STRIPPED_MARKER,
+          tool_input_preview: null,
+          tool_output_preview: null,
+          pii_verdict_reason: null,
+          output_name: null,
+        })
         .where(and(
-          lt(schema.chatMessages.occurred_at, chatCutoff),
-          ne(schema.chatMessages.prompt_text, STRIPPED_MARKER),
+          lt(schema.coworkMessages.occurred_at, chatCutoff),
+          eq(schema.coworkMessages.surface, 'chat'),
+          or(isNull(schema.coworkMessages.content_preview), ne(schema.coworkMessages.content_preview, STRIPPED_MARKER)),
         ));
       chatAffected = rowsAffected(chatResult);
 
@@ -390,7 +397,7 @@ export async function runRetentionCleanup(): Promise<CleanupResult> {
       );
 
       chatAffected = rowsAffected(
-        await tx.delete(schema.chatMessages).where(lt(schema.chatMessages.occurred_at, chatCutoff))
+        await tx.delete(schema.coworkMessages).where(and(lt(schema.coworkMessages.occurred_at, chatCutoff), eq(schema.coworkMessages.surface, 'chat')))
       );
     }
 

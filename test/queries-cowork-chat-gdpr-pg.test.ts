@@ -9,6 +9,11 @@
 // getRecentCoworkMessages, getRecentChatMessages, getCodeEventCount,
 // exportUserData, deleteUserData, getDbStats.
 //
+// Claude Chat prompts live in cowork_messages (surface 'chat',
+// message_type 'cowork_user_message', session_id = the conversation id) since
+// migration 0038 dropped chat_messages; the Chat helpers read them back from
+// there, and the Cowork-only readers must leave them out.
+//
 // The central assertions this file proves:
 //   1. token_usage (cowork_messages) / tool_input+token_usage+file_paths
 //      (otel_events) / metadata (compliance_events) / raw_evidence (alerts)
@@ -47,7 +52,7 @@ async function runSpec(): Promise<void> {
       getAvgSessionsPerWeek, getRecentCoworkMessages, getRecentChatMessages,
       getCodeEventCount, exportUserData, deleteUserData, getDbStats, upsertCoworkSession,
     } = queries;
-    const { eq, inArray } = await import('drizzle-orm');
+    const { and, eq, inArray } = await import('drizzle-orm');
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     const db = client as any;
 
@@ -78,14 +83,16 @@ async function runSpec(): Promise<void> {
       { session_id: 'avg-code-a', first_at: NOW - 3 * DAY, last_at: NOW - 3 * DAY, computed_at: NOW },
       { session_id: 'avg-code-b', first_at: NOW - 20 * DAY, last_at: NOW - 35 * DAY, computed_at: NOW },
     ]);
-    // chat: 2 distinct conversation_ids, firstSeen = NOW-2d → weeksActive =
-    // ceil(2/7) = 1 → avg = round((2/1)*10)/10 = 2.0.
-    await db.insert(schema.chatMessages).values([
+    // chat: 2 distinct Claude Chat conversations (cowork_messages surface
+    // 'chat', session_id = conversation id), firstSeen = NOW-2d → weeksActive =
+    // ceil(2/7) = 1 → avg = round((2/1)*10)/10 = 2.0. They must not count as
+    // Cowork sessions (the cowork figure stays 1).
+    await db.insert(schema.coworkMessages).values([
       // user_id deliberately NULL — getAvgSessionsPerWeek's chat query has no
       // user_id filter, and this keeps Section 0 fully decoupled from the
       // per-user assertions in Section 4.
-      { id: 'avg-chat-1', conversation_id: 'chatconv-avg-1', user_id: null, prompt_text: 'hi', prompt_length: 2, occurred_at: NOW - 2 * DAY },
-      { id: 'avg-chat-2', conversation_id: 'chatconv-avg-2', user_id: null, prompt_text: 'yo', prompt_length: 2, occurred_at: NOW - 2 * DAY },
+      { id: 'avg-chat-1', session_id: 'chatconv-avg-1', user_id: null, message_type: 'cowork_user_message', surface: 'chat', source: 'compliance', content_full: 'hi', content_preview: 'hi', flagged: 0, occurred_at: NOW - 2 * DAY },
+      { id: 'avg-chat-2', session_id: 'chatconv-avg-2', user_id: null, message_type: 'cowork_user_message', surface: 'chat', source: 'compliance', content_full: 'yo', content_preview: 'yo', flagged: 0, occurred_at: NOW - 2 * DAY },
     ]);
 
     const avg = await getAvgSessionsPerWeek();
@@ -125,7 +132,9 @@ async function runSpec(): Promise<void> {
     });
 
     expect(await hasCoworkContent()).toBe(true);
-    expect(await getCoworkMessageCount()).toBe(4); // avg-cw-1/2 (Section 0) + msg-1, msg-2 (dup ignored)
+    // getCoworkMessageCount counts Cowork and Code rows and leaves out Claude
+    // Chat (surface 'chat'): avg-cw-1/2 (Section 0) + msg-1, msg-2 (dup ignored).
+    expect(await getCoworkMessageCount()).toBe(4);
 
     const sessA = await getCoworkMessages('sess-A', 100);
     expect(sessA.map((m) => m.id)).toEqual(['msg-1']); // msg-2 excluded by type
@@ -184,7 +193,9 @@ async function runSpec(): Promise<void> {
 
     const recent = await getRecentCoworkMessages(100);
     // avg-cw-1/2 (Section 0) + msg-1,2,4,5,6,7,8,keep-1 (getRecentCoworkMessages has no type filter) = 10.
+    // avg-chat-1/2 are left out: Claude Chat prompts come through getRecentChatMessages.
     expect(recent.length).toBe(10);
+    expect(recent.some((m) => m.surface === 'chat')).toBe(false);
     // COALESCE(surface, 'cowork') — msg-7's DB column is really NULL (the
     // point of this fixture; getCoworkMessages' plain SELECT * does NOT
     // apply the COALESCE, so it would still read back NULL there), but
@@ -193,7 +204,7 @@ async function runSpec(): Promise<void> {
     const msg7Raw = (await db.select().from(schema.coworkMessages).where(eq(schema.coworkMessages.id, 'msg-7')))[0];
     expect(msg7Raw.surface).toBeNull(); // the underlying column really is NULL
 
-    expect(await getCoworkMessageCount()).toBe(10);
+    expect(await getCoworkMessageCount()).toBe(10); // the 10 above; avg-chat-1/2 are Claude Chat
 
     // ═══════════════════════════════════════════════════════════════════
     // SECTION 3 — getRecentCoworkSessions (Policy A jsonb read, 3 columns)
@@ -225,22 +236,35 @@ async function runSpec(): Promise<void> {
     expect(JSON.parse(s1.tools_available!)).toEqual(['bash', 'grep']);
 
     // ═══════════════════════════════════════════════════════════════════
-    // SECTION 4 — chat messages
+    // SECTION 4 — Claude Chat prompts (cowork_messages, surface 'chat')
     // ═══════════════════════════════════════════════════════════════════
-    await db.insert(schema.chatMessages).values([
-      { id: 'chat-1', conversation_id: 'chatconv-1', user_id: 'erase-user', prompt_text: 'a', prompt_length: 1, flagged: 0, occurred_at: NOW - DAY },
-      { id: 'chat-2', conversation_id: 'chatconv-1', user_id: 'erase-user', prompt_text: 'b', prompt_length: 1, flagged: 1, occurred_at: NOW - 2 * DAY },
-      { id: 'chat-3', conversation_id: 'chatconv-2', user_id: 'keep-user', prompt_text: 'c', prompt_length: 1, flagged: 0, occurred_at: NOW - DAY },
+    // The shape the Compliance API sync writes: session_id = conversation
+    // id, full text in content_full, the first 250 characters as the preview.
+    await db.insert(schema.coworkMessages).values([
+      { id: 'chat-1', session_id: 'chatconv-1', user_id: 'erase-user', message_type: 'cowork_user_message', surface: 'chat', source: 'compliance', content_full: 'a', content_preview: 'a', flagged: 0, occurred_at: NOW - DAY },
+      { id: 'chat-2', session_id: 'chatconv-1', user_id: 'erase-user', message_type: 'cowork_user_message', surface: 'chat', source: 'compliance', content_full: 'bb', content_preview: 'bb', flagged: 1, flag_reason: 'PII detected: email', occurred_at: NOW - 2 * DAY },
+      { id: 'chat-3', session_id: 'chatconv-2', user_id: 'keep-user', message_type: 'cowork_user_message', surface: 'chat', source: 'agent', content_full: 'c', content_preview: 'c', flagged: 0, occurred_at: NOW - DAY },
     ]);
 
     // Running total including avg-chat-1/2 from Section 0 = 5.
     expect(await getChatMessageCount()).toBe(5);
-    expect(await getChatFlaggedCount()).toBe(1); // chat-2 only
+    // chat-2 only: msg-4 and msg-8 are flagged too, but they are Cowork and Code.
+    expect(await getChatFlaggedCount()).toBe(1);
+    // A flagged Claude Chat prompt leaves the Cowork and Code flagged counts alone.
+    expect(await getCoworkFlaggedCount()).toBe(1);
+    expect(await getCodeFlaggedCount()).toBe(1);
 
     const eraseChats = await getChatMessages({ userId: 'erase-user' });
     expect(eraseChats.map((m) => m.id)).toEqual(['chat-1', 'chat-2']); // desc by occurred_at
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     expect((eraseChats[0] as any).user_display_name).toBe('Erase Me');
+    // Read back in the Chat shape: conversation id from session_id, text from
+    // content_full, length worked out from the text (a number, not a pg string).
+    expect(eraseChats[1].conversation_id).toBe('chatconv-1');
+    expect(eraseChats[1].prompt_text).toBe('bb');
+    expect(eraseChats[1].prompt_length).toBe(2);
+    expect(eraseChats[1].flag_reason).toBe('PII detected: email');
+    expect(eraseChats[1].source).toBe('compliance');
 
     const flaggedInConv1 = await getChatMessages({ conversationId: 'chatconv-1', flaggedOnly: true });
     expect(flaggedInConv1.map((m) => m.id)).toEqual(['chat-2']);
@@ -248,6 +272,9 @@ async function runSpec(): Promise<void> {
     const recentChat = await getRecentChatMessages(50);
     expect(recentChat.length).toBe(5);
     expect(recentChat.every((m) => typeof m.occurred_at === 'number')).toBe(true);
+    expect(recentChat.every((m) => typeof m.prompt_length === 'number')).toBe(true);
+    // getRecentCoworkMessages still leaves every Claude Chat prompt out.
+    expect((await getRecentCoworkMessages(100)).some((m) => m.surface === 'chat')).toBe(false);
 
     // ═══════════════════════════════════════════════════════════════════
     // SECTION 5 — exportUserData (Policy A across 4 jsonb columns)
@@ -273,8 +300,12 @@ async function runSpec(): Promise<void> {
     expect(exported).not.toBeNull();
     expect(exported!.user.id).toBe('erase-user');
     expect(exported!.cowork_messages.every((m) => m.user_id === 'erase-user')).toBe(true);
-    // The export includes the person's Claude Chat prompts (chat-1, chat-2), not another person's.
-    expect(exported!.chat_messages.map((m) => m.id)).toEqual(['chat-1', 'chat-2']);
+    // The export includes the person's Claude Chat prompts (chat-1, chat-2),
+    // not another person's, inside cowork_messages: there is no separate
+    // chat_messages key any more.
+    expect(exported!.cowork_messages.filter((m) => m.surface === 'chat').map((m) => m.id)).toEqual(['chat-1', 'chat-2']);
+    expect(exported!.cowork_messages.find((m) => m.id === 'chat-2')?.content_full).toBe('bb');
+    expect('chat_messages' in exported!).toBe(false);
     expect(exported!.chat_reply_metadata).toEqual([]);
     expect(exported!.otel_events.map((e) => e.id)).toEqual(['otel-erase-1']);
     expect(exported!.otel_events[0].tool_input).toBe(JSON.stringify({ cmd: 'ls' }));
@@ -290,6 +321,7 @@ async function runSpec(): Promise<void> {
     // ── getDbStats, pre-erasure — sane size + correct per-table counts ──
     const statsBefore = await getDbStats();
     expect(statsBefore.fileSizeBytes).toBeGreaterThan(0);
+    // coworkCount leaves out the 5 Claude Chat prompts, which chatCount counts.
     expect(statsBefore.coworkCount).toBe(10);
     expect(statsBefore.otelCount).toBe(2);
     expect(statsBefore.complianceCount).toBe(2);
@@ -363,14 +395,12 @@ async function runSpec(): Promise<void> {
     const result = await deleteUserData('erase-user');
     expect(result).not.toBeNull();
     // cowork_messages for erase-user: msg-1,2,4,5,6,7,8 = 7 (msg-keep-1 is
-    // keep-user's, avg-cw-1/2 are erase-user's too from Section 0 → +2 = 9).
-    // NOTE: the return TYPE only declares 6 fields, but the runtime `counts`
-    // object (and therefore the actual return VALUE) also carries
-    // chat_messages — matching the pre-existing behaviour exactly (the
-    // original sync function had the same type/value mismatch).
+    // keep-user's, avg-cw-1/2 are erase-user's too from Section 0 → +2 = 9),
+    // plus the person's Claude Chat prompts chat-1, chat-2 (Section 4) → 11.
+    // Claude Chat prompts are counted with cowork_messages: there is no
+    // separate chat_messages count any more.
     expect(result).toEqual({
-      chat_messages: 2, // chat-1, chat-2 (Section 4)
-      cowork_messages: 9,
+      cowork_messages: 11,
       cowork_sessions: 2, // cwsess-1 (Section 3) + gdpr-cwsess-erase
       otel_events: 1,
       compliance_events: 1,
@@ -386,7 +416,8 @@ async function runSpec(): Promise<void> {
     expect((await db.select().from(schema.complianceEvents).where(eq(schema.complianceEvents.user_id, 'erase-user'))).length).toBe(0);
     expect((await db.select().from(schema.analyticsSnapshots).where(eq(schema.analyticsSnapshots.user_id, 'erase-user'))).length).toBe(0);
     expect((await db.select().from(schema.alerts).where(eq(schema.alerts.user_id, 'erase-user'))).length).toBe(0);
-    expect((await db.select().from(schema.chatMessages).where(eq(schema.chatMessages.user_id, 'erase-user'))).length).toBe(0);
+    // The person's Claude Chat prompts went with their cowork_messages rows.
+    expect((await db.select().from(schema.coworkMessages).where(and(eq(schema.coworkMessages.user_id, 'erase-user'), eq(schema.coworkMessages.surface, 'chat')))).length).toBe(0);
     expect((await db.select().from(schema.agents).where(eq(schema.agents.user_id, 'erase-user'))).length).toBe(0);
     expect((await db.select().from(schema.pulseSkillRuns).where(eq(schema.pulseSkillRuns.user_id, 'erase-user'))).length).toBe(0);
     expect((await db.select().from(schema.pulseClassifications).where(eq(schema.pulseClassifications.user_id, 'erase-user'))).length).toBe(0);
@@ -410,7 +441,7 @@ async function runSpec(): Promise<void> {
     expect((await db.select().from(schema.complianceEvents).where(eq(schema.complianceEvents.user_id, 'keep-user'))).length).toBe(1);
     expect((await db.select().from(schema.analyticsSnapshots).where(eq(schema.analyticsSnapshots.user_id, 'keep-user'))).length).toBe(1);
     expect((await db.select().from(schema.alerts).where(eq(schema.alerts.user_id, 'keep-user'))).length).toBe(1);
-    expect((await db.select().from(schema.chatMessages).where(eq(schema.chatMessages.user_id, 'keep-user'))).length).toBeGreaterThan(0);
+    expect((await db.select().from(schema.coworkMessages).where(and(eq(schema.coworkMessages.user_id, 'keep-user'), eq(schema.coworkMessages.surface, 'chat')))).map((r: { id: string }) => r.id)).toEqual(['chat-3']);
     expect((await db.select().from(schema.agents).where(eq(schema.agents.user_id, 'keep-user'))).length).toBe(1);
     expect((await db.select().from(schema.pulseSkillRuns).where(eq(schema.pulseSkillRuns.user_id, 'keep-user'))).length).toBe(1);
     expect((await db.select().from(schema.pulseClassifications).where(eq(schema.pulseClassifications.user_id, 'keep-user'))).length).toBe(1);
@@ -434,6 +465,8 @@ async function runSpec(): Promise<void> {
     expect(statsAfter.userCount).toBe(1); // keep-user only
     expect(statsAfter.otelCount).toBe(1);
     expect(statsAfter.complianceCount).toBe(1);
+    // avg-chat-1/2 (no person) and keep-user's chat-3 remain.
+    expect(statsAfter.chatCount).toBe(3);
     expect(statsAfter.fileSizeBytes).toBeGreaterThan(0);
 
     // ═══════════════════════════════════════════════════════════════════

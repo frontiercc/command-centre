@@ -46,7 +46,6 @@ export const CLEARED_TABLES = [
   'cowork_mcp_invocations',
   'code_assistant_meta',
   'cowork_messages',
-  'chat_messages',
   // Alert view
   'alerts',
 ] as const;
@@ -64,7 +63,6 @@ const TABLE_SCHEMA_MAP = {
   cowork_mcp_invocations: schema.coworkMcpInvocations,
   code_assistant_meta: schema.codeAssistantMeta,
   cowork_messages: schema.coworkMessages,
-  chat_messages: schema.chatMessages,
   alerts: schema.alerts,
 } as const;
 

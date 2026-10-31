@@ -11,6 +11,9 @@
 //   1. source='compliance' -> `_source: 'compliance'`; source='agent' ->
 //      `_source: 'local-agent'` — per row, from the column.
 //   2. The ?source= filter filters on the same column.
+//   3. Claude Chat prompts live in cowork_messages (surface 'chat'), yet the
+//      unfiltered listing shows each one exactly once, as a chat_prompt on
+//      the chat surface, never a second time as a Cowork message.
 //
 // HARNESS RULE (copied from test/chat-thread-route.test.ts): schema.ts
 // binds getClient() to DATABASE_URL on first use, so the route + schema
@@ -35,6 +38,25 @@ vi.mock('@/lib/audit/log', () => ({
   logAccess: vi.fn(),
 }));
 
+/** A Claude Chat prompt row: cowork_messages, surface 'chat', session = conversation. */
+function chatPrompt(id: string, conversationId: string, text: string, occurredAt: number, agentId: string | null, source: string) {
+  return {
+    id, session_id: conversationId, user_id: 'u1',
+    message_type: 'cowork_user_message', surface: 'chat', source,
+    content_full: text, content_preview: text.slice(0, 250),
+    occurred_at: occurredAt, agent_id: agentId,
+  };
+}
+
+const CHAT_ROWS = [
+  // Legacy Desktop-agent row (source='agent') — badges the agent.
+  chatPrompt('agent-1', 'conv-agent', 'from the agent', 100, 'agent-xyz', 'agent'),
+  // Real Compliance-synced row.
+  chatPrompt('compliance-1', 'claude_chat_1', 'from compliance', 200, null, 'compliance'),
+  // Synthetic seed row (source='agent' default) with no conversation — badges the agent too.
+  chatPrompt('seed-1', '', '[seed] daily activity', 300, null, 'agent'),
+];
+
 function makeRequest(url: string): NextRequest {
   return new NextRequest(`http://localhost${url}`);
 }
@@ -43,7 +65,7 @@ async function setupDb() {
   const { createTestDbClient } = await import('./helpers/db');
   const { client, cleanup } = await createTestDbClient('postgres');
   const { schema } = await import('@/lib/db/schema');
-  // chat_messages.user_id carries an FK to users on Postgres.
+  // cowork_messages.user_id carries an FK to users on Postgres.
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   await (client as any).insert(schema.users).values({ id: 'u1', email: 'u1@x.test' });
   return { client, cleanup };
@@ -57,22 +79,20 @@ describe('GET /api/events chat provenance (badge read from the stored source col
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
       const db = client as any;
 
-      await db.insert(schema.chatMessages).values([
-        // Legacy Desktop-agent row (source='agent') — badges the agent.
-        { id: 'agent-1', conversation_id: 'conv-agent', user_id: 'u1', prompt_text: 'from the agent', prompt_length: 14, occurred_at: 100, agent_id: 'agent-xyz', source: 'agent' },
-        // Real Compliance-synced row.
-        { id: 'compliance-1', conversation_id: 'claude_chat_1', user_id: 'u1', prompt_text: 'from compliance', prompt_length: 16, occurred_at: 200, agent_id: null, source: 'compliance' },
-        // Synthetic seed row (source='agent' default) — badges the agent too.
-        { id: 'seed-1', conversation_id: null, user_id: 'u1', prompt_text: '[seed] daily activity', prompt_length: 22, occurred_at: 300, agent_id: null, source: 'agent' },
-      ]);
+      await db.insert(schema.coworkMessages).values(CHAT_ROWS);
 
       const { GET } = await import('@/app/api/events/route');
       const res = await GET(makeRequest('/api/events?source=chat'));
       expect(res.status).toBe(200);
-      const body = await res.json() as Array<{ id: string; _source: string }>;
+      const body = await res.json() as Array<{ id: string; _source: string; event_type: string; surface: string; content_preview: string }>;
 
       // All three chat rows returned; each badges its OWN stored source.
       expect(body.map(r => r.id).sort()).toEqual(['agent-1', 'compliance-1', 'seed-1']);
+      for (const r of body) {
+        expect(r.event_type).toBe('chat_prompt');
+        expect(r.surface).toBe('chat');
+      }
+      expect(body.find(r => r.id === 'compliance-1')?.content_preview).toBe('from compliance');
       const byId = Object.fromEntries(body.map(r => [r.id, r._source]));
       expect(byId['compliance-1']).toBe('compliance');
       expect(byId['agent-1']).toBe('local-agent');
@@ -89,11 +109,7 @@ describe('GET /api/events chat provenance (badge read from the stored source col
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
       const db = client as any;
 
-      await db.insert(schema.chatMessages).values([
-        { id: 'agent-1', conversation_id: 'conv-agent', user_id: 'u1', prompt_text: 'from the agent', prompt_length: 14, occurred_at: 100, agent_id: 'agent-xyz', source: 'agent' },
-        { id: 'compliance-1', conversation_id: 'claude_chat_1', user_id: 'u1', prompt_text: 'from compliance', prompt_length: 16, occurred_at: 200, agent_id: null, source: 'compliance' },
-        { id: 'seed-1', conversation_id: null, user_id: 'u1', prompt_text: '[seed] daily activity', prompt_length: 22, occurred_at: 300, agent_id: null, source: 'agent' },
-      ]);
+      await db.insert(schema.coworkMessages).values(CHAT_ROWS);
 
       const { GET } = await import('@/app/api/events/route');
       const res = await GET(makeRequest('/api/events?source=compliance'));
@@ -102,6 +118,39 @@ describe('GET /api/events chat provenance (badge read from the stored source col
 
       expect(body.map(r => r.id)).toEqual(['compliance-1']);
       expect(body[0]._source).toBe('compliance');
+    } finally {
+      await cleanup();
+    }
+  });
+
+  it('the unfiltered listing shows each Claude Chat prompt once, as chat_prompt, beside Cowork rows', async () => {
+    const { client, cleanup } = await setupDb();
+    try {
+      const { schema } = await import('@/lib/db/schema');
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const db = client as any;
+
+      await db.insert(schema.coworkMessages).values([
+        ...CHAT_ROWS,
+        {
+          id: 'cowork-1', session_id: 'sess-cowork', user_id: 'u1',
+          message_type: 'cowork_user_message', surface: 'cowork', source: 'otel',
+          content_full: 'a cowork prompt', content_preview: 'a cowork prompt', occurred_at: 400,
+        },
+      ]);
+
+      const { GET } = await import('@/app/api/events/route');
+      const res = await GET(makeRequest('/api/events'));
+      expect(res.status).toBe(200);
+      const body = await res.json() as Array<{ id: string; event_type: string; surface: string }>;
+
+      // Each id exactly once: the Cowork reader leaves surface 'chat' to the chat reader.
+      expect(body.map(r => r.id).sort()).toEqual(['agent-1', 'compliance-1', 'cowork-1', 'seed-1']);
+      const byId = Object.fromEntries(body.map(r => [r.id, r]));
+      for (const id of ['agent-1', 'compliance-1', 'seed-1']) {
+        expect(byId[id]).toMatchObject({ event_type: 'chat_prompt', surface: 'chat' });
+      }
+      expect(byId['cowork-1']).toMatchObject({ event_type: 'cowork_user_message', surface: 'cowork' });
     } finally {
       await cleanup();
     }

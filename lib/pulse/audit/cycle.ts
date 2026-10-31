@@ -9,6 +9,7 @@ import { getTypedClient } from '@/lib/db/client';
 import { schema } from '@/lib/db/schema';
 import { computeStratum, confidenceBand, isOversampledBand, mulberry32 } from './strata';
 import { reweightedAgreement, quadraticWeightedKappa, confusionMatrix, type AuditItem, type TierPair } from './agreement';
+import { isWorkPulseSurface } from '@/lib/pulse/work-surfaces';
 
 /** Oversample multiplier applied to hard/rare bands when allocating the sample. */
 const OVERSAMPLE_FACTOR = 2;
@@ -120,7 +121,8 @@ export async function drawAuditSample(opts: {
     .innerJoin(cm, eq(cm.id, pc.cowork_message_id))
     .where(and(
       eq(pc.classifier_status, 'classified'),
-      eq(cm.surface, surface),
+      // The Cowork cycle audits the Work Pulse classifier, which also sorts Claude Chat.
+      surface === 'cowork' ? isWorkPulseSurface(cm.surface) : eq(cm.surface, surface),
       gte(cm.occurred_at, start),
       lt(cm.occurred_at, end),
     ));

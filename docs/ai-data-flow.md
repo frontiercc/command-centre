@@ -89,7 +89,7 @@ The table lists every model call in the application. Defaults are the values a f
 
 | Feature | Trigger | Model setting (default) | Data sent | Switch off |
 |---|---|---|---|---|
-| Cowork work classifier | Every 5 minutes, batches of 25 prompts | Cowork classifier model (Haiku) | Claude Cowork prompts, masked, up to 4,000 characters; tool, skill and connector names; pseudonymous ids | Work Pulse off |
+| Cowork work classifier | Every 5 minutes, batches of 25 prompts | Cowork classifier model (Haiku) | Claude Cowork and Claude Chat prompts, masked, up to 4,000 characters; tool, skill and connector names; pseudonymous ids | Work Pulse off |
 | Claude Code session classifier | Every 30 minutes | Code classifier model (Haiku) | Session metadata; first prompt masked, up to 200 characters | Classifier or Developer Pulse off; prompts off sends metadata only |
 | Session descriptions | Hourly, up to 400 sessions | Core AI model (Haiku) | Up to 8 prompts per session, masked, 600 characters each | Session descriptions off |
 | Human time estimates | Hourly (Claude Cowork); with the classifier (Claude Code) | Core AI model; Code classifier model | Up to 8 masked prompts, output file names, connector names, department name | Human time off, per surface |
@@ -129,7 +129,7 @@ Where a call needs to distinguish people or sessions, it uses internal identifie
 
 ### Cowork work classifier
 
-Each Claude Cowork prompt is classified once for its tier of delegation and its kind of work. A batch carries each prompt's stored text (stored prompts are capped at 4,000 characters at ingest) after masking, the session's connector, skill and tool names and counts, and for each person their previously observed tiers and kinds of work, keyed by pseudonymous identifier. Stored tiers are limited to 1, 2 and 3, and the kind of work must come from the configured taxonomy: any other kind of work is recorded as a failed classification and retried, never coerced into a plausible value. Confidence is clamped to the range 0 to 1. From a successful reply, only the labels, the capability flags and the confidence are stored. Switching off Work Pulse stops the classifier.
+Each Claude Cowork and Claude Chat prompt is classified once for its tier of delegation and its kind of work. A batch carries each prompt's stored text (stored prompts are capped at 4,000 characters at ingest) after masking, the session's connector, skill and tool names and counts, and for each person their previously observed tiers and kinds of work, keyed by pseudonymous identifier. Stored tiers are limited to 1, 2 and 3, and the kind of work must come from the configured taxonomy: any other kind of work is recorded as a failed classification and retried, never coerced into a plausible value. Confidence is clamped to the range 0 to 1. From a successful reply, only the labels, the capability flags and the confidence are stored. Switching off Work Pulse stops the classifier.
 
 ### Claude Code session classifier
 
@@ -137,7 +137,7 @@ Each Claude Code session is classified for kind of work and tier once it has bee
 
 ### Session descriptions
 
-For Claude Cowork sessions that the frontier views can show (Tier 3 work or a capability in the last 30 days), a background job writes one sentence describing what the work was. The call carries up to eight of the session's prompts, each masked and truncated to 600 characters, with the classifier's kind of work and the connector names. A reply is accepted only if it is a single sentence of at most 220 characters with no line breaks and every number in it appears in the prompts; one repair attempt is allowed, and a session is abandoned after three refused attempts. The accepted sentence is masked again, labelled "AI summary", shown only to administrators, managers and the person concerned, and deleted when the Cowork retention window for its session passes. Switching descriptions off stops new ones and hides existing ones.
+For Claude Cowork sessions and Claude Chat conversations that the frontier views can show (Tier 3 work or a capability in the last 30 days), a background job writes one sentence describing what the work was. The call carries up to eight of the session's prompts, each masked and truncated to 600 characters, with the classifier's kind of work and the connector names. A reply is accepted only if it is a single sentence of at most 220 characters with no line breaks and every number in it appears in the prompts; one repair attempt is allowed, and a session is abandoned after three refused attempts. The accepted sentence is masked again, labelled "AI summary", shown only to administrators, managers and the person concerned, and deleted when the Cowork retention window for its session passes. Switching descriptions off stops new ones and hides existing ones.
 
 ### Human time estimates
 
@@ -203,7 +203,7 @@ The reply is constrained to a JSON schema with thinking off (on models that cann
 
 ### Weekly Highlights
 
-An administrator can generate a draft post describing what the past week's work produced. The call sends up to eighteen of the week's Tier 3 Claude Cowork prompts, with links and file paths replaced and personal data masked, up to 4,000 characters each, together with each prompt's kind of work. Scheduled-task prompts are excluded, and no name field is sent. The reply may contain no digits, each sentence must cite a supplied item, and the text is masked on the way out. The draft is shown for editing, is never stored, and is sent to Slack only when the administrator chooses to send the edited text.
+An administrator can generate a draft post describing what the past week's work produced. The call sends up to eighteen of the week's Tier 3 Claude Cowork and Claude Chat prompts, with links and file paths replaced and personal data masked, up to 4,000 characters each, together with each prompt's kind of work. Scheduled-task prompts are excluded, and no name field is sent. The reply may contain no digits, each sentence must cite a supplied item, and the text is masked on the way out. The draft is shown for editing, is never stored, and is sent to Slack only when the administrator chooses to send the edited text.
 
 ### Skills discovery
 
@@ -213,9 +213,9 @@ Once a week, and when a user of the Work Pulse skills page asks for a refresh, a
 
 For Claude for Enterprise organisations, Command Centre reads Claude Chat activity back from Anthropic's Compliance API with your Compliance Access Key. The pull involves no model call. Every request is an HTTPS GET to `api.anthropic.com` carrying only the key, pagination cursors, chat identifiers, page sizes, sort order and a date bound; no prompt text, personal data or other content is sent. The sync runs every two minutes by default and asks Anthropic only for messages within the shorter of your Chat retention window and the configured backfill window. The client makes no deletion call.
 
-What comes back is handled under one rule: store what a person sent, describe what Claude did, never store what Claude said. User prompts are stored as text, with the number of files attached, and go through the same personal-data and intent detection as other surfaces. Assistant replies are reduced to metadata: the model, the number of artifacts and generated files, and the names of any connectors it called. Their text is never written to the database. Claude Chat prompts are stored in full rather than truncated to the 4,000-character limit applied to telemetry. The organisation activity feed is a separate, optional sync, off by default, which stores audit-event metadata only.
+What comes back is handled under one rule: store what a person sent, describe what Claude did, never store what Claude said. User prompts are stored as text, beside Claude Cowork prompts, with the names of any attached files, and go through the same personal-data and intent detection as other surfaces. Assistant replies are reduced to metadata: the model, the number of artifacts and generated files, and the names of any connectors it called. Their text is never written to the database. Claude Chat prompts are stored in full rather than truncated to the 4,000-character limit applied to telemetry. The organisation activity feed is a separate, optional sync, off by default, which stores audit-event metadata only.
 
-Within Command Centre, Claude Chat prompt text is sent to a model directly only by the intent severity assessment described above. A governance report can also carry that assessment's reasoning, which may quote the prompt. Claude Chat prompts are not classified, judged or mined.
+Within Command Centre, Claude Chat prompts are part of Work Pulse: the Cowork work classifier sorts each one into a tier and a kind of work, and a conversation with Tier 3 work can receive a session description. Both calls are described above and send the prompt masked. The intent severity assessment also sends prompt text, and a governance report can carry that assessment's reasoning, which may quote the prompt. Claude Chat prompts are not judged against use cases or mined for processes.
 
 ## The Analytics and Admin API pulls
 

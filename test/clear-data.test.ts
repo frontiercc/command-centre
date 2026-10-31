@@ -24,9 +24,12 @@ describe('clearAuditAndAlerts — audit log view + alert view', () => {
 
   it('clears the audit/alert tables + the FK-child pulse records, in FK-safe order', async () => {
     const t = mod.CLEARED_TABLES as readonly string[];
-    for (const expected of ['cowork_messages', 'chat_messages', 'alerts', 'pulse_classifications', 'pulse_events', 'pulse_skill_runs']) {
+    for (const expected of ['cowork_messages', 'alerts', 'pulse_classifications', 'pulse_events', 'pulse_skill_runs']) {
       expect(t).toContain(expected);
     }
+    // Claude Chat prompts are cowork_messages rows (surface 'chat') since
+    // migration 0038, so chat_messages no longer exists to be cleared.
+    expect(t).not.toContain('chat_messages');
     // FK-children must be deleted before their parent cowork_messages
     for (const child of ['pulse_classifications', 'pulse_events', 'pulse_skill_runs']) {
       expect(t.indexOf(child)).toBeLessThan(t.indexOf('cowork_messages'));
@@ -45,6 +48,9 @@ describe('clearAuditAndAlerts — audit log view + alert view', () => {
     const now = Math.floor(Date.now() / 1000);
     await sql.run(`INSERT INTO users (id, email, display_name, source, first_seen_at, last_seen_at) VALUES ('u','u@test','U','otel', ?, ?)`, [now, now]);
     await sql.run(`INSERT INTO cowork_messages (id, user_id, session_id, message_type, occurred_at) VALUES ('m1','u','s','cowork_user_message', ?)`, [now]);
+    // A Claude Chat prompt: a cowork_messages row with surface 'chat', cleared with the rest.
+    await sql.run(`INSERT INTO cowork_messages (id, user_id, session_id, message_type, surface, source, content_preview, content_full, occurred_at)
+                VALUES ('chat1','u','conv1','cowork_user_message','chat','compliance','hi','hi', ?)`, [now]);
     await sql.run(`INSERT INTO pulse_classifications (cowork_message_id, user_id, tier, task_type, classifier_confidence, classifier_model, classified_at)
                 VALUES ('m1','u',2,'feature',0.9,'haiku', ?)`, [now]);
     await sql.run(`INSERT INTO alerts (id, alert_type, severity, title, explanation) VALUES ('a1','anomaly','high','t','e')`);

@@ -3,12 +3,12 @@
 
 // Full chat conversation thread for the audit
 // log, mirroring app/api/cowork/messages/route.ts's session-thread shape.
-// Merges chat_messages (user prompts, real text) with chat_assistant_meta
+// Merges Claude Chat prompts (cowork_messages, surface 'chat', real text) with chat_assistant_meta
 // (assistant turns — model + artifact/generated-file counts, structurally NO
 // text column exists on that table) for one conversation_id, ordered by
 // occurred_at ascending so the thread reads top-to-bottom chronologically.
 import { NextRequest, NextResponse } from 'next/server';
-import { eq } from 'drizzle-orm';
+import { and, eq, sql } from 'drizzle-orm';
 import { getTypedClient } from '@/lib/db/client';
 import { schema } from '@/lib/db/schema';
 import { gateContentRead, scopedDepartment, filterRowsToDepartment } from '@/lib/auth/content-access';
@@ -44,17 +44,19 @@ export async function GET(request: NextRequest) {
 
   // User prompts — real text (may be the retention-strip marker, or even a
   // blank string; never filtered on truthiness so a stripped row still shows).
+  const cm = schema.coworkMessages;
   const promptRows = await filterRowsToDepartment(await client
     .select({
-      id: schema.chatMessages.id,
-      user_id: schema.chatMessages.user_id,
-      prompt_text: schema.chatMessages.prompt_text,
-      occurred_at: schema.chatMessages.occurred_at,
-      flagged: schema.chatMessages.flagged,
-      flag_reason: schema.chatMessages.flag_reason,
+      id: cm.id,
+      user_id: cm.user_id,
+      // A retention-stripped prompt keeps only the marker in content_preview.
+      prompt_text: sql<string>`coalesce(${cm.content_full}, ${cm.content_preview}, '')`,
+      occurred_at: cm.occurred_at,
+      flagged: cm.flagged,
+      flag_reason: cm.flag_reason,
     })
-    .from(schema.chatMessages)
-    .where(eq(schema.chatMessages.conversation_id, conversationId)), department);
+    .from(cm)
+    .where(and(eq(cm.session_id, conversationId), eq(cm.surface, 'chat'), eq(cm.message_type, 'cowork_user_message'))), department);
 
   // Assistant turns — metadata only, no text column exists on this table.
   const assistantRows = await filterRowsToDepartment(await client

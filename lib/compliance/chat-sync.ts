@@ -5,6 +5,10 @@
 // (PII/intent-flagged at ingest, alert-once on first insert), assistant
 // replies as METADATA ONLY (chat_assistant_meta). LIVE-VERIFIED
 // against the Enterprise tenant (real org-wide chats syncing clean).
+//
+// Prompts are stored in cowork_messages with surface 'chat', one session per
+// conversation (cowork_sessions), the same way ChatGPT Chat is stored, so
+// Work Pulse classifies Claude Chat like every other prompt.
 import { sql, eq } from 'drizzle-orm';
 import { v4 as uuidv4 } from 'uuid';
 import { getTypedClient } from '@/lib/db/client';
@@ -16,6 +20,7 @@ import { detectIntent } from '@/lib/intent/detect';
 import { createIntentAlerts } from '@/lib/alerts/intent-alerts';
 import { getCustomCategories } from '@/lib/intent/custom';
 import { getConfigValue, setConfigValue } from '@/lib/config';
+import { CONTENT_PREVIEW_CHARS } from '@/lib/otel/content-limits';
 import { getChatMessages, listChats, ComplianceApiError, type ComplianceChatSummary, type ComplianceChatMessage, type ComplianceTextBlock, type ComplianceToolUseBlock } from './client';
 
 type TypedClient = Awaited<ReturnType<typeof getTypedClient>>;
@@ -204,8 +209,8 @@ export async function syncChat(
         if (!promptText) continue;
 
         // Alert-once gate: only flag + alert when the row is NEW.
-        const exists = await tx.select({ one: sql<number>`1` }).from(schema.chatMessages)
-          .where(eq(schema.chatMessages.id, msg.id)).limit(1);
+        const exists = await tx.select({ one: sql<number>`1` }).from(schema.coworkMessages)
+          .where(eq(schema.coworkMessages.id, msg.id)).limit(1);
         if (exists.length > 0) continue;
 
         const piiHits = detectPii(promptText);
@@ -215,14 +220,35 @@ export async function syncChat(
         if (intentMatches.length > 0) reasons.push(`Intent detected: ${intentMatches.map(m => m.categoryId).join(', ')}`);
         const flagReason = reasons.length > 0 ? reasons.join(' | ') : null;
 
-        await tx.insert(schema.chatMessages).values({
-          id: msg.id, conversation_id: chat.id, user_id: userId,
-          prompt_text: promptText, prompt_length: promptText.length,
-          attachments_count: (msg.files || []).length, files_count: (msg.files || []).length,
+        await tx.insert(schema.coworkMessages).values({
+          id: msg.id, session_id: chat.id, user_id: userId,
+          message_type: 'cowork_user_message', surface: 'chat', source: 'compliance',
+          model: chat.model ?? null,
+          // The full prompt is kept, as it always was for Claude Chat.
+          content_preview: promptText.slice(0, CONTENT_PREVIEW_CHARS), content_full: promptText,
           flagged: flagReason ? 1 : 0, flag_reason: flagReason,
-          occurred_at: occurredAt, agent_id: null, source: 'compliance',
+          occurred_at: occurredAt, agent_id: null,
         }).onConflictDoNothing();
         prompts++;
+
+        // One session per conversation; attached file names join its uploads.
+        await tx.insert(schema.coworkSessions).values({
+          id: chat.id, conversation_id: chat.id, user_id: userId, source: 'compliance',
+          started_at: occurredAt, created_at: nowS,
+        }).onConflictDoNothing();
+        await tx.update(schema.coworkSessions)
+          .set({ started_at: sql`LEAST(COALESCE(${schema.coworkSessions.started_at}, ${occurredAt}), ${occurredAt})` })
+          .where(eq(schema.coworkSessions.id, chat.id));
+        const fileNames = (msg.files || []).map(f => f.filename).filter((n): n is string => !!n);
+        if (fileNames.length > 0) {
+          const current = (await tx.select({ files: schema.coworkSessions.files_uploaded })
+            .from(schema.coworkSessions).where(eq(schema.coworkSessions.id, chat.id)).limit(1))[0];
+          let existing: string[] = [];
+          try { existing = current?.files ? JSON.parse(current.files) : []; } catch { existing = []; }
+          await tx.update(schema.coworkSessions)
+            .set({ files_uploaded: JSON.stringify(Array.from(new Set([...existing, ...fileNames]))) })
+            .where(eq(schema.coworkSessions.id, chat.id));
+        }
 
         if (piiHits.length > 0) pendingPiiAlerts.push({ flagReason: flagReason!, messageId: msg.id, text: promptText });
         if (intentMatches.length > 0) pendingIntentAlerts.push({ messageId: msg.id, text: promptText, matches: intentMatches });

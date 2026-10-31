@@ -18,6 +18,7 @@ import {
   type ClassifierEvent,
   type UserHistory,
 } from '@/lib/pulse/prompts/tier-classification';
+import { isWorkPulseSurface } from '@/lib/pulse/work-surfaces';
 
 // ─── Phase 3 raw-execution facade (mirrors lib/db/queries.ts's rawAll) ────────
 // Reserved for the one query below that's clearer as raw SQL (a NOT IN
@@ -420,7 +421,7 @@ const MAX_ATTEMPTS = 5;
 
 /**
  * Run one classification cycle:
- * 1. Fetch up to BATCH_SIZE unclassified cowork_messages rows (surface = 'cowork').
+ * 1. Fetch up to BATCH_SIZE unclassified cowork_messages rows (Work Pulse surfaces: 'cowork' and Claude Chat's 'chat').
  * 2. Call the Anthropic API in one batch.
  * 3. Write results to pulse_classifications.
  * 4. After MAX_ATTEMPTS failures on the same row, mark it as 'failed'.
@@ -447,7 +448,7 @@ export async function runClassifierJob(): Promise<DrainPassResult> {
        cm.tool_name,
        cm.occurred_at
      FROM cowork_messages cm
-     WHERE cm.surface = 'cowork'
+     WHERE ${isWorkPulseSurface(sql`cm.surface`)}
        AND cm.message_type = 'cowork_user_message'
        -- Never judge a prompt whose text retention has removed: the model
        -- would see only the marker and overwrite a real label with tier 1

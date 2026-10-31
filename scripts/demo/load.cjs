@@ -95,16 +95,14 @@ const run = (cmd, args) => execFileSync(cmd, args, { stdio: 'inherit', env: proc
   // never sets these, because it writes straight to the tables. Those records
   // can be missing (telemetry from before they existed, or a Compliance key
   // since removed), so any Cowork, Claude Code or Chat message whose id does
-  // not carry a sample prefix also counts as real.
+  // not carry a sample prefix also counts as real. All three live in
+  // cowork_messages (Claude Chat as surface 'chat' since migration 0038).
   const markers = await db.query(
     "SELECT key FROM config WHERE key IN ('setup_first_code_at', 'setup_first_cowork_at', 'compliance_last_sync_at')");
   const samplePatterns = STEPS.map(([prefix]) => `${prefix}%`);
   const notSample = samplePatterns.map((_, i) => `id NOT LIKE $${i + 1}`).join(' AND ');
-  let realMessages = 0;
-  for (const table of ['cowork_messages', 'chat_messages']) {
-    const r = await db.query(`SELECT COUNT(*)::int AS n FROM ${table} WHERE ${notSample}`, samplePatterns);
-    realMessages += r.rows[0].n;
-  }
+  const real = await db.query(`SELECT COUNT(*)::int AS n FROM cowork_messages WHERE ${notSample}`, samplePatterns);
+  const realMessages = real.rows[0].n;
   if ((markers.rows.length > 0 || realMessages > 0) && process.env.SAMPLE_DATA_FORCE !== '1') {
     console.error('This installation already holds real Claude data, so sample data was not loaded.');
     console.error('Sample data mixes invented activity into existing records. Use it only on an');

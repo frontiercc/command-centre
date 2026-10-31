@@ -5,7 +5,7 @@ import { and, eq, gte, sql } from 'drizzle-orm';
 import { getConfigValue, getDataSourceStatus } from '@/lib/config';
 import { getTypedClient } from '@/lib/db/client';
 import { schema } from '@/lib/db/schema';
-import { getOpenAlertsBySeverity, getSurfaceBreakdown, getChatFlaggedCount } from '@/lib/db/queries';
+import { getOpenAlertsBySeverity, getSurfaceBreakdown } from '@/lib/db/queries';
 import { PII_PATTERNS } from '@/lib/pii/detect';
 
 // ─── Helpers ──────────────────────────────────────────────────────────────
@@ -21,8 +21,7 @@ function capitalize(s: string): string {
 
 /**
  * Count PII detections in the report period (occurred_at >= startUnix):
- *   1. chat_messages flagged
- *   2. cowork_messages flagged (Cowork and Code)
+ *   cowork_messages flagged (Cowork, Code and Claude Chat, surface 'chat')
  * Each PII alert is raised from one of these flagged prompts, so the alerts
  * table is deliberately NOT added — it would count the same detection twice.
  * (A query against a non-existent compliance_events.alert_type column used to
@@ -31,8 +30,6 @@ function capitalize(s: string): string {
  */
 async function countPiiDetections(startUnix: number): Promise<number> {
   let total = 0;
-
-  total += await getChatFlaggedCount(startUnix);
 
   try {
     const db = await getTypedClient();

@@ -16,6 +16,7 @@ import { desc, eq, sql } from 'drizzle-orm';
 import { getAdminSession } from '@/lib/auth/admin-auth';
 import { getTypedClient } from '@/lib/db/client';
 import { schema } from '@/lib/db/schema';
+import { isWorkPulseSurface } from '@/lib/pulse/work-surfaces';
 
 export const dynamic = 'force-dynamic';
 
@@ -57,7 +58,7 @@ export async function GET(request: NextRequest) {
   // every cowork message here would leave tool/api rows permanently "queued".
   const queueDepthRow = await rawGet<{ cnt: number | string }>(client, sql`
      SELECT COUNT(*) as cnt FROM cowork_messages
-     WHERE surface = 'cowork'
+     WHERE ${isWorkPulseSurface(sql`surface`)}
        AND message_type = 'cowork_user_message'
        AND COALESCE(content_full, content_preview, '') <> ${STRIPPED_MARKER}
        AND id NOT IN (

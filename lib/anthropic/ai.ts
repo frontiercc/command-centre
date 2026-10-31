@@ -478,7 +478,7 @@ export async function generateGovernanceReport(
   // deployment — a compliance report claiming the wrong capture mechanism (and,
   // for Cowork, claiming assistant responses are stored when they are not) is
   // worse than no statement at all. Derived from live signals instead:
-  // users.source='otel' for the OTLP path, chat_messages.source for Chat.
+  // users.source='otel' for the OTLP path, the Claude Chat rows' own source for Chat.
   const otelPath = dataSources.otelCowork;
 
   const captureLabel = (surface: 'cowork' | 'code'): string => {
@@ -490,8 +490,9 @@ export async function generateGovernanceReport(
   let chatSources: string[] = [];
   try {
     const chatSourceRows = await dbClient
-      .selectDistinct({ source: schema.chatMessages.source })
-      .from(schema.chatMessages);
+      .selectDistinct({ source: schema.coworkMessages.source })
+      .from(schema.coworkMessages)
+      .where(eq(schema.coworkMessages.surface, 'chat'));
     chatSources = chatSourceRows.map(r => r.source).filter(Boolean);
   } catch { /* table may not exist */ }
   const chatCaptureLabel = chatSources.length === 0

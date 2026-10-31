@@ -56,15 +56,15 @@ interface CoworkEventRow {
 
 interface ChatEventRow {
   id: string;
-  conversation_id: string | null;
+  session_id: string;
   user_id: string | null;
-  prompt_text: string;
-  prompt_length: number;
+  content_full: string | null;
+  content_preview: string | null;
   flagged: number;
   flag_reason: string | null;
+  pii_verdict_reason: string | null;
   occurred_at: number;
   ingested_at: number;
-  agent_id: string | null;
   source: string;
 }
 
@@ -108,6 +108,8 @@ async function getCoworkEventsForAudit(filters: {
     if (filters.dateFrom) conditions.push(sql`cm.occurred_at >= ${filters.dateFrom}`);
     if (filters.dateTo) conditions.push(sql`cm.occurred_at <= ${filters.dateTo}`);
     if (filters.surface) conditions.push(sql`cm.surface = ${filters.surface}`);
+    // Claude Chat prompts (surface 'chat') are listed by getChatEventsForAudit.
+    else conditions.push(sql`COALESCE(cm.surface, '') <> 'chat'`);
     if (filters.source) conditions.push(sql`cm.source = ${filters.source}`);
     if (filters.search) {
       // UUID-shaped = exact ID match, otherwise content/user search
@@ -384,7 +386,8 @@ async function getSkillConnectorEventsForAudit(filters: {
 }
 
 /**
- * Get chat messages projected into audit event shape.
+ * Get Claude Chat prompts (cowork_messages, surface 'chat') projected into
+ * audit event shape.
  */
 async function getChatEventsForAudit(filters: {
   userId?: string;
@@ -413,10 +416,10 @@ async function getChatEventsForAudit(filters: {
 }>> {
   try {
     const client = await getTypedClient();
-    const conditions: SQL[] = [];
+    const conditions: SQL[] = [sql`cm.surface = 'chat'`, sql`cm.message_type = 'cowork_user_message'`];
 
     if (filters.userId) conditions.push(sql`cm.user_id = ${filters.userId}`);
-    if (filters.department) conditions.push(sql`u.department = ${filters.department}`);
+    if (filters.department) conditions.push(sql`COALESCE(au.department, u.department) = ${filters.department}`);
     if (filters.flaggedOnly) conditions.push(sql`cm.flagged = 1`);
     if (filters.dateFrom) conditions.push(sql`cm.occurred_at >= ${filters.dateFrom}`);
     if (filters.dateTo) conditions.push(sql`cm.occurred_at <= ${filters.dateTo}`);
@@ -430,37 +433,46 @@ async function getChatEventsForAudit(filters: {
       } else {
         const like = `%${filters.search}%`;
         const kw = likeKeyword();
-        conditions.push(sql`(cm.prompt_text ${kw} ${like} OR cm.user_id ${kw} ${like})`);
+        conditions.push(sql`(cm.content_full ${kw} ${like} OR cm.user_id ${kw} ${like})`);
       }
     }
 
-    const where = conditions.length > 0 ? sql`WHERE ${sql.join(conditions, sql` AND `)}` : sql``;
+    const where = sql`WHERE ${sql.join(conditions, sql` AND `)}`;
     const limit = filters.limit || 100;
     const offset = filters.offset || 0;
 
     const rows = await rawAll<ChatEventRow & { user_display_name: string | null; user_department: string | null }>(client, sql`
-       SELECT cm.*, u.display_name as user_display_name, u.department as user_department
-       FROM chat_messages cm
+       SELECT cm.id, cm.session_id, cm.user_id, cm.content_full, cm.content_preview, cm.flagged, cm.flag_reason, cm.pii_verdict_reason,
+              cm.occurred_at, cm.ingested_at, cm.source,
+              COALESCE(au.display_name, u.display_name) as user_display_name,
+              COALESCE(au.department, u.department) as user_department
+       FROM cowork_messages cm
        LEFT JOIN users u ON cm.user_id = u.id
+       LEFT JOIN admin_users au ON au.linked_cowork_user_id = cm.user_id
        ${where}
        ORDER BY cm.occurred_at DESC LIMIT ${limit} OFFSET ${offset}
     `);
 
-    return rows.map(r => ({
-      id: r.id,
-      user_id: r.user_display_name || r.user_id || 'unknown',
-      department: r.user_department ?? null,
-      event_type: 'chat_prompt',
-      surface: 'chat',
-      content_preview: r.prompt_text.length > 120 ? r.prompt_text.slice(0, 120) + '...' : r.prompt_text,
-      metadata: JSON.stringify({ conversation_id: r.conversation_id, prompt_length: r.prompt_length }),
-      flagged: r.flagged,
-      flag_reason: r.flag_reason,
-      occurred_at: r.occurred_at,
-      ingested_at: r.ingested_at,
-      session_id: r.conversation_id || '',
-      _source: sourceBadge(r.source),
-    }));
+    return rows.map(r => {
+      // A retention-stripped prompt keeps only the marker in content_preview.
+      const text = r.content_full ?? r.content_preview ?? '';
+      return {
+        id: r.id,
+        user_id: r.user_display_name || r.user_id || 'unknown',
+        department: r.user_department ?? null,
+        event_type: 'chat_prompt',
+        surface: 'chat',
+        content_preview: text.length > 120 ? text.slice(0, 120) + '...' : text,
+        metadata: JSON.stringify({ conversation_id: r.session_id, prompt_length: text.length }),
+        flagged: r.flagged,
+        flag_reason: r.flag_reason,
+        pii_verdict_reason: r.pii_verdict_reason ?? null,
+        occurred_at: r.occurred_at,
+        ingested_at: r.ingested_at,
+        session_id: r.session_id || '',
+        _source: sourceBadge(r.source),
+      };
+    });
   } catch {
     return [];
   }

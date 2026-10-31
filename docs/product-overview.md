@@ -45,7 +45,7 @@ Command Centre flags personal data, secrets, risky intent, anomalies, spend thre
 
 **Work Pulse**
 
-Work Pulse shows how deeply your people hand work to Claude, from routine tasks to multi-step work and whole processes. Work Pulse grades Claude Cowork activity against three tiers you can edit, follows each person's progress, compares departments, and shows whether deeper capability is spreading or sitting with a few people.
+Work Pulse shows how deeply your people hand work to Claude, from routine tasks to multi-step work and whole processes. Work Pulse grades Claude Cowork and Claude Chat activity against three tiers you can edit, follows each person's progress, compares departments, and shows whether deeper capability is spreading or sitting with a few people.
 
 Work Pulse also surfaces new kinds of work, standout individual contributions and outputs such as documents and files. Managers see where to coach; leaders see whether their investment is changing how work gets done. Every grade is labelled as an AI judgement, and an administrator can sample grades for human review.
 
@@ -206,7 +206,7 @@ The dashboard is the landing page for administrators, managers and viewers. The 
 
 ## Work Pulse
 
-Work Pulse is the productivity view of Claude Cowork work, with an executive view, a department view, a list of people, a personal view ("My Pulse") and a view of skills and connectors in use.
+Work Pulse is the productivity view of Claude Cowork and Claude Chat work, with an executive view, a department view, a list of people, a personal view ("My Pulse") and a view of skills and connectors in use.
 
 The executive view opens with five headline figures: people working in Claude Cowork each week, the share of work at Tier 2 or 3, output against baseline, delegation depth, and concentration (the share of the last 14 days' Tier 3 work carried by the three people who did the most of it). Beneath them sit the four signals, a department table and a "what to act on next" panel listing suggested department processes and coaching opportunities and, for administrators and managers when Model Efficiency is on, kinds of work where a cheaper model merits review.
 
@@ -403,7 +403,7 @@ Administrators reach these from **Admin** in the sidebar.
 | **Access Audit** | Keeps an unalterable record of who read what and when, including prompt text, exports and reports, as evidence for security reviews and audits. | [Audit logging](security-and-data-protection.md#audit-logging) |
 | **Files** | Lists the files people attached to Claude Cowork sessions across the organisation, with a breakdown by kind of document. | |
 | ***Products*** | | |
-| **Work Pulse** | Configures how Claude Cowork work is graded: the AI models, the tier definitions and optional features, with drill-downs by person and department, classifier health, and a monthly audit an administrator can run against the AI's grades. | [Work Pulse](#work-pulse) · [Measured and AI-judged](ai-data-flow.md#measured-and-ai-judged) |
+| **Work Pulse** | Configures how Claude Cowork and Claude Chat work is graded: the AI models, the tier definitions and optional features, with drill-downs by person and department, classifier health, and a monthly audit an administrator can run against the AI's grades. | [Work Pulse](#work-pulse) · [Measured and AI-judged](ai-data-flow.md#measured-and-ai-judged) |
 | **Developer Pulse** | Configures Claude Code analytics: the grading models and tiers, the model prices used for spend, the GitHub connection, the assumptions behind the value estimate, and checks on data quality and classifier health. | [Developer Pulse](#developer-pulse) |
 | **Use Cases** | Switches Use Cases on and sets how it works: the models used, when a use case counts as adopted or at risk, how suggestions and session matching behave, skill drafting, and the assumptions behind the governance value estimate. | [Use Cases](#use-cases) |
 | **Cost Centres** | Groups departments into the cost centres your finance team uses, with their codes, so FinOps can charge AI spend back to the right budget. | [Chargeback and period close](#chargeback-and-period-close) |

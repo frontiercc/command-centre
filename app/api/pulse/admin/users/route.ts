@@ -21,6 +21,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { sql } from 'drizzle-orm';
 import { getAdminSession, canAccessCoworkPulse, isDeptScoped } from '@/lib/auth/admin-auth';
 import { getTypedClient } from '@/lib/db/client';
+import { isWorkPulseSurface } from '@/lib/pulse/work-surfaces';
 
 export const dynamic = 'force-dynamic';
 
@@ -99,9 +100,9 @@ export async function GET(request: NextRequest) {
          WHERE scope_id = u.id AND scope_type = 'user'
          ORDER BY generated_at DESC LIMIT 1) AS last_briefing_at,
        (SELECT MAX(occurred_at) FROM cowork_messages
-         WHERE user_id = u.id AND surface = 'cowork') AS last_active_at,
+         WHERE user_id = u.id AND ${isWorkPulseSurface(sql`surface`)}) AS last_active_at,
        (SELECT COUNT(*) FROM cowork_messages cm2
-         WHERE cm2.user_id = u.id AND cm2.surface = 'cowork'
+         WHERE cm2.user_id = u.id AND ${isWorkPulseSurface(sql`cm2.surface`)}
            AND cm2.message_type = 'cowork_user_message'
            AND cm2.id NOT IN (
              SELECT cowork_message_id FROM pulse_classifications
@@ -121,7 +122,7 @@ export async function GET(request: NextRequest) {
        )
      WHERE EXISTS (
        SELECT 1 FROM cowork_messages
-       WHERE user_id = u.id AND surface = 'cowork'
+       WHERE user_id = u.id AND ${isWorkPulseSurface(sql`surface`)}
      )
      ${deptFilter ? sql`AND u.department = ${deptFilter}` : sql``}
      ORDER BY pm.dds DESC NULLS LAST, u.display_name ASC

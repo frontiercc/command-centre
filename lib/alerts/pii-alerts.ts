@@ -171,7 +171,8 @@ export async function createPiiAlertsWithDedup(
   // never undo an alert that was correctly raised.
   if (verdicts.size > 0) {
     try {
-      const table = surface === 'chat' ? schema.chatMessages : schema.coworkMessages;
+      // Every prompt, Claude Chat included (surface 'chat'), lives in cowork_messages.
+      const table = schema.coworkMessages;
 
       const attemptWrite = async (): Promise<boolean> => {
         const rows = await client
@@ -187,11 +188,8 @@ export async function createPiiAlertsWithDedup(
         // way) — so eq(table.flag_reason, existing) never has to compare
         // against null, which is not valid SQL equality.
         if (existing === null || next === null || next === existing) return true;
-        // chat_messages has no pii_verdict_reason column — the Compliance
-        // path does not run the confirmation check, so the reason is written
-        // only on the cowork/code table.
         const patch: Record<string, unknown> = { flag_reason: next };
-        if (reasons.length > 0 && table === schema.coworkMessages) {
+        if (reasons.length > 0) {
           patch.pii_verdict_reason = reasons.join(' | ').slice(0, 1000);
         }
         const result = await client

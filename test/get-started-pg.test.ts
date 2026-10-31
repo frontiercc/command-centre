@@ -37,7 +37,9 @@ beforeEach(async () => {
   delete process.env.CCC_SAMPLE_DATA;
   fm.resetFirstTelemetryForTests();
   await sql.exec(`DELETE FROM config; DELETE FROM pulse_rubric_versions; DELETE FROM admin_users;
-    DELETE FROM users; DELETE FROM cowork_messages; DELETE FROM code_otel_metrics; DELETE FROM chat_messages;`);
+    DELETE FROM users; DELETE FROM cowork_messages; DELETE FROM code_otel_metrics;`);
+  // Claude Chat prompts are cowork_messages rows (surface 'chat'), so the
+  // cowork_messages delete above clears them too.
 });
 
 afterEach(() => {

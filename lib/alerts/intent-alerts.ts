@@ -19,13 +19,6 @@ import { insertAlert } from '@/lib/db/queries';
 import { assessIntent } from '@/lib/intent/assess';
 import type { IntentMatch } from '@/lib/intent/types';
 
-/**
- * Map surface name to the Drizzle table that holds the message.
- * Chat messages live in chat_messages; Code and Cowork live in cowork_messages.
- */
-function tableForSurface(surface: string) {
-  return surface === 'chat' ? schema.chatMessages : schema.coworkMessages;
-}
 
 export async function createIntentAlerts(
   userId: string | null,
@@ -62,7 +55,8 @@ export async function createIntentAlerts(
   // Enrich the source message's flag_reason with AI-assessed severity
   // so the audit log shows severity without jumping to the alerts page
   try {
-    const table = tableForSurface(surface);
+    // Every prompt, Claude Chat included (surface 'chat'), lives in cowork_messages.
+    const table = schema.coworkMessages;
     const categories = matches.map(m => m.categoryId).join(', ');
     const enrichedReason = `Intent detected: ${categories} (${assessment.severity})`;
 

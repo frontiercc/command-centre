@@ -32,7 +32,9 @@ const CLEAN_ONLY = process.argv.includes('--clean');
 const PREVIEW_CHARS = 250; // lib/otel/content-limits.ts CONTENT_PREVIEW_CHARS
 // Seeded rows this script enriches: ff- ff2- ff3- ff4- ff5- ff8-. Never ff6-
 // (flagged prompts get lead-ins instead), ff9- (already realistic), ff10+ or
-// any real (non-ff) row.
+// any real (non-ff) row. Nor ff7-: the Claude Chat prompts 05-chat.cjs writes
+// share cowork_messages (surface 'chat') since migration 0038, and are left as
+// they are, as they were when they had a table of their own.
 const ENRICH_ID = '^ff[2-58]?-';
 
 const norm = (s) => String(s || '').replace(/[‘’]/g, "'").replace(/\s+/g, ' ').trim();

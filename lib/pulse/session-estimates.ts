@@ -17,7 +17,7 @@
 //   - a model-call ERROR counts nothing: the run stops and reports it.
 // Off unless humanTimeEnabled='true'.
 import { createAnthropicClient } from '@/lib/anthropic/client';
-import { and, eq, gt, gte, inArray, isNull, lt, or, sql } from 'drizzle-orm';
+import { and, eq, gt, gte, inArray, isNull, lt, sql } from 'drizzle-orm';
 import { getTypedClient } from '@/lib/db/client';
 import { schema } from '@/lib/db/schema';
 import { getConfigValue } from '@/lib/config';
@@ -26,6 +26,7 @@ import { getCoreAiModel } from '@/lib/anthropic/model';
 import { redactPii } from '@/lib/pii/detect';
 import { queueAiCall } from '@/lib/ingestion/scheduler';
 import { coworkHumanTimeInstruction, parseHumanMinutes, type HumanMinutes } from '@/lib/pulse/human-time';
+import { isWorkPulseSurface } from '@/lib/pulse/work-surfaces';
 
 const DAY = 86400;
 export const WINDOW_DAYS = 30;
@@ -95,7 +96,7 @@ async function candidateSessions(client: Awaited<ReturnType<typeof getTypedClien
     .from(pc)
     .innerJoin(cm, eq(cm.id, pc.cowork_message_id))
     .where(and(eq(pc.classifier_status, 'classified'), gte(pc.tier, 2), gte(cm.occurred_at, since),
-      or(eq(cm.surface, 'cowork'), isNull(cm.surface))))
+      isWorkPulseSurface(cm.surface, true)))
     .groupBy(cm.session_id);
   const latest = new Map<string, number>();
   for (const r of deep) if (r.session_id) latest.set(r.session_id, Number(r.at));

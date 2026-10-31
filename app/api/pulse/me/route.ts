@@ -21,6 +21,7 @@ import { getPublishedAgreement } from '@/lib/pulse/audit/cycle';
 import { readHumanTime } from '@/lib/pulse/human-time-summary';
 import { getAllConfig } from '@/lib/config';
 import { canViewSpendReview } from '@/lib/finance/spend-review-access';
+import { isWorkPulseSurface } from '@/lib/pulse/work-surfaces';
 
 // OTI's interpretive status line is gated on the classifier accuracy audit
 // clearing its substantial-agreement floor. No scored audit yet, or below the
@@ -270,7 +271,7 @@ export async function GET(request: NextRequest) {
   // subquery kept as one raw statement.
   const pendingRow = await rawGet<{ cnt: number | string }>(client, sql`
     SELECT COUNT(*) as cnt FROM cowork_messages cm
-    WHERE cm.surface = 'cowork' AND cm.user_id = ${userId}
+    WHERE ${isWorkPulseSurface(sql`cm.surface`)} AND cm.user_id = ${userId}
       AND cm.message_type = 'cowork_user_message'
       AND cm.id NOT IN (
         SELECT cowork_message_id FROM pulse_classifications

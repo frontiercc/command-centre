@@ -7,7 +7,7 @@
 // folded through `and()`, which avoids raw-SQL/bigint coercion (Drizzle's own
 // bigint({mode:'number'}) column codec decodes occurred_at correctly).
 import { NextRequest, NextResponse } from 'next/server';
-import { and, asc, eq, gte, lte, notInArray, type SQL } from 'drizzle-orm';
+import { and, asc, eq, gte, isNull, lte, ne, notInArray, or, sql, type SQL } from 'drizzle-orm';
 import { getTypedClient } from '@/lib/db/client';
 import { schema } from '@/lib/db/schema';
 import { getAdminSession } from '@/lib/auth/admin-auth';
@@ -52,6 +52,8 @@ export async function GET(request: NextRequest) {
       notInArray(cm.message_type, ['cowork_tool_summary', 'cowork_message', 'cowork_session_init']),
     ];
     if (surface !== 'all') conditions.push(eq(cm.surface, surface));
+    // Claude Chat prompts (surface 'chat') are exported in the Chat block below.
+    else conditions.push(or(isNull(cm.surface), ne(cm.surface, 'chat'))!);
     if (dateFrom) conditions.push(gte(cm.occurred_at, dateFrom));
     if (dateTo) conditions.push(lte(cm.occurred_at, dateTo));
 
@@ -79,9 +81,10 @@ export async function GET(request: NextRequest) {
 
   // Chat messages
   if (surface === 'all' || surface === 'chat') {
-    const chm = schema.chatMessages;
+    // Claude Chat prompts: cowork_messages, surface 'chat'.
+    const chm = schema.coworkMessages;
     const u = schema.users;
-    const conditions: SQL[] = [];
+    const conditions: SQL[] = [eq(chm.surface, 'chat'), eq(chm.message_type, 'cowork_user_message')];
     if (dateFrom) conditions.push(gte(chm.occurred_at, dateFrom));
     if (dateTo) conditions.push(lte(chm.occurred_at, dateTo));
 
@@ -91,11 +94,11 @@ export async function GET(request: NextRequest) {
         display_name: u.display_name,
         user_id: chm.user_id,
         department: u.department,
-        prompt_text: chm.prompt_text,
+        prompt_text: sql<string | null>`coalesce(${chm.content_full}, ${chm.content_preview})`,
       })
       .from(chm)
       .leftJoin(u, eq(chm.user_id, u.id))
-      .where(conditions.length ? and(...conditions) : undefined)
+      .where(and(...conditions))
       .orderBy(asc(chm.occurred_at));
 
     for (const r of rows) {

@@ -22,7 +22,7 @@
 // part of a person's data erasure. Off when pulseSessionDescriptionsEnabled='false'.
 // Who may SEE a description is decided in the API routes, not here.
 import { createAnthropicClient } from '@/lib/anthropic/client';
-import { and, eq, gte, inArray, isNull, or, sql } from 'drizzle-orm';
+import { and, eq, gte, inArray, or, sql } from 'drizzle-orm';
 import { getTypedClient } from '@/lib/db/client';
 import { schema } from '@/lib/db/schema';
 import { getConfigValue } from '@/lib/config';
@@ -31,6 +31,7 @@ import { getCoreAiModel } from '@/lib/anthropic/model';
 import { extractNumbers, ungroundedNumbers } from '@/lib/anthropic/grounded-narrative';
 import { redactPii } from '@/lib/pii/detect';
 import { queueAiCall } from '@/lib/ingestion/scheduler';
+import { isWorkPulseSurface } from '@/lib/pulse/work-surfaces';
 
 const DAY = 86400;
 export const WINDOW_DAYS = 30;
@@ -136,7 +137,7 @@ async function candidateSessions(client: Awaited<ReturnType<typeof getTypedClien
     .from(pc)
     .innerJoin(cm, eq(cm.id, pc.cowork_message_id))
     .where(and(eq(pc.classifier_status, 'classified'), eq(pc.tier, 3), gte(cm.occurred_at, since),
-      or(eq(cm.surface, 'cowork'), isNull(cm.surface))))
+      isWorkPulseSurface(cm.surface, true)))
     .groupBy(cm.session_id);
   const caps = await client
     .select({ session_id: cm.session_id, at: sql<number>`max(${pe.detected_at})` })

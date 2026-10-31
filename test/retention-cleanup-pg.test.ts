@@ -26,7 +26,7 @@ async function runSpec(): Promise<void> {
     const { schema } = await import('@/lib/db/schema');
     const { runRetentionCleanup } = await import('@/lib/retention/cleanup');
     const { setConfigValue } = await import('@/lib/config');
-    const { eq } = await import('drizzle-orm');
+    const { eq, ne } = await import('drizzle-orm');
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     const db = client as any;
 
@@ -39,10 +39,14 @@ async function runSpec(): Promise<void> {
     await setConfigValue('retentionOtelDays', '7');
     await setConfigValue('retentionComplianceDays', '7');
     await setConfigValue('retentionErrorDays', '7');
-    await setConfigValue('retentionChatDays', '7');
+    // Claude Chat prompts (cowork_messages, surface 'chat') follow their own
+    // window, retentionChatDays, not the Cowork one: a longer window here
+    // proves a chat prompt past the Cowork cutoff but inside its own is kept.
+    await setConfigValue('retentionChatDays', '30');
 
     const oldTs = NOW - 10 * DAY; // past the 7-day cutoff
     const newTs = NOW - 1 * DAY; // inside the 7-day window
+    const chatOldTs = NOW - 40 * DAY; // past the 30-day Claude Chat cutoff
 
     await db.insert(schema.coworkMessages).values([
       { id: 'cw-old', session_id: 'sess-1', message_type: 'assistant', occurred_at: oldTs, surface: 'cowork', source: 'agent' },
@@ -60,35 +64,52 @@ async function runSpec(): Promise<void> {
       { occurred_at: oldTs, severity: 'error', source: 'test', message: 'old error' },
       { occurred_at: newTs, severity: 'error', source: 'test', message: 'new error' },
     ]);
-    await db.insert(schema.chatMessages).values([
-      { id: 'chat-old', prompt_text: 'old prompt', prompt_length: 10, occurred_at: oldTs },
-      { id: 'chat-new', prompt_text: 'new prompt', prompt_length: 10, occurred_at: newTs },
+    // Claude Chat prompts, as the Compliance API sync writes them.
+    const chatPrompt = (id: string, occurredAt: number, text: string) => ({
+      id, session_id: `conv-${id}`, user_id: 'chat-user', message_type: 'cowork_user_message',
+      surface: 'chat', source: 'compliance', content_full: text, content_preview: text, occurred_at: occurredAt,
+    });
+    await db.insert(schema.users).values({ id: 'chat-user', email: 'chat-user@test.local' });
+    await db.insert(schema.coworkMessages).values([
+      chatPrompt('chat-old', chatOldTs, 'old prompt'),
+      chatPrompt('chat-mid', oldTs, 'mid prompt'), // past the Cowork window, inside the Chat one
+      chatPrompt('chat-new', newTs, 'new prompt'),
+    ]);
+    // Work Pulse classifies Claude Chat prompts like any other, so their
+    // pulse_classifications children must go with them on the Chat window
+    // (the FK would otherwise refuse the purge), and stay with a kept prompt.
+    await db.insert(schema.pulseClassifications).values([
+      { cowork_message_id: 'chat-old', user_id: 'chat-user', tier: 1, task_type: 'analysis', classifier_confidence: 0.9, classifier_model: 'haiku', classified_at: chatOldTs },
+      { cowork_message_id: 'chat-mid', user_id: 'chat-user', tier: 1, task_type: 'analysis', classifier_confidence: 0.9, classifier_model: 'haiku', classified_at: oldTs },
     ]);
     await db.insert(schema.chatAssistantMeta).values([
-      { id: 'chat-meta-old', occurred_at: oldTs },
+      { id: 'chat-meta-old', occurred_at: chatOldTs },
       { id: 'chat-meta-new', occurred_at: newTs },
     ]);
 
     const purgeResult = await runRetentionCleanup();
     expect(purgeResult.mode).toBe('purge');
+    // cw-old only: the Claude Chat rows in cowork_messages are not Cowork.
     expect(purgeResult.cowork_rows_affected).toBe(1);
     expect(purgeResult.otel_rows_affected).toBe(1);
     expect(purgeResult.compliance_rows_affected).toBe(1);
     expect(purgeResult.error_rows_affected).toBe(1);
-    // chat_rows_affected sums chat_messages (1) + chat_assistant_meta (1)
-    // purged in the same window.
+    // chat_rows_affected sums the Claude Chat prompts (chat-old, 1) +
+    // chat_assistant_meta (1) purged on the same window.
     expect(purgeResult.chat_rows_affected).toBe(2);
 
-    const remainingCowork = await db.select().from(schema.coworkMessages);
+    const remainingCowork = await db.select().from(schema.coworkMessages).where(ne(schema.coworkMessages.surface, 'chat'));
     expect(remainingCowork.map((r: { id: string }) => r.id)).toEqual(['cw-new']);
+    const remainingChatPrompts = await db.select().from(schema.coworkMessages).where(eq(schema.coworkMessages.surface, 'chat'));
+    expect(remainingChatPrompts.map((r: { id: string }) => r.id).sort()).toEqual(['chat-mid', 'chat-new']);
+    const remainingChatClassifications = await db.select().from(schema.pulseClassifications);
+    expect(remainingChatClassifications.map((r: { cowork_message_id: string }) => r.cowork_message_id)).toEqual(['chat-mid']);
     const remainingOtel = await db.select().from(schema.otelEvents);
     expect(remainingOtel.map((r: { id: string }) => r.id)).toEqual(['otel-new']);
     const remainingCompliance = await db.select().from(schema.complianceEvents);
     expect(remainingCompliance.map((r: { id: string }) => r.id)).toEqual(['ce-new']);
     const remainingErrors = await db.select().from(schema.errorEvents);
     expect(remainingErrors.map((r: { message: string }) => r.message)).toEqual(['new error']);
-    const remainingChatMessages = await db.select().from(schema.chatMessages);
-    expect(remainingChatMessages.map((r: { id: string }) => r.id)).toEqual(['chat-new']);
     const remainingChatMeta = await db.select().from(schema.chatAssistantMeta);
     expect(remainingChatMeta.map((r: { id: string }) => r.id)).toEqual(['chat-meta-new']);
 
@@ -104,23 +125,26 @@ async function runSpec(): Promise<void> {
       tool_input_preview: 'tool in', tool_output_preview: 'tool out',
       surface: 'cowork', source: 'agent',
     });
-    // chat_messages: prompt_text is NOT NULL, so strip mode substitutes the
-    // SAME marker used for cowork's content_preview rather than nulling it —
-    // the row + its metadata (prompt_length, flagged, etc.) stay in place.
-    await db.insert(schema.chatMessages).values({
-      id: 'chat-strip', prompt_text: 'secret prompt content', prompt_length: 22, occurred_at: oldTs,
+    // A Claude Chat prompt past the Chat window: strip mode treats it like a
+    // stripped Cowork prompt (content_full NULL, the marker as the preview)
+    // while the row + its metadata (flags, time, session) stay in place.
+    await db.insert(schema.coworkMessages).values({
+      ...chatPrompt('chat-strip', chatOldTs, 'secret prompt content'),
+      flagged: 1, flag_reason: 'PII detected: email',
     });
     // chat_assistant_meta is metadata-only (no content column to strip), so
     // cleanup deletes it outright on the same window in BOTH modes rather
     // than leaving it in place — there is nothing for "strip" to mean here.
     await db.insert(schema.chatAssistantMeta).values({
-      id: 'chat-meta-strip', occurred_at: oldTs, model: 'claude-sonnet-5',
+      id: 'chat-meta-strip', occurred_at: chatOldTs, model: 'claude-sonnet-5',
     });
 
     const stripResult1 = await runRetentionCleanup();
     expect(stripResult1.mode).toBe('strip');
+    // cw-strip only: chat-mid (10 days) is past the Cowork window but is a
+    // Claude Chat prompt, inside its own 30-day window, so it is untouched.
     expect(stripResult1.cowork_rows_affected).toBe(1);
-    // chat_messages stripped (1) + chat_assistant_meta deleted (1), same window.
+    // Claude Chat prompt stripped (1) + chat_assistant_meta deleted (1), same window.
     expect(stripResult1.chat_rows_affected).toBe(2);
 
     const stripped = (await db.select().from(schema.coworkMessages).where(eq(schema.coworkMessages.id, 'cw-strip')))[0];
@@ -129,9 +153,18 @@ async function runSpec(): Promise<void> {
     expect(stripped.tool_input_preview).toBeNull();
     expect(stripped.tool_output_preview).toBeNull();
 
-    const strippedChat = (await db.select().from(schema.chatMessages).where(eq(schema.chatMessages.id, 'chat-strip')))[0];
-    expect(strippedChat.prompt_text).toBe('[Content removed — retention policy]');
-    expect(strippedChat.prompt_length).toBe(22); // metadata (length) unchanged — only content blanked
+    const strippedChat = (await db.select().from(schema.coworkMessages).where(eq(schema.coworkMessages.id, 'chat-strip')))[0];
+    expect(strippedChat.content_full).toBeNull();
+    expect(strippedChat.content_preview).toBe('[Content removed — retention policy]');
+    // metadata unchanged — only content blanked
+    expect(strippedChat.surface).toBe('chat');
+    expect(strippedChat.flagged).toBe(1);
+    expect(strippedChat.flag_reason).toBe('PII detected: email');
+    expect(strippedChat.occurred_at).toBe(chatOldTs);
+    expect(strippedChat.session_id).toBe('conv-chat-strip');
+
+    const keptChat = (await db.select().from(schema.coworkMessages).where(eq(schema.coworkMessages.id, 'chat-mid')))[0];
+    expect(keptChat.content_full).toBe('mid prompt'); // inside the Chat window: not stripped
 
     const deletedChatMeta = await db.select().from(schema.chatAssistantMeta).where(eq(schema.chatAssistantMeta.id, 'chat-meta-strip'));
     expect(deletedChatMeta.length).toBe(0); // deleted even in strip mode — metadata-only, both-modes delete

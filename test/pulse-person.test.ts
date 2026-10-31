@@ -30,7 +30,6 @@ beforeEach(async () => {
   await sql.exec(`DELETE FROM pulse_metrics;`);
   await sql.exec(`DELETE FROM code_metrics;`);
   await sql.exec(`DELETE FROM cowork_messages;`);
-  await sql.exec(`DELETE FROM chat_messages;`);
   await sql.exec(`DELETE FROM users;`);
 });
 
@@ -75,15 +74,15 @@ describe('getPerson360', () => {
       [NOW - 1000],
     );
 
-    // Chat: messages in the last 7 days
+    // Chat: Claude Chat prompts in the last 7 days (cowork_messages, surface 'chat')
     await sql.run(
-      `INSERT INTO chat_messages (id, user_id, prompt_text, prompt_length, occurred_at)
-       VALUES ('c1', 'u1', 'hello', 5, ?)`,
+      `INSERT INTO cowork_messages (id, session_id, user_id, message_type, surface, source, content_preview, content_full, occurred_at)
+       VALUES ('c1', 'conv1', 'u1', 'cowork_user_message', 'chat', 'compliance', 'hello', 'hello', ?)`,
       [NOW - 500],
     );
     await sql.run(
-      `INSERT INTO chat_messages (id, user_id, prompt_text, prompt_length, occurred_at)
-       VALUES ('c2', 'u1', 'world', 5, ?)`,
+      `INSERT INTO cowork_messages (id, session_id, user_id, message_type, surface, source, content_preview, content_full, occurred_at)
+       VALUES ('c2', 'conv1', 'u1', 'cowork_user_message', 'chat', 'compliance', 'world', 'world', ?)`,
       [NOW - 400],
     );
 
@@ -145,7 +144,7 @@ describe('getPerson360', () => {
 
   it('returns null per-surface sections when a surface has no data, and null userId fields are handled', async () => {
     await seedUser('u2', null, null);
-    // No pulse_metrics, no code_metrics, no cowork_messages, no chat_messages rows for u2.
+    // No pulse_metrics, no code_metrics, no cowork_messages rows (Cowork or Claude Chat) for u2.
 
     const result = await getPerson360('u2');
 

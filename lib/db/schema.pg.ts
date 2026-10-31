@@ -178,28 +178,8 @@ export const chargebackPeriods = pgTable('chargeback_periods', {
     estimated: integer().notNull().default(0),
 });
 
-export const chatMessages = pgTable('chat_messages', {
-    id: text().primaryKey(),
-    conversation_id: text(),
-    user_id: text(),
-    prompt_text: text().notNull(),
-    prompt_length: integer().notNull(),
-    attachments_count: integer().default(0),
-    files_count: integer().default(0),
-    flagged: integer().default(0),
-    flag_reason: text(),
-    occurred_at: bigint({ mode: 'number' }).notNull(),
-    ingested_at: bigint({ mode: 'number' }).default(sql`extract(epoch from now())`),
-    agent_id: text(),
-    source: text().notNull().default('agent'),
-}, (t) => [
-    foreignKey({ columns: [t.user_id], foreignColumns: [users.id], name: 'chat_messages_user_id_fk' }),
-    index('idx_chat_messages_ingested_at').on(t.ingested_at),
-    index('idx_chat_messages_flagged').on(t.flagged),
-    index('idx_chat_messages_conversation').on(t.conversation_id, t.occurred_at),
-    index('idx_chat_messages_user').on(t.user_id, t.occurred_at),
-    index('idx_chat_messages_source').on(t.source),
-]);
+// Claude Chat prompts live in cowork_messages with surface 'chat'
+// (migration 0038 moved them there and dropped chat_messages).
 
 export const codeAssistantMeta = pgTable('code_assistant_meta', {
     id: text().primaryKey(),
@@ -1212,7 +1192,6 @@ export const pgSchema = {
   chargebackCostCentres,
   chargebackDeptMap,
   chargebackPeriods,
-  chatMessages,
   chatAssistantMeta,
   coachingAcks,
   codeAssistantMeta,

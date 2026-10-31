@@ -183,22 +183,24 @@ async function runSpec(): Promise<void> {
     expect(sessionCount).toBe(3);
     expect(typeof sessionCount).toBe('number');
 
-    // ── getEventsLast24h: compliance + cowork + chat, ingested_at >= dayAgo ──
+    // ── getEventsLast24h: compliance + cowork_messages (Claude Chat
+    //    included, surface 'chat'), ingested_at >= dayAgo ────────────────
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     await (client as any).insert(schema.coworkMessages).values([
       { id: 'cm-1', session_id: 'sess-x', user_id: 'user-1', message_type: 'cowork_user_message', occurred_at: NOW - 10, ingested_at: NOW - 10 },
       { id: 'cm-2', session_id: 'sess-y', user_id: 'user-2', message_type: 'cowork_user_message', occurred_at: NOW - (2 * DAY), ingested_at: NOW - (2 * DAY) },
-    ]);
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    await (client as any).insert(schema.chatMessages).values([
-      { id: 'chm-1', user_id: 'user-1', prompt_text: 'hi', prompt_length: 2, occurred_at: NOW - 10, ingested_at: NOW - 10 },
+      // A Claude Chat prompt: cowork_messages surface 'chat'.
+      { id: 'chm-1', session_id: 'chatconv-1', user_id: 'user-1', message_type: 'cowork_user_message', surface: 'chat', source: 'compliance', content_full: 'hi', content_preview: 'hi', occurred_at: NOW - 10, ingested_at: NOW - 10 },
+      // An older Claude Chat prompt, outside the 24 hours.
+      { id: 'chm-2', session_id: 'chatconv-2', user_id: 'user-2', message_type: 'cowork_user_message', surface: 'chat', source: 'compliance', content_full: 'old', content_preview: 'old', occurred_at: NOW - (2 * DAY), ingested_at: NOW - (2 * DAY) },
     ]);
     // The compliance_events fixture insert above did NOT set ingested_at
     // explicitly — it falls back to the column default (extract(epoch from
     // now())), so all 3 count as "last 24h".
     const last24h = await getEventsLast24h();
     // 3 compliance (ce-1/2/3, all default-ingested "now") + 1 cowork (cm-1;
-    // cm-2 is 2 days old) + 1 chat (chm-1) = 5.
+    // cm-2 is 2 days old) + 1 Claude Chat (chm-1; chm-2 is 2 days old) = 5.
+    // The Claude Chat prompt is counted once, not again from a second table.
     expect(last24h).toBe(5);
     expect(typeof last24h).toBe('number');
 
@@ -216,7 +218,8 @@ async function runSpec(): Promise<void> {
     // ── getCoworkSessionCountThisWeek: primary cowork_messages, fallback
     //    to otel_events when cowork has no recent sessions ───────────────
     // cm-1 (sess-x, -10s) is within the week; cm-2 (sess-y) is 2 days old but
-    // still within 7 days — both sess-x and sess-y count = 2.
+    // still within 7 days — both sess-x and sess-y count. Claude Chat
+    // conversations (chatconv-1/2, surface 'chat') are left out: 2.
     const thisWeek = await getCoworkSessionCountThisWeek();
     expect(thisWeek).toBe(2);
     expect(typeof thisWeek).toBe('number');

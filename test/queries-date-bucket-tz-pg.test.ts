@@ -73,15 +73,15 @@ async function runSpec(): Promise<void> {
     await (client as any).insert(schema.users).values([
       { id: 'tz-user', email: 'tz@test.local' },
     ]);
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    await (client as any).insert(schema.chatMessages).values([
-      {
-        id: 'tz-chm-1', user_id: 'tz-user', prompt_text: 'boundary',
-        prompt_length: 8, occurred_at: BOUNDARY_TS,
-      },
-    ]);
+    // A Claude Chat prompt (cowork_messages, surface 'chat') and a Cowork
+    // prompt at the same boundary timestamp.
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     await (client as any).insert(schema.coworkMessages).values([
+      {
+        id: 'tz-chm-1', session_id: 'tz-chatconv-1', user_id: 'tz-user',
+        message_type: 'cowork_user_message', surface: 'chat', source: 'compliance',
+        content_full: 'boundary', content_preview: 'boundary', occurred_at: BOUNDARY_TS,
+      },
       {
         id: 'tz-cw-1', session_id: 'tz-s1', user_id: 'tz-user',
         message_type: 'cowork_user_message', surface: 'cowork', occurred_at: BOUNDARY_TS,
