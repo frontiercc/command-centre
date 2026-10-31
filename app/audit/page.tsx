@@ -14,6 +14,7 @@ import { useCorePlatformGuard } from '@/components/shared/useCorePlatformGuard';
 import { PageBody, Panel, PanelFoot, Notice, Empty, Tag, Dot, T, B, SEVERITY_COLOR } from '@/components/precision/ui';
 import WhereMoneyWent, { SplitLine, spendMoney } from '@/components/finance/WhereMoneyWent';
 import { hasBreakdown, type SpendSplit } from '@/lib/finance/where-money-went';
+import { isOpenAiSource, OPENAI_SOURCE_LABELS } from '@/lib/openai/sources';
 
 interface AuditEvent {
   id: string;
@@ -355,6 +356,7 @@ function CoworkThread({ messages }: { messages: CoworkMessage[] }) {
 }
 
 function SourceCell({ event }: { event: AuditEvent }) {
+  if (isOpenAiSource(event._source)) return <>{OPENAI_SOURCE_LABELS[event._source]}</>;
   if (event._source === 'otel') return <>OTel</>;
   if (event._source === 'local-agent') return <>Agent</>;
   return <>{event.surface === 'cowork_partial' ? 'OpenTelemetry' : 'Compliance API'}</>;
@@ -622,6 +624,9 @@ export default function AuditPage() {
             <option value="">All sources</option>
             <option value="otel">OpenTelemetry</option>
             <option value="compliance">Compliance API</option>
+            <option value="chatgpt_chat">ChatGPT Chat</option>
+            <option value="chatgpt_work">ChatGPT Work</option>
+            <option value="codex">Codex</option>
             <option value="cowork">Cowork</option>
             <option value="code">Code Sessions</option>
             <option value="chat">Chat</option>
@@ -848,7 +853,7 @@ export default function AuditPage() {
                 return (
                   <div className="border border-[#EAEAEA] rounded-[10px] px-3 py-2.5 flex flex-col gap-1.5 text-[13px]">
                     <span className="font-semibold text-[#245BF3]">
-                      {isCodeEvent ? 'Session stats' : 'Session stats (OTel)'}
+                      {isCodeEvent || isOpenAiSource(selectedEvent?._source) ? 'Session stats' : 'Session stats (OTel)'}
                     </span>
                     {facts.length > 0 && (
                       <span className="flex flex-wrap gap-x-1.5 text-[#333333] tabular-nums">

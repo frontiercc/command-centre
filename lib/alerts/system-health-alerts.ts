@@ -37,6 +37,7 @@ import { schema } from '@/lib/db/schema';
 import { insertAlert } from '@/lib/db/queries';
 import { JOB_CATALOG, jobLabel } from '@/lib/health/job-catalog';
 import { planSilenceAlerts, silenceSettingsFrom, type SilenceSurface } from '@/lib/alerts/telemetry-silence';
+import { OPENAI_SOURCES } from '@/lib/openai/sources';
 
 export const SYSTEM_HEALTH_ALERT_TYPE = 'system_health';
 const DAY = 24 * 3600;
@@ -149,8 +150,11 @@ async function readSilenceSurfaces(): Promise<SilenceSurface[]> {
   const cm = schema.coworkMessages;
   const com = schema.codeOtelMetrics;
   const num = (v: unknown) => (v === null || v === undefined ? null : Number(v));
+  // Claude's own feeds only: ChatGPT and Codex prompts share these surfaces
+  // and would otherwise hide a Claude feed that has gone quiet.
   const last = async (surface: 'cowork' | 'code') => {
-    const rows = await client.select({ v: sql<number | string | null>`MAX(${cm.ingested_at})` }).from(cm).where(eq(cm.surface, surface));
+    const rows = await client.select({ v: sql<number | string | null>`MAX(${cm.ingested_at})` }).from(cm)
+      .where(and(eq(cm.surface, surface), sql`${cm.source} NOT IN (${sql.join(OPENAI_SOURCES.map(s => sql`${s}`), sql`, `)})`));
     return num(rows[0]?.v);
   };
   const metrics = await client.select({ v: sql<number | string | null>`MAX(${com.ingested_at})` }).from(com);

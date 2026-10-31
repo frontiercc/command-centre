@@ -5,12 +5,51 @@ import { NextRequest, NextResponse } from 'next/server';
 import { logError } from '@/lib/api/errors';
 import { getConfigValue } from '@/lib/config';
 import { requireAdmin } from '@/lib/auth/admin-auth';
+import { listLogFiles, OpenAiApiError, type OpenAiEventType } from '@/lib/openai/client';
+
+/**
+ * OpenAI's Admin API key is checked by listing one file of each log type the
+ * sync reads. Scopes are per log type, so a key can read one and not the other;
+ * the reply names each type the key cannot read.
+ */
+async function testOpenAiKey(formKey: string | undefined, formWorkspace: string | undefined) {
+  const apiKey = formKey?.trim() || await getConfigValue('openaiAdminApiKey');
+  const workspaceId = formWorkspace?.trim() || (await getConfigValue('openaiWorkspaceId')).trim();
+  if (!apiKey) return NextResponse.json({ ok: false, error: 'Key not configured' });
+  if (!workspaceId) return NextResponse.json({ ok: false, error: 'Enter the ChatGPT workspace ID first' });
+
+  const after = new Date(Date.now() - 3600_000).toISOString();
+  const labels: Record<string, string> = { CONVERSATION_MESSAGE: 'ChatGPT conversations', CODEX_LOG: 'Codex logs' };
+  const missing: string[] = [];
+  for (const type of ['CONVERSATION_MESSAGE', 'CODEX_LOG'] as OpenAiEventType[]) {
+    try {
+      await listLogFiles(apiKey, { kind: 'workspace', id: workspaceId }, type, after, 1);
+    } catch (err) {
+      if (err instanceof OpenAiApiError) {
+        if (err.status === 401) return NextResponse.json({ ok: false, error: 'Invalid key' });
+        if (err.status === 404) return NextResponse.json({ ok: false, error: 'OpenAI did not find this workspace ID' });
+        if (err.status === 403) { missing.push(labels[type]); continue; }
+        return NextResponse.json({ ok: false, error: `OpenAI did not accept the request (status ${err.status}).` });
+      }
+      logError('api/config/test', err);
+      return NextResponse.json({ ok: false, error: 'Could not reach OpenAI. Details are in the server log.' });
+    }
+  }
+  if (missing.length > 0) {
+    return NextResponse.json({ ok: false, error: `Key is valid but cannot read ${missing.join(' or ')}: it needs the matching Compliance Logs Platform read permission` });
+  }
+  return NextResponse.json({ ok: true });
+}
 
 export async function POST(request: NextRequest) {
   if (!(await requireAdmin(request))) {
     return NextResponse.json({ error: 'Forbidden: admin role required' }, { status: 403 });
   }
-  const { key, value } = await request.json();
+  const { key, value, workspaceId } = await request.json();
+
+  if (key === 'openaiAdminApiKey') {
+    return testOpenAiKey(typeof value === 'string' ? value : undefined, typeof workspaceId === 'string' ? workspaceId : undefined);
+  }
 
   const fourDaysAgo = new Date(Date.now() - 4 * 86400_000).toISOString().split('T')[0];
   const keyMap: Record<string, { configKey: string; endpoint: string }> = {

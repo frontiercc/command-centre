@@ -300,6 +300,15 @@ export interface AppConfig {
   complianceActivityExcludedTypes: string;     // default '["compliance_api_accessed"]' — JSON array of activity `type` values skipped at ingest
   complianceLastSyncAt: string;          // job-written (epoch seconds)
   complianceLastSyncStats: string;       // job-written (JSON)
+  // OpenAI export sync (ChatGPT and Codex), dormant until a key and workspace are saved
+  openaiAdminApiKey: string;             // OpenAI Admin API key, SENSITIVE
+  openaiWorkspaceId: string;             // ChatGPT workspace ID
+  openaiOrganizationId: string;          // OpenAI organisation ID (costs)
+  openaiSyncIntervalMinutes: string;     // default '5'
+  openaiBackfillDays: string;            // default '30' (OpenAI keeps files 30 days)
+  openaiSyncCursors: string;             // job-written (JSON: event type → last file end_time)
+  openaiLastSyncAt: string;              // job-written (epoch seconds)
+  openaiLastSyncStats: string;           // job-written (JSON)
   // Weekly Highlights (dormant) — model used by lib/highlights/compose.ts's
   // single LLM call. Registered here so compose.ts type-checks.
   highlightsModel: string;
@@ -511,6 +520,14 @@ export const CONFIG_KEYS: Record<keyof AppConfig, string> = {
   complianceActivityExcludedTypes: 'compliance_activity_excluded_types',
   complianceLastSyncAt: 'compliance_last_sync_at',
   complianceLastSyncStats: 'compliance_last_sync_stats',
+  openaiAdminApiKey: 'openai_admin_api_key',
+  openaiWorkspaceId: 'openai_workspace_id',
+  openaiOrganizationId: 'openai_organization_id',
+  openaiSyncIntervalMinutes: 'openai_sync_interval_minutes',
+  openaiBackfillDays: 'openai_backfill_days',
+  openaiSyncCursors: 'openai_sync_cursors',
+  openaiLastSyncAt: 'openai_last_sync_at',
+  openaiLastSyncStats: 'openai_last_sync_stats',
   highlightsModel: 'highlights_model',
   highlightsEnabled: 'highlights_enabled',
   highlightsIncludeNames: 'highlights_include_names',
@@ -538,6 +555,7 @@ const SENSITIVE_KEYS = new Set<keyof AppConfig>([
   'dxApiKey',
   'complianceAccessKey',
   'alertsSlackWebhookUrl',
+  'openaiAdminApiKey',
 ]);
 
 export const ENCRYPTED_CONFIG_KEYS: ReadonlySet<keyof AppConfig> = SENSITIVE_KEYS;
@@ -608,6 +626,7 @@ const ENV_FALLBACKS: Partial<Record<keyof AppConfig, string>> = {
   otelEndpointSecret: 'OTEL_ENDPOINT_SECRET',
   ingestIntervalSeconds: 'INGEST_INTERVAL_SECONDS',
   complianceAccessKey: 'COMPLIANCE_ACCESS_KEY',
+  openaiAdminApiKey: 'OPENAI_ADMIN_API_KEY',
 };
 
 /**
@@ -898,6 +917,14 @@ export async function getAllConfig(): Promise<AppConfig> {
     complianceActivityExcludedTypes: resolve('complianceActivityExcludedTypes', '["compliance_api_accessed"]'),
     complianceLastSyncAt: resolve('complianceLastSyncAt'),
     complianceLastSyncStats: resolve('complianceLastSyncStats'),
+    openaiAdminApiKey: resolve('openaiAdminApiKey'),
+    openaiWorkspaceId: resolve('openaiWorkspaceId'),
+    openaiOrganizationId: resolve('openaiOrganizationId'),
+    openaiSyncIntervalMinutes: resolve('openaiSyncIntervalMinutes', '5'),
+    openaiBackfillDays: resolve('openaiBackfillDays', '30'),
+    openaiSyncCursors: resolve('openaiSyncCursors'),
+    openaiLastSyncAt: resolve('openaiLastSyncAt'),
+    openaiLastSyncStats: resolve('openaiLastSyncStats'),
     highlightsModel: resolve('highlightsModel'),
     highlightsEnabled: resolve('highlightsEnabled', 'false'),
     highlightsIncludeNames: resolve('highlightsIncludeNames', 'false'),

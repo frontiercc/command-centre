@@ -9,7 +9,8 @@
 //   node scripts/openai-mock/server.mjs --write out  # also writes the files available now to out/
 //
 // Settings (environment): OPENAI_MOCK_PORT (4010), OPENAI_MOCK_DAYS of
-// history (14), OPENAI_MOCK_SEED (42). The data runs 24 hours past start-up
+// history (14), OPENAI_MOCK_SEED (42), OPENAI_MOCK_RATE_LIMIT (100 a minute).
+// The data runs 24 hours past start-up
 // and files appear as their time comes, about every 10 minutes, so an
 // incremental sync can be watched picking up new files.
 //
@@ -24,7 +25,8 @@ import { buildEvents, buildFiles, WORKSPACE_ID, ORGANIZATION_ID } from './data.m
 const PORT = Number(process.env.OPENAI_MOCK_PORT || 4010);
 const DAYS = Number(process.env.OPENAI_MOCK_DAYS || 14);
 const SEED = Number(process.env.OPENAI_MOCK_SEED || 42);
-const RATE_LIMIT_PER_MIN = 100; // per key, per method and route, as documented
+// Per key, per method and route, as documented. Tests raise it to run at full speed.
+const RATE_LIMIT_PER_MIN = Number(process.env.OPENAI_MOCK_RATE_LIMIT || 100);
 const SIGNED_URL_TTL_MS = 5 * 60 * 1000;
 
 const KEYS = {
@@ -93,14 +95,15 @@ function listFiles(res, url, scope, allowedHere, grants) {
   });
 }
 
-function redirectToFile(res, fileId, allowedHere, grants) {
+function redirectToFile(req, res, fileId, allowedHere, grants) {
   const f = byId.get(fileId);
   if (!f || f.endMs > Date.now()) return fail(res, 404, 'The log file was not found or is no longer available.');
   if (!allowedHere.has(f.event_type)) return fail(res, 404, 'The log file was not found or is no longer available.');
   if (!grants.has(f.event_type)) return fail(res, 403, `API key is missing the scope to read ${f.event_type}`);
   const token = randomBytes(16).toString('hex');
   signed.set(token, { fileId, expires: Date.now() + SIGNED_URL_TTL_MS });
-  res.writeHead(307, { location: `http://localhost:${PORT}/signed/${token}` });
+  // Built from the Host the caller used, so the link also works from inside Docker.
+  res.writeHead(307, { location: `http://${req.headers.host || `localhost:${PORT}`}/signed/${token}` });
   res.end();
 }
 
@@ -155,7 +158,7 @@ const server = http.createServer((req, res) => {
     }
     const allowedHere = isOrg ? ORG_TYPES : WORKSPACE_TYPES;
     if (name.endsWith('list')) return listFiles(res, url, isOrg ? 'organization' : 'workspace', allowedHere, grants);
-    if (name.endsWith('get')) return redirectToFile(res, m[2], allowedHere, grants);
+    if (name.endsWith('get')) return redirectToFile(req, res, m[2], allowedHere, grants);
     return maxEventTime(res, url, allowedHere, grants);
   }
   return fail(res, 404, 'Not found');

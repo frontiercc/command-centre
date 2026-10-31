@@ -40,6 +40,7 @@ let schedulerGeneration = 0;
 // Session descriptions run alongside the cycle, never inside it (see runCycle).
 let descriptionRunInFlight = false;
 let judgeRunInFlight = false;
+let openAiSyncInFlight = false;
 
 /**
  * Wall-clock budget per SCHEDULED classifier drain. Bounds when a pass may
@@ -143,6 +144,20 @@ async function runCycle(): Promise<void> {
   // already started under the current generation — exit now rather than run
   // the rest of this cycle's jobs beside it.
   if (generation !== schedulerGeneration) return;
+
+  // OpenAI sync (ChatGPT and Codex prompts), interval-gated inside the job and
+  // a no-op until a key and workspace are saved. STARTED, NOT AWAITED: a first
+  // backfill downloads hundreds of files, paced for OpenAI's rate limit, and
+  // must not hold up the jobs after it. runJob still records the real outcome.
+  if (!openAiSyncInFlight) {
+    openAiSyncInFlight = true;
+    void runJob('openai_sync', 'OpenAI sync', async () => {
+      const { runOpenAiSyncJob } = await import('@/lib/openai/job');
+      const r = await runOpenAiSyncJob();
+      if (r.skipped) return JOB_SKIPPED;
+      if (r.stats && r.stats.errors.length > 0) throw new Error(`OpenAI sync errors: ${r.stats.errors.join('; ')}`);
+    }).finally(() => { openAiSyncInFlight = false; });
+  }
 
   // Analytics ingestion (once per day — check if we've already run today)
   await runJob('analytics_ingest', 'Analytics ingest', async () => {

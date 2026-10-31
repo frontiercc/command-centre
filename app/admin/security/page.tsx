@@ -21,7 +21,7 @@ type TestStatus = 'idle' | 'testing' | 'success' | 'error';
 // updated whenever /api/config is (re-)fetched.
 const SECURITY_SAVE_SECRET_FIELDS = [
   'anthropicAiApiKey', 'anthropicAdminApiKey', 'anthropicAnalyticsApiKey',
-  'complianceAccessKey', 'otelEndpointSecret',
+  'complianceAccessKey', 'otelEndpointSecret', 'openaiAdminApiKey',
 ] as const;
 
 function trackLoadedSecrets(ref: { current: Set<string> }, data: Record<string, unknown>) {
@@ -96,6 +96,15 @@ export default function SecurityPage() {
   const [complianceLastSyncAt, setComplianceLastSyncAt] = useState('');
   const [complianceLastSyncStats, setComplianceLastSyncStats] = useState('');
   const [otelEndpointSecret, setOtelEndpointSecret] = useState('');
+  // --- OpenAI export (ChatGPT and Codex) ---
+  const [openaiAdminApiKey, setOpenaiAdminApiKey] = useState('');
+  const [openaiWorkspaceId, setOpenaiWorkspaceId] = useState('');
+  const [openaiOrganizationId, setOpenaiOrganizationId] = useState('');
+  const [openaiLastSyncAt, setOpenaiLastSyncAt] = useState('');
+  const [openaiLastSyncStats, setOpenaiLastSyncStats] = useState('');
+  const [openaiTestStatus, setOpenaiTestStatus] = useState<TestStatus>('idle');
+  const [openaiTestMessage, setOpenaiTestMessage] = useState('');
+  const [openaiTestOk, setOpenaiTestOk] = useState(false);
   // Which of SECURITY_SAVE_SECRET_FIELDS currently have a stored (non-empty,
   // masked) value. See the note above trackLoadedSecrets().
   const loadedSecretsRef = useRef<Set<string>>(new Set());
@@ -204,6 +213,11 @@ export default function SecurityPage() {
         setComplianceAccessKey(String(data.complianceAccessKey || ''));
         setComplianceLastSyncAt(String(data.complianceLastSyncAt || ''));
         setComplianceLastSyncStats(String(data.complianceLastSyncStats || ''));
+        setOpenaiAdminApiKey(String(data.openaiAdminApiKey || ''));
+        setOpenaiWorkspaceId(String(data.openaiWorkspaceId || ''));
+        setOpenaiOrganizationId(String(data.openaiOrganizationId || ''));
+        setOpenaiLastSyncAt(String(data.openaiLastSyncAt || ''));
+        setOpenaiLastSyncStats(String(data.openaiLastSyncStats || ''));
         trackLoadedSecrets(loadedSecretsRef, data);
         setOtelEndpointSecret(String(data.otelEndpointSecret || ''));
         setSmtpHost(String(data.smtpHost || ''));
@@ -267,6 +281,9 @@ export default function SecurityPage() {
           anthropicAnalyticsApiKey,
           complianceAccessKey,
           otelEndpointSecret,
+          openaiAdminApiKey,
+          openaiWorkspaceId,
+          openaiOrganizationId,
         }),
       });
       if (res.ok) {
@@ -296,6 +313,7 @@ export default function SecurityPage() {
           setAnthropicAnalyticsApiKey(String(cfg.anthropicAnalyticsApiKey || ''));
           setComplianceAccessKey(String(cfg.complianceAccessKey || ''));
           setOtelEndpointSecret(String(cfg.otelEndpointSecret || ''));
+          setOpenaiAdminApiKey(String(cfg.openaiAdminApiKey || ''));
           trackLoadedSecrets(loadedSecretsRef, cfg);
         } catch { /* refresh is cosmetic; the save itself succeeded */ }
       } else {
@@ -324,6 +342,30 @@ export default function SecurityPage() {
       setTestStatuses(prev => ({ ...prev, [key]: 'error' }));
     }
     setTimeout(() => setTestStatuses(prev => ({ ...prev, [key]: 'idle' })), 5000);
+  };
+
+  // OpenAI's test also needs the workspace ID, and says why a key failed
+  // (which log type it cannot read), so it has its own handler.
+  const testOpenAi = async () => {
+    setOpenaiTestStatus('testing');
+    setOpenaiTestMessage('');
+    try {
+      const isUnchangedMask = openaiAdminApiKey.includes('••••••••');
+      const res = await fetch('/api/config/test', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ key: 'openaiAdminApiKey', value: isUnchangedMask ? undefined : openaiAdminApiKey, workspaceId: openaiWorkspaceId }),
+      });
+      const result = await res.json();
+      setOpenaiTestStatus(result.ok ? 'success' : 'error');
+      setOpenaiTestOk(Boolean(result.ok));
+      setOpenaiTestMessage(result.ok ? 'The key can read ChatGPT conversations and Codex logs.' : String(result.error || 'The test failed.'));
+    } catch {
+      setOpenaiTestStatus('error');
+      setOpenaiTestOk(false);
+      setOpenaiTestMessage('Could not reach the server.');
+    }
+    setTimeout(() => setOpenaiTestStatus('idle'), 5000);
   };
 
   const handleChangeRole = async (user: AdminUser, newRole: AdminUser['role']) => {
@@ -1463,6 +1505,64 @@ export default function SecurityPage() {
           </div>
         </Panel>
 
+        {/* OpenAI export: ChatGPT and Codex */}
+        <Panel title="OpenAI (ChatGPT and Codex)">
+          <div className="flex flex-col gap-4">
+            <ApiKeyField
+              label="OpenAI Admin API Key"
+              value={openaiAdminApiKey}
+              onChange={setOpenaiAdminApiKey}
+              testStatus={openaiTestStatus}
+              onTest={testOpenAi}
+              placeholder="OpenAI admin key"
+              hint="Created by a ChatGPT workspace owner at admin.openai.com under Credentials → Admin keys. ChatGPT Enterprise or Edu only. Give it read access to Conversation messages and Codex logs. Brings ChatGPT prompts into Work Pulse and Codex prompts into Developer Pulse."
+              configKey="openaiAdminApiKey"
+              resetsNote="sync position, last-sync status"
+              onRemoved={() => {
+                setOpenaiAdminApiKey('');
+                setOpenaiTestStatus('idle');
+                setOpenaiTestMessage('');
+                setOpenaiLastSyncAt('');
+                setOpenaiLastSyncStats('');
+                loadedSecretsRef.current.delete('openaiAdminApiKey');
+              }}
+            />
+            {openaiTestMessage && (
+              <p className={cx('m-0 text-[13px]', openaiTestOk ? 'text-[#1A7F37]' : 'text-[#B42318]')}>{openaiTestMessage}</p>
+            )}
+            <FormField label="ChatGPT workspace ID">
+              <input
+                type="text"
+                value={openaiWorkspaceId}
+                onChange={e => setOpenaiWorkspaceId(e.target.value)}
+                className={cx(B.input, 'w-full font-mono')}
+                placeholder="Shown in admin.openai.com under your workspace settings"
+              />
+            </FormField>
+            <FormField label="OpenAI organisation ID">
+              <input
+                type="text"
+                value={openaiOrganizationId}
+                onChange={e => setOpenaiOrganizationId(e.target.value)}
+                className={cx(B.input, 'w-full font-mono')}
+                placeholder="org-…, used for ChatGPT and Codex spend"
+              />
+            </FormField>
+            {openaiLastSyncAt && (
+              <p className="m-0 text-[13px] text-[#666666] tabular-nums">
+                Last sync: {new Date(parseInt(openaiLastSyncAt, 10) * 1000).toLocaleString()}
+                {(() => {
+                  try {
+                    const s = JSON.parse(openaiLastSyncStats || '{}');
+                    const p = s.prompts ?? {};
+                    return ` (${s.files ?? 0} files, ${p.chatgpt_chat ?? 0} ChatGPT Chat, ${p.chatgpt_work ?? 0} ChatGPT Work and ${p.codex ?? 0} Codex prompts${(s.errors?.length ?? 0) > 0 ? `, ${s.errors.length} error(s)` : ''})`;
+                  } catch { return ''; }
+                })()}
+              </p>
+            )}
+          </div>
+        </Panel>
+
         {/* Endpoint Security */}
         <Panel title="Endpoint security">
           <div className="flex flex-col gap-1.5">
@@ -1825,6 +1925,7 @@ function ApiKeyField({
   configKey,
   resetsNote,
   onRemoved,
+  placeholder = 'sk-ant-...',
 }: {
   label: string;
   value: string;
@@ -1835,6 +1936,7 @@ function ApiKeyField({
   configKey?: string;
   resetsNote?: string;
   onRemoved?: () => void;
+  placeholder?: string;
 }) {
   const inputId = useId();
   return (
@@ -1847,7 +1949,7 @@ function ApiKeyField({
             value={value}
             onChange={e => onChange(e.target.value)}
             className={cx(B.input, 'flex-1 min-w-0 font-mono')}
-            placeholder="sk-ant-..."
+            placeholder={placeholder}
           />
           <button
             type="button"

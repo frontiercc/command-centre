@@ -20,6 +20,7 @@ import { getAdminSession, canAccessAuditLog } from '@/lib/auth/admin-auth';
 import { lacksDepartment, noDepartmentResponse } from '@/lib/auth/content-access';
 import { logAccess } from '@/lib/audit/log';
 import { getCodeModelRates, priceModelsJson } from '@/lib/pulse/code/rates';
+import { isOpenAiSource, OPENAI_SOURCES, type OpenAiSource } from '@/lib/openai/sources';
 
 // ─── Raw-execution facade (mirrors lib/db/queries.ts's rawAll) ────────────────
 interface RawFacade {
@@ -233,13 +234,15 @@ async function getCoworkEventsForAudit(filters: {
  * through, so the display reads the stamp and never assumes it from the
  * surface (Compliance-synced chat connectors, for example, are not OTel).
  * The OTel receivers write 'otel', the Compliance API sync writes
- * 'compliance', the retired local agent (and older seeds) wrote 'agent'.
+ * 'compliance', the OpenAI sync writes 'chatgpt_chat', 'chatgpt_work' or
+ * 'codex', the retired local agent (and older seeds) wrote 'agent'.
  * Anything unrecognised renders as the agent badge, never as one of the two
  * live capture paths.
  */
-function sourceBadge(source: string | null | undefined): 'compliance' | 'otel' | 'local-agent' {
+function sourceBadge(source: string | null | undefined): 'compliance' | 'otel' | 'local-agent' | OpenAiSource {
   if (source === 'compliance') return 'compliance';
   if (source === 'otel') return 'otel';
+  if (isOpenAiSource(source)) return source;
   return 'local-agent';
 }
 
@@ -289,7 +292,7 @@ async function getSkillConnectorEventsForAudit(filters: {
     if (filters.search) skillConds.push(sql`csi.skill_name ${likeKeyword()} ${`%${filters.search}%`}`);
     if (filters.surface) skillConds.push(sql`csi.surface = ${filters.surface}`);
     if (filters.source === 'compliance') skillConds.push(sql`csi.source = 'compliance'`);
-    if (filters.source === 'otel') skillConds.push(sql`COALESCE(csi.source, '') <> 'compliance'`);
+    if (filters.source === 'otel') skillConds.push(sql`COALESCE(csi.source, '') NOT IN ('compliance', ${sql.join(OPENAI_SOURCES.map(v => sql`${v}`), sql`, `)})`);
     const skillWhere = skillConds.length ? sql`WHERE ${sql.join(skillConds, sql` AND `)}` : sql``;
 
     const skillRows = await rawAll<{
@@ -338,7 +341,7 @@ async function getSkillConnectorEventsForAudit(filters: {
     }
     if (filters.surface) mcpConds.push(sql`cmi.surface = ${filters.surface}`);
     if (filters.source === 'compliance') mcpConds.push(sql`cmi.source = 'compliance'`);
-    if (filters.source === 'otel') mcpConds.push(sql`COALESCE(cmi.source, '') <> 'compliance'`);
+    if (filters.source === 'otel') mcpConds.push(sql`COALESCE(cmi.source, '') NOT IN ('compliance', ${sql.join(OPENAI_SOURCES.map(v => sql`${v}`), sql`, `)})`);
     const mcpWhere = sql`WHERE ${sql.join(mcpConds, sql` AND `)}`;
 
     const mcpRows = await rawAll<{
@@ -514,6 +517,12 @@ export async function GET(request: NextRequest) {
       .sort((a, b) => b.occurred_at - a.occurred_at)
       .slice(0, limit);
     return NextResponse.json(merged);
+  }
+
+  if (isOpenAiSource(source)) {
+    // OpenAI sync: ChatGPT Chat, ChatGPT Work or Codex prompts, by their own source stamp.
+    const messages = await getCoworkEventsForAudit({ userId, department, flaggedOnly, dateFrom, dateTo, search, limit, offset, source });
+    return NextResponse.json(messages);
   }
 
   if (source === 'agent') {

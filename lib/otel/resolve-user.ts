@@ -95,6 +95,8 @@ export interface ResolveInput {
   nowS: number;
   /** Log records in this resource — counted on an open conflict. */
   eventCount: number;
+  /** `users.source` for a person created here: 'otel' unless another sync says otherwise. */
+  userSource?: string;
 }
 
 export interface ResolveResult {
@@ -146,7 +148,7 @@ export async function resolveOtelUser(client: Client, input: ResolveInput): Prom
     id: newId,
     email: input.email,
     display_name: input.displayName,
-    source: 'otel',
+    source: input.userSource ?? 'otel',
     account_uuid: input.accountUuid ?? null,
     department: input.department,
     first_seen_at: input.nowS,

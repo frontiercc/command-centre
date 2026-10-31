@@ -32,7 +32,7 @@ Add `--write <folder>` to also save the files available at start-up, to read the
 - Events reach a file within 30 minutes; about 2% appear in two files, so the sync must remove duplicates by `event_id`.
 - The file link returns a 307 redirect to a download link that lasts five minutes and needs no key.
 - Costs are listed only on the organisation route, the other types only on the workspace route.
-- More than 100 requests a minute per key and route gets a 429 with `Retry-After`.
+- More than 100 requests a minute per key and route gets a 429 with `Retry-After`. Tests raise the limit with `OPENAI_MOCK_RATE_LIMIT`.
 - A missing key gets 401; the costs-only key gets 403 on the other types.
 
 ## What is assumed, not documented

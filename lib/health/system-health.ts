@@ -20,6 +20,7 @@ import { getTypedClient } from '@/lib/db/client';
 import { schema } from '@/lib/db/schema';
 import { getConfigValue, getUnreadableSecretKeys } from '@/lib/config';
 import { JOB_CATALOG } from '@/lib/health/job-catalog';
+import { OPENAI_SOURCES } from '@/lib/openai/sources';
 
 export type JobStatus = 'ok' | 'failing' | 'not_run';
 
@@ -34,7 +35,7 @@ export interface JobHealth {
 }
 
 export interface SurfaceHealth {
-  key: 'cowork' | 'code' | 'code_metrics' | 'chat';
+  key: 'cowork' | 'code' | 'code_metrics' | 'chat' | 'chatgpt' | 'codex';
   label: string;
   lastEventAt: number | null;
 }
@@ -72,12 +73,13 @@ const num = (v: unknown): number | null => (v === null || v === undefined ? null
  * reports a rejected key (the classifiers, analytics ingest and
  * GitHub sync do so); empty means the row reads "not tracked yet".
  */
-const INTEGRATIONS: { key: 'complianceAccessKey' | 'anthropicAiApiKey' | 'anthropicAnalyticsApiKey' | 'anthropicAdminApiKey' | 'githubToken' | 'smtpHost'; label: string; jobs: string[] }[] = [
+const INTEGRATIONS: { key: 'complianceAccessKey' | 'anthropicAiApiKey' | 'anthropicAnalyticsApiKey' | 'anthropicAdminApiKey' | 'githubToken' | 'smtpHost' | 'openaiAdminApiKey'; label: string; jobs: string[] }[] = [
   { key: 'anthropicAiApiKey', label: 'Anthropic API (AI features)', jobs: ['pulse_classifier', 'code_classifier'] },
   { key: 'complianceAccessKey', label: 'Compliance API', jobs: ['compliance_sync'] },
   { key: 'anthropicAnalyticsApiKey', label: 'Analytics API', jobs: ['analytics_ingest'] },
   { key: 'anthropicAdminApiKey', label: 'Admin API', jobs: [] },
   { key: 'githubToken', label: 'GitHub', jobs: ['github_sync'] },
+  { key: 'openaiAdminApiKey', label: 'OpenAI (ChatGPT and Codex)', jobs: ['openai_sync'] },
   { key: 'smtpHost', label: 'Email (SMTP)', jobs: [] },
 ];
 
@@ -114,11 +116,21 @@ export async function getSystemHealth(nowS: number = Math.floor(Date.now() / 100
 
   // ── Telemetry received ────────────────────────────────────────────
   const cm = schema.coworkMessages;
+  // Claude's own feeds only: ChatGPT and Codex prompts share these surfaces
+  // and are listed on rows of their own below.
+  const openAiList = sql.join(OPENAI_SOURCES.map(s => sql`${s}`), sql`, `);
   const maxOccurred = async (surface: 'cowork' | 'code') => {
     const rows = await client
       .select({ v: sql<number | string | null>`MAX(${cm.occurred_at})` })
       .from(cm)
-      .where(eq(cm.surface, surface));
+      .where(and(eq(cm.surface, surface), sql`${cm.source} NOT IN (${openAiList})`));
+    return num(rows[0]?.v);
+  };
+  const maxOccurredFor = async (sources: string[]) => {
+    const rows = await client
+      .select({ v: sql<number | string | null>`MAX(${cm.occurred_at})` })
+      .from(cm)
+      .where(sql`${cm.source} IN (${sql.join(sources.map(s => sql`${s}`), sql`, `)})`);
     return num(rows[0]?.v);
   };
   const com = schema.codeOtelMetrics;
@@ -135,6 +147,12 @@ export async function getSystemHealth(nowS: number = Math.floor(Date.now() / 100
   const complianceKey = await getConfigValue('complianceAccessKey');
   if (complianceKey || chatLast !== null) {
     surfaces.push({ key: 'chat', label: 'Chat (Compliance API)', lastEventAt: chatLast });
+  }
+  const chatgptLast = await maxOccurredFor(['chatgpt_chat', 'chatgpt_work']);
+  const codexLast = await maxOccurredFor(['codex']);
+  if ((await getConfigValue('openaiAdminApiKey')) || chatgptLast !== null || codexLast !== null) {
+    surfaces.push({ key: 'chatgpt', label: 'ChatGPT (OpenAI export)', lastEventAt: chatgptLast });
+    surfaces.push({ key: 'codex', label: 'Codex (OpenAI export)', lastEventAt: codexLast });
   }
 
   // ── Ingest failures ───────────────────────────────────────────────

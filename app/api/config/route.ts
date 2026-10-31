@@ -224,6 +224,11 @@ export async function POST(request: NextRequest) {
     'complianceActivityBackfillDays',
     'complianceActivitySyncEnabled',
     'complianceActivityExcludedTypes',
+    'openaiAdminApiKey',
+    'openaiWorkspaceId',
+    'openaiOrganizationId',
+    'openaiSyncIntervalMinutes',
+    'openaiBackfillDays',
   ]);
 
   const values: Partial<Record<keyof AppConfig, string>> = {};
@@ -246,6 +251,7 @@ export async function POST(request: NextRequest) {
       'dxInstanceUrl',
       // Blank = the address falls back to CCC_COLLECTOR_ADDRESS, then localhost.
       'otelCollectorAddress',
+      'openaiWorkspaceId', 'openaiOrganizationId',
     ]);
     if (!allowedKeys.has(key) || typeof value !== 'string') continue;
     if (String(value).includes('••••••••')) {
