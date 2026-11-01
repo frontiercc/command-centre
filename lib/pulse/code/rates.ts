@@ -81,6 +81,11 @@ export const OPENAI_DEFAULT_RATES: ModelRates = {
   'o4-mini-deep-research': openai(2, 0.5, 8),
 };
 
+/** On the rate card for Chat only: never suggested for Codex work. */
+export const OPENAI_CHAT_ONLY_MODELS = new Set(['gpt-6-pro', 'gpt-6', 'gpt-5.3']);
+/** Research and deep-research models: priced, but never suggested as a cheaper model for everyday work. */
+export const OPENAI_SPECIALIST_MODELS = new Set(['gpt-6-rosalind-research', 'gpt-5.5-rosalind-research', 'gpt-5.5-rosalind-discovery', 'o4-mini-deep-research']);
+
 // Published Anthropic API pricing, $/MTok (input / output), then OpenAI's.
 export const DEFAULT_RATES: ModelRates = {
   ...OPENAI_DEFAULT_RATES,

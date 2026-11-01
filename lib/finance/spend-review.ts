@@ -34,7 +34,7 @@ import { jsonToText } from '@/lib/db/json';
 import { monthBounds } from '@/lib/finance/period';
 import { getCodeModelRates, priceTokens, type ModelRates, type TokenUsage } from '@/lib/pulse/code/rates';
 import { rankModelsByPrice, estimateCeilingUsd, modelPrice } from '@/lib/finance/model-tiering';
-import { normalizeModelId } from '@/lib/pulse/code/rates';
+import { normalizeModelId, OPENAI_CHAT_ONLY_MODELS, OPENAI_SPECIALIST_MODELS } from '@/lib/pulse/code/rates';
 import { isBuiltInTool } from '@/lib/finance/spend-review-builtins';
 import { buildSessionTaskTypeMap, parseCoworkTokenUsage, computeCostByType, computeCacheEfficiency, type ModelSpend } from '@/lib/finance/model-efficiency';
 import { formatTaskType } from '@/lib/pulse/events/capability';
@@ -477,7 +477,11 @@ export function deriveModelFit(
   if (!step && provenCheapestPrice === null) {
     const cap = currentPrice * SAVE_MAX_COST_RATIO;
     const pick = Object.keys(rates)
-      .filter(m => (vendor === 'anthropic' ? m.startsWith('claude-') : modelVendor(m) === 'openai') && (price(m) ?? 0) > 0 && !evidenced(m) && m !== current)
+      .filter(m => (vendor === 'anthropic'
+        ? m.startsWith('claude-')
+        // OpenAI: the product must offer the model (Chat-only models are not in Codex), and never a research model.
+        : modelVendor(m) === 'openai' && !OPENAI_SPECIALIST_MODELS.has(m) && !(surface === 'codex' && OPENAI_CHAT_ONLY_MODELS.has(m)))
+        && (price(m) ?? 0) > 0 && !evidenced(m) && m !== current)
       .filter(m => price(m)! <= cap)
       .map(m => ({ m, saving: savingTo(m), used: colleagues.has(m) || you.has(m) }))
       .filter(x => savingWorthIt(x.saving, workSpendUsd))

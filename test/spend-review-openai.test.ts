@@ -79,6 +79,15 @@ describe('model advice stays with one vendor', () => {
     expect(modelVendor(trial!.toModel)).toBe('openai');
   });
 
+  it('a Codex trial never suggests a Chat-only or research model', () => {
+    const you = new Map([['gpt-6-astra', tally(10, 1, 5, 3)]]);
+    const only = (...ms: string[]) => Object.fromEntries(ms.map(m => [m, RATES[m]]));
+    // gpt-6 (Chat only) is the only cheaper general model here, so nothing is suggested.
+    expect(deriveModelFit('codex', you, new Map(), USAGE('gpt-6-astra'), only('gpt-6-astra', 'gpt-6', 'o4-mini-deep-research'), 100).trial).toBeNull();
+    // The same mix for ChatGPT work may suggest gpt-6.
+    expect(deriveModelFit('chatgpt', you, new Map(), USAGE('gpt-6-astra'), only('gpt-6-astra', 'gpt-6', 'o4-mini-deep-research'), 100).trial?.toModel).toBe('gpt-6');
+  });
+
   it('a Claude trial never suggests an OpenAI model, however cheap', () => {
     const you = new Map([['claude-opus-4-6', tally(10, 1, 5, 3)]]);
     const { trial } = deriveModelFit('cowork', you, new Map(), USAGE('claude-opus-4-6'), RATES, 100);

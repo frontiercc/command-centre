@@ -650,7 +650,7 @@ function SpendReviewContent() {
 
         {!loading && data && (
           <>
-            {data.isCurrentMonth && <AnthropicCard a={data.anthropic} nearShare={data.nearLimitShare} email={data.email} />}
+            {data.isCurrentMonth && !openaiOnly && <AnthropicCard a={data.anthropic} nearShare={data.nearLimitShare} email={data.email} />}
 
             <div className="flex flex-col gap-2">
               <Strip cols={!openai ? 4 : claudeShown ? 6 : 4}>
@@ -662,7 +662,9 @@ function SpendReviewContent() {
                 <Figure label="Sessions" value={String(data.totals.sessions)} />
               </Strip>
               <Muted>
-                {openai
+                {openaiOnly
+                  ? <>ChatGPT and Codex spend from OpenAI&apos;s export, priced at OpenAI&apos;s USD token rates: the same figures as FinOps.</>
+                  : openai
                   ? <>Measured by Command Centre: Claude from telemetry, ChatGPT and Codex from OpenAI&apos;s export priced at OpenAI&apos;s USD token rates, the same figures as FinOps. Claude Chat isn&apos;t included.</>
                   : <>Measured by Command Centre from telemetry, the same figures as FinOps. Chat isn&apos;t included.</>}
                 {hasChatgpt && ' ChatGPT spend per conversation is an estimate: OpenAI reports cost per hour, so each hour\'s cost is shared evenly across the replies in that hour.'}

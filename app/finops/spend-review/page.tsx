@@ -13,6 +13,7 @@ import { MonthPicker, monthOptions, money, pct, ukDate, LimitsNotice, LimitBar, 
 import { PageBody, Toolbar, Panel, PanelFoot, Strip, Figure, T, B, Tag, Chip, Notice, Muted, cx } from '@/components/precision/ui';
 import { SURFACE_COLOR, PRODUCT_COLOR } from '@/lib/ui/chart-colours';
 import { surfaceName, type SpendReviewSurface } from '@/lib/finance/spend-review-format';
+import { useOpenAiOnly } from '@/components/shared/VendorSwitch';
 import { formatModelLabel } from '@/lib/pulse/code/model-label';
 
 type Surface = SpendReviewSurface;
@@ -206,6 +207,8 @@ function SpendReviewIndex() {
   const search = useSearchParams();
   const [period, setPeriod] = useState(() => search.get('period') || monthOptions()[0].value);
   const [data, setData] = useState<IndexData | null>(null);
+  // Only OpenAI connected: no Anthropic limits and no Claude in the key or notes.
+  const openaiOnly = useOpenAiOnly();
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [onlyRoutes, setOnlyRoutes] = useState(false);
@@ -230,7 +233,7 @@ function SpendReviewIndex() {
       .finally(() => { setLoading(false); setRefreshing(false); });
   }, [period, refreshKey]);
 
-  const limitsOn = data?.limits.status === 'ok' && data.isCurrentMonth;
+  const limitsOn = data?.limits.status === 'ok' && data.isCurrentMonth && !openaiOnly;
   const nearShare = data?.nearLimitShare ?? 0.8;
   const departments = useMemo(() => [...new Set((data?.people ?? []).map(p => p.department).filter((d): d is string => !!d))].sort(), [data]);
 
@@ -320,7 +323,7 @@ function SpendReviewIndex() {
 
         {!loading && data && s && (
           <>
-            {data.isCurrentMonth && <LimitsNotice status={data.limits.status} />}
+            {data.isCurrentMonth && !openaiOnly && <LimitsNotice status={data.limits.status} />}
 
             {s.people > 0 && (
               <Strip cols={limitsOn ? 5 : 4}>
@@ -486,13 +489,15 @@ function SpendReviewIndex() {
               )}
               <div className="px-4 py-2.5 border-t border-[#F2F2F2] flex flex-col gap-1.5 text-[13px] text-[#8F8F8F]">
                 <div className="flex gap-4 flex-wrap">
-                  <span className="flex items-center gap-1.5"><span className="w-2.5 h-1 rounded-full" style={{ background: SURFACE_COLOR.cowork }} />{surfaceName('cowork', !!data.openai)}</span>
-                  <span className="flex items-center gap-1.5"><span className="w-2.5 h-1 rounded-full" style={{ background: SURFACE_COLOR.code }} />{surfaceName('code', !!data.openai)}</span>
+                  {!openaiOnly && <span className="flex items-center gap-1.5"><span className="w-2.5 h-1 rounded-full" style={{ background: SURFACE_COLOR.cowork }} />{surfaceName('cowork', !!data.openai)}</span>}
+                  {!openaiOnly && <span className="flex items-center gap-1.5"><span className="w-2.5 h-1 rounded-full" style={{ background: SURFACE_COLOR.code }} />{surfaceName('code', !!data.openai)}</span>}
                   {data.openai && <span className="flex items-center gap-1.5"><span className="w-2.5 h-1 rounded-full" style={{ background: PRODUCT_COLOR.chatgpt_chat }} />ChatGPT</span>}
                   {data.openai && <span className="flex items-center gap-1.5"><span className="w-2.5 h-1 rounded-full" style={{ background: PRODUCT_COLOR.codex }} />Codex</span>}
                 </div>
                 <p className="m-0 leading-5">
-                  {data.openai
+                  {openaiOnly
+                    ? <>ChatGPT and Codex spend from OpenAI&apos;s export, priced at OpenAI&apos;s USD token rates: the same figures as FinOps. ChatGPT spend per conversation is an estimate, since OpenAI reports cost per hour.</>
+                    : data.openai
                     ? <>Measured by Command Centre: Claude Code and Cowork spend from telemetry, and ChatGPT and Codex spend from OpenAI&apos;s export priced at OpenAI&apos;s USD token rates, the same figures as FinOps. Claude Chat isn&apos;t included.</>
                     : <>Measured by Command Centre: Code and Cowork spend from telemetry, the same figures as FinOps. Chat isn&apos;t included.</>}
                   {data.isCurrentMonth && ' The change compares this month so far with last month scaled to the same point in the month.'}
