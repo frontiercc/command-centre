@@ -281,6 +281,13 @@
       "when": 1791158400000,
       "tag": "0039_pulse_metrics_vendor",
       "breakpoints": true
+    },
+    {
+      "idx": 40,
+      "version": "7",
+      "when": 1791244800000,
+      "tag": "0040_openai_spend",
+      "breakpoints": true
     }
   ]
 }

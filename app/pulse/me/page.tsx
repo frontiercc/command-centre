@@ -22,6 +22,7 @@ import HumanTimeCard, { type HumanTimeSummary } from '@/components/pulse/HumanTi
 import { PageBody, Toolbar, Panel, Strip, Figure, BarRow, Tag, Notice, Dot, B, C } from '@/components/precision/ui';
 import { useVendor, VendorSwitch } from '@/components/shared/VendorSwitch';
 import { WORK_PULSE_VENDOR_LABELS } from '@/lib/dashboard/vendor';
+import { workSpendFigure } from '@/lib/pulse/spend-figure';
 
 interface PersonalPulseData {
   humanTime?: HumanTimeSummary | null;
@@ -57,6 +58,7 @@ interface PersonalPulseData {
   } | null;
   teamMetrics: { ors: number | null } | null;
   coworkCostUsd?: number;
+  chatgptCostUsd?: number | null;
   coworkFrictionIndex?: number | null;
   topNativeTools?: Array<{ tool_name: string; usage_count: number }>;
   otiUnderReview?: boolean;
@@ -142,6 +144,7 @@ export default function PersonalPulsePage() {
 
   const pending = data.capabilitiesDetail?.pending ?? [];
   const topTools = data.topNativeTools ?? [];
+  const mySpend = workSpendFigure(vendor, data.coworkCostUsd, data.chatgptCostUsd);
 
   return (
     <>
@@ -215,13 +218,16 @@ export default function PersonalPulsePage() {
         <SkillExchange skills={skillExchangeData} />
 
         {/* 6b. OTel cowork enrichments — cost + friction */}
-        {(data.coworkCostUsd !== undefined || data.coworkFrictionIndex !== undefined) && (
-          <Strip cols={2}>
-            <Figure
-              label="Claude Cowork spend, 7 days"
-              value={spendValue(data.coworkCostUsd)}
-              sub="API cost of Claude Cowork sessions. ChatGPT spend is not recorded yet."
-            />
+        {(mySpend || data.coworkFrictionIndex !== undefined) && (
+          <Strip cols={mySpend && data.coworkFrictionIndex !== undefined ? 2 : undefined}>
+            {mySpend && (
+              <Figure
+                label={`${mySpend.label}, 7 days`}
+                value={spendValue(mySpend.usd)}
+                sub={mySpend.sub}
+              />
+            )}
+            {data.coworkFrictionIndex !== undefined && (
             <Figure
               label="Friction index, 7 days"
               value={data.coworkFrictionIndex == null
@@ -229,6 +235,7 @@ export default function PersonalPulsePage() {
                 : `${(data.coworkFrictionIndex * 100).toFixed(1)}%`}
               sub="Tool failures ÷ total tool calls"
             />
+            )}
           </Strip>
         )}
 

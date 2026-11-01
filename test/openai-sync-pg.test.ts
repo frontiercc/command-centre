@@ -6,7 +6,8 @@
 // into a migrated test database. Proves the paging, the signed-link download,
 // at-least-once delivery (repeats stored once), the Work-in-both-logs skip, the
 // retention floor, people created by email, flags on risky prompts, the
-// cursor, and that a costs-only key reads nothing.
+// cursor, spend (hourly costs, ChatGPT reply times, Codex turns) kept apart
+// from Claude's, and that a costs-only key reads costs and nothing else.
 import { describe, it, expect, beforeAll, afterAll } from 'vitest';
 import { spawn, type ChildProcess } from 'node:child_process';
 import path from 'node:path';
@@ -14,6 +15,7 @@ import path from 'node:path';
 const ROOT = path.resolve(__dirname, '..');
 const PORT = 41000 + Math.floor(Math.random() * 2000);
 const WORKSPACE_ID = '7f3c2a10-5b1e-4c8d-9a6f-0e2d4b8c1a55';
+const ORGANIZATION_ID = 'org-MockAcmeCorp000000000000';
 
 let server: ChildProcess;
 
@@ -47,6 +49,7 @@ describe('OpenAI sync against the stand-in export', () => {
 
       await setConfigValue('openaiAdminApiKey', 'mock-admin-key');
       await setConfigValue('openaiWorkspaceId', WORKSPACE_ID);
+      await setConfigValue('openaiOrganizationId', ORGANIZATION_ID);
       // Cowork kept for 2 days only: older ChatGPT prompts must not come back.
       await setConfigValue('retentionCoworkDays', '2');
 
@@ -88,6 +91,61 @@ describe('OpenAI sync against the stand-in export', () => {
       expect(connectors).toEqual([{ source: 'codex', surface: 'code', mcp_server: 'linear', n: first.connectorCalls }]);
       // The Get started panel's optional step ticks on the first OpenAI prompt.
       expect(Number(await getConfigValue('setupFirstOpenaiAt'))).toBeGreaterThanOrEqual(syncStartS);
+
+      // Spend, kept apart from Claude's: hourly costs, ChatGPT reply times
+      // and Codex turns, never in cowork_messages or code_assistant_meta.
+      expect(first.costRecords).toBeGreaterThan(0);
+      expect(first.replies).toBeGreaterThan(0);
+      expect(first.codexTurns).toBeGreaterThan(0);
+      const claudeSpendRows = await sql.all<{ n: number }>(
+        `SELECT (SELECT COUNT(*) FROM cowork_messages WHERE message_type = 'cowork_api_request')
+              + (SELECT COUNT(*) FROM code_assistant_meta) AS n`,
+      );
+      expect(claudeSpendRows[0].n).toBe(0);
+      const costs = await sql.all<{ product: string; billed_in: string; n: number; usd: number; oldest: number }>(
+        `SELECT product, billed_in, COUNT(*) AS n, SUM(cost_usd) AS usd, MIN(hour_start) AS oldest
+           FROM openai_costs GROUP BY product, billed_in ORDER BY product, billed_in`,
+      );
+      expect(costs.map(c => c.product)).toEqual(expect.arrayContaining(['chatgpt', 'codex']));
+      // One person is billed in dollars, everyone else in credits valued at OpenAI's estimate.
+      expect(costs.some(c => c.product === 'chatgpt' && c.billed_in === 'USD')).toBe(true);
+      expect(costs.some(c => c.product === 'chatgpt' && c.billed_in === 'CREDITS')).toBe(true);
+      expect(costs.every(c => c.usd > 0)).toBe(true);
+      // ChatGPT costs honour the 2-day Cowork window, like its prompts.
+      for (const c of costs.filter(c => c.product === 'chatgpt')) expect(c.oldest + 3600).toBeGreaterThan(syncStartS - 2 * 86400);
+      const costPeople = await sql.all<{ n: number }>(`SELECT COUNT(*) AS n FROM openai_costs WHERE product = 'chatgpt' AND user_id IS NOT NULL`);
+      expect(costPeople[0].n).toBeGreaterThan(0);
+      const replies = await sql.all<{ source: string; n: number }>(
+        `SELECT source, COUNT(*) AS n FROM openai_replies GROUP BY source ORDER BY source`,
+      );
+      expect(replies.map(r => r.source)).toEqual(['chatgpt_chat', 'chatgpt_work']);
+      // Codex turns only: ChatGPT Work's spend arrives in COSTS under ChatGPT.
+      const turns = await sql.all<{ bad: number; models: string }>(
+        `SELECT COUNT(*) FILTER (WHERE session_id NOT LIKE 'codex:%' OR openai_cost_usd IS NULL) AS bad,
+                string_agg(DISTINCT model, ',' ORDER BY model) AS models FROM codex_turns`,
+      );
+      expect(turns[0].bad).toBe(0);
+
+      // The readers: ChatGPT is OpenAI's own figure; Codex is priced from
+      // the rates table, and a model with no rate is named, never $0.
+      const { chatgptCostUsd, codexSpend } = await import('@/lib/openai/spend');
+      const chatgptTotal = costs.filter(c => c.product === 'chatgpt').reduce((n, c) => n + c.usd, 0);
+      expect(await chatgptCostUsd({ since: 0 })).toBeCloseTo(chatgptTotal, 4);
+      expect(await chatgptCostUsd({ since: 0, userIds: [] })).toBe(0);
+      const unpriced = await codexSpend({ since: 0 }, {});
+      expect(unpriced.usd).toBeNull();
+      expect(unpriced.unpricedModels).toEqual(turns[0].models.split(',').sort());
+      expect(unpriced.turns).toBe(first.codexTurns);
+      // The stand-in's own made-up prices ($0.04 a credit), entered as rates,
+      // give back OpenAI's estimate for the same turns.
+      const rate = (inp: number, cached: number, out: number) => ({ in: inp, out, cacheWrite: inp, cacheRead: cached });
+      const priced = await codexSpend({ since: 0 }, {
+        'gpt-5.5-codex': rate(1.25, 0.125, 10),
+        'gpt-5-codex-mini': rate(0.25, 0.025, 2),
+      });
+      expect(priced.unpricedModels).toEqual([]);
+      expect(priced.usd).not.toBeNull();
+      expect(Math.abs(priced.usd! - priced.openaiUsd) / priced.openaiUsd).toBeLessThan(0.01);
 
       // No Work prompt was stored twice under Codex.
       const workTwice = await sql.all<{ n: number }>(
@@ -175,7 +233,7 @@ describe('OpenAI sync against the stand-in export', () => {
 
       // Cursor saved per log type.
       const cursors = JSON.parse(await getConfigValue('openaiSyncCursors'));
-      expect(Object.keys(cursors).sort()).toEqual(['CODEX_LOG', 'CONVERSATION_MESSAGE']);
+      expect(Object.keys(cursors).sort()).toEqual(['CODEX_LOG', 'CODEX_TURN', 'CONVERSATION_MESSAGE', 'COSTS']);
 
       // A second run from the saved cursor finds nothing new.
       const second = await runOpenAiSync({ downloadGapMs: 0, filesPerRun: 100_000 });
@@ -189,6 +247,7 @@ describe('OpenAI sync against the stand-in export', () => {
       expect(replay.prompts).toEqual({ chatgpt_chat: 0, chatgpt_work: 0, codex: 0 });
       expect(replay.skillUses).toBe(0);
       expect(replay.connectorCalls).toBe(0);
+      expect([replay.replies, replay.codexTurns, replay.costRecords]).toEqual([0, 0, 0]);
       const total = await sql.all<{ n: number }>(`SELECT COUNT(*) AS n FROM cowork_messages`);
       expect(total[0].n).toBe(first.prompts.chatgpt_chat + first.prompts.chatgpt_work + first.prompts.codex);
 
@@ -197,21 +256,23 @@ describe('OpenAI sync against the stand-in export', () => {
       await setConfigValue('openaiSyncCursors', '');
       const capped = await runOpenAiSync({ downloadGapMs: 0, filesPerRun: 5 });
       expect(capped.files).toBe(5);
-      // The cap is shared, so both logs move forward in the same run.
-      expect(Object.keys(JSON.parse(await getConfigValue('openaiSyncCursors'))).sort()).toEqual(['CODEX_LOG', 'CONVERSATION_MESSAGE']);
+      // The cap is shared, so every log moves forward in the same run.
+      expect(Object.keys(JSON.parse(await getConfigValue('openaiSyncCursors'))).sort()).toEqual(['CODEX_LOG', 'CODEX_TURN', 'CONVERSATION_MESSAGE', 'COSTS']);
       const rest = await runOpenAiSync({ downloadGapMs: 0, filesPerRun: 100_000 });
       expect(rest.files).toBe(first.files - 5);
 
-      // A costs-only key can read neither log; nothing is stored and the
-      // cursor does not move.
+      // A costs-only key reads costs and none of the workspace logs: no
+      // prompt is stored and only the COSTS cursor moves.
       await sql.run(`DELETE FROM cowork_messages`);
+      await sql.run(`DELETE FROM openai_costs`);
       await setConfigValue('openaiSyncCursors', '');
       await setConfigValue('openaiAdminApiKey', 'mock-costs-key');
-      const refused = await runOpenAiSync({ downloadGapMs: 0 });
-      expect(refused.errors).toHaveLength(2);
+      const refused = await runOpenAiSync({ downloadGapMs: 0, filesPerRun: 100_000 });
+      expect(refused.errors).toHaveLength(3);
       expect(refused.errors.every(e => e.includes('403'))).toBe(true);
+      expect(refused.costRecords).toBeGreaterThan(0);
       expect((await sql.all<{ n: number }>(`SELECT COUNT(*) AS n FROM cowork_messages`))[0].n).toBe(0);
-      expect(await getConfigValue('openaiSyncCursors')).toBe('');
+      expect(Object.keys(JSON.parse(await getConfigValue('openaiSyncCursors')))).toEqual(['COSTS']);
 
       // Let the fire-and-forget alert writes settle before the database goes.
       await new Promise(r => setTimeout(r, 500));

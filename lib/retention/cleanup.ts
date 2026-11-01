@@ -466,6 +466,22 @@ export async function runRetentionCleanup(): Promise<CleanupResult> {
       await tx.delete(schema.coworkMcpInvocations).where(and(eq(schema.coworkMcpInvocations.surface, 'chat'), lt(schema.coworkMcpInvocations.occurred_at, chatCutoff)))
     );
 
+    // ── OpenAI spend (migration 0040; metadata-only -> delete in BOTH
+    // modes). Codex on the Code window, ChatGPT on the Cowork window, as
+    // their prompts are. ─────────────────────────────────────────────────
+    codeAffected += rowsAffected(
+      await tx.delete(schema.codexTurns).where(lt(schema.codexTurns.started_at, codeCutoff))
+    );
+    codeAffected += rowsAffected(
+      await tx.delete(schema.openaiCosts).where(and(eq(schema.openaiCosts.product, 'codex'), lt(schema.openaiCosts.hour_start, codeCutoff)))
+    );
+    coworkAffected += rowsAffected(
+      await tx.delete(schema.openaiCosts).where(and(ne(schema.openaiCosts.product, 'codex'), lt(schema.openaiCosts.hour_start, coworkCutoff)))
+    );
+    coworkAffected += rowsAffected(
+      await tx.delete(schema.openaiReplies).where(lt(schema.openaiReplies.occurred_at, coworkCutoff))
+    );
+
     // ── chat_assistant_meta (metadata-only -> delete in BOTH modes; was
     // purge-only before — moved out of the mode branch above so it is no
     // longer duplicated/double-counted). ────────────────────────────────

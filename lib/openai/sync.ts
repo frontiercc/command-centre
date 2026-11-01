@@ -20,8 +20,16 @@
 //
 // Prompts are checked for personal data and risky intent exactly as the OTel
 // receivers check Claude prompts, and alert once, on the first insert.
-// Assistant replies, token counts and costs are later phases; reply TEXT is
-// never stored.
+//
+// Spend is kept apart from Claude's spend, so no page shows it under a Claude
+// label (migration 0040):
+//   COSTS (organisation route)            → openai_costs, one row per person,
+//     model, product and app per hour
+//   ChatGPT assistant messages             → openai_replies, model and time
+//     only, to share each hourly cost across that hour's conversations
+//   CODEX_TURN                             → codex_turns, tokens to price from
+//     the rates table, with OpenAI's own estimate beside them
+// Reply TEXT is never stored.
 //
 // ChatGPT Work also appears in CODEX_LOG with a CODEX_WORK_* app, carrying the
 // same prompt. Work is taken from CONVERSATION_MESSAGE only, so those Codex
@@ -52,8 +60,8 @@ import { noteFirstTelemetry } from '@/lib/setup/first-telemetry';
 
 type TypedClient = Awaited<ReturnType<typeof getTypedClient>>;
 
-/** Log types this phase reads, and where each is listed. */
-export const SYNCED_TYPES: OpenAiEventType[] = ['CONVERSATION_MESSAGE', 'CODEX_LOG'];
+/** Log types the sync reads. COSTS is listed by organisation, the rest by workspace. */
+export const SYNCED_TYPES: OpenAiEventType[] = ['CONVERSATION_MESSAGE', 'CODEX_LOG', 'CODEX_TURN', 'COSTS'];
 
 /**
  * Downloads are paced so one run stays under OpenAI's 100 requests a minute
@@ -80,6 +88,10 @@ export interface OpenAiSyncStats {
   /** Skill uses (ChatGPT) and connector calls (Codex, ChatGPT Work) stored. */
   skillUses: number;
   connectorCalls: number;
+  /** Spend records stored: ChatGPT replies, Codex turns and hourly costs. */
+  replies: number;
+  codexTurns: number;
+  costRecords: number;
   badLines: number;
   errors: string[];
 }
@@ -87,7 +99,8 @@ export interface OpenAiSyncStats {
 export function emptyStats(): OpenAiSyncStats {
   return {
     files: 0, records: 0, prompts: { chatgpt_chat: 0, chatgpt_work: 0, codex: 0 },
-    repeats: 0, workInCodexLog: 0, noPerson: 0, tooOld: 0, skillUses: 0, connectorCalls: 0, badLines: 0, errors: [],
+    repeats: 0, workInCodexLog: 0, noPerson: 0, tooOld: 0, skillUses: 0, connectorCalls: 0,
+    replies: 0, codexTurns: 0, costRecords: 0, badLines: 0, errors: [],
   };
 }
 
@@ -115,6 +128,28 @@ interface CodexLogRecord extends Envelope {
     session_id?: string; prompt_text?: string; model?: string;
     // APP_MCP_CALL: the MCP tool's name and optional metadata naming its connector.
     name?: string; tool_meta?: { connector?: unknown };
+  };
+}
+
+interface CodexTurnRecord extends Envelope {
+  payload?: {
+    turn_id?: string; turn_key?: string; session_id?: string; product_client_id?: string; model?: string;
+    started_at?: string; completed_at?: string; credits?: number; estimated_cost_usd?: number; tags?: string[];
+    token_usage?: { uncached_input_tokens?: number; cached_input_tokens?: number; output_tokens?: number };
+  };
+}
+interface CostLine {
+  cost?: { value?: number; unit?: string };
+  estimated_cost_usd?: { value?: number };
+}
+interface CostsRecord extends Envelope {
+  payload?: {
+    day?: string; hour?: number; product?: string; client?: string; model?: string;
+    identity?: { email?: string; agent?: { name?: string } };
+    measures?: {
+      usage?: { text_input_tokens?: number; text_cached_input_tokens?: number; text_output_tokens?: number };
+      billing?: CostLine[];
+    };
   };
 }
 
@@ -283,6 +318,116 @@ export function interpretActivity(raw: unknown, floors: { cowork: number; code: 
   return null;
 }
 
+/** A spend record ready to store. No text. */
+export type SpendRow =
+  | {
+      kind: 'reply';
+      id: string; sessionId: string; source: OpenAiSource; email: string; model: string | null; occurredAt: number;
+    }
+  | {
+      kind: 'turn';
+      id: string; sessionId: string; email: string; model: string | null; startedAt: number; completedAt: number | null;
+      uncachedInput: number; cachedInput: number; output: number;
+      credits: number | null; openaiCostUsd: number | null; automation: boolean;
+    }
+  | {
+      kind: 'cost';
+      id: string; email: string | null; agentName: string | null; hourStart: number;
+      product: string; client: string | null; model: string | null;
+      input: number; cachedInput: number; output: number;
+      costUsd: number | null; credits: number | null; billedIn: 'USD' | 'CREDITS';
+    };
+
+const count = (v: unknown): number => (typeof v === 'number' && Number.isFinite(v) && v > 0 ? Math.round(v) : 0);
+const money = (v: unknown): number | null => (typeof v === 'number' && Number.isFinite(v) ? v : null);
+
+/**
+ * Decides whether a record carries spend: a ChatGPT reply (its model and
+ * time), a Codex turn, or an hourly cost. Pure, like interpretRecord.
+ *
+ * A cost billed in credits is valued at OpenAI's estimated dollar figure; if a
+ * credit line carries none, the record's dollar cost is unknown (null) rather
+ * than guessed. A cost with no plain email keeps no person: its spend still
+ * counts in totals. A ChatGPT Work turn in the Codex turn log is skipped:
+ * Work's spend arrives in COSTS under ChatGPT.
+ */
+export function interpretSpend(raw: unknown, floors: { cowork: number; code: number }): SpendRow | null {
+  const rec = raw as Envelope;
+  if (!rec || typeof rec !== 'object') return null;
+
+  if (rec.type === 'CONVERSATION_MESSAGE') {
+    const r = rec as ConversationMessageRecord;
+    const m = r.message;
+    if (m?.author?.type !== 'assistant' || !m.id || !r.conversation?.id) return null;
+    const email = r.actor?.user_email ?? '';
+    if (!isPlainEmail(email)) return null;
+    const occurredAt = toSeconds(m.created_at) ?? toSeconds(r.timestamp);
+    if (occurredAt === null || occurredAt < floors.cowork) return null;
+    return {
+      kind: 'reply', id: `chatgpt-reply:${m.id}`, sessionId: `chatgpt:${r.conversation.id}`,
+      source: r.conversation.mode === 'work' ? 'chatgpt_work' : 'chatgpt_chat',
+      email, model: m.author.model ?? null, occurredAt,
+    };
+  }
+
+  if (rec.type === 'CODEX_TURN') {
+    const p = (rec as CodexTurnRecord).payload;
+    const key = p?.turn_key ?? p?.turn_id;
+    if (!p || !key || !p.session_id) return null;
+    if ((p.product_client_id ?? '').startsWith('CODEX_WORK_')) return null;
+    const email = rec.actor?.user_email ?? '';
+    if (!isPlainEmail(email)) return null;
+    const startedAt = toSeconds(p.started_at) ?? toSeconds(rec.timestamp);
+    if (startedAt === null || startedAt < floors.code) return null;
+    return {
+      kind: 'turn', id: `codex-turn:${key}`, sessionId: `codex:${p.session_id}`, email, model: p.model ?? null,
+      startedAt, completedAt: toSeconds(p.completed_at),
+      uncachedInput: count(p.token_usage?.uncached_input_tokens),
+      cachedInput: count(p.token_usage?.cached_input_tokens),
+      output: count(p.token_usage?.output_tokens),
+      credits: money(p.credits), openaiCostUsd: money(p.estimated_cost_usd),
+      automation: (p.tags ?? []).includes('automation'),
+    };
+  }
+
+  if (rec.type === 'COSTS') {
+    const r = rec as CostsRecord;
+    const p = r.payload;
+    if (!p || !rec.event_id || !p.product) return null;
+    const dayS = p.day ? toSeconds(`${p.day}T00:00:00Z`) : null;
+    const hourStart = dayS !== null && typeof p.hour === 'number'
+      ? dayS + p.hour * 3600
+      : (() => { const t = toSeconds(rec.timestamp); return t === null ? null : t - (t % 3600); })();
+    if (hourStart === null) return null;
+    if (hourStart + 3600 <= (p.product === 'codex' ? floors.code : floors.cowork)) return null;
+    let costUsd: number | null = 0;
+    let credits: number | null = null;
+    let billedIn: 'USD' | 'CREDITS' = 'USD';
+    for (const line of p.measures?.billing ?? []) {
+      const value = money(line.cost?.value);
+      if (line.cost?.unit === 'CREDITS') {
+        billedIn = 'CREDITS';
+        credits = (credits ?? 0) + (value ?? 0);
+        const est = money(line.estimated_cost_usd?.value);
+        costUsd = costUsd === null || est === null ? null : costUsd + est;
+      } else {
+        costUsd = costUsd === null || value === null ? null : costUsd + value;
+      }
+    }
+    const email = p.identity?.email ?? '';
+    const u = p.measures?.usage;
+    return {
+      kind: 'cost', id: `openai-cost:${rec.event_id}`,
+      email: isPlainEmail(email) ? email : null,
+      agentName: p.identity?.agent?.name ?? null,
+      hourStart, product: p.product, client: p.client ?? null, model: p.model ?? null,
+      input: count(u?.text_input_tokens), cachedInput: count(u?.text_cached_input_tokens), output: count(u?.text_output_tokens),
+      costUsd, credits, billedIn,
+    };
+  }
+  return null;
+}
+
 function displayNameFromEmail(email: string): string {
   const local = email.split('@')[0];
   return local.split(/[._-]/).filter(Boolean).map(p => p.charAt(0).toUpperCase() + p.slice(1)).join(' ');
@@ -343,6 +488,11 @@ async function storeRecords(
         else {
           const activity = interpretActivity(raw, floors);
           if (activity) await storeActivity(tx, activity, await personFor(activity.email, activity.surface), stats);
+          const spend = interpretSpend(raw, floors);
+          if (spend) {
+            const surface = spend.kind === 'turn' || (spend.kind === 'cost' && spend.product === 'codex') ? 'code' : 'cowork';
+            await storeSpend(tx, spend, spend.email ? await personFor(spend.email, surface) : null, stats);
+          }
         }
         continue;
       }
@@ -441,6 +591,40 @@ async function storeActivity(tx: TypedClient, a: ActivityRow, userId: string, st
   if (inserted.length > 0) stats.connectorCalls++;
 }
 
+/** Stores a ChatGPT reply, Codex turn or hourly cost; a repeated delivery is a no-op. */
+async function storeSpend(tx: TypedClient, s: SpendRow, userId: string | null, stats: OpenAiSyncStats): Promise<void> {
+  if (s.kind === 'reply') {
+    if (!userId) return;
+    const inserted = await tx.insert(schema.openaiReplies).values({
+      id: s.id, user_id: userId, session_id: s.sessionId, source: s.source, model: s.model, occurred_at: s.occurredAt,
+    }).onConflictDoNothing().returning({ id: schema.openaiReplies.id });
+    if (inserted.length > 0) stats.replies++;
+    return;
+  }
+  if (s.kind === 'turn') {
+    if (!userId) return;
+    const inserted = await tx.insert(schema.codexTurns).values({
+      id: s.id, user_id: userId, session_id: s.sessionId, model: s.model,
+      started_at: s.startedAt, completed_at: s.completedAt,
+      uncached_input_tokens: s.uncachedInput, cached_input_tokens: s.cachedInput, output_tokens: s.output,
+      credits: s.credits === null ? null : String(s.credits),
+      openai_cost_usd: s.openaiCostUsd === null ? null : String(s.openaiCostUsd),
+      automation: s.automation ? 1 : 0,
+    }).onConflictDoNothing().returning({ id: schema.codexTurns.id });
+    if (inserted.length > 0) stats.codexTurns++;
+    return;
+  }
+  const inserted = await tx.insert(schema.openaiCosts).values({
+    id: s.id, user_id: userId, agent_name: s.agentName, hour_start: s.hourStart,
+    product: s.product, client: s.client, model: s.model,
+    input_tokens: s.input, cached_input_tokens: s.cachedInput, output_tokens: s.output,
+    cost_usd: s.costUsd === null ? null : String(s.costUsd),
+    credits: s.credits === null ? null : String(s.credits),
+    billed_in: s.billedIn,
+  }).onConflictDoNothing().returning({ id: schema.openaiCosts.id });
+  if (inserted.length > 0) stats.costRecords++;
+}
+
 /** Same as the OTel receivers: never awaited inside the sync, never lost silently. */
 function raiseAlerts(alerts: PendingAlert[]): void {
   for (const a of alerts) {
@@ -504,14 +688,19 @@ export async function runOpenAiSync(opts: RunOptions = {}): Promise<OpenAiSyncSt
   const gap = opts.downloadGapMs ?? MIN_DOWNLOAD_GAP_MS;
   let budget = opts.filesPerRun ?? DEFAULT_FILES_PER_RUN;
   const cursors = readCursors(await getConfigValue('openaiSyncCursors'));
-  const scope: LogScope = { kind: 'workspace', id: workspaceId };
+  const organizationId = (await getConfigValue('openaiOrganizationId')).trim();
+  // COSTS is listed by organisation; without an organisation id it is skipped.
+  const types = SYNCED_TYPES.filter((t) => t !== 'COSTS' || organizationId);
+  const scopeFor = (t: OpenAiEventType): LogScope =>
+    t === 'COSTS' ? { kind: 'organization', id: organizationId } : { kind: 'workspace', id: workspaceId };
   const userCache = new Map<string, string>();
 
-  for (const [index, eventType] of SYNCED_TYPES.entries()) {
+  for (const [index, eventType] of types.entries()) {
+    const scope = scopeFor(eventType);
     // Each type gets a fair share of what is left, so a long backfill of one
-    // log never holds the other back; a type that needs less leaves the rest
+    // log never holds the others back; a type that needs less leaves the rest
     // to the types after it.
-    let share = Math.ceil(budget / (SYNCED_TYPES.length - index));
+    let share = Math.ceil(budget / (types.length - index));
     let after = cursors[eventType] || firstAfter;
     try {
       while (share > 0) {

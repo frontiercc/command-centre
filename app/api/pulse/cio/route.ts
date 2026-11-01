@@ -29,6 +29,7 @@ import { parseVendor, type Vendor } from '@/lib/dashboard/vendor';
 import { hasOpenAiData } from '@/lib/dashboard/queries';
 import { vendorClause } from '@/lib/dashboard/product-sql';
 import { messageVendor } from '@/lib/pulse/vendor-filter';
+import { chatgptCostUsd } from '@/lib/openai/spend';
 
 export const dynamic = 'force-dynamic';
 
@@ -350,13 +351,14 @@ export async function GET(request: NextRequest) {
   const priorTier3 = completedVolume.length > 1 ? completedVolume[completedVolume.length - 2].tier3Count : null;
   const tier3Pct = priorTier3 !== null && priorTier3 !== 0 && currentTier3 !== null ? (currentTier3 - priorTier3) / priorTier3 : null;
 
-  // OTel cowork enrichments — org-wide 7-day cost. Claude Cowork only: no
-  // ChatGPT spend is recorded, so the OpenAI view has no spend figure.
+  // OTel cowork enrichments — org-wide 7-day cost, Claude Cowork only.
+  // ChatGPT's spend comes from OpenAI's cost records, read apart below.
   const orgCoworkCostRows = await client
     .select({ cowork_cost: sql<number | string>`COALESCE(SUM(${schema.coworkMessages.cost_usd}), 0)` })
     .from(schema.coworkMessages)
     .where(and(eq(schema.coworkMessages.message_type, 'cowork_api_request'), gte(schema.coworkMessages.occurred_at, sevenDaysAgo)));
   const orgCoworkCostUsd = Number(orgCoworkCostRows[0]?.cowork_cost ?? 0);
+  const orgChatgptCostUsd = vendor === 'claude' || !openaiPresent ? undefined : await chatgptCostUsd({ since: sevenDaysAgo });
 
   // ── Files touched by category — org-wide, 30-day window ────────────────────
   const fileCategoryMix = await getFileCategoryMix(30);
@@ -492,6 +494,7 @@ export async function GET(request: NextRequest) {
     briefing: briefing ?? null,
     capabilityLog,
     coworkCostUsd: vendor === 'openai' ? undefined : orgCoworkCostUsd,
+    chatgptCostUsd: orgChatgptCostUsd,
     fileCategoryMix,
     weeklyVolume: {
       series: weeklyVolume,

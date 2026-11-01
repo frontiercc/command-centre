@@ -26,6 +26,7 @@ import HumanTimeCard, { type HumanTimeSummary } from '@/components/pulse/HumanTi
 import { PageBody, Toolbar, Strip, Figure, Notice, B, cx } from '@/components/precision/ui';
 import { useVendor, VendorSwitch } from '@/components/shared/VendorSwitch';
 import { WORK_PULSE_VENDOR_LABELS } from '@/lib/dashboard/vendor';
+import { workSpendFigure } from '@/lib/pulse/spend-figure';
 
 // Based on DeptPulseData from app/pulse/dept/[dept]/page.tsx (a redirect-only
 // legacy page) but intentionally diverges: `delegation?` exists only here.
@@ -53,6 +54,7 @@ interface DeptData {
   concentrationDetail: Array<{ user_id: string; display_name: string | null; task_types: string[] }>;
   deptBriefing: { body: string; suggestion: string | null; generated_at: number } | null;
   coworkCostUsd?: number;
+  chatgptCostUsd?: number | null;
   coworkFrictionIndex?: number | null;
   openaiPresent?: boolean;
   docSessions?: { sessions_with_uploads: number; total_uploads: number };
@@ -194,9 +196,10 @@ export default function DeptPickerPage() {
 
         {deptData && !dataLoading && (() => {
           const d = deptData;
-          const showSpend = d.coworkCostUsd !== undefined || d.coworkFrictionIndex !== undefined;
+          const spend = workSpendFigure(vendor, d.coworkCostUsd, d.chatgptCostUsd);
+          const showFriction = d.coworkFrictionIndex !== undefined;
           const showDocs = !!d.docSessions && d.docSessions.sessions_with_uploads > 0;
-          const activityCols = (showSpend ? 2 : 0) + (showDocs ? 2 : 0);
+          const activityCols = (spend ? 1 : 0) + (showFriction ? 1 : 0) + (showDocs ? 2 : 0);
           return (
             <>
               <FrontierHero view={d.frontier} canOpenUseCases={d.frontierAccess?.canOpenUseCases ?? false} />
@@ -258,15 +261,15 @@ export default function DeptPickerPage() {
 
               {/* Cowork spend, friction and document sessions: measured, one strip. */}
               {activityCols > 0 && (
-                <Strip cols={activityCols as 2 | 4}>
-                  {showSpend && (
+                <Strip cols={activityCols === 1 ? undefined : activityCols as 2 | 3 | 4}>
+                  {spend && (
                     <Figure
-                      label="Dept Claude Cowork spend, 7 days"
-                      value={spendValue(d.coworkCostUsd)}
-                      sub="Total API cost of Claude Cowork sessions. ChatGPT spend is not recorded yet."
+                      label={`Dept ${spend.label.charAt(0).toLowerCase()}${spend.label.slice(1)}, 7 days`}
+                      value={spendValue(spend.usd)}
+                      sub={spend.sub}
                     />
                   )}
-                  {showSpend && (
+                  {showFriction && (
                     <Figure
                       label="Dept friction index, 7 days"
                       value={d.coworkFrictionIndex == null

@@ -213,6 +213,64 @@ export const codeAssistantMeta = pgTable('code_assistant_meta', {
     index('idx_cam_agent_name').on(t.agent_name, t.occurred_at).where(sql`agent_name IS NOT NULL`),
 ]);
 
+// ChatGPT and Codex spend from the OpenAI export (migration 0040), kept apart
+// from Claude's spend so no page shows it under a Claude label.
+
+/** One OpenAI COSTS record: a person's cost for one model, product and app in one UTC hour. */
+export const openaiCosts = pgTable('openai_costs', {
+    id: text().primaryKey(),
+    user_id: text(),
+    agent_name: text(),
+    hour_start: bigint({ mode: 'number' }).notNull(),
+    product: text().notNull(),
+    client: text(),
+    model: text(),
+    input_tokens: bigint({ mode: 'number' }).notNull().default(0),
+    cached_input_tokens: bigint({ mode: 'number' }).notNull().default(0),
+    output_tokens: bigint({ mode: 'number' }).notNull().default(0),
+    cost_usd: numeric(),
+    credits: numeric(),
+    billed_in: text().notNull(),
+    ingested_at: bigint({ mode: 'number' }).notNull().default(sql`extract(epoch from now())`),
+}, (t) => [
+    index('idx_openai_costs_hour').on(t.product, t.hour_start),
+    index('idx_openai_costs_user_hour').on(t.user_id, t.hour_start),
+]);
+
+/** A ChatGPT reply's model and time, never its text. */
+export const openaiReplies = pgTable('openai_replies', {
+    id: text().primaryKey(),
+    user_id: text().notNull(),
+    session_id: text().notNull(),
+    source: text().notNull(),
+    model: text(),
+    occurred_at: bigint({ mode: 'number' }).notNull(),
+    ingested_at: bigint({ mode: 'number' }).notNull().default(sql`extract(epoch from now())`),
+}, (t) => [
+    index('idx_openai_replies_user_time').on(t.user_id, t.occurred_at),
+    index('idx_openai_replies_session').on(t.session_id),
+]);
+
+/** One Codex turn: tokens priced from the rates table, OpenAI's own estimate beside them. */
+export const codexTurns = pgTable('codex_turns', {
+    id: text().primaryKey(),
+    user_id: text().notNull(),
+    session_id: text().notNull(),
+    model: text(),
+    started_at: bigint({ mode: 'number' }).notNull(),
+    completed_at: bigint({ mode: 'number' }),
+    uncached_input_tokens: bigint({ mode: 'number' }).notNull().default(0),
+    cached_input_tokens: bigint({ mode: 'number' }).notNull().default(0),
+    output_tokens: bigint({ mode: 'number' }).notNull().default(0),
+    credits: numeric(),
+    openai_cost_usd: numeric(),
+    automation: integer().notNull().default(0),
+    ingested_at: bigint({ mode: 'number' }).notNull().default(sql`extract(epoch from now())`),
+}, (t) => [
+    index('idx_codex_turns_user_time').on(t.user_id, t.started_at),
+    index('idx_codex_turns_session').on(t.session_id),
+]);
+
 export const chatAssistantMeta = pgTable('chat_assistant_meta', {
     id: text().primaryKey(),
     conversation_id: text(),
@@ -1255,6 +1313,9 @@ export const pgSchema = {
   pulseEvents,
   pulseMetrics,
   pulseMetricsVendor,
+  openaiCosts,
+  openaiReplies,
+  codexTurns,
   pulseRubricVersions,
   pulseAuditCycles,
   pulseAuditItems,

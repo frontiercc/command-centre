@@ -26,6 +26,7 @@ import SessionOutputCard, { type SessionOutputReport } from '@/components/pulse/
 import HumanTimeCard, { type HumanTimeSummary } from '@/components/pulse/HumanTimeCard';
 import { useVendor, VendorSwitch, formatSplit } from '@/components/shared/VendorSwitch';
 import { WORK_PULSE_VENDOR_LABELS, type Vendor } from '@/lib/dashboard/vendor';
+import { workSpendFigure, formatUsd } from '@/lib/pulse/spend-figure';
 
 interface WorkMixItem {
   task_type: string;
@@ -130,6 +131,8 @@ interface CioData {
     content_preview: string | null;
   }>;
   coworkCostUsd?: number;
+  /** ChatGPT spend from OpenAI's cost records; null until one arrives. */
+  chatgptCostUsd?: number | null;
   fileCategoryMix?: Array<{ category: string; count: number; share: number }>;
   weeklyVolume?: {
     series: Array<{ weekStart: number; eventCount: number; tier3Count: number; partial: boolean }>;
@@ -358,6 +361,7 @@ export default function CioPulsePage() {
     const o = pick(hs.openai);
     return `Claude ${c === null ? 'n/a' : fmt(c)} · ChatGPT ${o === null ? 'n/a' : fmt(o)}`;
   };
+  const spend = workSpendFigure(vendor, data.coworkCostUsd, data.chatgptCostUsd);
   const usingLabel = vendor === 'claude' ? 'Using Claude for work weekly'
     : vendor === 'openai' ? 'Using ChatGPT for work weekly'
       : 'Using AI for work weekly';
@@ -499,16 +503,16 @@ export default function CioPulsePage() {
           </Panel>
 
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-            {data.coworkCostUsd !== undefined && (
-              <Panel title="Claude Cowork spend" subtitle="7 days">
+            {spend && (
+              <Panel title={spend.label} subtitle="7 days">
                 <p className="m-0 text-[24px] leading-7 font-semibold tabular-nums text-[#0A0A0A]">
-                  {data.coworkCostUsd === 0
-                    ? <span className="text-[#8F8F8F]">$0.00</span>
-                    : data.coworkCostUsd >= 100
-                      ? `$${data.coworkCostUsd.toFixed(0)}`
-                      : `$${data.coworkCostUsd.toFixed(2)}`}
+                  {spend.usd === null
+                    ? <span className="text-[15px] font-medium text-[#8F8F8F]">Not recorded yet</span>
+                    : spend.usd === 0
+                      ? <span className="text-[#8F8F8F]">$0.00</span>
+                      : formatUsd(spend.usd)}
                 </p>
-                <p className="m-0 mt-1 text-[13px] text-[#8F8F8F]">API cost of every Claude Cowork session, measured. ChatGPT spend is not recorded yet.</p>
+                <p className="m-0 mt-1 text-[13px] text-[#8F8F8F]">{spend.sub}</p>
               </Panel>
             )}
           </div>

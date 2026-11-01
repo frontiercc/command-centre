@@ -32,6 +32,7 @@ import {
 } from '@/lib/pulse/delegation';
 import { getDeptCoachingPrompts } from '@/lib/usecases/spread';
 import { readHumanTime } from '@/lib/pulse/human-time-summary';
+import { chatgptCostUsd } from '@/lib/openai/spend';
 
 export const dynamic = 'force-dynamic';
 
@@ -380,6 +381,7 @@ export async function GET(
   // OTel cowork enrichments — sum cost and aggregate friction across dept members
   const sevenDaysAgoOtel = now - 7 * 24 * 3600;
   let deptCoworkCostUsd = 0;
+  const openaiPresent = await hasOpenAiData();
   let deptFailedTools = 0;
   let deptTotalTools = 0;
   for (const memberId of memberIds) {
@@ -503,9 +505,10 @@ export async function GET(
     deptBriefing: deptBriefing ?? null,
     // Claude Cowork only (no ChatGPT spend or tool calls are recorded): absent in the OpenAI view.
     coworkCostUsd: vendor === 'openai' ? undefined : deptCoworkCostUsd,
+    chatgptCostUsd: vendor === 'claude' || !openaiPresent ? undefined : await chatgptCostUsd({ since: sevenDaysAgoOtel, userIds: memberIds }),
     coworkFrictionIndex: vendor === 'openai' ? undefined : deptCoworkFrictionIndex,
     vendor,
-    openaiPresent: await hasOpenAiData(),
+    openaiPresent,
     docSessions,
     delegation: { window: delegationWindow, bands, bandsDataWeeks, people },
     coaching: { prompts: coachingPrompts },

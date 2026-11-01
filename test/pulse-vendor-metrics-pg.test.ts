@@ -111,11 +111,29 @@ describe('Work Pulse figures by vendor', () => {
       expect(allView.adoptionHero.weeklyActive).toBe(3);
       expect(allView.heroSplit.claude.weeklyActive).toBe(2);
       expect(allView.heroSplit.openai.weeklyActive).toBe(2);
+      // No ChatGPT cost record yet: the spend figure says so rather than $0.
+      expect(allView.chatgptCostUsd).toBeNull();
 
-      // A person's erasure removes their per-vendor rows too.
+      // ChatGPT spend from OpenAI's cost records, beside Claude Cowork's, never in it.
+      const hourAgo = Math.floor(Date.now() / 1000) - 3600;
+      await sql.run(
+        `INSERT INTO openai_costs (id, user_id, hour_start, product, model, cost_usd, billed_in) VALUES
+           ('c1', 'u-both', ?, 'chatgpt', 'gpt-5.5', 4.25, 'CREDITS'),
+           ('c2', 'u-both', ?, 'codex', 'gpt-5.5-codex', 9, 'CREDITS')`,
+        [hourAgo, hourAgo],
+      );
+      const withCost = await cio('all');
+      expect(withCost.chatgptCostUsd).toBe(4.25);
+      expect(withCost.coworkCostUsd).toBe(allView.coworkCostUsd);
+      expect((await cio('openai')).chatgptCostUsd).toBe(4.25);
+      expect((await cio('claude')).chatgptCostUsd).toBeUndefined();
+
+      // A person's erasure removes their per-vendor rows and OpenAI spend too.
       const { deleteUserData } = await import('@/lib/db/queries');
       await deleteUserData('u-both');
-      const left = await sql.all<{ n: number }>(`SELECT COUNT(*) AS n FROM pulse_metrics_vendor WHERE scope_id = 'u-both'`);
+      const left = await sql.all<{ n: number }>(
+        `SELECT (SELECT COUNT(*) FROM pulse_metrics_vendor WHERE scope_id = 'u-both')
+              + (SELECT COUNT(*) FROM openai_costs WHERE user_id = 'u-both') AS n`);
       expect(left[0].n).toBe(0);
     } finally {
       await cleanup();
