@@ -55,6 +55,7 @@ interface DeptData {
   deptBriefing: { body: string; suggestion: string | null; generated_at: number } | null;
   coworkCostUsd?: number;
   chatgptCostUsd?: number | null;
+  chatgptUnpricedModels?: string[];
   coworkFrictionIndex?: number | null;
   openaiPresent?: boolean;
   docSessions?: { sessions_with_uploads: number; total_uploads: number };
@@ -196,7 +197,7 @@ export default function DeptPickerPage() {
 
         {deptData && !dataLoading && (() => {
           const d = deptData;
-          const spend = workSpendFigure(vendor, d.coworkCostUsd, d.chatgptCostUsd);
+          const spend = workSpendFigure(vendor, d.coworkCostUsd, d.chatgptCostUsd, d.chatgptUnpricedModels?.length ?? 0);
           const showFriction = d.coworkFrictionIndex !== undefined;
           const showDocs = !!d.docSessions && d.docSessions.sessions_with_uploads > 0;
           const activityCols = (spend ? 1 : 0) + (showFriction ? 1 : 0) + (showDocs ? 2 : 0);

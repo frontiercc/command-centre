@@ -133,6 +133,7 @@ interface CioData {
   coworkCostUsd?: number;
   /** ChatGPT spend from OpenAI's cost records; null until one arrives. */
   chatgptCostUsd?: number | null;
+  chatgptUnpricedModels?: string[];
   fileCategoryMix?: Array<{ category: string; count: number; share: number }>;
   weeklyVolume?: {
     series: Array<{ weekStart: number; eventCount: number; tier3Count: number; partial: boolean }>;
@@ -361,7 +362,7 @@ export default function CioPulsePage() {
     const o = pick(hs.openai);
     return `Claude ${c === null ? 'n/a' : fmt(c)} · ChatGPT ${o === null ? 'n/a' : fmt(o)}`;
   };
-  const spend = workSpendFigure(vendor, data.coworkCostUsd, data.chatgptCostUsd);
+  const spend = workSpendFigure(vendor, data.coworkCostUsd, data.chatgptCostUsd, data.chatgptUnpricedModels?.length ?? 0);
   const usingLabel = vendor === 'claude' ? 'Using Claude for work weekly'
     : vendor === 'openai' ? 'Using ChatGPT for work weekly'
       : 'Using AI for work weekly';

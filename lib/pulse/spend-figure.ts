@@ -23,7 +23,11 @@ export function formatUsd(usd: number): string {
   return usd >= 100 ? `$${usd.toFixed(0)}` : `$${usd.toFixed(2)}`;
 }
 
-const CHATGPT_NOTE = "ChatGPT's figure is OpenAI's own cost record, a few hours behind.";
+const CHATGPT_NOTE = "ChatGPT is priced from its tokens at OpenAI's USD (token-based) contract rates, a few hours behind.";
+
+function unpricedNote(n: number): string {
+  return n > 0 ? ` ${n} ChatGPT model${n === 1 ? ' has' : 's have'} no rate yet and ${n === 1 ? 'is' : 'are'} not included: see Admin → Developer Pulse → Rates.` : '';
+}
 
 /**
  * `cowork` is undefined in the ChatGPT view; `chatgpt` is undefined in the
@@ -34,17 +38,19 @@ export function workSpendFigure(
   vendor: Vendor,
   cowork: number | undefined,
   chatgpt: number | null | undefined,
+  /** ChatGPT models seen with no rate, left out of the ChatGPT figure. */
+  chatgptUnpriced = 0,
 ): SpendFigure | null {
   if (vendor === 'openai') {
     if (chatgpt === undefined) return null;
-    return { label: 'ChatGPT spend', usd: chatgpt, sub: `ChatGPT Chat and ChatGPT Work. ${CHATGPT_NOTE}` };
+    return { label: 'ChatGPT spend', usd: chatgpt, sub: `ChatGPT Chat and ChatGPT Work. ${CHATGPT_NOTE}${unpricedNote(chatgptUnpriced)}` };
   }
   if (cowork === undefined) return null;
   if (vendor === 'all' && typeof chatgpt === 'number') {
     return {
       label: 'Spend',
       usd: cowork + chatgpt,
-      sub: `Claude Cowork ${formatUsd(cowork)} · ChatGPT ${formatUsd(chatgpt)}. ${CHATGPT_NOTE}`,
+      sub: `Claude Cowork ${formatUsd(cowork)} · ChatGPT ${formatUsd(chatgpt)}. ${CHATGPT_NOTE}${unpricedNote(chatgptUnpriced)}`,
     };
   }
   return {

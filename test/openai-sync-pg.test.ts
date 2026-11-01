@@ -126,12 +126,25 @@ describe('OpenAI sync against the stand-in export', () => {
       );
       expect(turns[0].bad).toBe(0);
 
-      // The readers: ChatGPT is OpenAI's own figure; Codex is priced from
-      // the rates table, and a model with no rate is named, never $0.
-      const { chatgptCostUsd, codexSpend } = await import('@/lib/openai/spend');
+      // The readers: ChatGPT and Codex are both tokens × the rates table, and a
+      // model with no rate is named, never $0. The stand-in's made-up models
+      // have no built-in rate; its own prices ($0.04 a credit), entered as
+      // rates, give back OpenAI's figure for the same records.
+      const { chatgptSpend, codexSpend } = await import('@/lib/openai/spend');
       const chatgptTotal = costs.filter(c => c.product === 'chatgpt').reduce((n, c) => n + c.usd, 0);
-      expect(await chatgptCostUsd({ since: 0 })).toBeCloseTo(chatgptTotal, 4);
-      expect(await chatgptCostUsd({ since: 0, userIds: [] })).toBe(0);
+      const builtIn = await chatgptSpend({ since: 0 });
+      expect(builtIn?.usd).toBe(0);
+      expect(builtIn?.unpricedModels.length).toBeGreaterThan(0);
+      expect(builtIn?.openaiUsd).toBeCloseTo(chatgptTotal, 4);
+      const mockRates = {
+        'gpt-5.5': { in: 1.25, out: 10, cacheWrite: 1.25, cacheRead: 0.125 },
+        'gpt-5-mini': { in: 0.25, out: 2, cacheWrite: 0.25, cacheRead: 0.025 },
+        'gpt-5.5-pro': { in: 15, out: 120, cacheWrite: 15, cacheRead: 15 },
+      };
+      const chatPriced = await chatgptSpend({ since: 0 }, mockRates);
+      expect(chatPriced?.unpricedModels).toEqual([]);
+      expect(Math.abs(chatPriced!.usd - chatgptTotal) / chatgptTotal).toBeLessThan(0.01);
+      expect((await chatgptSpend({ since: 0, userIds: [] }, mockRates))?.usd).toBe(0);
       const unpriced = await codexSpend({ since: 0 }, {});
       expect(unpriced.usd).toBeNull();
       expect(unpriced.unpricedModels).toEqual(turns[0].models.split(',').sort());

@@ -32,7 +32,7 @@ import {
 } from '@/lib/pulse/delegation';
 import { getDeptCoachingPrompts } from '@/lib/usecases/spread';
 import { readHumanTime } from '@/lib/pulse/human-time-summary';
-import { chatgptCostUsd } from '@/lib/openai/spend';
+import { chatgptSpend } from '@/lib/openai/spend';
 
 export const dynamic = 'force-dynamic';
 
@@ -484,6 +484,7 @@ export async function GET(
 
   const humanTime = await readHumanTime('cowork', memberIds, vendor);
 
+  const deptChatgpt = vendor === 'claude' || !openaiPresent ? undefined : await chatgptSpend({ since: sevenDaysAgoOtel, userIds: memberIds });
   return NextResponse.json({
     humanTime,
     dept,
@@ -505,7 +506,8 @@ export async function GET(
     deptBriefing: deptBriefing ?? null,
     // Claude Cowork only (no ChatGPT spend or tool calls are recorded): absent in the OpenAI view.
     coworkCostUsd: vendor === 'openai' ? undefined : deptCoworkCostUsd,
-    chatgptCostUsd: vendor === 'claude' || !openaiPresent ? undefined : await chatgptCostUsd({ since: sevenDaysAgoOtel, userIds: memberIds }),
+    chatgptCostUsd: deptChatgpt === undefined ? undefined : deptChatgpt?.usd ?? null,
+    chatgptUnpricedModels: deptChatgpt?.unpricedModels ?? [],
     coworkFrictionIndex: vendor === 'openai' ? undefined : deptCoworkFrictionIndex,
     vendor,
     openaiPresent,

@@ -26,7 +26,7 @@ import { readHumanTime } from '@/lib/pulse/human-time-summary';
 import { getAllConfig } from '@/lib/config';
 import { canViewSpendReview } from '@/lib/finance/spend-review-access';
 import { isWorkPulseSurface, classifiableSource, classifyChatgptOn } from '@/lib/pulse/work-surfaces';
-import { chatgptCostUsd } from '@/lib/openai/spend';
+import { chatgptSpend } from '@/lib/openai/spend';
 
 // OTI's interpretive status line is gated on the classifier accuracy audit
 // clearing its substantial-agreement floor. No scored audit yet, or below the
@@ -411,7 +411,7 @@ export async function GET(request: NextRequest) {
   const sevenDaysAgoOtel = now - 7 * 24 * 3600;
   const coworkCostUsd = await getCoworkCostUsd(userId, sevenDaysAgoOtel, now);
   const openaiPresent = await hasOpenAiData();
-  const chatgptCost = vendor === 'claude' || !openaiPresent ? undefined : await chatgptCostUsd({ since: sevenDaysAgoOtel, userIds: [userId] });
+  const chatgpt = vendor === 'claude' || !openaiPresent ? undefined : await chatgptSpend({ since: sevenDaysAgoOtel, userIds: [userId] });
   const coworkFrictionIndex = await getCoworkFrictionIndex(userId, sevenDaysAgoOtel, now);
 
   // Frontier boxes: best recent work, step-ups, capabilities.
@@ -459,7 +459,8 @@ export async function GET(request: NextRequest) {
     toolsUsed,
     // Claude Cowork only (no ChatGPT spend or tool calls are recorded): absent in the OpenAI view.
     coworkCostUsd: vendor === 'openai' ? undefined : coworkCostUsd,
-    chatgptCostUsd: chatgptCost,
+    chatgptCostUsd: chatgpt === undefined ? undefined : chatgpt?.usd ?? null,
+    chatgptUnpricedModels: chatgpt?.unpricedModels ?? [],
     coworkFrictionIndex: vendor === 'openai' ? undefined : coworkFrictionIndex,
     topNativeTools: vendor === 'openai' ? [] : topNativeTools,
     otiUnderReview,

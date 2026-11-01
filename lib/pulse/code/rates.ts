@@ -42,8 +42,48 @@ function rate(inRate: number, outRate: number, cacheReadMultiplier = 0.1): Model
   };
 }
 
-// Published Anthropic API pricing, $/MTok (input / output).
+/** OpenAI rates: input, cached input and output, $/MTok. OpenAI charges no cache writes. */
+function openai(inRate: number, cachedRate: number, outRate: number): ModelRate {
+  return { in: inRate, out: outRate, cacheWrite: inRate, cacheRead: cachedRate };
+}
+
+/**
+ * OpenAI's published USD rates for ChatGPT Enterprise token-based agreements
+ * ("ChatGPT Rate Card (Enterprise token-based pricing)", help.openai.com
+ * article 20001415, read 2026-11-01), Standard mode, keyed by the rate card's
+ * model names in lower case with hyphens. Whether the export names models
+ * exactly this way is unconfirmed: a model seen with no match is listed as
+ * unpriced on the Rates tab, where an admin adds its exact name. Customers on
+ * credit-based agreements are priced at these same list rates, as Claude is
+ * priced at Anthropic's list rates whatever the plan. Extra charges (web
+ * search, voice, fast mode, long context, regional processing) are not included.
+ */
+export const OPENAI_DEFAULT_RATES: ModelRates = {
+  // Chat
+  'gpt-6-pro': openai(10, 1, 50),
+  'gpt-6': openai(2, 0.2, 10),
+  'gpt-5.3': openai(1.75, 0.175, 14),
+  // Chat, Work and Codex
+  'gpt-6.1-sol': openai(2, 0.1, 10),
+  'gpt-6.1-terra': openai(1, 0.05, 5),
+  'gpt-6-astra': openai(10, 1, 50),
+  'gpt-6-sol': openai(2, 0.2, 10),
+  'gpt-6-luna': openai(0.1, 0.01, 0.5),
+  'gpt-5.6-sol': openai(4, 0.4, 20),
+  'gpt-5.6-terra': openai(2, 0.2, 12),
+  'gpt-5.6-luna': openai(0.2, 0.02, 1.2),
+  'gpt-6-rosalind-research': openai(15, 1.5, 75),
+  'gpt-5.5-rosalind-research': openai(5, 0.5, 25),
+  'gpt-5.5-rosalind-discovery': openai(5, 0.5, 25),
+  'gpt-5.3-codex': openai(1.75, 0.175, 14),
+  'gpt-5.2': openai(1.75, 0.175, 14),
+  // Deep research
+  'o4-mini-deep-research': openai(2, 0.5, 8),
+};
+
+// Published Anthropic API pricing, $/MTok (input / output), then OpenAI's.
 export const DEFAULT_RATES: ModelRates = {
+  ...OPENAI_DEFAULT_RATES,
   'claude-fable-5-1': rate(10, 50, 0.025),
   'claude-fable-5': rate(10, 50),
   'claude-opus-5': rate(5, 25),

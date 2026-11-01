@@ -114,12 +114,13 @@ describe('Work Pulse figures by vendor', () => {
       // No ChatGPT cost record yet: the spend figure says so rather than $0.
       expect(allView.chatgptCostUsd).toBeNull();
 
-      // ChatGPT spend from OpenAI's cost records, beside Claude Cowork's, never in it.
+      // ChatGPT spend: the tokens in OpenAI's cost records at the built-in USD
+      // rates (gpt-6: $2 in, $10 out per million), beside Claude Cowork's, never in it.
       const hourAgo = Math.floor(Date.now() / 1000) - 3600;
       await sql.run(
-        `INSERT INTO openai_costs (id, user_id, hour_start, product, model, cost_usd, billed_in) VALUES
-           ('c1', 'u-both', ?, 'chatgpt', 'gpt-5.5', 4.25, 'CREDITS'),
-           ('c2', 'u-both', ?, 'codex', 'gpt-5.5-codex', 9, 'CREDITS')`,
+        `INSERT INTO openai_costs (id, user_id, hour_start, product, model, input_tokens, output_tokens, cost_usd, billed_in) VALUES
+           ('c1', 'u-both', ?, 'chatgpt', 'gpt-6', 1000000, 225000, 3.9, 'CREDITS'),
+           ('c2', 'u-both', ?, 'codex', 'gpt-5.5-codex', 1000000, 0, 9, 'CREDITS')`,
         [hourAgo, hourAgo],
       );
       const withCost = await cio('all');

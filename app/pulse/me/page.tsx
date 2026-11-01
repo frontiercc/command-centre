@@ -59,6 +59,7 @@ interface PersonalPulseData {
   teamMetrics: { ors: number | null } | null;
   coworkCostUsd?: number;
   chatgptCostUsd?: number | null;
+  chatgptUnpricedModels?: string[];
   coworkFrictionIndex?: number | null;
   topNativeTools?: Array<{ tool_name: string; usage_count: number }>;
   otiUnderReview?: boolean;
@@ -144,7 +145,7 @@ export default function PersonalPulsePage() {
 
   const pending = data.capabilitiesDetail?.pending ?? [];
   const topTools = data.topNativeTools ?? [];
-  const mySpend = workSpendFigure(vendor, data.coworkCostUsd, data.chatgptCostUsd);
+  const mySpend = workSpendFigure(vendor, data.coworkCostUsd, data.chatgptCostUsd, data.chatgptUnpricedModels?.length ?? 0);
 
   return (
     <>

@@ -439,9 +439,10 @@ function RatesPanel({ prefillModel }: { prefillModel: string | null }) {
           Overrides and additions to the built-in Anthropic list rates. A model with no entry here (and no
           normalisable Bedrock/Vertex match) prices as unpriced, never silently zero. Add the exact
           provider-decorated model ID (e.g. <code className={inlineCode}>us.anthropic.claude-opus-4-6-v1</code>)
-          for real AWS/GCP cost instead of the Anthropic list-rate estimate. Codex models (for example{' '}
-          <code className={inlineCode}>gpt-5.5-codex</code>) are priced from this table too; there are no
-          built-in OpenAI rates, so add each Codex model you see listed below.
+          for real AWS/GCP cost instead of the Anthropic list-rate estimate. ChatGPT and Codex are priced from this
+          table too, at OpenAI&apos;s published USD rates for token-based Enterprise contracts (built in, read
+          1 November 2026). Customers on credit-based contracts are priced at the same list rates, as Claude is.
+          If a ChatGPT or Codex model is listed below as having no rate, add it under its exact name.
         </p>
 
         {data.unpricedModels.length > 0 && (
