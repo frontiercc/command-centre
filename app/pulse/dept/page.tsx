@@ -25,7 +25,7 @@ import CoachingPrompts, { type CoachingPromptItem } from '@/components/pulse/Coa
 import HumanTimeCard, { type HumanTimeSummary } from '@/components/pulse/HumanTimeCard';
 import { PageBody, Toolbar, Strip, Figure, Notice, B, cx } from '@/components/precision/ui';
 import { useVendor, VendorSwitch } from '@/components/shared/VendorSwitch';
-import { VENDOR_LABELS } from '@/lib/dashboard/vendor';
+import { WORK_PULSE_VENDOR_LABELS } from '@/lib/dashboard/vendor';
 
 // Based on DeptPulseData from app/pulse/dept/[dept]/page.tsx (a redirect-only
 // legacy page) but intentionally diverges: `delegation?` exists only here.
@@ -177,11 +177,11 @@ export default function DeptPickerPage() {
               ))}
             </select>
           )}
-          <VendorSwitch vendor={vendor} onChange={setVendor} openaiPresent={deptData?.openaiPresent ?? false} />
+          <VendorSwitch vendor={vendor} onChange={setVendor} openaiPresent={deptData?.openaiPresent ?? false} labels={WORK_PULSE_VENDOR_LABELS} />
         </Toolbar>
         {vendor !== 'all' && (
           <p className="m-0 -mt-2 text-[13px] text-[#8F8F8F]">
-            Showing {VENDOR_LABELS[vendor]} only{vendor === 'openai' ? ': ChatGPT Chat and ChatGPT Work' : ': Claude Cowork and Claude Chat'}.
+            Showing {WORK_PULSE_VENDOR_LABELS[vendor]} only{vendor === 'openai' ? ': ChatGPT Chat and ChatGPT Work' : ': Claude Cowork and Claude Chat'}.
           </p>
         )}
 

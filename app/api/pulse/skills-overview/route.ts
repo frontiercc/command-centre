@@ -11,7 +11,7 @@ import { and, eq, gte, notInArray, sql } from 'drizzle-orm';
 import { getAdminSession } from '@/lib/auth/admin-auth';
 import { getTypedClient } from '@/lib/db/client';
 import { schema } from '@/lib/db/schema';
-import { vendorExpr } from '@/lib/dashboard/product-sql';
+import { vendorExpr, toolTagExpr } from '@/lib/dashboard/product-sql';
 
 export const dynamic = 'force-dynamic';
 
@@ -21,6 +21,9 @@ const EXCLUDED_CONNECTORS = ['workspace', 'cowork'];
 // different tools, so every list is grouped by name and vendor.
 const skillVendorSql = sql.raw(vendorExpr('cowork_skill_invocations.'));
 const connectorVendorSql = sql.raw(vendorExpr('cowork_mcp_invocations.'));
+// The product each row came from, as its tag reads (Claude, ChatGPT or Codex).
+const skillTagSql = sql.raw(toolTagExpr('cowork_skill_invocations.'));
+const connectorTagSql = sql.raw(toolTagExpr('cowork_mcp_invocations.'));
 type RowVendor = 'claude' | 'openai';
 
 export async function GET(request: NextRequest) {
@@ -58,30 +61,32 @@ export async function GET(request: NextRequest) {
     .select({
       skill_name: csi.skill_name,
       vendor: sql<string>`${skillVendorSql}`,
+      tag: sql<string>`${skillTagSql}`,
       usage_count: sql<number | string>`COUNT(*)`,
       user_count: sql<number | string>`COUNT(DISTINCT ${csi.user_id})`,
     })
     .from(csi)
     .where(gte(csi.occurred_at, thirtyDaysAgo))
-    .groupBy(csi.skill_name, skillVendorSql)
+    .groupBy(csi.skill_name, skillVendorSql, skillTagSql)
     .orderBy(sql`COUNT(*) DESC`)
     .limit(10);
-  const topSkills = topSkillsRows.map(r => ({ skill_name: r.skill_name, vendor: r.vendor as RowVendor, usage_count: Number(r.usage_count), user_count: Number(r.user_count) }));
+  const topSkills = topSkillsRows.map(r => ({ skill_name: r.skill_name, vendor: r.vendor as RowVendor, tag: r.tag, usage_count: Number(r.usage_count), user_count: Number(r.user_count) }));
 
   // Org top connectors (30 days, exclude system defaults)
   const topConnectorsRows = await client
     .select({
       mcp_server: cmi.mcp_server,
       vendor: sql<string>`${connectorVendorSql}`,
+      tag: sql<string>`${connectorTagSql}`,
       usage_count: sql<number | string>`COUNT(*)`,
       user_count: sql<number | string>`COUNT(DISTINCT ${cmi.user_id})`,
     })
     .from(cmi)
     .where(and(gte(cmi.occurred_at, thirtyDaysAgo), notInArray(cmi.mcp_server, EXCLUDED_CONNECTORS)))
-    .groupBy(cmi.mcp_server, connectorVendorSql)
+    .groupBy(cmi.mcp_server, connectorVendorSql, connectorTagSql)
     .orderBy(sql`COUNT(*) DESC`)
     .limit(10);
-  const topConnectors = topConnectorsRows.map(r => ({ mcp_server: r.mcp_server, vendor: r.vendor as RowVendor, usage_count: Number(r.usage_count), user_count: Number(r.user_count) }));
+  const topConnectors = topConnectorsRows.map(r => ({ mcp_server: r.mcp_server, vendor: r.vendor as RowVendor, tag: r.tag, usage_count: Number(r.usage_count), user_count: Number(r.user_count) }));
 
   // User's own skills and connectors (30 days)
   let mySkills: Array<{ skill_name: string; vendor: RowVendor; usage_count: number }> = [];

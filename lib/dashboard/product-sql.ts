@@ -43,6 +43,16 @@ export function codeSessionVendorClause(vendor: Vendor, p = ''): string {
   return 'TRUE';
 }
 
+/**
+ * SQL expression naming the product a skill or connector row came from, as
+ * its tag reads: 'Claude', 'ChatGPT' or 'Codex' (the invocation tables).
+ */
+export function toolTagExpr(p = ''): string {
+  return `CASE WHEN ${p}source = 'codex' THEN 'Codex'`
+    + ` WHEN ${vendorClause('openai', p)} THEN 'ChatGPT'`
+    + ` ELSE 'Claude' END`;
+}
+
 /** SQL expression naming a cowork_messages row's product (lib/dashboard/vendor.ts PRODUCTS). */
 export function productExpr(p = ''): string {
   return `CASE WHEN ${p}source = 'chatgpt_chat' THEN 'chatgpt_chat'`

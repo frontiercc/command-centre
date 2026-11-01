@@ -19,6 +19,16 @@ export const VENDOR_LABELS: Record<Vendor, string> = {
   openai: 'OpenAI',
 };
 
+/**
+ * Work Pulse's labels for the same switch. Codex is not in Work Pulse, so on
+ * its pages OpenAI only ever means ChatGPT and the switch says so.
+ */
+export const WORK_PULSE_VENDOR_LABELS: Record<Vendor, string> = {
+  all: 'All',
+  claude: 'Claude',
+  openai: 'ChatGPT',
+};
+
 export type WorkKind = 'chat' | 'work' | 'code';
 
 export function parseVendor(v: string | null | undefined): Vendor {

@@ -24,24 +24,26 @@ export function useVendor(): [Vendor, (v: Vendor) => void] {
 }
 
 /** Shown once OpenAI data exists, or while a vendor view is still chosen. */
-export function VendorSwitch({ vendor, onChange, openaiPresent }: {
+export function VendorSwitch({ vendor, onChange, openaiPresent, labels = VENDOR_LABELS }: {
   vendor: Vendor;
   onChange: (v: Vendor) => void;
   openaiPresent: boolean;
+  /** Work Pulse passes WORK_PULSE_VENDOR_LABELS (All / Claude / ChatGPT). */
+  labels?: Record<Vendor, string>;
 }) {
   if (!openaiPresent && vendor === 'all') return null;
   return (
     <Segmented
       label="Show products from"
-      options={VENDORS.map(v => ({ value: v, label: VENDOR_LABELS[v] }))}
+      options={VENDORS.map(v => ({ value: v, label: labels[v] }))}
       value={vendor}
       onChange={onChange}
     />
   );
 }
 
-/** "Claude 12 · OpenAI 4" under a figure in the All view. */
-export function formatSplit(s: Pick<VendorSplit, 'claude' | 'openai'>): string {
+/** "Claude 12 · OpenAI 4" under a figure in the All view ("ChatGPT" in Work Pulse). */
+export function formatSplit(s: Pick<VendorSplit, 'claude' | 'openai'>, openaiLabel = 'OpenAI'): string {
   const n = (v: number) => v.toLocaleString('en-GB');
-  return `Claude ${n(s.claude)} · OpenAI ${n(s.openai)}`;
+  return `Claude ${n(s.claude)} · ${openaiLabel} ${n(s.openai)}`;
 }

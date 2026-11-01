@@ -148,11 +148,11 @@ describe('OpenAI sync against the stand-in export', () => {
       if (codexRisky.some(r => r.content_full.includes('personal Dropbox'))) expect(reasonFor('personal Dropbox')).toContain('shadow_it');
       if (codexRisky.some(r => r.content_full.includes('Disable logging'))) expect(reasonFor('Disable logging')).toContain('Intent detected');
       // Every flagged ChatGPT and Codex prompt raises an alert. How many risky
-      // ChatGPT prompts fall inside the 2-day window depends on the date.
+      // ChatGPT prompts fall inside the 2-day window depends on the date, and
+      // on some dates there are none, so this checks every source present.
       const flaggedBySource = await sql.all<{ source: string; n: number }>(
         `SELECT source, COUNT(*) AS n FROM cowork_messages WHERE flagged = 1 GROUP BY source`,
       );
-      expect(flaggedBySource.find(r => r.source === 'chatgpt_chat')?.n ?? 0).toBeGreaterThanOrEqual(1);
       const { vi } = await import('vitest');
       await vi.waitFor(async () => {
         const alerted = await sql.all<{ source: string; n: number }>(

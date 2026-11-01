@@ -133,7 +133,7 @@ describe('Work Pulse figures by vendor', () => {
         'ChatGPT Chat: 2 classified prompts, 2 people',
         'Claude Cowork: 2 classified prompts, 1 person',
         'ChatGPT Work: 1 classified prompts, 1 person',
-        'Share of work at Tier 2 or 3: Claude 100%, OpenAI 0%',
+        'Share of work at Tier 2 or 3: Claude 100%, ChatGPT 0%',
       ]);
       // One person who used Claude only: no facts, so the briefing is unchanged.
       expect(await buildProductFacts({ periodStart: NOW - 3600, periodEnd: NOW + 1, userIds: ['u-claude'] })).toEqual([]);

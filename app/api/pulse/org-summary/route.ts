@@ -16,7 +16,7 @@ import { schema } from '@/lib/db/schema';
 import { buildSessionOutputRate } from '@/lib/pulse/cowork/session-output-rate';
 import { readHumanTime } from '@/lib/pulse/human-time-summary';
 import { parseVendor } from '@/lib/dashboard/vendor';
-import { vendorClause, vendorExpr } from '@/lib/dashboard/product-sql';
+import { vendorClause, vendorExpr, toolTagExpr } from '@/lib/dashboard/product-sql';
 import { messageVendor } from '@/lib/pulse/vendor-filter';
 import { getDocSessions } from '@/lib/pulse/cowork/doc-sessions';
 
@@ -152,37 +152,39 @@ export async function GET(request: NextRequest) {
 
   // Top 5 skills org-wide (30 days). A skill of the same name from Claude and
   // from OpenAI is two different skills, so each row carries its vendor.
-  const topSkills = await rawAll<{ skill_name: string; vendor: string; usage_count: number | string; user_count: number | string }>(client, sql`
-    SELECT cm.skill_name, ${sql.raw(vendorExpr('cm.'))} AS vendor,
+  const topSkills = await rawAll<{ skill_name: string; vendor: string; tag: string; usage_count: number | string; user_count: number | string }>(client, sql`
+    SELECT cm.skill_name, ${sql.raw(vendorExpr('cm.'))} AS vendor, ${sql.raw(toolTagExpr('cm.'))} AS tag,
            COUNT(*) AS usage_count,
            COUNT(DISTINCT cm.user_id) AS user_count
     FROM cowork_skill_invocations cm
     WHERE cm.occurred_at >= ${thirtyDaysAgo} AND ${vendorSql}
-    GROUP BY 1, 2
+    GROUP BY 1, 2, 3
     ORDER BY usage_count DESC
     LIMIT 5
   `).then(rows => rows.map(r => ({
     skill_name: r.skill_name,
     vendor: r.vendor as 'claude' | 'openai',
+    tag: r.tag,
     usage_count: Number(r.usage_count),
     user_count: Number(r.user_count),
   })));
 
   // Top 5 connectors org-wide (30 days), each with its vendor.
-  const topConnectors = await rawAll<{ mcp_server: string; vendor: string; usage_count: number | string; user_count: number | string }>(client, sql`
-    SELECT cm.mcp_server, ${sql.raw(vendorExpr('cm.'))} AS vendor,
+  const topConnectors = await rawAll<{ mcp_server: string; vendor: string; tag: string; usage_count: number | string; user_count: number | string }>(client, sql`
+    SELECT cm.mcp_server, ${sql.raw(vendorExpr('cm.'))} AS vendor, ${sql.raw(toolTagExpr('cm.'))} AS tag,
            COUNT(*) AS usage_count,
            COUNT(DISTINCT cm.user_id) AS user_count
     FROM cowork_mcp_invocations cm
     WHERE cm.occurred_at >= ${thirtyDaysAgo}
       AND cm.mcp_server NOT IN ('workspace', 'cowork')
       AND ${vendorSql}
-    GROUP BY 1, 2
+    GROUP BY 1, 2, 3
     ORDER BY usage_count DESC
     LIMIT 5
   `).then(rows => rows.map(r => ({
     mcp_server: r.mcp_server,
     vendor: r.vendor as 'claude' | 'openai',
+    tag: r.tag,
     usage_count: Number(r.usage_count),
     user_count: Number(r.user_count),
   })));

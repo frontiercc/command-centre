@@ -25,7 +25,7 @@ import { PageBody, Toolbar, Panel, Strip, Figure, BarRow, Tag, Dot, Muted, Notic
 import SessionOutputCard, { type SessionOutputReport } from '@/components/pulse/SessionOutputCard';
 import HumanTimeCard, { type HumanTimeSummary } from '@/components/pulse/HumanTimeCard';
 import { useVendor, VendorSwitch, formatSplit } from '@/components/shared/VendorSwitch';
-import { VENDOR_LABELS, type Vendor } from '@/lib/dashboard/vendor';
+import { WORK_PULSE_VENDOR_LABELS, type Vendor } from '@/lib/dashboard/vendor';
 
 interface WorkMixItem {
   task_type: string;
@@ -40,8 +40,8 @@ interface WorkMixItem {
 type RowVendor = 'claude' | 'openai';
 
 interface OrgSummarySlice {
-  topSkills: Array<{ skill_name: string; vendor?: RowVendor; usage_count: number; user_count: number }>;
-  topConnectors: Array<{ mcp_server: string; vendor?: RowVendor; usage_count: number; user_count: number }>;
+  topSkills: Array<{ skill_name: string; vendor?: RowVendor; tag?: string; usage_count: number; user_count: number }>;
+  topConnectors: Array<{ mcp_server: string; vendor?: RowVendor; tag?: string; usage_count: number; user_count: number }>;
   topNativeTools?: Array<{ tool_name: string; usage_count: number; user_count: number }>;
   docSessions?: { sessions_with_uploads: number; total_uploads: number };
   workMix?: WorkMixItem[];
@@ -63,7 +63,7 @@ function formatConnectorName(name: string): string {
 
 function InvocationList({ title, items, nameKey, emptyMessage, formatName, showVendor }: {
   title: string;
-  items: Array<{ usage_count: number; user_count: number; vendor?: RowVendor; [k: string]: unknown }>;
+  items: Array<{ usage_count: number; user_count: number; vendor?: RowVendor; tag?: string; [k: string]: unknown }>;
   nameKey: string;
   emptyMessage: string;
   formatName: (n: string) => string;
@@ -79,12 +79,12 @@ function InvocationList({ title, items, nameKey, emptyMessage, formatName, showV
           const maxUsage = items[0].usage_count;
           return (
             <BarRow
-              key={`${name}|${item.vendor ?? ''}`}
+              key={`${name}|${item.tag ?? item.vendor ?? ''}`}
               rank={i + 1}
               label={showVendor && item.vendor ? (
                 <span className="inline-flex items-center gap-1.5 min-w-0">
                   <span className="truncate">{formatName(name)}</span>
-                  <Tag tone="neutral">{VENDOR_LABELS[item.vendor]}</Tag>
+                  <Tag tone="neutral">{item.tag ?? WORK_PULSE_VENDOR_LABELS[item.vendor]}</Tag>
                 </span>
               ) : formatName(name)}
               value={`${item.usage_count}× · ${item.user_count} ${item.user_count === 1 ? 'user' : 'users'}`}
@@ -351,12 +351,12 @@ export default function CioPulsePage() {
 
   const h = data.adoptionHero;
   const hs = data.heroSplit;
-  // Shown under a headline figure in the All view: its Claude and OpenAI parts.
+  // Shown under a headline figure in the All view: its Claude and ChatGPT parts.
   const splitLine = (pick: (f: HeroFigures) => number | null, fmt: (v: number) => string) => {
     if (!hs) return null;
     const c = pick(hs.claude);
     const o = pick(hs.openai);
-    return `Claude ${c === null ? 'n/a' : fmt(c)} · OpenAI ${o === null ? 'n/a' : fmt(o)}`;
+    return `Claude ${c === null ? 'n/a' : fmt(c)} · ChatGPT ${o === null ? 'n/a' : fmt(o)}`;
   };
   const usingLabel = vendor === 'claude' ? 'Using Claude for work weekly'
     : vendor === 'openai' ? 'Using ChatGPT for work weekly'
@@ -371,13 +371,13 @@ export default function CioPulsePage() {
       <PageBody>
         <Toolbar left="Last 14 days unless a panel says otherwise">
           <span className="flex flex-wrap items-center justify-end gap-3">
-            <VendorSwitch vendor={vendor} onChange={setVendor} openaiPresent={data.openaiPresent} />
+            <VendorSwitch vendor={vendor} onChange={setVendor} openaiPresent={data.openaiPresent} labels={WORK_PULSE_VENDOR_LABELS} />
             <Link href="/admin/pulse" className={B.secondary}>Pulse settings</Link>
           </span>
         </Toolbar>
         {vendor !== 'all' && (
           <p className="m-0 -mt-2 text-[13px] text-[#8F8F8F]">
-            Showing {VENDOR_LABELS[vendor]} only{vendor === 'openai' ? ': ChatGPT Chat and ChatGPT Work' : ': Claude Cowork and Claude Chat'}.
+            Showing {WORK_PULSE_VENDOR_LABELS[vendor]} only{vendor === 'openai' ? ': ChatGPT Chat and ChatGPT Work' : ': Claude Cowork and Claude Chat'}.
           </p>
         )}
 
@@ -511,14 +511,6 @@ export default function CioPulsePage() {
                 <p className="m-0 mt-1 text-[13px] text-[#8F8F8F]">API cost of every Claude Cowork session, measured. ChatGPT spend is not recorded yet.</p>
               </Panel>
             )}
-            {orgSummary?.docSessions && orgSummary.docSessions.sessions_with_uploads > 0 && (
-              <Panel title="Document sessions" subtitle="30 days" right={<Link href="/admin/files" className={B.link}>View files</Link>}>
-                <div className="flex items-baseline gap-4 flex-wrap">
-                  <span><span className="text-[24px] leading-7 font-semibold tabular-nums">{orgSummary.docSessions.sessions_with_uploads}</span> <span className="text-[13px] text-[#8F8F8F]">sessions with uploads</span></span>
-                  <span><span className="text-[18px] font-semibold tabular-nums text-[#4D4D4D]">{orgSummary.docSessions.total_uploads}</span> <span className="text-[13px] text-[#8F8F8F]">files uploaded</span></span>
-                </div>
-              </Panel>
-            )}
           </div>
         </div>
 
@@ -555,7 +547,7 @@ export default function CioPulsePage() {
                       label={vendor === 'all' && data.openaiPresent && w.claude !== undefined && w.openai !== undefined ? (
                         <span className="flex flex-col min-w-0">
                           <span className="truncate">{formatTaskType(w.task_type)}</span>
-                          <span className="text-[12px] text-[#8F8F8F]">{formatSplit({ claude: w.claude, openai: w.openai })}</span>
+                          <span className="text-[12px] text-[#8F8F8F]">{formatSplit({ claude: w.claude, openai: w.openai }, 'ChatGPT')}</span>
                         </span>
                       ) : formatTaskType(w.task_type)}
                       value={`${w.messages} prompt${w.messages === 1 ? '' : 's'}${w.tier3 > 0 ? ` · ${w.tier3} frontier` : ''}`}

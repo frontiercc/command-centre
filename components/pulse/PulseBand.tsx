@@ -6,15 +6,15 @@
 import { useEffect, useState } from 'react';
 import Link from 'next/link';
 import { Panel, Strip, Figure, BarRow, Tag, Muted, Empty } from '@/components/precision/ui';
-import { VENDOR_LABELS, type Vendor } from '@/lib/dashboard/vendor';
+import { WORK_PULSE_VENDOR_LABELS, type Vendor } from '@/lib/dashboard/vendor';
 
 type RowVendor = Exclude<Vendor, 'all'>;
 
 interface OrgSummary {
   signalCards: { oti: number | null; dds: number | null; psr: number | null; ors: number | null };
   tierCounts: { t1: number; t2: number; t3: number };
-  topSkills: Array<{ skill_name: string; vendor: RowVendor; usage_count: number; user_count: number }>;
-  topConnectors: Array<{ mcp_server: string; vendor: RowVendor; usage_count: number; user_count: number }>;
+  topSkills: Array<{ skill_name: string; vendor: RowVendor; tag?: string; usage_count: number; user_count: number }>;
+  topConnectors: Array<{ mcp_server: string; vendor: RowVendor; tag?: string; usage_count: number; user_count: number }>;
 }
 
 // ── Helpers ────────────────────────────────────────────────────────────────────
@@ -81,11 +81,11 @@ function InvocationList({
   showVendor,
 }: {
   title: string;
-  items: Array<{ usage_count: number; user_count: number; vendor?: RowVendor; [k: string]: unknown }>;
+  items: Array<{ usage_count: number; user_count: number; vendor?: RowVendor; tag?: string; [k: string]: unknown }>;
   nameKey: string;
   emptyMessage: string;
   formatName: (n: string) => string;
-  /** Tag each row Claude or OpenAI, on installs that hold OpenAI data. */
+  /** Tag each row with its product (Claude, ChatGPT or Codex), on installs that hold OpenAI data. */
   showVendor?: boolean;
 }) {
   return (
@@ -100,12 +100,12 @@ function InvocationList({
             const barPct = Math.round((item.usage_count / maxUsage) * 100);
             return (
               <BarRow
-                key={`${item.vendor ?? ''}:${name}`}
+                key={`${item.tag ?? item.vendor ?? ''}:${name}`}
                 rank={i + 1}
                 label={showVendor && item.vendor ? (
                   <span className="inline-flex items-center gap-1.5 min-w-0">
                     <span className="truncate">{formatName(name)}</span>
-                    <Tag tone="neutral">{VENDOR_LABELS[item.vendor]}</Tag>
+                    <Tag tone="neutral">{item.tag ?? WORK_PULSE_VENDOR_LABELS[item.vendor]}</Tag>
                   </span>
                 ) : formatName(name)}
                 value={`${item.usage_count}× · ${item.user_count} ${item.user_count === 1 ? 'user' : 'users'}`}
@@ -175,7 +175,7 @@ export default function PulseBand({ children, vendor = 'all', showVendor = false
           {/* Row 1: the four Cowork signals in plain English + tier bar */}
           {vendor !== 'all' && (
             <p className="m-0 -mb-2 text-[13px] text-[#8F8F8F]">
-              Work Pulse shows {VENDOR_LABELS[vendor]} only. Developer Pulse below covers every product.
+              Work Pulse shows {WORK_PULSE_VENDOR_LABELS[vendor]} only. Developer Pulse below covers every product.
             </p>
           )}
           <div className="grid grid-cols-1 lg:grid-cols-[minmax(0,3fr)_minmax(0,1fr)] gap-4">

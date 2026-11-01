@@ -67,7 +67,7 @@ export async function buildProductFacts(opts: {
     const c = counts.get(p.id) ?? { prompts: 0, people: 0 };
     return `${p.label}: ${c.prompts} classified prompts, ${c.people} ${c.people === 1 ? 'person' : 'people'}`;
   });
-  lines.push(`Share of work at Tier 2 or 3: Claude ${share('claude')}, OpenAI ${share('openai')}`);
+  lines.push(`Share of work at Tier 2 or 3: Claude ${share('claude')}, ChatGPT ${share('openai')}`);
   return lines;
 }
 

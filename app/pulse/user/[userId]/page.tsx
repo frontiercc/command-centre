@@ -21,6 +21,7 @@ import { cleanTitle } from '@/components/pulse/CapabilityLog';
 import HumanTimeCard, { type HumanTimeSummary } from '@/components/pulse/HumanTimeCard';
 import { PageBody, Toolbar, Panel, Tag, Notice, B } from '@/components/precision/ui';
 import { useVendor, VendorSwitch } from '@/components/shared/VendorSwitch';
+import { WORK_PULSE_VENDOR_LABELS } from '@/lib/dashboard/vendor';
 
 interface PersonalPulseData {
   openaiPresent?: boolean;
@@ -138,7 +139,7 @@ export default function UserPulsePage() {
               </Link>
             ) : undefined}
           >
-            <VendorSwitch vendor={vendor} onChange={setVendor} openaiPresent={data.openaiPresent ?? false} />
+            <VendorSwitch vendor={vendor} onChange={setVendor} openaiPresent={data.openaiPresent ?? false} labels={WORK_PULSE_VENDOR_LABELS} />
           </Toolbar>
         )}
 

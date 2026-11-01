@@ -9,7 +9,7 @@ import LoadingSpinner from '@/components/shared/LoadingSpinner';
 import type { DiscoveredSkill } from '@/lib/pulse/skills-discover';
 import { PageBody, Panel, BarRow, Tag, Notice, Muted, B } from '@/components/precision/ui';
 import { isWebUrl } from '@/lib/library/source-url';
-import { VENDOR_LABELS } from '@/lib/dashboard/vendor';
+import { WORK_PULSE_VENDOR_LABELS } from '@/lib/dashboard/vendor';
 
 function formatSkillName(name: string): string {
   return name.replace(':', ' · ');
@@ -21,13 +21,13 @@ function formatConnectorName(name: string): string {
 
 type RowVendor = 'claude' | 'openai';
 
-/** The name, with a Claude or OpenAI tag once both vendors appear on the page. */
-function toolLabel(name: string, vendor: RowVendor | undefined, showVendor: boolean): ReactNode {
+/** The name, with a Claude, ChatGPT or Codex tag once both vendors appear on the page. */
+function toolLabel(name: string, vendor: RowVendor | undefined, showVendor: boolean, tag?: string): ReactNode {
   if (!showVendor || !vendor) return name;
   return (
     <span className="inline-flex items-center gap-1.5 min-w-0">
       <span className="truncate">{name}</span>
-      <Tag tone="neutral">{VENDOR_LABELS[vendor]}</Tag>
+      <Tag tone="neutral">{tag ?? WORK_PULSE_VENDOR_LABELS[vendor]}</Tag>
     </span>
   );
 }
@@ -41,7 +41,7 @@ function RankedList({
   showVendor,
 }: {
   title: string;
-  items: Array<{ usage_count: number; user_count: number; vendor?: RowVendor; [k: string]: unknown }>;
+  items: Array<{ usage_count: number; user_count: number; vendor?: RowVendor; tag?: string; [k: string]: unknown }>;
   nameKey: string;
   emptyMessage: string;
   formatName: (n: string) => string;
@@ -59,9 +59,9 @@ function RankedList({
             const barPct = Math.round((item.usage_count / max) * 100);
             return (
               <BarRow
-                key={`${name}|${item.vendor ?? ''}`}
+                key={`${name}|${item.tag ?? item.vendor ?? ''}`}
                 rank={i + 1}
-                label={toolLabel(formatName(name), item.vendor, showVendor)}
+                label={toolLabel(formatName(name), item.vendor, showVendor, item.tag)}
                 value={`${item.usage_count}× · ${item.user_count} ${item.user_count === 1 ? 'user' : 'users'}`}
                 pct={barPct}
                 tone="measured"
@@ -85,7 +85,7 @@ function GapList({
 }: {
   title: string;
   subtitle: string;
-  items: Array<{ usage_count: number; user_count: number; vendor?: RowVendor; [k: string]: unknown }>;
+  items: Array<{ usage_count: number; user_count: number; vendor?: RowVendor; tag?: string; [k: string]: unknown }>;
   nameKey: string;
   emptyMessage: string;
   formatName: (n: string) => string;
@@ -100,8 +100,8 @@ function GapList({
           {items.map(item => {
             const name = item[nameKey] as string;
             return (
-              <li key={`${name}|${item.vendor ?? ''}`} className="px-4 py-2 border-t border-[#F2F2F2] first:border-t-0 flex items-center justify-between gap-3">
-                <span className="text-[14px] text-[#0A0A0A] truncate">{toolLabel(formatName(name), item.vendor, showVendor)}</span>
+              <li key={`${name}|${item.tag ?? item.vendor ?? ''}`} className="px-4 py-2 border-t border-[#F2F2F2] first:border-t-0 flex items-center justify-between gap-3">
+                <span className="text-[14px] text-[#0A0A0A] truncate">{toolLabel(formatName(name), item.vendor, showVendor, item.tag)}</span>
                 <span className="text-[13px] text-[#666666] tabular-nums shrink-0">
                   {item.user_count} {item.user_count === 1 ? 'teammate' : 'teammates'} use this
                 </span>
@@ -193,10 +193,10 @@ function DiscoverFeed({
 }
 
 interface OverviewData {
-  topSkills: Array<{ skill_name: string; vendor?: RowVendor; usage_count: number; user_count: number }>;
-  topConnectors: Array<{ mcp_server: string; vendor?: RowVendor; usage_count: number; user_count: number }>;
-  skillGap: Array<{ skill_name: string; vendor?: RowVendor; usage_count: number; user_count: number }>;
-  connectorGap: Array<{ mcp_server: string; vendor?: RowVendor; usage_count: number; user_count: number }>;
+  topSkills: Array<{ skill_name: string; vendor?: RowVendor; tag?: string; usage_count: number; user_count: number }>;
+  topConnectors: Array<{ mcp_server: string; vendor?: RowVendor; tag?: string; usage_count: number; user_count: number }>;
+  skillGap: Array<{ skill_name: string; vendor?: RowVendor; tag?: string; usage_count: number; user_count: number }>;
+  connectorGap: Array<{ mcp_server: string; vendor?: RowVendor; tag?: string; usage_count: number; user_count: number }>;
 }
 
 interface DiscoverData {
