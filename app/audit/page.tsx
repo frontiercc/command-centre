@@ -514,7 +514,9 @@ export default function AuditPage() {
 
     if ((event.surface === 'cowork' || event.surface === 'code') && sessionId) {
       const spendQs = new URLSearchParams({ sessionId });
-      if (event.prompt_id) spendQs.set('promptId', event.prompt_id);
+      // ChatGPT and Codex rows are the prompt themselves; Claude's carry the prompt's id.
+      const promptId = isOpenAiSource(event._source) ? event.id : event.prompt_id;
+      if (promptId) spendQs.set('promptId', promptId);
       fetch(`/api/audit/session-spend?${spendQs}`)
         .then(r => (r.ok ? r.json() : null))
         .then(d => { if (d?.conversation) setSessionSpend({ conversation: d.conversation, prompt: d.prompt ?? null }); })
@@ -882,6 +884,14 @@ export default function AuditPage() {
                         Files uploaded:
                         {files.map(f => <Mono key={f}>{f}</Mono>)}
                       </span>
+                    )}
+                    {(selectedEvent?._source === 'chatgpt_chat' || selectedEvent?._source === 'chatgpt_work') && cost != null && (
+                      <span className="text-[#8F8F8F]">
+                        Cost is an estimate: OpenAI reports ChatGPT cost per hour, so each hour&apos;s cost is shared evenly across the replies in it. Priced at OpenAI&apos;s USD token rates.
+                      </span>
+                    )}
+                    {selectedEvent?._source === 'codex' && cost != null && (
+                      <span className="text-[#8F8F8F]">Priced from each turn&apos;s tokens at OpenAI&apos;s USD token rates.</span>
                     )}
                     {sessionSpend && (sessionSpend.prompt || hasBreakdown(sessionSpend.conversation) || sessionSpend.conversation.byModel.length > 1) && (
                       <span className="flex flex-col gap-1.5 pt-1.5 mt-0.5 border-t border-[#F2F2F2]">

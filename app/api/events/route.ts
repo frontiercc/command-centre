@@ -21,6 +21,7 @@ import { lacksDepartment, noDepartmentResponse } from '@/lib/auth/content-access
 import { logAccess } from '@/lib/audit/log';
 import { getCodeModelRates, priceModelsJson, priceTokens } from '@/lib/pulse/code/rates';
 import { isOpenAiSource, OPENAI_SOURCES, type OpenAiSource } from '@/lib/openai/sources';
+import { chatgptSessionShares } from '@/lib/finance/spend-review-openai';
 
 // ─── Raw-execution facade (mirrors lib/db/queries.ts's rawAll) ────────────────
 interface RawFacade {
@@ -202,6 +203,42 @@ async function getCoworkEventsForAudit(filters: {
       }
     }
 
+    // ChatGPT conversations: no cowork_session_stats row, so spend, tokens and
+    // models come from each conversation's share of its hours' costs (an
+    // estimate: OpenAI reports cost per hour), active time from
+    // chatgpt_session_time. Same sharing as FinOps and Spend Review.
+    const chatgptIds = [...new Set(rows.map(r => r.session_id).filter((id): id is string => !!id && id.startsWith('chatgpt:')))];
+    const chatgptStats = new Map<string, { cost: number | null; input: number; output: number; models: string[]; activeSecs: number | null }>();
+    if (chatgptIds.length > 0) {
+      const idList = sql.join(chatgptIds.map(id => sql`${id}`), sql`, `);
+      const span = await rawAll<{ lo: number | string | null; hi: number | string | null }>(client, sql`
+        SELECT MIN(occurred_at) AS lo, MAX(occurred_at) AS hi FROM openai_replies WHERE session_id IN (${idList})
+      `);
+      const lo = Number(span[0]?.lo ?? NaN);
+      const hi = Number(span[0]?.hi ?? NaN);
+      if (Number.isFinite(lo) && Number.isFinite(hi)) {
+        const shared = await chatgptSessionShares(client, codeRates, Math.floor(lo / 3600) * 3600, Math.floor(hi / 3600) * 3600 + 3600, { sessionIds: chatgptIds });
+        for (const [sid, e] of shared.bySession) {
+          const s = { cost: null as number | null, input: 0, output: 0, models: [] as string[], activeSecs: null as number | null };
+          for (const p of e.parts) {
+            s.input += p.usage.inputTokens + p.usage.cacheReadTokens;
+            s.output += p.usage.outputTokens;
+            if (p.model && !s.models.includes(p.model)) s.models.push(p.model);
+            if (p.usd !== null) s.cost = (s.cost ?? 0) + p.usd;
+          }
+          chatgptStats.set(sid, s);
+        }
+      }
+      const times = await rawAll<{ session_id: string; active_secs: number | string }>(client, sql`
+        SELECT session_id, active_secs FROM chatgpt_session_time WHERE session_id IN (${idList})
+      `);
+      for (const t of times) {
+        const s = chatgptStats.get(t.session_id) ?? { cost: null, input: 0, output: 0, models: [], activeSecs: null };
+        s.activeSecs = Number(t.active_secs);
+        chatgptStats.set(t.session_id, s);
+      }
+    }
+
     return rows.map(r => ({
       id: r.id,
       user_id: r.user_display_name || r.user_id || 'unknown',
@@ -220,6 +257,19 @@ async function getCoworkEventsForAudit(filters: {
       prompt_id: r.prompt_id ?? null,
       _source: sourceBadge(r.source),
       session_enrichment: (() => {
+        if (r.session_id?.startsWith('chatgpt:')) {
+          const g = chatgptStats.get(r.session_id);
+          if (!g) return null;
+          return JSON.stringify({
+            cost_usd: g.cost,
+            input_tokens: g.input,
+            output_tokens: g.output,
+            tool_call_count: null,
+            unique_tools: null,
+            models_used: g.models.length > 0 ? JSON.stringify(g.models) : null,
+            duration_secs: g.activeSecs,
+          });
+        }
         const codex = r.session_id ? codexStats.get(r.session_id) : undefined;
         if (r.session_id?.startsWith('codex:')) {
           if (!codex) return null;

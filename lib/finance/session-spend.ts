@@ -5,14 +5,20 @@
  * Where the money went for one conversation, and for one prompt inside it
  * (the Audit Log's Session stats). Reads the session's model calls directly,
  * so the conversation total always equals the sum of its parts.
+ *
+ * ChatGPT and Codex calls carry no prompt id, so each reply (ChatGPT) or turn
+ * (Codex) counts towards the person's latest prompt before it. A ChatGPT
+ * reply's cost is its share of its hour's cost (OpenAI reports cost per hour),
+ * so a ChatGPT figure is an estimate; a Codex turn's tokens are priced exactly.
  */
 import { sql } from 'drizzle-orm';
 import { getTypedClient } from '@/lib/db/client';
 import { getCodeModelRates, priceTokens } from '@/lib/pulse/code/rates';
 import { SpendSplitAcc, type SpendSplit } from './where-money-went';
+import { chatgptConversationReplies } from './spend-review-openai';
 
 export interface SessionSpend {
-  surface: 'code' | 'cowork' | null;
+  surface: 'code' | 'cowork' | 'chatgpt' | 'codex' | null;
   /** The person the session belongs to (for the caller's department check). */
   userId: string | null;
   conversation: SpendSplit;
@@ -34,12 +40,71 @@ const num = (v: unknown): number => {
 };
 const text = (v: unknown): string | null => (typeof v === 'string' && v !== '' ? v : null);
 
+/**
+ * The prompt each call belongs to when calls carry no prompt id: the latest
+ * prompt at or before the call, or the first prompt for a call before any.
+ */
+export function promptAt(prompts: Array<{ id: string; at: number }>, at: number): string | null {
+  let pick: string | null = prompts[0]?.id ?? null;
+  for (const p of prompts) if (p.at <= at) pick = p.id;
+  return pick;
+}
+
+async function sessionPrompts(sessionId: string): Promise<Array<{ id: string; at: number }>> {
+  const r = await rows(sql`
+    SELECT id, occurred_at FROM cowork_messages
+     WHERE session_id = ${sessionId} AND message_type IN ('cowork_user_message', 'code_user_message')
+     ORDER BY occurred_at, id`);
+  return r.map(x => ({ id: String(x.id), at: num(x.occurred_at) }));
+}
+
 export async function buildSessionSpend(sessionId: string, promptId: string | null): Promise<SessionSpend> {
   const conversation = new SpendSplitAcc();
   const prompt = new SpendSplitAcc();
   let promptCalls = 0;
   let surface: SessionSpend['surface'] = null;
   let userId: string | null = null;
+
+  if (sessionId.startsWith('codex:') || sessionId.startsWith('chatgpt:')) {
+    const rates = await getCodeModelRates();
+    const prompts = await sessionPrompts(sessionId);
+    const add = (model: string | null, usd: number | null, calls: number, at: number) => {
+      const fact = { model, subagent: null, skill: null, sourceRecorded: true, usd, calls };
+      conversation.add(fact);
+      if (promptId && promptAt(prompts, at) === promptId) { prompt.add(fact); promptCalls += calls; }
+    };
+    if (sessionId.startsWith('codex:')) {
+      surface = 'codex';
+      const turns = await rows(sql`
+        SELECT user_id, model, started_at, uncached_input_tokens AS inp, cached_input_tokens AS cached, output_tokens AS outp
+          FROM codex_turns WHERE session_id = ${sessionId}`);
+      for (const t of turns) {
+        userId ??= text(t.user_id);
+        const model = text(t.model);
+        const usd = model === null ? null : priceTokens(model, {
+          inputTokens: num(t.inp), outputTokens: num(t.outp), cacheReadTokens: num(t.cached), cacheCreationTokens: 0,
+        }, rates);
+        add(model, usd, 1, num(t.started_at));
+      }
+    } else {
+      surface = 'chatgpt';
+      const client = await getTypedClient();
+      const conv = await chatgptConversationReplies(client, rates, sessionId);
+      userId = conv.userId;
+      for (const r of conv.replies) {
+        // No cost record for its hour yet (OpenAI's export lags): nothing to count.
+        if (r.parts.length === 0) continue;
+        // One reply can carry shares of more than one cost record; it is one call.
+        r.parts.forEach((p, i) => add(p.model, p.usd, i === 0 ? 1 : 0, r.occurredAt));
+      }
+    }
+    return {
+      surface,
+      userId,
+      conversation: conversation.result(),
+      prompt: promptId && promptCalls > 0 ? prompt.result() : null,
+    };
+  }
 
   // Claude Code: priced from tokens at the admin model rates.
   const code = await rows(sql`

@@ -33,6 +33,8 @@ export interface Reply {
   sessionId: string;
   model: string | null;
   occurredAt: number;
+  /** When given, each reply's own share is returned in `byReply`. */
+  id?: string;
 }
 
 /** One part of a conversation's ChatGPT cost: a share of one hour's cost on one model. */
@@ -46,6 +48,8 @@ export interface SessionShare {
 
 export interface SharedCosts {
   bySession: Map<string, { userId: string; parts: SessionShare[] }>;
+  /** Each reply's share (replies given an id only). */
+  byReply: Map<string, SessionShare[]>;
   /** Priced cost with no reply in its hour to share it across, per person. */
   unmatchedByUser: Map<string, number>;
   unpricedModels: Set<string>;
@@ -71,7 +75,7 @@ export function shareHourlyCosts(costs: HourlyCost[], replies: Reply[], rates: M
     (byHourModel.get(km) ?? byHourModel.set(km, []).get(km)!).push(r);
     (byHour.get(kh) ?? byHour.set(kh, []).get(kh)!).push(r);
   }
-  const out: SharedCosts = { bySession: new Map(), unmatchedByUser: new Map(), unpricedModels: new Set() };
+  const out: SharedCosts = { bySession: new Map(), byReply: new Map(), unmatchedByUser: new Map(), unpricedModels: new Set() };
   for (const c of costs) {
     const usd = c.model === null ? null : priceTokens(c.model, c.usage, rates);
     if (usd === null) out.unpricedModels.add(c.model ?? '(no model)');
@@ -81,7 +85,15 @@ export function shareHourlyCosts(costs: HourlyCost[], replies: Reply[], rates: M
       continue;
     }
     const perSession = new Map<string, number>();
-    for (const r of matched) perSession.set(r.sessionId, (perSession.get(r.sessionId) ?? 0) + 1);
+    for (const r of matched) {
+      perSession.set(r.sessionId, (perSession.get(r.sessionId) ?? 0) + 1);
+      if (r.id) {
+        const f = 1 / matched.length;
+        const list = out.byReply.get(r.id) ?? [];
+        out.byReply.set(r.id, list);
+        list.push({ model: c.model, usd: usd === null ? null : usd * f, usage: scale(c.usage, f), replies: 1 });
+      }
+    }
     for (const [sessionId, n] of perSession) {
       const f = n / matched.length;
       const entry = out.bySession.get(sessionId) ?? { userId: c.userId, parts: [] };
@@ -108,10 +120,10 @@ export async function chatgptSessionShares(client: Client, rates: ModelRates, st
   let userIds: string[] | null = null;
   if ('userId' in filter) userIds = [filter.userId];
   if ('sessionIds' in filter) {
-    if (filter.sessionIds.length === 0) return { bySession: new Map(), unmatchedByUser: new Map(), unpricedModels: new Set() };
+    if (filter.sessionIds.length === 0) return { bySession: new Map(), byReply: new Map(), unmatchedByUser: new Map(), unpricedModels: new Set() };
     const rows = await inChunks(filter.sessionIds, part => client.selectDistinct({ user_id: or.user_id }).from(or).where(inArray(or.session_id, part)));
     userIds = [...new Set(rows.map(r => r.user_id))];
-    if (userIds.length === 0) return { bySession: new Map(), unmatchedByUser: new Map(), unpricedModels: new Set() };
+    if (userIds.length === 0) return { bySession: new Map(), byReply: new Map(), unmatchedByUser: new Map(), unpricedModels: new Set() };
   }
   const costWhere = and(eq(oc.product, 'chatgpt'), gte(oc.hour_start, start), lt(oc.hour_start, end));
   const costSelect = {
@@ -181,4 +193,41 @@ export async function codexSessionTurns(client: Client, rates: ModelRates, start
     e.parts.push({ model: s.model, usd, usage: s.usage, turns: s.turns });
   }
   return { bySession, unpricedModels };
+}
+
+/**
+ * One ChatGPT conversation's replies, each with its share of its hour's cost
+ * (the Audit Log's where-the-money-went). The person's other replies in those
+ * hours are read too, since they share the same hourly costs.
+ */
+export async function chatgptConversationReplies(client: Client, rates: ModelRates, sessionId: string): Promise<{
+  userId: string | null;
+  replies: Array<{ id: string; occurredAt: number; parts: SessionShare[] }>;
+  unpricedModels: Set<string>;
+}> {
+  const or = schema.openaiReplies;
+  const oc = schema.openaiCosts;
+  const own = await client.select({ id: or.id, user_id: or.user_id, model: or.model, occurred_at: or.occurred_at }).from(or).where(eq(or.session_id, sessionId));
+  if (own.length === 0) return { userId: null, replies: [], unpricedModels: new Set() };
+  const userId = own[0].user_id;
+  const hours = [...new Set(own.map(r => Math.floor(Number(r.occurred_at) / HOUR) * HOUR))];
+  const costs = await client.select({ model: oc.model, hour_start: oc.hour_start, inp: oc.input_tokens, cached: oc.cached_input_tokens, outp: oc.output_tokens })
+    .from(oc).where(and(eq(oc.product, 'chatgpt'), eq(oc.user_id, userId), inArray(oc.hour_start, hours)));
+  const minH = Math.min(...hours);
+  const maxH = Math.max(...hours) + HOUR;
+  const theirs = await client.select({ id: or.id, session_id: or.session_id, model: or.model, occurred_at: or.occurred_at })
+    .from(or).where(and(eq(or.user_id, userId), gte(or.occurred_at, minH), lt(or.occurred_at, maxH)));
+  const shared = shareHourlyCosts(
+    costs.map(c => ({
+      userId, model: c.model, hourStart: Number(c.hour_start),
+      usage: { inputTokens: Number(c.inp) || 0, outputTokens: Number(c.outp) || 0, cacheCreationTokens: 0, cacheReadTokens: Number(c.cached) || 0 },
+    })),
+    theirs.map(r => ({ id: r.id, userId, sessionId: r.session_id, model: r.model, occurredAt: Number(r.occurred_at) })),
+    rates,
+  );
+  return {
+    userId,
+    replies: own.map(r => ({ id: r.id, occurredAt: Number(r.occurred_at), parts: shared.byReply.get(r.id) ?? [] })),
+    unpricedModels: shared.unpricedModels,
+  };
 }
