@@ -124,11 +124,8 @@ export default function TierConfigTab() {
 Changes take effect on the next classifier run (every 5 minutes). Use &ldquo;Preview prompt&rdquo; to inspect exactly what the AI will receive before saving.
       </Notice>
 
-      {/* Structural constraints notice */}
-      <Notice tone="info" title="Structural constraints: load-bearing metric logic.">
-        <strong>Tier 2</strong> requires: connector (MCP tool) use <em>or</em> specialised skill invocation <em>or</em> multi-step synthesis.
-        {' '}<strong>Tier 3</strong> requires: connector orchestration across systems <em>or</em> skill invocation <em>plus</em> genuine reasoning complexity.
-        {' '}These are objective qualifying signals baked into the rubric. Editing tier descriptions changes the AI&rsquo;s language context; it does not remove these structural requirements, which are enforced by the classifier prompt architecture.
+      <Notice tone="info" title="What the classifier receives.">
+        The classifier&apos;s instructions are built from this tab: the tier descriptions, the connector and skill evidence, the task types and the detection criteria. Nothing else decides the tier. Use &ldquo;Preview prompt&rdquo; to see the full text.
       </Notice>
 
       {/* Tier Rubric */}
@@ -156,6 +153,22 @@ Changes take effect on the next classifier run (every 5 minutes). Use &ldquo;Pre
             />
           </div>
         ))}
+      </Panel>
+
+      {/* Connector and skill evidence: how tool use counts towards a tier */}
+      <Panel title="Connector and skill evidence">
+        <Field
+          label="Rules sent to the classifier"
+          hint="How connector and skill use counts towards a tier. Sent after the tier descriptions, word for word. Clear it to send no connector or skill rules, so the tier descriptions alone decide."
+        >
+          <textarea
+            value={config.evidenceRules ?? ''}
+            onChange={e => setConfig(c => c ? { ...c, evidenceRules: e.target.value } : c)}
+            rows={12}
+            aria-label="Connector and skill evidence rules"
+            className={cx(B.input, 'w-full resize-y leading-5 font-mono text-[13px]')}
+          />
+        </Field>
       </Panel>
 
       {/* Task Taxonomy */}

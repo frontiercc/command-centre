@@ -50,6 +50,9 @@ export async function POST(request: NextRequest) {
   }
   const taxonomyError = validateTaxonomy(config.taxonomy);
   if (taxonomyError) return NextResponse.json({ error: taxonomyError }, { status: 400 });
+  if (config.evidenceRules !== undefined && (typeof config.evidenceRules !== 'string' || config.evidenceRules.length > 4000)) {
+    return NextResponse.json({ error: 'evidenceRules must be text of at most 4,000 characters' }, { status: 400 });
+  }
   if (typeof config.confidenceThreshold !== 'number' ||
       config.confidenceThreshold < 0 || config.confidenceThreshold > 1) {
     return NextResponse.json({ error: 'confidenceThreshold must be 0.0–1.0' }, { status: 400 });
