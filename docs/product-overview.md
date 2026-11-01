@@ -312,6 +312,8 @@ The Board catalogues the skills and connectors in use across the organisation an
 
 Each entry shows usage, the number of people using it, its trend, whether people invoke it or Claude chains it, upvotes and the use cases that depend on it. Unclaimed entries with wide use point to tooling that nobody owns.
 
+With the OpenAI export connected, ChatGPT's skills and Codex's connectors are registered the same way, unclaimed, and each entry is tagged with the products it is used in: Claude, ChatGPT or Codex. OpenAI does not document the names of its own built-in skills, so they also start unclaimed.
+
 ## FinOps
 
 FinOps is available to administrators and managers. FinOps ships switched off, as does its Model Efficiency view; an administrator turns both on under **Admin → System**. FinOps attributes Claude Code and Claude Cowork spend to people and rolls it up by cost centre for each calendar month. Developer Pulse carries its own Claude Code spend figures, and its department view lists each member's spend for the last seven days to the roles that can open that department.

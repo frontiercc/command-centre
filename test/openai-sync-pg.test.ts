@@ -94,6 +94,17 @@ describe('OpenAI sync against the stand-in export', () => {
         `SELECT source, surface, mcp_server, COUNT(*) AS n FROM cowork_mcp_invocations GROUP BY source, surface, mcp_server`,
       );
       expect(connectors).toEqual([{ source: 'codex', surface: 'code', mcp_server: 'linear', n: first.connectorCalls }]);
+      // Each skill and connector is on the S&C Board, unclaimed, for its builder to claim.
+      const board = await sql.all<{ name: string; type: string; surface: string; source: string; is_published: number }>(
+        `SELECT name, type, surface, source, is_published FROM skill_library_entries ORDER BY type, name`,
+      );
+      // (The Board also holds the official Anthropic skills a migration seeds; only the synced names are checked.)
+      const skillNames = [...new Set((await sql.all<{ skill_name: string }>(`SELECT DISTINCT skill_name FROM cowork_skill_invocations`)).map(r => r.skill_name))];
+      expect(skillNames.length).toBeGreaterThan(0);
+      for (const name of skillNames) {
+        expect(board.find(b => b.name === name)).toMatchObject({ type: 'skill', surface: 'cowork', source: 'org', is_published: 0 });
+      }
+      expect(board.find(b => b.name === 'linear')).toMatchObject({ type: 'connector', surface: 'code', source: 'org', is_published: 0 });
       // The Get started panel's optional step ticks on the first OpenAI prompt.
       expect(Number(await getConfigValue('setupFirstOpenaiAt'))).toBeGreaterThanOrEqual(syncStartS);
 

@@ -651,6 +651,18 @@ async function storeRecords(
   return pending;
 }
 
+/**
+ * Puts a skill or connector on the S&C Board unclaimed, as Claude's telemetry
+ * does at ingest, so the person who built it can claim it. An entry already
+ * there (claimed, official or Claude's) is left as it is.
+ */
+async function registerOnBoard(tx: TypedClient, name: string, type: 'skill' | 'connector', surface: string): Promise<void> {
+  const nowSec = Math.floor(Date.now() / 1000);
+  await tx.insert(schema.skillLibraryEntries).values({
+    name, type, surface, source: 'org', is_published: 0, created_at: nowSec, updated_at: nowSec,
+  }).onConflictDoNothing();
+}
+
 /** Stores a skill use or connector call; a repeated delivery is a no-op. */
 async function storeActivity(tx: TypedClient, a: ActivityRow, userId: string, stats: OpenAiSyncStats): Promise<void> {
   if (a.kind === 'skills') {
@@ -666,7 +678,10 @@ async function storeActivity(tx: TypedClient, a: ActivityRow, userId: string, st
         source: a.source,
         surface: a.surface,
       }).onConflictDoNothing().returning({ id: schema.coworkSkillInvocations.id });
-      if (inserted.length > 0) stats.skillUses++;
+      if (inserted.length > 0) {
+        stats.skillUses++;
+        await registerOnBoard(tx, skill, 'skill', a.surface);
+      }
     }
     return;
   }
@@ -680,7 +695,10 @@ async function storeActivity(tx: TypedClient, a: ActivityRow, userId: string, st
     source: a.source,
     surface: a.surface,
   }).onConflictDoNothing().returning({ id: schema.coworkMcpInvocations.id });
-  if (inserted.length > 0) stats.connectorCalls++;
+  if (inserted.length > 0) {
+    stats.connectorCalls++;
+    await registerOnBoard(tx, a.server, 'connector', a.surface);
+  }
 }
 
 /** Stores a ChatGPT reply, Codex turn or hourly cost; a repeated delivery is a no-op. */

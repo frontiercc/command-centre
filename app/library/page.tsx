@@ -8,6 +8,7 @@ import { useEffect, useState, useCallback, type ReactNode } from 'react';
 import Link from 'next/link';
 import { useRouter, useSearchParams } from 'next/navigation';
 import TopBar from '@/components/layout/TopBar';
+import { useConnectedProducts } from '@/components/shared/VendorSwitch';
 import LoadingSpinner from '@/components/shared/LoadingSpinner';
 import {
   PageBody, Toolbar, Panel, PanelFoot, Strip, Figure, Bar, T, Tag, B, Chip, Notice, Muted, cx,
@@ -30,8 +31,24 @@ interface LibraryEntry {
   user_voted: number;
   week_count: number;
   trend_pct: number;
+  /** Products it is used in, from its uses (Claude, ChatGPT, Codex). */
+  products?: string[];
   reads?: number;
   writes?: number;
+}
+
+/**
+ * The products an entry is used in, as tags. Shown only once ChatGPT or Codex
+ * is on the Board, so a Claude-only Board looks as it always has.
+ */
+function ProductTags({ e, show }: { e: LibraryEntry; show: boolean }) {
+  if (!show || !e.products?.length) return null;
+  return <>{e.products.map(p => <Tag key={p}>{p}</Tag>)}</>;
+}
+
+/** True when any listed entry is used in ChatGPT or Codex. */
+function openaiOnBoard(entries: LibraryEntry[]): boolean {
+  return entries.some(e => e.products?.some(p => p !== 'Claude'));
 }
 
 function readWriteLine(e: { reads?: number; writes?: number }): string | null {
@@ -219,6 +236,7 @@ function PanelTabs<K extends string>({ tabs, value, onChange, label, right }: {
 // ── Headline strip ────────────────────────────────────────────────────────────
 
 function HeadlineStrip({ data }: { data: LibraryData }) {
+  const connected = useConnectedProducts();
   const ur = data.user_rank;
   const nextRankEntry = ur && ur.rank > 1
     ? data.leaderboard[ur.rank - 2]
@@ -255,7 +273,7 @@ function HeadlineStrip({ data }: { data: LibraryData }) {
           }
         />
       ) : (
-        <Figure label="Your standing" value="—" sub="Start using skills in Claude to earn your rank." />
+        <Figure label="Your standing" value="—" sub={`Start using skills in ${connected?.openai ? (connected.claude ? 'Claude or ChatGPT' : 'ChatGPT') : 'Claude'} to earn your rank.`} />
       )}
     </Strip>
   );
@@ -430,6 +448,7 @@ function TabbedTopList({
   onVote: (id: number) => void;
 }) {
   const [tab, setTab] = useState<'skills' | 'connectors'>('skills');
+  const showProducts = openaiOnBoard([...skills, ...connectors]);
   const [skillPage, setSkillPage] = useState(0);
   const [connectorPage, setConnectorPage] = useState(0);
   const [openId, setOpenId] = useState<number | null>(null);
@@ -473,6 +492,7 @@ function TabbedTopList({
                         <Link href={`/library/${e.id}`} className="font-mono text-[13px] font-medium text-[#0A0A0A] hover:underline break-all">
                           {fmt(e.name)}
                         </Link>
+                        <ProductTags e={e} show={showProducts} />
                         {e.author_name && <span className="text-[13px] text-[#666666]">by {e.author_name}</span>}
                         {e.is_published === 0 && (
                           <Link
@@ -851,6 +871,7 @@ function AnthropicCatalog({ entries, onVote }: { entries: LibraryEntry[]; onVote
 // ── Filtered results ─────────────────────────────────────────────────────────
 
 function FilteredList({ entries, onVote }: { entries: LibraryEntry[]; onVote: (id: number) => void }) {
+  const showProducts = openaiOnBoard(entries);
   return (
     <Panel title="Results" subtitle={<span className="tabular-nums">{entries.length}</span>} flush>
       {entries.length === 0 ? (
@@ -865,6 +886,7 @@ function FilteredList({ entries, onVote }: { entries: LibraryEntry[]; onVote: (i
                 <div className="flex items-center gap-2 min-w-0 flex-wrap">
                   <Link href={`/library/${e.id}`} className="font-mono text-[13px] font-medium text-[#0A0A0A] hover:underline truncate">{fmt(e.name)}</Link>
                   <Tag>{e.type}</Tag>
+                  <ProductTags e={e} show={showProducts} />
                   {e.source === 'anthropic' && <Tag>Anthropic</Tag>}
                   {isUnclaimed && <Tag tone="warn">Unclaimed</Tag>}
                 </div>

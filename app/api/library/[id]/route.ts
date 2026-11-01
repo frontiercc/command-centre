@@ -15,6 +15,7 @@
 // NOTE: the GET handler spreads `...entry` (all columns, including
 // author_user_id) into the response alongside the server-computed
 // `is_author` flag.
+import { entryProducts } from '@/lib/library/products';
 import { NextRequest, NextResponse } from 'next/server';
 import { normaliseSourceUrl, SOURCE_URL_ERROR } from '@/lib/library/source-url';
 import { isEntryAuthor } from '@/lib/library/author';
@@ -220,8 +221,12 @@ export async function GET(
       }
     : undefined;
 
+  // Which products it is used in (Claude, ChatGPT, Codex).
+  const products = (await entryProducts([{ name, type: entry.type }])).get(name) ?? [];
+
   return NextResponse.json({
     ...entry,
+    products,
     is_author: await isEntryAuthor(session, entry.author_user_id),
     stats: {
       total_invocations: totalInvocations,

@@ -24,6 +24,7 @@
 //
 // Case-insensitive search: the `q` name/description search uses
 // ILIKE, since Postgres LIKE is case-sensitive.
+import { entryProducts } from '@/lib/library/products';
 import { NextRequest, NextResponse } from 'next/server';
 import { normaliseSourceUrl, SOURCE_URL_ERROR } from '@/lib/library/source-url';
 import { callerPersonId } from '@/lib/library/author';
@@ -463,6 +464,8 @@ export async function GET(req: NextRequest) {
   }));
 
   const readWriteCounts = await getConnectorReadWriteCounts();
+  // Which products each entry is used in (Claude, ChatGPT, Codex), for its tags.
+  const products = await entryProducts(rows);
 
   const entries = rows.map(r => {
     const rw = r.type === 'connector' ? readWriteCounts.get(r.name) : undefined;
@@ -474,6 +477,7 @@ export async function GET(req: NextRequest) {
         ? Math.round(((weekCountNum - prevWeekCountNum) / prevWeekCountNum) * 100)
         : weekCountNum > 0 ? 100 : 0,
       ...(rw ? { reads: rw.reads, writes: rw.writes } : {}),
+      products: products.get(r.name) ?? [],
     };
   });
 
