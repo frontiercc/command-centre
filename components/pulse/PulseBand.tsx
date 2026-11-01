@@ -7,6 +7,7 @@ import { useEffect, useState } from 'react';
 import Link from 'next/link';
 import { Panel, Strip, Figure, BarRow, Tag, Muted, Empty } from '@/components/precision/ui';
 import { WORK_PULSE_VENDOR_LABELS, type Vendor } from '@/lib/dashboard/vendor';
+import { useOpenAiOnly } from '@/components/shared/VendorSwitch';
 
 type RowVendor = Exclude<Vendor, 'all'>;
 
@@ -129,6 +130,8 @@ export default function PulseBand({ children, vendor = 'all', showVendor = false
   /** Tag top skills and connectors Claude or OpenAI. */
   showVendor?: boolean;
 }) {
+  // Only OpenAI connected: no note saying the band shows OpenAI only.
+  const openaiOnly = useOpenAiOnly();
   const [data, setData] = useState<OrgSummary | null>(null);
   const [loading, setLoading] = useState(true);
 
@@ -173,7 +176,7 @@ export default function PulseBand({ children, vendor = 'all', showVendor = false
       {!loading && hasData && data && (
         <>
           {/* Row 1: the four Cowork signals in plain English + tier bar */}
-          {vendor !== 'all' && (
+          {vendor !== 'all' && !openaiOnly && (
             <p className="m-0 -mb-2 text-[13px] text-[#8F8F8F]">
               Work Pulse shows {WORK_PULSE_VENDOR_LABELS[vendor]} only{vendor === 'openai' ? ', and Developer Pulse below shows Codex only' : ', and Developer Pulse below shows Claude Code only'}.
             </p>

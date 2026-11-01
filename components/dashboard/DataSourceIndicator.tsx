@@ -5,7 +5,10 @@
 
 // Capture-path indicator for the dashboard header: OTLP push is the path for
 // Cowork and Code, Chat comes from the Compliance API on an Enterprise plan,
-// and ChatGPT and Codex from OpenAI's export once its key is saved.
+// and ChatGPT and Codex from OpenAI's export once its key is saved. With only
+// OpenAI connected the Claude paths are not shown.
+
+import { useOpenAiOnly } from '@/components/shared/VendorSwitch';
 
 interface DataSourceStatus {
   coworkContent: boolean;
@@ -17,12 +20,17 @@ interface DataSourceStatus {
 }
 
 export function DataSourceIndicator({ status }: { status: DataSourceStatus }) {
+  const openaiOnly = useOpenAiOnly();
   return (
     <div className="flex flex-wrap items-center justify-end gap-2" aria-label="Data sources">
-      <SourceChip label="OTel" active={Boolean(status.otelCowork)} />
-      <SourceChip label="Compliance API" active={status.complianceApi} />
-      <SourceChip label="Analytics API" active={status.analyticsApi} />
-      {status.openai && <SourceChip label="OpenAI" active />}
+      {!openaiOnly && (
+        <>
+          <SourceChip label="OTel" active={Boolean(status.otelCowork)} />
+          <SourceChip label="Compliance API" active={status.complianceApi} />
+          <SourceChip label="Analytics API" active={status.analyticsApi} />
+        </>
+      )}
+      {(status.openai || openaiOnly) && <SourceChip label="OpenAI" active />}
     </div>
   );
 }
