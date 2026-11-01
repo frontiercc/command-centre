@@ -1461,7 +1461,7 @@ export default function SecurityPage() {
               {complianceLastSyncAt && (
                 <p className="m-0 text-[13px] text-[#666666] tabular-nums">
                   Last sync: {new Date(parseInt(complianceLastSyncAt, 10) * 1000).toLocaleString()}
-                  {(() => { try { const s = JSON.parse(complianceLastSyncStats || '{}'); return ` (${s.chatsProcessed ?? 0} chats, ${s.prompts ?? 0} prompts, ${s.connectors ?? 0} connectors, ${s.activities ?? 0} activities${(s.errors?.length ?? 0) > 0 ? `, ${s.errors.length} error(s)` : ''})`; } catch { return ''; } })()}
+                  {(() => { try { const s = JSON.parse(complianceLastSyncStats || '{}'); return ` (${s.chatsProcessed ?? 0} chats, ${s.prompts ?? 0} prompts, ${s.connectors ?? 0} connectors, ${s.activities ?? 0} activities${(s.excluded ?? 0) > 0 ? `, ${s.excluded} excluded` : ''}${(s.errors?.length ?? 0) > 0 ? `, ${s.errors.length} error(s)` : ''})`; } catch { return ''; } })()}
                 </p>
               )}
             </div>

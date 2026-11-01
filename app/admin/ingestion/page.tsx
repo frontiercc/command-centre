@@ -305,8 +305,8 @@ export default function IngestionPage() {
             <Panel title="Exclude people from monitoring">
               <div className="flex flex-col gap-3">
                 <label htmlFor="otel-excluded" className="text-[13px] text-[#666666] leading-5">
-                  Claude telemetry and OpenAI export records (ChatGPT and Codex) for these email addresses are silently dropped:
-                  no data written, no alerts fired. The match ignores capital letters.
+                  Claude records (telemetry, and Claude Chat from the Compliance API) and OpenAI export records (ChatGPT and Codex)
+                  for these email addresses are silently dropped: no data written, no alerts fired. The match ignores capital letters.
                   Use this for executives, risk teams, or other roles that should not be monitored.
                   One email address per line.
                 </label>

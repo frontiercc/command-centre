@@ -484,7 +484,7 @@ async function runRunChatSyncSpec(): Promise<void> {
     }) as unknown as typeof fetch;
 
     const resultNoKey = await runChatSync();
-    expect(resultNoKey).toEqual({ chatsProcessed: 0, prompts: 0, assistantMeta: 0, connectors: 0, errors: [] });
+    expect(resultNoKey).toEqual({ chatsProcessed: 0, prompts: 0, assistantMeta: 0, connectors: 0, excluded: 0, errors: [] });
     expect(fetchCallCount).toBe(0);
 
     await setConfigValue('complianceAccessKey', 'test-compliance-key');
@@ -845,6 +845,42 @@ async function runRunChatSyncSpec(): Promise<void> {
 
     const newMsgRows = await db.select().from(schema.coworkMessages).where(eq(schema.coworkMessages.id, 'retention-new-msg'));
     expect(newMsgRows.length).toBe(1);
+
+    // ════════════════════════════════════════════════════════════════════
+    // Behaviour 10 — the Admin → Ingestion exclusion list: a listed
+    // person's chat is skipped before its messages are fetched (matched
+    // ignoring case), counted as excluded, and the cursor still advances.
+    // ════════════════════════════════════════════════════════════════════
+    await setConfigValue('otelExcludedEmails', JSON.stringify(['Excluded.Exec@test.local']));
+    await setConfigValue('complianceChatCursor', '');
+    const chatExcluded = chatFixture('chat-excluded', 'excluded-user', 'excluded.exec@test.local', now);
+    const chatKept = chatFixture('chat-kept', 'kept-user', 'kept.user@test.local', now);
+    const fetchedMessagesFor: string[] = [];
+    global.fetch = vi.fn(async (url: string | URL) => {
+      const u = url.toString();
+      if (u.includes('/compliance/apps/chats?')) {
+        return jsonResponse({ data: [chatExcluded, chatKept], has_more: false, first_id: 'chat-excluded', last_id: 'chat-kept' });
+      }
+      const m = u.match(/\/compliance\/apps\/chats\/([^/]+)\/messages/);
+      if (m) {
+        fetchedMessagesFor.push(m[1]);
+        return jsonResponse({
+          chat_messages: [{ id: `${m[1]}-m1`, role: 'user', created_at: new Date(now * 1000).toISOString(), content: [{ type: 'text', text: 'a prompt' }], files: [] }],
+          has_more: false, first_id: `${m[1]}-m1`, last_id: `${m[1]}-m1`,
+        });
+      }
+      throw new Error(`unexpected fetch: ${u}`);
+    }) as unknown as typeof fetch;
+
+    const resultExcluded = await runChatSync();
+    expect(resultExcluded.errors).toEqual([]);
+    expect(resultExcluded.excluded).toBe(1);
+    expect(resultExcluded.chatsProcessed).toBe(2);
+    expect(resultExcluded.prompts).toBe(1);
+    expect(fetchedMessagesFor).toEqual(['chat-kept']);
+    expect((await db.select().from(schema.coworkMessages).where(eq(schema.coworkMessages.id, 'chat-excluded-m1'))).length).toBe(0);
+    expect((await db.select().from(schema.users).where(eq(schema.users.email, 'excluded.exec@test.local'))).length).toBe(0);
+    expect(await getConfigValue('complianceChatCursor')).toBe('chat-kept');
   } finally {
     global.fetch = originalFetch;
     if (originalEnvKey === undefined) delete process.env.COMPLIANCE_ACCESS_KEY;

@@ -23,6 +23,7 @@ import { getConfigValue, setConfigValue } from '@/lib/config';
 import { CONTENT_PREVIEW_CHARS } from '@/lib/otel/content-limits';
 import { getChatMessages, listChats, ComplianceApiError, type ComplianceChatSummary, type ComplianceChatMessage, type ComplianceTextBlock, type ComplianceToolUseBlock } from './client';
 import { noteFirstTelemetry } from '@/lib/setup/first-telemetry';
+import { loadExcludedEmails } from '@/lib/ingestion/excluded-emails';
 
 type TypedClient = Awaited<ReturnType<typeof getTypedClient>>;
 
@@ -287,8 +288,8 @@ export async function syncChat(
  * aborts the run immediately with the cursor left unadvanced, so the failed
  * chat is retried from the same point next run.
  */
-export async function runChatSync(): Promise<{ chatsProcessed: number; prompts: number; assistantMeta: number; connectors: number; errors: string[] }> {
-  const result = { chatsProcessed: 0, prompts: 0, assistantMeta: 0, connectors: 0, errors: [] as string[] };
+export async function runChatSync(): Promise<{ chatsProcessed: number; prompts: number; assistantMeta: number; connectors: number; excluded: number; errors: string[] }> {
+  const result = { chatsProcessed: 0, prompts: 0, assistantMeta: 0, connectors: 0, excluded: 0, errors: [] as string[] };
   const apiKey = await getConfigValue('complianceAccessKey');
   if (!apiKey) return result;
 
@@ -308,6 +309,9 @@ export async function runChatSync(): Promise<{ chatsProcessed: number; prompts: 
     ? Math.min(backfillDays, retentionChatDaysRaw)
     : backfillDays;
   const minOccurredAtS = nowS - floorDays * 86400;
+  // The Admin → Ingestion exclusion list: a listed person's chats are never
+  // fetched or stored, the same as their Claude telemetry and OpenAI records.
+  const excluded = await loadExcludedEmails();
   let cursor = (await getConfigValue('complianceChatCursor')) || '';
   // Request pages no bigger than the cap so a cap smaller than the API's
   // default page size (100) still makes forward progress each run — see
@@ -327,6 +331,11 @@ export async function runChatSync(): Promise<{ chatsProcessed: number; prompts: 
       if (result.chatsProcessed + page.data.length > cap) break;
 
       for (const chat of page.data) {
+        if (excluded.has((chat.user?.email_address ?? '').trim().toLowerCase())) {
+          result.excluded++;
+          result.chatsProcessed++;
+          continue;
+        }
         try {
           const r = await syncChat(client, apiKey, chat, minOccurredAtS);
           result.prompts += r.prompts;

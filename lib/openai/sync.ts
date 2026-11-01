@@ -61,6 +61,7 @@ import { isPlainEmail } from '@/lib/email/address';
 import { listLogFiles, downloadLogFile, parseJsonl, type LogScope, type OpenAiEventType } from './client';
 import { OPENAI_SOURCE_LABELS, OPENAI_USER_SOURCE, type OpenAiSource } from './sources';
 import { noteFirstTelemetry } from '@/lib/setup/first-telemetry';
+import { loadExcludedEmails } from '@/lib/ingestion/excluded-emails';
 
 type TypedClient = Awaited<ReturnType<typeof getTypedClient>>;
 
@@ -491,18 +492,6 @@ export function interpretSpend(raw: unknown, floors: { cowork: number; code: num
   return null;
 }
 
-/** The Admin → Ingestion exclusion list (a JSON array of emails), lower-cased. Malformed reads as empty. */
-export function parseExcludedEmails(raw: string | null | undefined): Set<string> {
-  if (!raw) return new Set();
-  try {
-    const list: unknown = JSON.parse(raw);
-    if (!Array.isArray(list)) return new Set();
-    return new Set(list.filter((e): e is string => typeof e === 'string').map(e => e.trim().toLowerCase()).filter(Boolean));
-  } catch {
-    return new Set();
-  }
-}
-
 function displayNameFromEmail(email: string): string {
   const local = email.split('@')[0];
   return local.split(/[._-]/).filter(Boolean).map(p => p.charAt(0).toUpperCase() + p.slice(1)).join(' ');
@@ -797,7 +786,7 @@ export async function runOpenAiSync(opts: RunOptions = {}): Promise<OpenAiSyncSt
   const scopeFor = (t: OpenAiEventType): LogScope =>
     t === 'COSTS' ? { kind: 'organization', id: organizationId } : { kind: 'workspace', id: workspaceId };
   const userCache = new Map<string, string>();
-  const excluded = parseExcludedEmails(await getConfigValue('otelExcludedEmails'));
+  const excluded = await loadExcludedEmails();
 
   for (const [index, eventType] of types.entries()) {
     const scope = scopeFor(eventType);
