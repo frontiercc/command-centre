@@ -11,10 +11,11 @@ import LoadingSpinner from '@/components/shared/LoadingSpinner';
 import { gapPct } from '@/lib/finance/spend-review-format';
 import { MonthPicker, monthOptions, money, pct, ukDate, LimitsNotice, LimitBar, UpdatedLine, type LimitsStatus } from '@/components/spend-review/shared';
 import { PageBody, Toolbar, Panel, PanelFoot, Strip, Figure, T, B, Tag, Chip, Notice, Muted, cx } from '@/components/precision/ui';
-import { SURFACE_COLOR } from '@/lib/ui/chart-colours';
+import { SURFACE_COLOR, PRODUCT_COLOR } from '@/lib/ui/chart-colours';
+import { surfaceName, type SpendReviewSurface } from '@/lib/finance/spend-review-format';
 import { formatModelLabel } from '@/lib/pulse/code/model-label';
 
-type Surface = 'code' | 'cowork';
+type Surface = SpendReviewSurface;
 interface LimitRow { period: string; limit: number | null; spend: number; currency: string; source: string; shareUsed: number | null }
 interface Person {
   userId: string | null;
@@ -23,6 +24,9 @@ interface Person {
   department: string | null;
   codeUsd: number;
   coworkUsd: number;
+  /** Present when the OpenAI export is connected. */
+  chatgptUsd?: number;
+  codexUsd?: number;
   totalUsd: number;
   priorTotalUsd: number | null;
   unpricedOnly: boolean;
@@ -108,6 +112,8 @@ function EfficiencyBoard({ rows, period, boardPeriod }: { rows: EfficiencyEntry[
 interface IndexData {
   period: string;
   isCurrentMonth: boolean;
+  /** ChatGPT and Codex spend is included (the OpenAI export is connected). */
+  openai?: boolean;
   efficiency?: EfficiencyEntry[];
   /** The month the efficiency board covers: last month while this month is too new. */
   efficiencyPeriod?: string;
@@ -119,7 +125,6 @@ interface IndexData {
   nearLimitShare: number;
 }
 
-const SURFACE_LABEL: Record<Surface, string> = { code: 'Code', cowork: 'Cowork' };
 /** Below this much spend last month, the change reads New rather than a percentage. */
 const MIN_PRIOR_FOR_CHANGE = 1;
 
@@ -151,14 +156,21 @@ function Change({ now, prior, pace }: { now: number; prior: number | null; pace:
   );
 }
 
-function SplitBar({ code, cowork }: { code: number; cowork: number }) {
-  const total = code + cowork;
+function SplitBar({ p, openai }: { p: Person; openai: boolean }) {
+  // Each product's spend, in the shared product colours.
+  const parts = [
+    { label: surfaceName('cowork', openai), usd: p.coworkUsd, colour: SURFACE_COLOR.cowork },
+    { label: surfaceName('code', openai), usd: p.codeUsd, colour: SURFACE_COLOR.code },
+    ...(openai ? [
+      { label: 'ChatGPT', usd: p.chatgptUsd ?? 0, colour: PRODUCT_COLOR.chatgpt_chat },
+      { label: 'Codex', usd: p.codexUsd ?? 0, colour: PRODUCT_COLOR.codex },
+    ] : []),
+  ];
+  const total = parts.reduce((a, x) => a + x.usd, 0);
   if (total <= 0) return null;
   return (
-    <div className="flex h-1 w-[72px] rounded-full overflow-hidden gap-px bg-[#F2F2F2] ml-auto mt-1" title={`Cowork ${money(cowork)} · Code ${money(code)}`}>
-      {/* Both halves are measured spend, in the shared surface colours. */}
-      <div style={{ width: `${(cowork / total) * 100}%`, background: SURFACE_COLOR.cowork }} />
-      <div style={{ width: `${(code / total) * 100}%`, background: SURFACE_COLOR.code }} />
+    <div className="flex h-1 w-[72px] rounded-full overflow-hidden gap-px bg-[#F2F2F2] ml-auto mt-1" title={parts.filter(x => x.usd > 0).map(x => `${x.label} ${money(x.usd)}`).join(' · ')}>
+      {parts.map(x => <div key={x.label} style={{ width: `${(x.usd / total) * 100}%`, background: x.colour }} />)}
     </div>
   );
 }
@@ -289,7 +301,7 @@ function SpendReviewIndex() {
         </Panel>
   ) : null;
   const rereadNotice = s && s.orgRereadShare !== null && s.orgRereadShare >= 0.3 ? (
-        <Notice tone="info" title={`${pct(s.orgRereadShare)} of the month's spend is Claude re-reading earlier conversation on every message.`}>
+        <Notice tone="info" title={`${pct(s.orgRereadShare)} of the month's ${data?.openai ? 'Claude ' : ''}spend is Claude re-reading earlier conversation on every message.`}>
           That is normal for long Cowork sessions; a person is only flagged when they re-read clearly more than colleagues doing the same work.
         </Notice>
   ) : null;
@@ -330,7 +342,7 @@ function SpendReviewIndex() {
                     : <ul className="m-0 p-0 list-none flex flex-col gap-0.5">
                         {s.topWork.map(w => (
                           <li key={w.surface + w.label} className="flex items-baseline justify-between gap-2 text-[14px]">
-                            <span className="truncate text-[#0A0A0A]">{w.label} <span className="text-[12px] text-[#8F8F8F]">{SURFACE_LABEL[w.surface]}</span></span>
+                            <span className="truncate text-[#0A0A0A]">{w.label} <span className="text-[12px] text-[#8F8F8F]">{surfaceName(w.surface, !!data.openai)}</span></span>
                             <span className="tabular-nums text-[#4D4D4D]">{pct(w.share)}</span>
                           </li>
                         ))}
@@ -433,14 +445,14 @@ function SpendReviewIndex() {
                               {p.mainWork ? (
                                 <>
                                   <span className="block text-[#0A0A0A]">{p.mainWork.label}</span>
-                                  <span className="block text-[13px] text-[#8F8F8F] tabular-nums">{pct(p.mainWork.share)} of their spend · {SURFACE_LABEL[p.mainWork.surface]}</span>
+                                  <span className="block text-[13px] text-[#8F8F8F] tabular-nums">{pct(p.mainWork.share)} of their spend · {surfaceName(p.mainWork.surface, !!data.openai)}</span>
                                 </>
                               ) : <span className="text-[13px] text-[#8F8F8F]">{p.totalUsd > 0 ? 'Not classified yet' : '—'}</span>}
                             </td>
                             <td className={T.tdRight}>
                               {p.unpricedOnly
                                 ? <span className="text-[13px] text-[#B54708]">Not priced</span>
-                                : <><span className="block text-[#0A0A0A]">{money(p.totalUsd)}</span><SplitBar code={p.codeUsd} cowork={p.coworkUsd} /></>}
+                                : <><span className="block text-[#0A0A0A]">{money(p.totalUsd)}</span><SplitBar p={p} openai={!!data.openai} /></>}
                             </td>
                             <td className={T.tdRight}><Change now={p.totalUsd} prior={p.priorTotalUsd} pace={pace} /></td>
                             <td className={T.td}>
@@ -474,13 +486,17 @@ function SpendReviewIndex() {
               )}
               <div className="px-4 py-2.5 border-t border-[#F2F2F2] flex flex-col gap-1.5 text-[13px] text-[#8F8F8F]">
                 <div className="flex gap-4 flex-wrap">
-                  <span className="flex items-center gap-1.5"><span className="w-2.5 h-1 rounded-full" style={{ background: SURFACE_COLOR.cowork }} />Cowork</span>
-                  <span className="flex items-center gap-1.5"><span className="w-2.5 h-1 rounded-full" style={{ background: SURFACE_COLOR.code }} />Code</span>
+                  <span className="flex items-center gap-1.5"><span className="w-2.5 h-1 rounded-full" style={{ background: SURFACE_COLOR.cowork }} />{surfaceName('cowork', !!data.openai)}</span>
+                  <span className="flex items-center gap-1.5"><span className="w-2.5 h-1 rounded-full" style={{ background: SURFACE_COLOR.code }} />{surfaceName('code', !!data.openai)}</span>
+                  {data.openai && <span className="flex items-center gap-1.5"><span className="w-2.5 h-1 rounded-full" style={{ background: PRODUCT_COLOR.chatgpt_chat }} />ChatGPT</span>}
+                  {data.openai && <span className="flex items-center gap-1.5"><span className="w-2.5 h-1 rounded-full" style={{ background: PRODUCT_COLOR.codex }} />Codex</span>}
                 </div>
                 <p className="m-0 leading-5">
-                  Measured by Command Centre: Code and Cowork spend from telemetry, the same figures as FinOps. Chat isn&apos;t included.
+                  {data.openai
+                    ? <>Measured by Command Centre: Claude Code and Cowork spend from telemetry, and ChatGPT and Codex spend from OpenAI&apos;s export priced at OpenAI&apos;s USD token rates, the same figures as FinOps. Claude Chat isn&apos;t included.</>
+                    : <>Measured by Command Centre: Code and Cowork spend from telemetry, the same figures as FinOps. Chat isn&apos;t included.</>}
                   {data.isCurrentMonth && ' The change compares this month so far with last month scaled to the same point in the month.'}
-                  {' '}Kind of work is AI-judged. The bar under each amount splits it into Cowork and Code, coloured as in the key above.
+                  {' '}Kind of work is AI-judged. The bar under each amount splits it {data.openai ? 'by product' : 'into Cowork and Code'}, coloured as in the key above.
                   {limitsOn && " Anthropic's figures cover every surface, including Chat, so they can differ from Command Centre's."}
                   {data.unpricedModels.length > 0 && ` Not priced, so left out: ${data.unpricedModels.map(m => formatModelLabel(m).label).join(', ')}.`}
                 </p>

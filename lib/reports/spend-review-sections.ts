@@ -15,7 +15,7 @@ import { getSpendLimits, indexByEmail, primaryRow, shareUsed, NEAR_LIMIT_SHARE, 
 import { formatModelLabel } from '@/lib/pulse/code/model-label';
 import { monthOf, periodMatchesMonth } from '@/lib/reports/finops-sections';
 import { currentPeriod } from '@/lib/finance/period';
-import { gapPct } from '@/lib/finance/spend-review-format';
+import { gapPct, surfaceName } from '@/lib/finance/spend-review-format';
 
 /** The biggest spenders whose advice is spelled out person by person. */
 export const REPORT_PEOPLE = 10;
@@ -94,9 +94,12 @@ export function renderSpendReviewSection(input: SpendReviewSectionInput): string
   const board = input.board ?? { rows: index.efficiency, period };
   const out: string[] = [];
   out.push(`### Spend Review: ${monthName(period)}`);
+  const sources = index.openai
+    ? "Measured by Command Centre from Claude Code and Cowork telemetry, plus ChatGPT and Codex from OpenAI's export priced at OpenAI's USD token rates (Claude Chat is not included; ChatGPT spend per conversation is an estimate, since OpenAI reports cost per hour)."
+    : 'Measured by Command Centre from Code and Cowork telemetry (Chat is not included).';
   out.push(periodMatchesMonth(input.periodStart, input.periodEnd)
-    ? `Figures cover ${monthName(period)}, measured by Command Centre from Code and Cowork telemetry (Chat is not included). Kind of work is AI-judged; savings are estimates at list price.`
-    : `Spend Review works by calendar month, so these figures cover ${monthName(period)}, the month containing the report's end date, not the full report window. Measured by Command Centre from Code and Cowork telemetry (Chat is not included). Kind of work is AI-judged; savings are estimates at list price.`);
+    ? `Figures cover ${monthName(period)}. ${sources} Kind of work is AI-judged; savings are estimates at list price.`
+    : `Spend Review works by calendar month, so these figures cover ${monthName(period)}, the month containing the report's end date, not the full report window. ${sources} Kind of work is AI-judged; savings are estimates at list price.`);
 
   if (index.people.length === 0) {
     out.push('No measured spend in this month.');
@@ -107,7 +110,7 @@ export function renderSpendReviewSection(input: SpendReviewSectionInput): string
   const bullets = [
     `Total measured spend: **${usd(s.totalUsd)}**, ${change(s.totalUsd, s.priorTotalUsd, pace)}, across ${s.people} people.`,
     s.halfSpendPeople !== null ? `${s.halfSpendPeople} ${s.halfSpendPeople === 1 ? 'person accounts' : 'people account'} for half of it.` : null,
-    s.topWork.length ? `Biggest kinds of work: ${s.topWork.map(w => `${w.label} (${w.surface === 'code' ? 'Code' : 'Cowork'}, ${pct(w.share)})`).join(', ')}.` : null,
+    s.topWork.length ? `Biggest kinds of work: ${s.topWork.map(w => `${w.label} (${surfaceName(w.surface, index.openai)}, ${pct(w.share)})`).join(', ')}.` : null,
     s.orgRereadShare !== null ? `${pct(s.orgRereadShare)} of the month's cost is Claude re-reading earlier conversation on every message.` : null,
   ].filter(Boolean) as string[];
   out.push(bullets.map(b => `- ${b}`).join('\n'));

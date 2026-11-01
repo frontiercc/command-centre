@@ -111,6 +111,7 @@ export async function GET(request: NextRequest) {
     return NextResponse.json({
       period,
       isCurrentMonth: isCurrent,
+      openai: index.openai,
       updatedAt: Math.floor(built.computedAt / 1000),
       people: rows,
       efficiency,
