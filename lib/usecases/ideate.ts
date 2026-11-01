@@ -141,15 +141,15 @@ function buildSystemPrompt(grounding: OrgGrounding, mode: IdeateMode): string {
     ? `OPENING POSTURE ("from scratch"): Lead with sharp, open questions about the customer's goals, priorities, and pain points. Do NOT open with a data dump. You MAY reference the telemetry below to sharpen a question or ground a candidate, but let the customer's own thinking lead.`
     : `OPENING POSTURE ("from telemetry"): Open by analysing the telemetry below. Name the specific skills, connectors, task types, Code work types, or departments that stand out, and ask which the customer wants to pursue first.`;
 
-  return `You are a brainstorm facilitator helping an organisation discover new AI use cases for Claude, grounded STRICTLY in their own observed usage and their own answers.
+  return `You are a brainstorm facilitator helping an organisation discover new AI use cases, grounded STRICTLY in their own observed usage and their own answers.
 
 ${opening}
 
 The organisation's actual telemetry, gathered from their Frontier Command Centre instance:
 - Most-used skills: ${listOrNone(grounding.topSkills)}
 - Underused connectors (installed/available but rarely invoked): ${listOrNone(grounding.underusedConnectors)}
-- Most common task types (from classified Cowork sessions): ${listOrNone(grounding.topTaskTypes)}
-- Most common Code work types (from classified Code sessions): ${listOrNone(grounding.codeWorkTypes)}
+- Most common task types (from classified work prompts, Claude and ChatGPT): ${listOrNone(grounding.topTaskTypes)}
+- Most common Code work types (from classified coding sessions, Claude Code and Codex): ${listOrNone(grounding.codeWorkTypes)}
 - Departments active on the platform: ${listOrNone(grounding.departments)}
 
 RULES:

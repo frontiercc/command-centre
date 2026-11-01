@@ -299,7 +299,7 @@ export default function DashboardPage() {
               (data.dataSourceStatus.otelCowork
                 ? 'Claude Cowork data captured via OpenTelemetry integration.'
                 : data.dataSourceStatus.coworkContent
-                ? 'User messages, MCP connector activity, and skill invocations captured from Claude Code sessions.'
+                ? 'User messages, MCP connector activity, and skill invocations captured from Claude Cowork sessions.'
                 : 'Cowork conversation content is not available. Tool calls and file access are captured via OpenTelemetry.')
               + (data.openaiPresent ? ' ChatGPT Work prompts come from OpenAI’s export.' : '')
             }

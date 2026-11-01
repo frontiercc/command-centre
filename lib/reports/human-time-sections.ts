@@ -24,21 +24,21 @@ function kinds(name: string, s: HumanTimeSummary): string[] {
   return [
     '',
     `**${name} by kind of work** (kinds with at least five sessions):`,
-    ...s.byKind.map(k => `- ${kindLabel(k.kind)}: about ${formatHours(k.humanMinutes)} hours by hand against ${formatHours(k.claudeMinutes)} hours with Claude, ${k.sessions} sessions`),
+    ...s.byKind.map(k => `- ${kindLabel(k.kind)}: about ${formatHours(k.humanMinutes)} hours by hand against ${formatHours(k.claudeMinutes)} hours with AI, ${k.sessions} sessions`),
   ];
 }
 
 /** Pure: the section from computed figures (null = feature off or nothing measured). */
 export function renderHumanTimeSection(h: OrgHumanTime | null): string {
-  const lines = ['## Human time vs Claude time', ''];
+  const lines = ['## Human time vs AI time', ''];
   if (!h) {
     lines.push('Not measured in this period: either the feature is switched off or no Tier 2 or 3 session in the period carries both figures.');
     return lines.join('\n');
   }
   lines.push(
-    'Tier 2 and 3 sessions only. **The by-hand figures are AI estimates**, made once per session, of how long a competent person in the relevant role would take to produce the same result without AI. Claude time is measured active time; on Cowork it includes the person working alongside Claude. The two are shown side by side and never combined.',
+    'Tier 2 and 3 sessions only. **The by-hand figures are AI estimates**, made once per session, of how long a competent person in the relevant role would take to produce the same result without AI. AI time is measured active time; on Cowork it includes the person working alongside Claude. Code covers Claude Code, and Codex where connected; Cowork covers Claude Cowork. The two are shown side by side and never combined.',
     '',
-    '| Surface | Sessions | By hand, hours (estimate) | With Claude, hours (measured) |',
+    '| Surface | Sessions | By hand, hours (estimate) | With AI, hours (measured) |',
     '|---|---|---|---|',
     row('Code', h.code),
     row('Cowork', h.cowork),

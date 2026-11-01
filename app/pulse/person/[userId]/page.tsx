@@ -183,7 +183,7 @@ export default function Person360Page() {
           {/* Code column */}
           <Panel title="Developer Pulse" right={code ? <Tag tone="measured">Measured</Tag> : undefined} flush={code !== null}>
             {code === null ? (
-              <Muted>No Claude Code activity for this user yet.</Muted>
+              <Muted>No coding activity for this user yet.</Muted>
             ) : (
               <>
                 <FigureGrid cols={2}>

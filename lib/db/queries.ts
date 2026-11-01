@@ -2156,6 +2156,8 @@ export async function getAvgSessionsPerWeek(): Promise<{ cowork: number; code: n
 export async function getRecentCoworkMessages(limit: number = 100): Promise<Array<{
   user_id: string | null;
   surface: string;
+  /** Which product the event came from (Claude Cowork, Claude Code, ChatGPT Chat, ChatGPT Work, Codex). */
+  product: string;
   message_type: string;
   flagged: number;
   flag_reason: string | null;
@@ -2167,6 +2169,8 @@ export async function getRecentCoworkMessages(limit: number = 100): Promise<Arra
     .select({
       user_id: cm.user_id,
       surface: sql<string>`coalesce(${cm.surface}, 'cowork')`,
+      product: sql<string>`CASE ${cm.source} WHEN 'chatgpt_chat' THEN 'ChatGPT Chat' WHEN 'chatgpt_work' THEN 'ChatGPT Work' WHEN 'codex' THEN 'Codex'
+        ELSE CASE WHEN ${cm.surface} = 'code' THEN 'Claude Code' ELSE 'Claude Cowork' END END`,
       message_type: cm.message_type,
       flagged: cm.flagged,
       flag_reason: cm.flag_reason,
@@ -2177,7 +2181,7 @@ export async function getRecentCoworkMessages(limit: number = 100): Promise<Arra
     .where(or(isNull(cm.surface), sql`${cm.surface} <> 'chat'`))
     .orderBy(desc(cm.occurred_at))
     .limit(limit);
-  return rows as Array<{ user_id: string | null; surface: string; message_type: string; flagged: number; flag_reason: string | null; occurred_at: number }>;
+  return rows as Array<{ user_id: string | null; surface: string; product: string; message_type: string; flagged: number; flag_reason: string | null; occurred_at: number }>;
 }
 
 export async function getRecentChatMessages(limit: number = 50): Promise<Array<{

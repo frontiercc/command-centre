@@ -105,7 +105,7 @@ The table lists every model call in the application. Defaults are the values a f
 | Ideation | On request | Ideation model (Sonnet) | Organisation aggregates and the user's own messages | Do not use |
 | Workflow impact summary | On request | Organisation briefing model (Sonnet) | A use case's title, measured counts and tool names | Do not use |
 | Skill drafting | On request | Drafting model (Sonnet) | Up to 60 cleaned excerpts, 600 characters each, labelled by letter | Use Cases content off |
-| Weekly Highlights | On request, admin only | Highlights model (Sonnet) | Up to 18 masked Tier 3 Claude Cowork prompts, up to 4,000 characters each | Highlights off |
+| Weekly Highlights | On request, admin only | Highlights model (Sonnet) | Up to 18 masked Tier 3 work prompts (Claude, and ChatGPT where connected), up to 4,000 characters each | Highlights off |
 | Skills discovery | Weekly, or on request | Organisation briefing model (Sonnet), with web search | A fixed prompt; no organisation data | Always on |
 | Model list and key test | Admin pages | None | The key only | Not applicable |
 
@@ -137,7 +137,7 @@ Each Claude Code session, and each Codex session from OpenAI's export, is classi
 
 ### Session descriptions
 
-For Claude Cowork sessions and Claude Chat conversations that the frontier views can show (Tier 3 work or a capability in the last 30 days), a background job writes one sentence describing what the work was. The call carries up to eight of the session's prompts, each masked and truncated to 600 characters, with the classifier's kind of work and the connector names. A reply is accepted only if it is a single sentence of at most 220 characters with no line breaks and every number in it appears in the prompts; one repair attempt is allowed, and a session is abandoned after three refused attempts. The accepted sentence is masked again, labelled "AI summary", shown only to administrators, managers and the person concerned, and deleted when the Cowork retention window for its session passes. Switching descriptions off stops new ones and hides existing ones.
+For Claude Cowork sessions, Claude Chat conversations and, where OpenAI's export is connected, ChatGPT conversations that the frontier views can show (Tier 3 work or a capability in the last 30 days), a background job writes one sentence describing what the work was. The call carries up to eight of the session's prompts, each masked and truncated to 600 characters, with the classifier's kind of work and the connector names. A reply is accepted only if it is a single sentence of at most 220 characters with no line breaks and every number in it appears in the prompts; one repair attempt is allowed, and a session is abandoned after three refused attempts. The accepted sentence is masked again, labelled "AI summary", shown only to administrators, managers and the person concerned, and deleted when the Cowork retention window for its session passes. Switching descriptions off stops new ones and hides existing ones.
 
 ### Human time estimates
 
@@ -203,7 +203,7 @@ The reply is constrained to a JSON schema with thinking off (on models that cann
 
 ### Weekly Highlights
 
-An administrator can generate a draft post describing what the past week's work produced. The call sends up to eighteen of the week's Tier 3 Claude Cowork and Claude Chat prompts, with links and file paths replaced and personal data masked, up to 4,000 characters each, together with each prompt's kind of work. Scheduled-task prompts are excluded, and no name field is sent. The reply may contain no digits, each sentence must cite a supplied item, and the text is masked on the way out. The draft is shown for editing, is never stored, and is sent to Slack only when the administrator chooses to send the edited text.
+An administrator can generate a draft post describing what the past week's work produced. The call sends up to eighteen of the week's Tier 3 Claude Cowork and Claude Chat prompts, and ChatGPT prompts where OpenAI's export is connected, with links and file paths replaced and personal data masked, up to 4,000 characters each, together with each prompt's kind of work. Scheduled-task prompts are excluded, and no name field is sent. The reply may contain no digits, each sentence must cite a supplied item, and the text is masked on the way out. The draft is shown for editing, is never stored, and is sent to Slack only when the administrator chooses to send the edited text.
 
 ### Skills discovery
 

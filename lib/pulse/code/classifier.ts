@@ -535,7 +535,9 @@ export async function estimateClassifiedCodeSessions(
     .from(css)
     .innerJoin(csc, eq(csc.session_id, css.session_id))
     .where(and(eq(csc.status, 'classified'), inArray(csc.tier, [2, 3]), isNull(csc.human_minutes_likely),
-      lt(csc.human_minutes_attempts, 3), ...(opts.sinceS ? [gte(css.first_at, opts.sinceS)] : [])))
+      lt(csc.human_minutes_attempts, 3), ...(opts.sinceS ? [gte(css.first_at, opts.sinceS)] : []),
+      // Classify Codex sessions off: Codex sessions are not sent for estimates either.
+      ...((await getConfigValue('codeClassifyCodex')) === 'false' ? [sql`${css.session_id} NOT LIKE 'codex:%'`] : [])))
     .orderBy(desc(css.last_at))
     .limit(BATCH_SIZE + skip.size)) as SessionDigestRow[];
   const rows = candidates.filter(r => !skip.has(r.session_id)).slice(0, BATCH_SIZE);

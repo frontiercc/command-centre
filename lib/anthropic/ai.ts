@@ -69,7 +69,7 @@ export async function buildAnomalySystemPrompt(): Promise<string> {
     conservative: `You have a HIGH threshold for generating alerts. Flag PII and credential detections when they suggest systematic issues or repeated patterns (3+ occurrences). Flag clear policy violations. You may skip isolated one-off occurrences that appear to be test data.`,
   }[config.riskSensitivity] ?? `You have a MODERATE threshold for generating alerts. Flag all PII and credential detections.`;
 
-  return `You are a compliance adviser for an organisation using Anthropic's Claude AI platform. You review usage data and generate alerts based on the organisation's configured risk scoring settings.
+  return `You are a compliance adviser for an organisation using AI assistants: Anthropic's Claude, and OpenAI's ChatGPT and Codex where connected. You review usage data and generate alerts based on the organisation's configured risk scoring settings.
 
 WRITING STYLE: Use British English spelling throughout (e.g. organisation, behaviour, categorise). Use British punctuation. NEVER use em dashes or en dashes; use commas, colons, semicolons, or full stops instead.
 
@@ -83,10 +83,11 @@ SEVERITY CALIBRATION:
 - "high": ${config.riskSeverityHighDesc}
 - "critical": ${config.riskSeverityCriticalDesc}
 
-You have data from three Claude surfaces:
-- **Chat**: user prompts captured from Claude Desktop
-- **Code**: user prompts and tool usage from Claude Code sessions
-- **Cowork**: full conversation content including user messages, assistant responses, and tool calls
+You have data from these products (each captured event names its product):
+- **Claude Chat**: user prompts captured from Claude Desktop
+- **Claude Code**: user prompts and tool usage from Claude Code sessions
+- **Claude Cowork**: full conversation content including user messages, assistant responses, and tool calls
+- **ChatGPT Chat, ChatGPT Work and Codex** (where connected): user prompts from OpenAI's export, with no assistant replies
 
 Flag the following behavioural patterns:
 - A user accessing files or connectors significantly outside their usual scope
@@ -245,7 +246,7 @@ function formatDataForAnalysis(
   complianceEvents: ComplianceEvent[],
   otelEvents: OtelEvent[],
   snapshots: AnalyticsSnapshot[],
-  coworkMessages: Array<{ user_id: string | null; surface: string; message_type: string; flagged: number; flag_reason: string | null; occurred_at: number }> = [],
+  coworkMessages: Array<{ user_id: string | null; surface: string; product?: string; message_type: string; flagged: number; flag_reason: string | null; occurred_at: number }> = [],
   chatMessages: Array<{ user_id: string | null; prompt_length: number; flagged: number; flag_reason: string | null; occurred_at: number }> = []
 ): string {
   const sections: string[] = [];
@@ -301,13 +302,13 @@ function formatDataForAnalysis(
     const flagged = coworkMessages.filter(m => m.flagged);
     sections.push(`## Captured Events: Cowork + Code (last ${coworkMessages.length})\n` +
       `Total: ${coworkMessages.length}, Flagged: ${flagged.length}\n` +
-      `Surface breakdown: ${JSON.stringify(
-        coworkMessages.reduce((acc, m) => { acc[m.surface] = (acc[m.surface] || 0) + 1; return acc; }, {} as Record<string, number>)
+      `Product breakdown: ${JSON.stringify(
+        coworkMessages.reduce((acc, m) => { acc[m.product ?? m.surface] = (acc[m.product ?? m.surface] || 0) + 1; return acc; }, {} as Record<string, number>)
       )}\n` +
       (flagged.length > 0
         ? `Flagged events:\n${JSON.stringify(flagged.map(m => ({
             user_id: m.user_id,
-            surface: m.surface,
+            product: m.product ?? m.surface,
             message_type: m.message_type,
             flag_reason: m.flag_reason,
             occurred_at: new Date(m.occurred_at * 1000).toISOString(),
@@ -554,6 +555,7 @@ Cowork sessions seen in metadata: ${coworkSessions}`;
     const codeEventCount7d = await getCodeEventCount();
     let totalCodeMessages = 0;
     let codeFlaggedCount = 0;
+    let codexCounted = false;
     try {
       const totalRows = await dbClient
         .select({ count: sql<number | string>`count(*)` })
@@ -565,13 +567,18 @@ Cowork sessions seen in metadata: ${coworkSessions}`;
         .from(schema.coworkMessages)
         .where(and(eq(schema.coworkMessages.surface, 'code'), eq(schema.coworkMessages.flagged, 1)));
       codeFlaggedCount = Number(flaggedRows[0]?.count ?? 0);
+      const codexRows = await dbClient
+        .select({ count: sql<number | string>`count(*)` })
+        .from(schema.coworkMessages)
+        .where(and(eq(schema.coworkMessages.surface, 'code'), eq(schema.coworkMessages.source, 'codex')));
+      codexCounted = Number(codexRows[0]?.count ?? 0) > 0;
     } catch { /* table might not exist */ }
 
     codeSection = `## Code Audit
 
 **Data source:** ${captureLabel('code')}
 
-User prompts and tool-usage metadata are captured from Claude Code sessions. Assistant responses are never stored, only model, token and tool metadata.
+User prompts and tool-usage metadata are captured from Claude Code sessions${codexCounted ? ', and Codex sessions from OpenAI\'s export' : ''}. Assistant responses are never stored, only model, token and tool metadata.
 
 - **Total Code events:** ${totalCodeMessages}
 - **Events in last 7 days:** ${codeEventCount7d}
@@ -733,7 +740,7 @@ ${topFiles.length > 0
   const message = await queueAiCall(() => client.messages.create({
     model: coreModel,
     max_tokens: 12288,
-    system: `You are writing a governance and compliance report for a UK organisation using Claude AI.
+    system: `You are writing a governance and compliance report for a UK organisation using AI assistants: Claude, and ChatGPT and Codex where connected.
 Write in formal but accessible British English. Use markdown formatting. NEVER use em dashes or en dashes; use commas, colons, semicolons, or full stops instead.
 
 Context (for your reference, do not state this directly in the report opening): the deployment tier is "${dataSources.mode}". Use this to inform your analysis but do not open the report by describing the deployment mode.

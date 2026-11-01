@@ -74,7 +74,7 @@ export const DEFAULT_TIER_CONFIG: TierConfig = {
         'judgement, OR sessions where an external connector (MCP tool) or ' +
         'specialised skill was invoked. Connector or skill use is objective ' +
         'evidence that the work extended beyond what the person could do in ' +
-        'Claude alone. Reversible with effort. The human applies judgement to ' +
+        'the AI assistant alone. Reversible with effort. The human applies judgement to ' +
         'the AI output before delivery.',
     },
     tier3: {
@@ -173,9 +173,9 @@ export function buildClassifierSystemMessage(config: TierConfig): string {
   const taxonomyLines = (defs: TaskTypeDef[]) =>
     defs.map(d => `  ${(d.name + ':').padEnd(23)} ${d.description}`).join('\n');
 
-  return `You are a classification engine for the Cowork Operating System framework.
+  return `You are a classification engine that grades how deeply people hand work to an AI assistant (Claude or ChatGPT).
 
-For each Cowork task event provided, output one classification with:
+For each work event provided, output one classification with:
 - tier: integer 1, 2, or 3
 - task_type: one of the labels in the taxonomy below
 - frontier_push_candidate: boolean

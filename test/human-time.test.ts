@@ -117,7 +117,7 @@ describe('text outputs', () => {
   it('builds the digest/Highlights sentence from computed figures', async () => {
     const { humanTimeSentence } = await import('@/lib/pulse/human-time');
     expect(humanTimeSentence({ total }, 'Last week')).toBe(
-      'Last week: about 310 hours of Tier 2 and 3 work by hand (AI estimate), done in 44 hours with Claude (measured), across 42 sessions.');
+      'Last week: about 310 hours of Tier 2 and 3 work by hand (AI estimate), done in 44 hours with AI (measured), across 42 sessions.');
   });
   it('renders the Reports section, estimate labelled in words, null as not measured', async () => {
     const { renderHumanTimeSection } = await import('@/lib/reports/human-time-sections');
@@ -132,7 +132,7 @@ describe('text outputs', () => {
     expect(md).toContain('**The by-hand figures are AI estimates**');
     expect(md).toContain('| Code | 6 | about 10 (range 5.0–20) | 2.0 |');
     expect(md).toContain('| Cowork | 0 | not measured | not measured |');
-    expect(md).toContain('- feature: about 8.3 hours by hand against 1.7 hours with Claude, 5 sessions');
+    expect(md).toContain('- feature: about 8.3 hours by hand against 1.7 hours with AI, 5 sessions');
   });
   it('adds a Highlights line only when there are figures', async () => {
     const { renderHighlightsPost: renderHighlights } = await import('@/lib/highlights/render');
@@ -143,6 +143,21 @@ describe('text outputs', () => {
     const composed = { subject: 'A week of work', deliverables: [] };
     expect(renderHighlights({ ...base }, composed)).not.toContain('by hand');
     expect(renderHighlights({ ...base, humanTime: total }, composed)).toContain('About 310 hours of work by hand (AI estimate), done in 44 hours with Claude, across 42 sessions');
+    // A week with ChatGPT or Codex work never credits Claude with it.
+    const withOpenAi = renderHighlights({ ...base, assistant: 'AI', humanTime: total }, composed);
+    expect(withOpenAi).toContain('What a week of AI actually produced');
+    expect(withOpenAi).toContain('3 of our people used AI this week');
+    expect(withOpenAi).toContain('done in 44 hours with AI');
+    expect(withOpenAi).not.toMatch(/used Claude|week of Claude|with Claude,/);
+  });
+
+  it('names Claude and ChatGPT in the classifier and anomaly prompts', async () => {
+    const { buildClassifierSystemMessage, DEFAULT_TIER_CONFIG } = await import('@/lib/pulse/tier-config');
+    const classifier = buildClassifierSystemMessage(DEFAULT_TIER_CONFIG);
+    expect(classifier).toContain('an AI assistant (Claude or ChatGPT)');
+    expect(classifier).not.toContain('Cowork Operating System');
+    const { CODE_ESTIMATE_ONLY_SYSTEM } = await import('@/lib/pulse/human-time');
+    expect(CODE_ESTIMATE_ONLY_SYSTEM).toContain('(Claude Code or Codex)');
   });
 });
 

@@ -23,7 +23,7 @@
  * as lib/digest/build.ts and lib/reports/*-sections.ts).
  */
 import { getCodeWorkTypeLabeller } from '@/lib/pulse/code/tier-config';
-import { and, desc, eq, gte, isNotNull, isNull, lt, ne, notLike, or, sql } from 'drizzle-orm';
+import { inArray, and, desc, eq, gte, isNotNull, isNull, lt, ne, notLike, or, sql } from 'drizzle-orm';
 import { getTypedClient } from '@/lib/db/client';
 import { schema } from '@/lib/db/schema';
 import { weekStart } from '@/lib/pulse/period';
@@ -49,6 +49,8 @@ export interface HighlightsInput {
   systems: { totalCalls: number; distinctSystems: number; top: { server: string; calls: number; people: number }[] };
   codeOutput: { linesChanged: number; handsOnHours: number; changesKept: number; changesProposed: number; basis: 'week' | 'rolling' } | null;
   tier3Count: number;
+  /** 'AI' when ChatGPT or Codex work is in the week, so the post never credits Claude with it; else 'Claude'. */
+  assistant?: 'Claude' | 'AI';
   /** Org totals for the week; injected by render, never model-written. Null when off or empty. */
   humanTime?: { humanMinutes: number; claudeMinutes: number; sessions: number } | null;
   shoutouts: { skills: HighlightsShoutout | null; systems: HighlightsShoutout | null } | null;  // null unless includeNames
@@ -198,10 +200,16 @@ export async function gatherHighlights(opts?: { nowS?: number; includeNames?: bo
     };
   }
 
+  const openaiRows = await client
+    .select({ n: sql<number | string>`count(*)` })
+    .from(cm)
+    .where(and(inWindow, inArray(cm.source, ['chatgpt_chat', 'chatgpt_work', 'codex'])));
+
   return {
     weekStart: wkStart,
     weekEnd: wkEnd,
     headcount: toNum(headcountRows[0]?.n),
+    assistant: toNum(openaiRows[0]?.n) > 0 ? 'AI' : 'Claude',
     workItems,
     engineeringMix: engRows.map(r => ({ workType: codeLabel(r.workType ?? 'other'), sessions: toNum(r.sessions) })),
     systems: {

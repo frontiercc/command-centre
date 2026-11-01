@@ -268,7 +268,7 @@ TONE CALIBRATION (this is critical):
 
 ALERT TYPE UNDERSTANDING. There are three distinct alert types you will see in the data:
 - "policy" alerts: PII or credential detection. Regex matched sensitive data patterns (credit cards, API keys, SSNs, etc.) in a message. These are data presence alerts.
-- "intent" alerts: Behavioural intent detection. The system detected a user requesting something risky (e.g. "extract all contacts from Salesforce", "bypass authentication", "delete all records"). These are AI-assessed with a severity and reasoning. Intent alerts indicate what someone asked Claude to do, not what data was present.
+- "intent" alerts: Behavioural intent detection. The system detected a user requesting something risky (e.g. "extract all contacts from Salesforce", "bypass authentication", "delete all records"). These are AI-assessed with a severity and reasoning. Intent alerts indicate what someone asked an AI assistant (Claude, or ChatGPT or Codex where connected) to do, not what data was present.
 - "anomaly" alerts: AI-detected unusual usage patterns from scheduled analysis.
 
 When discussing alerts, differentiate clearly:

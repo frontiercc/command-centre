@@ -569,7 +569,7 @@ export default function AuditPage() {
 
   if (noAccess) return (
     <>
-      <TopBar title="Audit Log" subtitle="Compliance event trail across Chat, Code, and Cowork" />
+      <TopBar title="Audit Log" subtitle="Compliance event trail across Chat, Work and Code" />
       <PageBody>
         {noDepartment ? (
           <Notice tone="info" title="Your account has no department yet.">
@@ -587,7 +587,7 @@ export default function AuditPage() {
 
   return (
     <>
-      <TopBar title="Audit Log" subtitle="Compliance event trail across Chat, Code, and Cowork" />
+      <TopBar title="Audit Log" subtitle="Compliance event trail across Chat, Work and Code" />
       <PageBody>
         {/* What each surface captures */}
         <Notice tone="info">
@@ -793,7 +793,7 @@ export default function AuditPage() {
           >
             <div className="h-12 shrink-0 flex items-center gap-2.5 px-5 border-b border-[#EAEAEA]">
               <h2 className="m-0 text-[14px] font-semibold text-[#0A0A0A] truncate">
-                {isChatEvent ? (hasSessionId ? 'Chat conversation' : 'Chat prompt') : isCodeEvent ? (hasSessionId ? 'Code session' : 'Code event') : isSkillEvent ? 'Skill invocation' : isMcpEvent ? 'Connector usage' : isCoworkEvent ? 'Cowork session' : 'Event detail'}
+                {isOpenAiSource(selectedEvent?._source) ? `${OPENAI_SOURCE_LABELS[selectedEvent!._source as keyof typeof OPENAI_SOURCE_LABELS]} ${hasSessionId ? (selectedEvent!._source === 'codex' ? 'session' : 'conversation') : 'event'}` : isChatEvent ? (hasSessionId ? 'Chat conversation' : 'Chat prompt') : isCodeEvent ? (hasSessionId ? 'Code session' : 'Code event') : isSkillEvent ? 'Skill invocation' : isMcpEvent ? 'Connector usage' : isCoworkEvent ? 'Cowork session' : 'Event detail'}
               </h2>
               {selectedEvent.flagged ? <Tag tone="bad">Flagged</Tag> : null}
               <button
@@ -993,7 +993,9 @@ export default function AuditPage() {
                   })()}
 
                   <NoteBox>
-                    <span className="font-semibold text-[#333333]">Source:</span> Claude Code session file (~/.claude/projects). User prompts and tool summaries are captured. Full assistant responses are not stored.
+                    <span className="font-semibold text-[#333333]">Source:</span> {selectedEvent?._source === 'codex'
+                      ? "Codex log from OpenAI's export. User prompts and tool activity are captured. Codex's replies are not stored."
+                      : 'Claude Code telemetry. User prompts and tool summaries are captured. Full assistant responses are not stored.'}
                   </NoteBox>
                 </div>
               ) : null}
@@ -1074,7 +1076,7 @@ export default function AuditPage() {
                 </div>
               ) : isCoworkEvent ? (
                 <NoteBox>
-                  This Cowork event does not have an associated session ID. Conversation content is unavailable.
+                  This event does not have an associated session ID. Conversation content is unavailable.
                 </NoteBox>
               ) : !isCodeEvent && !isChatEvent ? (
                 /* Standard event detail for compliance/OTel events */

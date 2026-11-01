@@ -19,7 +19,7 @@ import { getTypedClient } from '@/lib/db/client';
 import { getAdminSession, canAccessAuditLog } from '@/lib/auth/admin-auth';
 import { lacksDepartment, noDepartmentResponse } from '@/lib/auth/content-access';
 import { logAccess } from '@/lib/audit/log';
-import { getCodeModelRates, priceModelsJson } from '@/lib/pulse/code/rates';
+import { getCodeModelRates, priceModelsJson, priceTokens } from '@/lib/pulse/code/rates';
 import { isOpenAiSource, OPENAI_SOURCES, type OpenAiSource } from '@/lib/openai/sources';
 
 // ─── Raw-execution facade (mirrors lib/db/queries.ts's rawAll) ────────────────
@@ -170,6 +170,38 @@ async function getCoworkEventsForAudit(filters: {
     // code_session_stats instead — resolved once per request, not per row.
     const codeRates = await getCodeModelRates();
 
+    // Codex sessions: spend, tokens and models from their turns (priced from the
+    // same rates table), actions from codex_actions. Their code_session_stats
+    // row carries none of these, so reading it would show $0.
+    const codexIds = [...new Set(rows.map(r => r.session_id).filter((id): id is string => !!id && id.startsWith('codex:')))];
+    const codexStats = new Map<string, { cost: number | null; input: number; output: number; models: string[]; actions: number }>();
+    if (codexIds.length > 0) {
+      const idList = sql.join(codexIds.map(id => sql`${id}`), sql`, `);
+      const turns = await rawAll<{ session_id: string; model: string | null; inp: number | string; cached: number | string; outp: number | string }>(client, sql`
+        SELECT session_id, model, SUM(uncached_input_tokens) AS inp, SUM(cached_input_tokens) AS cached, SUM(output_tokens) AS outp
+        FROM codex_turns WHERE session_id IN (${idList}) GROUP BY session_id, model
+      `);
+      const actions = await rawAll<{ session_id: string; n: number | string }>(client, sql`
+        SELECT session_id, COUNT(*) AS n FROM codex_actions WHERE session_id IN (${idList}) GROUP BY session_id
+      `);
+      for (const t of turns) {
+        const e = codexStats.get(t.session_id) ?? { cost: null, input: 0, output: 0, models: [], actions: 0 };
+        e.input += Number(t.inp) + Number(t.cached);
+        e.output += Number(t.outp);
+        if (t.model) {
+          e.models.push(t.model);
+          const usd = priceTokens(t.model, { inputTokens: Number(t.inp), outputTokens: Number(t.outp), cacheReadTokens: Number(t.cached), cacheCreationTokens: 0 }, codeRates);
+          if (usd !== null) e.cost = (e.cost ?? 0) + usd;
+        }
+        codexStats.set(t.session_id, e);
+      }
+      for (const a of actions) {
+        const e = codexStats.get(a.session_id) ?? { cost: null, input: 0, output: 0, models: [], actions: 0 };
+        e.actions = Number(a.n);
+        codexStats.set(a.session_id, e);
+      }
+    }
+
     return rows.map(r => ({
       id: r.id,
       user_id: r.user_display_name || r.user_id || 'unknown',
@@ -188,6 +220,19 @@ async function getCoworkEventsForAudit(filters: {
       prompt_id: r.prompt_id ?? null,
       _source: sourceBadge(r.source),
       session_enrichment: (() => {
+        const codex = r.session_id ? codexStats.get(r.session_id) : undefined;
+        if (r.session_id?.startsWith('codex:')) {
+          if (!codex) return null;
+          return JSON.stringify({
+            cost_usd: codex.cost,
+            input_tokens: codex.input,
+            output_tokens: codex.output,
+            tool_call_count: codex.actions,
+            unique_tools: null,
+            models_used: codex.models.length > 0 ? JSON.stringify(codex.models) : null,
+            duration_secs: r.code_active_secs ?? null,
+          });
+        }
         const isCode = r.surface === 'code';
         const { costUsd: codeCostUsd, models: codeModels } = isCode
           ? priceModelsJson(r.code_models_json, codeRates)

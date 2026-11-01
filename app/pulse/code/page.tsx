@@ -416,7 +416,7 @@ export default function CodePulseOverviewPage() {
             <CodeBriefingCard />
 
             {data?.githubOverlay && (
-              <ShippingAlignmentChart series={data.githubOverlay.shippingSeries ?? []}>
+              <ShippingAlignmentChart series={data.githubOverlay.shippingSeries ?? []} codexPresent={codexPresent}>
                 {(data.githubOverlay.repoCards?.length ?? 0) > 0
                   ? <GithubRepoCards cards={data.githubOverlay.repoCards} />
                   : undefined}

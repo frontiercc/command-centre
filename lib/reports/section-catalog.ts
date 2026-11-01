@@ -90,8 +90,8 @@ export const REPORT_SECTIONS: ReportSectionDef[] = [
   },
   {
     id: 'human_time',
-    label: 'Human time vs Claude time',
-    description: 'By-hand estimate against measured Claude time, Code and Cowork',
+    label: 'Human time vs AI time',
+    description: 'By-hand estimate against measured AI time, Code and Cowork',
     default: false,
     requiresFlag: 'humanTimeEnabled',
   },
