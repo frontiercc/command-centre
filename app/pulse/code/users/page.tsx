@@ -171,7 +171,7 @@ function CodeUsersContent() {
             <>
               <CodeStatStrip metrics={data.metrics} githubRepos={data.githubRepos} view={codexPresent ? vendor : 'claude'} split={data.metricsSplit} />
 
-              <HumanTimeCard summary={data.humanTime} surface="code" scope="Personal" />
+              <HumanTimeCard summary={data.humanTime} surface="code" scope="Personal" view={codexPresent ? vendor : 'claude'} />
 
               {(data.journeyGrid?.length ?? 0) > 0 && (
                 <div className="flex flex-col gap-2">

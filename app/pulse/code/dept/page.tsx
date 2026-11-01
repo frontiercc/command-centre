@@ -133,7 +133,7 @@ function DeptContent() {
           <>
             <CodeStatStrip metrics={detail.metrics} githubRepos={detail.githubRepos} view={codexPresent ? vendor : 'claude'} split={detail.metricsSplit} />
 
-            <HumanTimeCard summary={detail.humanTime} surface="code" scope={detail.dept} />
+            <HumanTimeCard summary={detail.humanTime} surface="code" scope={detail.dept} view={codexPresent ? vendor : 'claude'} />
 
             {(detail.journeyGrid?.length ?? 0) > 0 && (
               <div className="flex flex-col gap-2">

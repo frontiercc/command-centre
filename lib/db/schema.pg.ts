@@ -251,6 +251,24 @@ export const openaiReplies = pgTable('openai_replies', {
     index('idx_openai_replies_session').on(t.session_id),
 ]);
 
+/** Working time and by-hand estimates for a ChatGPT conversation (migration 0043). */
+export const chatgptSessionTime = pgTable('chatgpt_session_time', {
+    session_id: text().primaryKey(),
+    user_id: text().notNull(),
+    source: text().notNull(),
+    first_at: bigint({ mode: 'number' }).notNull(),
+    last_at: bigint({ mode: 'number' }).notNull(),
+    active_secs: integer().notNull().default(0),
+    human_minutes_low: integer(),
+    human_minutes_likely: integer(),
+    human_minutes_high: integer(),
+    human_minutes_attempts: integer().notNull().default(0),
+    computed_at: bigint({ mode: 'number' }).notNull(),
+}, (t) => [
+    index('idx_chatgpt_session_time_user').on(t.user_id, t.first_at),
+    index('idx_chatgpt_session_time_first').on(t.first_at),
+]);
+
 /** One Codex tool call: failed or not, and whether it was a commit. No command text (migration 0041). */
 export const codexActions = pgTable('codex_actions', {
     id: text().primaryKey(),
@@ -1369,6 +1387,7 @@ export const pgSchema = {
   codexTurns,
   codexActions,
   codeMetricsVendor,
+  chatgptSessionTime,
   pulseRubricVersions,
   pulseAuditCycles,
   pulseAuditItems,

@@ -177,7 +177,7 @@ export default function PersonalPulsePage() {
         {/* 1. Frontier Push hero */}
         <FrontierHero view={data.frontier} canOpenUseCases={data.frontierAccess?.canOpenUseCases ?? false} />
 
-        <HumanTimeCard summary={data.humanTime} surface="cowork" scope="Personal" />
+        <HumanTimeCard summary={data.humanTime} surface="cowork" scope="Personal" view={data.openaiPresent ? vendor : 'claude'} />
 
         {/* 2. Stat strip with deltas */}
         <StatStrip

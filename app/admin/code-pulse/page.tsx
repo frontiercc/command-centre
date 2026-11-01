@@ -844,7 +844,7 @@ function CodePulseAdminContent() {
               />
               {humanTimeCode !== null && (
                 <ToggleRow
-                  label="Human time vs Claude time · Code"
+                  label="Human time vs AI time · Code"
                   hint="For each Tier 2 and 3 Code session, an AI estimate of how long an experienced engineer would take by hand, shown beside the measured Claude time on Developer Pulse, and in the weekly digest, Highlights, Reports and the Metrics Connector. Independent of the Cowork switch on Admin → Work Pulse. Off stops new Code estimates and hides the Code figures."
                   checked={humanTimeCode}
                   onChange={setHumanTimeCode}

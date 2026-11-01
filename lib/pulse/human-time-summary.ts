@@ -27,7 +27,12 @@ export interface HumanTimeRow {
   claudeMinutes: number;
 }
 
+/** One product's totals (All view, once ChatGPT conversations are estimated). */
+export interface HumanTimeProductTotals { sessions: number; humanMinutes: number; claudeMinutes: number }
+
 export interface HumanTimeSummary {
+  /** Work Pulse's All view: Claude Cowork's and ChatGPT's own totals. */
+  byProduct?: { claude: HumanTimeProductTotals; openai: HumanTimeProductTotals };
   windowDays: number;
   sessions: number;
   humanMinutes: { low: number; likely: number; high: number };
@@ -81,8 +86,14 @@ export async function buildHumanTimeSummary(opts: {
   minSessionsForRatio: number;
   /** A fixed [startS, endS) window (e.g. a completed week) instead of the last 30 days. */
   range?: { startS: number; endS: number };
-  /** Developer Pulse's switch (Code only): Claude Code or Codex sessions. */
+  /** Developer Pulse's switch (Code), or Work Pulse's (Cowork, with includeChatgpt). */
   vendor?: Vendor;
+  /**
+   * Cowork only: count ChatGPT conversations too (chatgpt_session_time), as
+   * Work Pulse's pages do. Off for the digest, Reports, Highlights and the
+   * Metrics Connector, which describe Claude Cowork as they always have.
+   */
+  includeChatgpt?: boolean;
 }): Promise<HumanTimeSummary> {
   const nowS = opts.nowS ?? Math.floor(Date.now() / 1000);
   const since = opts.range?.startS ?? nowS - WINDOW_DAYS * 86400;
@@ -117,13 +128,29 @@ export async function buildHumanTimeSummary(opts: {
     const where: SQL[] = [gte(st.first_event_at, since), isNotNull(st.human_minutes_likely), gt(st.active_secs, 0)];
     if (until !== null) where.push(lt(st.first_event_at, until));
     if (opts.userIds) where.push(inArray(st.user_id, opts.userIds));
-    const r = await client
+    const withClaude = !opts.includeChatgpt || opts.vendor !== 'openai';
+    const withChatgpt = !!opts.includeChatgpt && opts.vendor !== 'claude';
+    const r = !withClaude ? [] : await client
       .select({
         session_id: st.session_id, low: st.human_minutes_low, likely: st.human_minutes_likely,
         high: st.human_minutes_high, secs: st.active_secs,
       })
       .from(st)
       .where(and(...where));
+    if (withChatgpt) {
+      const ct = schema.chatgptSessionTime;
+      const cw: SQL[] = [gte(ct.first_at, since), isNotNull(ct.human_minutes_likely), gt(ct.active_secs, 0)];
+      if (until !== null) cw.push(lt(ct.first_at, until));
+      if (opts.userIds) cw.push(inArray(ct.user_id, opts.userIds));
+      const chat = await client
+        .select({
+          session_id: ct.session_id, low: ct.human_minutes_low, likely: ct.human_minutes_likely,
+          high: ct.human_minutes_high, secs: ct.active_secs,
+        })
+        .from(ct)
+        .where(and(...cw));
+      r.push(...chat);
+    }
     // Named kinds of work only, as Session Output Rate: a mechanism-only
     // session still counts in the totals but gets no breakdown row.
     const kinds = await buildSessionTaskTypeMap(client, r.map(x => x.session_id));
@@ -135,7 +162,16 @@ export async function buildHumanTimeSummary(opts: {
       };
     });
   }
-  return summariseHumanTime(rows, opts.minSessionsForRatio, days);
+  const summary = summariseHumanTime(rows, opts.minSessionsForRatio, days);
+  // Work Pulse's All view: each product's own totals, once ChatGPT conversations are estimated.
+  if (opts.surface === 'cowork' && opts.includeChatgpt && (opts.vendor ?? 'all') === 'all' && rows.some(r => r.session_id.startsWith('chatgpt:'))) {
+    const totals = (pick: (r: SessionFigures) => boolean) => {
+      const sel = rows.filter(pick);
+      return { sessions: sel.length, humanMinutes: sel.reduce((s, r) => s + r.likely, 0), claudeMinutes: sel.reduce((s, r) => s + r.claudeSecs, 0) / 60 };
+    };
+    summary.byProduct = { claude: totals(r => !r.session_id.startsWith('chatgpt:')), openai: totals(r => r.session_id.startsWith('chatgpt:')) };
+  }
+  return summary;
 }
 
 /**
@@ -149,7 +185,7 @@ export async function readHumanTime(surface: 'code' | 'cowork', userIds?: string
     const { humanTimeOn } = await import('@/lib/pulse/human-time-flags');
     if (!(await humanTimeOn(surface))) return null;
     const min = parseInt(await getConfigValue('humanTimeMinSessionsForRatio'), 10);
-    const summary = await buildHumanTimeSummary({ surface, userIds, vendor, minSessionsForRatio: Number.isFinite(min) && min > 0 ? min : 20 });
+    const summary = await buildHumanTimeSummary({ surface, userIds, vendor, includeChatgpt: surface === 'cowork', minSessionsForRatio: Number.isFinite(min) && min > 0 ? min : 20 });
     // The spot-check result (counts only), so the card can say how well the estimates held up.
     const { latestCheckResult } = await import('@/lib/pulse/human-time-checks');
     return { ...summary, check: await latestCheckResult(surface) };

@@ -519,7 +519,7 @@ export default function CioPulsePage() {
         </div>
 
         {/* Human time vs Claude time */}
-        <HumanTimeCard summary={orgSummary?.humanTime} surface="cowork" scope="Organisation, 30 days" />
+        <HumanTimeCard summary={orgSummary?.humanTime} surface="cowork" scope="Organisation, 30 days" view={data.openaiPresent ? vendor : 'claude'} />
 
         {/* Top skills, top connectors, produced a file, work mix */}
         {orgSummary && (

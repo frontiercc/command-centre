@@ -204,7 +204,7 @@ export default function DeptPickerPage() {
             <>
               <FrontierHero view={d.frontier} canOpenUseCases={d.frontierAccess?.canOpenUseCases ?? false} />
 
-              <HumanTimeCard summary={d.humanTime} surface="cowork" scope={d.dept} />
+              <HumanTimeCard summary={d.humanTime} surface="cowork" scope={d.dept} view={d.openaiPresent ? vendor : 'claude'} />
 
               <StatStrip
                 oti={d.metrics?.oti ?? null}

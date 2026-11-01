@@ -126,8 +126,8 @@ The features in the table below send people's prompt text, masked for personal d
 | Switch | Where | Default |
 |---|---|---|
 | Session descriptions (one AI-written sentence per notable Claude Cowork session) | Admin → Work Pulse → Overview | On |
-| Human time vs Claude time · Cowork | Admin → Work Pulse → Overview | Off |
-| Human time vs Claude time · Code | Admin → Developer Pulse → Overview | Follows the Cowork switch |
+| Human time vs AI time (Claude Cowork and ChatGPT) | Admin → Work Pulse → Overview | Off |
+| Human time vs AI time · Code (Claude Code and Codex) | Admin → Developer Pulse → Overview | Follows the Work Pulse switch |
 | Include first prompt (Code session classifier) | Admin → Developer Pulse → Overview | On |
 | Classify Codex sessions | Admin → Developer Pulse → Overview | On |
 | Content analysis (use case judging and process suggestions) | Admin → Use Cases | On |
@@ -141,7 +141,7 @@ Three further settings shape alerting. **Admin → Risk Scoring → Developer Pu
 
 Work Pulse shows the depth of work people hand to Claude in Claude Cowork: a judged tier for each prompt, whether that depth is growing and spreading by department, and what capability the organisation has built. The tiers are AI-judged and labelled as such; time and session counts are measured.
 
-1. In **Admin → Work Pulse → Overview → Module settings**, confirm **Pulse enabled** is on, choose the **Classifier model**, **Organisation briefing model** and **Personal briefing model**, set **Human time vs Claude time · Claude Cowork**, **Session descriptions** and **Classify ChatGPT prompts** to your decision, and select **Save**. **Classify ChatGPT prompts** applies once ChatGPT prompts arrive from OpenAI's export.
+1. In **Admin → Work Pulse → Overview → Module settings**, confirm **Pulse enabled** is on, choose the **Classifier model**, **Organisation briefing model** and **Personal briefing model**, set **Human time vs AI time**, **Session descriptions** and **Classify ChatGPT prompts** to your decision, and select **Save**. **Classify ChatGPT prompts** applies once ChatGPT prompts arrive from OpenAI's export.
 2. Review the rubric in **Admin → Work Pulse → Tier config**: the tier definitions, the connector and skill evidence rules, the task type taxonomy and the detection criteria. The classifier's instructions are built entirely from this page, and it previews the exact text the classifier receives. Clearing the connector and skill evidence rules leaves the tier definitions alone to decide. Changes apply from the next classification onward and never rewrite history.
 3. Leave **Classifier health** open for the first day. Classifier health shows the queue awaiting classification and any failures, with a control to retry them; once ChatGPT prompts exist, a table shows classified, waiting and failed prompts for each product.
 
@@ -153,7 +153,7 @@ Once a month, use **Admin → Work Pulse → Audit** to start an audit cycle wit
 
 Developer Pulse measures Claude Code use (spend, engaged time, lines changed, AI-assisted commits and pull requests, edit acceptance) without judgement, and adds one AI-judged layer: a kind of work and a tier for each finished session.
 
-1. In **Admin → Developer Pulse → Overview**, confirm **Session classifier enabled** is on, choose the **Classifier model** and **Briefing model**, set **Human time vs Claude time · Code**, **Classify Codex sessions** and **Include first prompt**, and save. **Classify Codex sessions** applies once Codex sessions arrive from OpenAI's export.
+1. In **Admin → Developer Pulse → Overview**, confirm **Session classifier enabled** is on, choose the **Classifier model** and **Briefing model**, set **Human time vs AI time · Code**, **Classify Codex sessions** and **Include first prompt**, and save. **Classify Codex sessions** applies once Codex sessions arrive from OpenAI's export.
 2. Review the session rubric in **Admin → Developer Pulse → Tiers**. As with Work Pulse, saving applies from now on.
 3. Review **Admin → Developer Pulse → Rates** (see the FinOps section) and, after the first day of data, **Data quality**, which lists models with no price and telemetry that arrived without an identity.
 4. In **Admin → Developer Pulse → Value**, replace the default calibrations (productivity lift, loaded annual compensation, coding hours per week, and minutes saved per pull request, AI-assisted commit, Claude Cowork session and Claude Chat conversation) with your own figures. Every estimate on the Value view is labelled as such and shown apart from the measured figures beside it.

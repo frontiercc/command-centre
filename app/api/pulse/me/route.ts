@@ -433,7 +433,7 @@ export async function GET(request: NextRequest) {
   // Person-level human time: admins and managers for anyone, everyone else for
   // themselves only (a same-department colleague's page does not carry it).
   const seesPerson = canAccessPulseAdmin(session.role) || userId === (await resolveMyUserId());
-  const humanTime = seesPerson ? await readHumanTime('cowork', [userId]) : null;
+  const humanTime = seesPerson ? await readHumanTime('cowork', [userId], vendor) : null;
   // Link to this person's Spend Review, for whoever may open it
   // (lib/finance/spend-review-access.ts); it lives under FinOps and is hidden with it.
   const canSeeSpendReview = (await getAllConfig()).chargebackEnabled === true

@@ -484,6 +484,9 @@ export async function runRetentionCleanup(): Promise<CleanupResult> {
     coworkAffected += rowsAffected(
       await tx.delete(schema.openaiReplies).where(lt(schema.openaiReplies.occurred_at, coworkCutoff))
     );
+    coworkAffected += rowsAffected(
+      await tx.delete(schema.chatgptSessionTime).where(lt(schema.chatgptSessionTime.last_at, coworkCutoff))
+    );
 
     // ── chat_assistant_meta (metadata-only -> delete in BOTH modes; was
     // purge-only before — moved out of the mode branch above so it is no

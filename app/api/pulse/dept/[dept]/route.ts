@@ -482,7 +482,7 @@ export async function GET(
   // this call is safe unconditionally, same as every other caller.
   const coachingPrompts = await getDeptCoachingPrompts(dept, now);
 
-  const humanTime = await readHumanTime('cowork', memberIds);
+  const humanTime = await readHumanTime('cowork', memberIds, vendor);
 
   return NextResponse.json({
     humanTime,

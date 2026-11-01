@@ -1869,6 +1869,7 @@ export async function deleteUserData(userId: string): Promise<{
       async (h) => { await h.delete(schema.openaiReplies).where(eq(schema.openaiReplies.user_id, userId)); },
       async (h) => { await h.delete(schema.codexTurns).where(eq(schema.codexTurns.user_id, userId)); },
       async (h) => { await h.delete(schema.codexActions).where(eq(schema.codexActions.user_id, userId)); },
+      async (h) => { await h.delete(schema.chatgptSessionTime).where(eq(schema.chatgptSessionTime.user_id, userId)); },
       async (h) => { await h.delete(schema.codeOtelMetrics).where(eq(schema.codeOtelMetrics.user_id, userId)); },
       // user-scope metric rows only — org/dept aggregates are not personal data
       async (h) => { await h.delete(schema.codeMetrics).where(and(eq(schema.codeMetrics.scope_type, 'user'), eq(schema.codeMetrics.scope_id, userId))); },

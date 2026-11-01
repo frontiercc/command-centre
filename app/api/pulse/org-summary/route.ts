@@ -262,7 +262,7 @@ export async function GET(request: NextRequest) {
   }
 
   // Human time vs Claude time — org totals; null when off.
-  const humanTime = await readHumanTime('cowork');
+  const humanTime = await readHumanTime('cowork', undefined, vendor);
 
   return NextResponse.json({
     signalCards: {

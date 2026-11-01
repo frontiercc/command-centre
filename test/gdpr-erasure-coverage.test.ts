@@ -102,6 +102,7 @@ const COVERAGE: Record<string, { status: Status; why: string }> = {
   'openai_replies.user_id':              { status: 'deleted', why: 'a person\'s ChatGPT reply times (migration 0040)' },
   'codex_turns.user_id':                 { status: 'deleted', why: 'a person\'s Codex turns (migration 0040)' },
   'codex_actions.user_id':               { status: 'deleted', why: 'a person\'s Codex tool calls (migration 0041)' },
+  'chatgpt_session_time.user_id':        { status: 'deleted', why: 'a person\'s ChatGPT working time and by-hand estimates (migration 0043)' },
   'code_session_stats.user_id':          { status: 'deleted', why: 'P1' },
   'code_otel_metrics.user_id':           { status: 'deleted', why: 'P1' },
   'code_session_classifications.user_id':{ status: 'deleted', why: 'P1' },

@@ -185,7 +185,7 @@ function MyCodePulseContent() {
                   ? { ...data.metricsSplit.claude, commit_count: data.metrics.commit_count }
                   : data.metrics} />}
 
-            <HumanTimeCard summary={data.humanTime} surface="code" scope="Personal" />
+            <HumanTimeCard summary={data.humanTime} surface="code" scope="Personal" view={data.codexPresent ? vendor : 'claude'} />
 
             {data.trends && (
               <div className="grid grid-cols-1 md:grid-cols-2 gap-4">

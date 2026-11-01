@@ -411,7 +411,7 @@ export default function CodePulseOverviewPage() {
             </div>
 
             {/* By hand vs with Claude sits after the verdicts, above This Week in Code. */}
-            <HumanTimeCard summary={data!.humanTime} surface="code" scope="Org" />
+            <HumanTimeCard summary={data!.humanTime} surface="code" scope="Org" view={view} />
 
             <CodeBriefingCard />
 
