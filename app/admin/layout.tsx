@@ -6,6 +6,7 @@
 import { useEffect, useState } from 'react';
 import { usePathname, useRouter } from 'next/navigation';
 import Link from 'next/link';
+import { useOpenAiOnly } from '@/components/shared/VendorSwitch';
 
 const adminNavItems = [
   { href: '/admin/overview', label: 'Overview' },
@@ -51,6 +52,9 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
   const [loading, setLoading] = useState(true);
   const [accessDenied, setAccessDenied] = useState(false);
   const pulsePendingCount = usePulsePendingCount();
+  // Only OpenAI connected: Claude Sub Agents can never have anything to show.
+  const openaiOnly = useOpenAiOnly();
+  const navItems = openaiOnly ? adminNavItems.filter(i => i.href !== '/admin/subagents') : adminNavItems;
 
   const isAuthPage = authPages.some(p => pathname === p || pathname.startsWith(p + '/'));
 
@@ -137,7 +141,7 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
         </div>
 
         <nav className="flex-1 px-2 pb-4 flex flex-col gap-px">
-          {adminNavItems
+          {navItems
             .filter(item => user.role === 'admin' || item.href === '/admin/pulse')
             .map(item => (
             <Link

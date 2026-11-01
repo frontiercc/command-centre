@@ -13,7 +13,7 @@ import ModelMixBar, { type ModelMixItem } from '@/components/pulse/code/ModelMix
 import JourneyGrid from '@/components/pulse/JourneyGrid';
 import HumanTimeCard, { type HumanTimeSummary } from '@/components/pulse/HumanTimeCard';
 import { PageBody, Toolbar, Panel, Tag, Empty, Muted, B, cx } from '@/components/precision/ui';
-import { useVendor, VendorSwitch } from '@/components/shared/VendorSwitch';
+import { useVendor, useOpenAiOnly, VendorSwitch } from '@/components/shared/VendorSwitch';
 import { DEVELOPER_PULSE_VENDOR_LABELS, type Vendor } from '@/lib/dashboard/vendor';
 
 interface SessionRow {
@@ -74,6 +74,8 @@ function CodeUsersContent() {
   const [dataLoading, setDataLoading] = useState(false);
   const [vendor, setVendor] = useVendor();
   const [codexPresent, setCodexPresent] = useState(false);
+  const openaiOnly = useOpenAiOnly();
+  const codexView = codexPresent || openaiOnly;
 
   const selectedUserId = searchParams.get('userId') ?? '';
 
@@ -125,7 +127,7 @@ function CodeUsersContent() {
     <>
       <TopBar
         title="Developer Pulse: Users"
-        subtitle={displayName ? `Per-user ${codexPresent ? 'coding' : 'Claude Code'} activity · ${displayName}` : 'Select a user'}
+        subtitle={displayName ? `Per-user ${openaiOnly ? 'Codex' : codexPresent ? 'coding' : 'Claude Code'} activity · ${displayName}` : 'Select a user'}
       />
       <PageBody>
         {/* User picker (top-left) */}
@@ -145,7 +147,7 @@ function CodeUsersContent() {
                   {users.map(u => (
                     <option key={u.user_id} value={u.user_id}>
                       {u.display_name ?? u.email}{u.department ? ` · ${u.department}` : ''}
-                      {codexPresent && (u.products?.length ?? 0) > 0 ? ` · ${u.products!.map(p => p === 'codex' ? 'Codex' : 'Claude Code').join(', ')}` : ''}
+                      {codexPresent && !openaiOnly && (u.products?.length ?? 0) > 0 ? ` · ${u.products!.map(p => p === 'codex' ? 'Codex' : 'Claude Code').join(', ')}` : ''}
                     </option>
                   ))}
                 </select>
@@ -164,14 +166,14 @@ function CodeUsersContent() {
 
         {!dataLoading && data && (
           !data.userId ? (
-            <Empty title={codexPresent ? 'No coding activity for this user yet' : 'No Claude Code activity for this user yet'}>
+            <Empty title={openaiOnly ? 'No Codex activity for this user yet' : codexPresent ? 'No coding activity for this user yet' : 'No Claude Code activity for this user yet'}>
               Activity appears after the next hourly aggregation.
             </Empty>
           ) : (
             <>
-              <CodeStatStrip metrics={data.metrics} githubRepos={data.githubRepos} view={codexPresent ? vendor : 'claude'} split={data.metricsSplit} />
+              <CodeStatStrip metrics={data.metrics} githubRepos={data.githubRepos} view={codexView ? vendor : 'claude'} split={data.metricsSplit} />
 
-              <HumanTimeCard summary={data.humanTime} surface="code" scope="Personal" view={codexPresent ? vendor : 'claude'} />
+              <HumanTimeCard summary={data.humanTime} surface="code" scope="Personal" view={codexView ? vendor : 'claude'} />
 
               {(data.journeyGrid?.length ?? 0) > 0 && (
                 <div className="flex flex-col gap-2">

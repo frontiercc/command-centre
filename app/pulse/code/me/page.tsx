@@ -16,7 +16,7 @@ import Sparkline from '@/components/pulse/Sparkline';
 import WeeklyDeltaBadge from '@/components/pulse/WeeklyDeltaBadge';
 import HumanTimeCard, { type HumanTimeSummary } from '@/components/pulse/HumanTimeCard';
 import { PageBody, Toolbar, Panel, Tag, Empty, Muted, B } from '@/components/precision/ui';
-import { useVendor, VendorSwitch } from '@/components/shared/VendorSwitch';
+import { useVendor, useOpenAiOnly, VendorSwitch } from '@/components/shared/VendorSwitch';
 import { DEVELOPER_PULSE_VENDOR_LABELS, type Vendor } from '@/lib/dashboard/vendor';
 
 interface SessionRow {
@@ -136,6 +136,9 @@ function MyCodePulseContent() {
   const [data, setData] = useState<MeData | null>(null);
   const [loading, setLoading] = useState(true);
   const [vendor, setVendor] = useVendor();
+  const openaiOnly = useOpenAiOnly();
+  // The view: Codex's own when it is the only coding tool connected.
+  const codexView = !!data?.codexPresent || openaiOnly;
 
   useEffect(() => {
     const qs = new URLSearchParams({ vendor });
@@ -153,15 +156,23 @@ function MyCodePulseContent() {
     <>
       <TopBar
         title={viewUserId ? `Developer Pulse: ${viewName || viewUserId}` : 'My Developer Pulse'}
-        subtitle={data?.codexPresent
-          ? (viewUserId ? 'Per-user coding activity: Claude Code and Codex' : 'Your coding activity, spend, and autonomy: Claude Code and Codex')
-          : (viewUserId ? 'Per-user Claude Code activity' : 'Your Claude Code activity, spend, and autonomy')}
+        subtitle={openaiOnly
+          ? (viewUserId ? 'Per-user Codex activity' : 'Your Codex activity, spend, and autonomy')
+          : data?.codexPresent
+            ? (viewUserId ? 'Per-user coding activity: Claude Code and Codex' : 'Your coding activity, spend, and autonomy: Claude Code and Codex')
+            : (viewUserId ? 'Per-user Claude Code activity' : 'Your Claude Code activity, spend, and autonomy')}
       />
       <PageBody>
         {!data?.userId ? (
-          <Empty title="No Claude Code activity linked to your account yet">
-            Ask an admin to link your sign-in to your Claude identity on the Access & Keys page, or start a Claude Code session with telemetry on.
-          </Empty>
+          openaiOnly ? (
+            <Empty title="No Codex activity linked to your account yet">
+              Codex activity is matched to your sign-in by email. It arrives from OpenAI&apos;s export a few hours after you use Codex.
+            </Empty>
+          ) : (
+            <Empty title="No Claude Code activity linked to your account yet">
+              Ask an admin to link your sign-in to your Claude identity on the Access & Keys page, or start a Claude Code session with telemetry on.
+            </Empty>
+          )
         ) : (
           <>
             {(data.canSeeSpendReview || data.codexPresent) && (
@@ -177,17 +188,17 @@ function MyCodePulseContent() {
               </Toolbar>
             )}
 
-            <CodeStatStrip metrics={data.metrics} githubRepos={data.githubRepos} view={data.codexPresent ? vendor : 'claude'} split={data.metricsSplit} />
+            <CodeStatStrip metrics={data.metrics} githubRepos={data.githubRepos} view={codexView ? vendor : 'claude'} split={data.metricsSplit} />
 
-            {data.codexPresent && vendor === 'openai'
+            {openaiOnly ? null : data.codexPresent && vendor === 'openai'
               ? <Muted>Engaged time, lines of code, pull requests and edit acceptance come from Claude Code&apos;s own telemetry. Codex doesn&apos;t send them.</Muted>
               : <CodeProductivityStrip metrics={data.codexPresent && vendor === 'all' && data.metricsSplit?.claude && data.metrics
                   ? { ...data.metricsSplit.claude, commit_count: data.metrics.commit_count }
                   : data.metrics} />}
 
-            <HumanTimeCard summary={data.humanTime} surface="code" scope="Personal" view={data.codexPresent ? vendor : 'claude'} />
+            <HumanTimeCard summary={data.humanTime} surface="code" scope="Personal" view={codexView ? vendor : 'claude'} />
 
-            {data.trends && (
+            {data.trends && !openaiOnly && (
               <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                 <TrendCard label="Engaged time" trend={data.trends.engagedTime} />
                 <TrendCard label="Code output" trend={data.trends.codeOutput} />

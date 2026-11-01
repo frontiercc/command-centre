@@ -18,7 +18,7 @@ import Sparkline from '@/components/pulse/Sparkline';
 import WeeklyDeltaBadge from '@/components/pulse/WeeklyDeltaBadge';
 import HumanTimeCard, { type HumanTimeSummary } from '@/components/pulse/HumanTimeCard';
 import { displayDefinition } from '@/lib/pulse/code/work-type-labels';
-import { useVendor, VendorSwitch, formatSplit } from '@/components/shared/VendorSwitch';
+import { useVendor, useOpenAiOnly, VendorSwitch, formatSplit } from '@/components/shared/VendorSwitch';
 import { DEVELOPER_PULSE_VENDOR_LABELS, type Vendor } from '@/lib/dashboard/vendor';
 import {
   PageBody, Toolbar, Panel, PanelFoot, SubHead, Figure, BarRow, Bar, Tag, Pill, Notice, Muted,
@@ -114,7 +114,7 @@ const STATUS_LABEL: Record<Verdict['status'], string> = {
 
 function buildVerdicts(d: OrgSummary, vendor: Vendor): Verdict[] {
   const m = d.metrics;
-  const w = productWords(d.codexPresent ? vendor : 'claude');
+  const w = productWords(vendor);
   const sp = d.metricsSplit;
   const part = (pick: (r: CodeMetricsRow) => number | null, fmt: (v: number) => string) => {
     if (!sp) return undefined;
@@ -340,6 +340,8 @@ export default function CodePulseOverviewPage() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [vendor, setVendor] = useVendor();
+  // Only OpenAI connected: the Codex view, with nothing that only Claude Code can fill.
+  const openaiOnly = useOpenAiOnly();
 
   useEffect(() => {
     fetch(`/api/pulse/code/org-summary?vendor=${vendor}`)
@@ -359,11 +361,11 @@ export default function CodePulseOverviewPage() {
   const hasRepoData = !!data && ((data.metrics?.repo_count ?? 0) > 0 || (data.activeRepos?.length ?? 0) > 0 || (data.darkRepos?.length ?? 0) > 0);
   const repoOrLanguage = hasRepoData
     ? <RepoCoverageList active={data?.activeRepos ?? []} dark={data?.darkRepos ?? []} githubTotals={data?.githubOverlay?.totalCommits30dByRepo} />
-    : <LanguageMixCard items={data?.languageMix ?? []} />;
+    : openaiOnly ? null : <LanguageMixCard items={data?.languageMix ?? []} />;
 
   const hasWorkMix = data?.workMix !== null && data?.workMix !== undefined;
   const codexPresent = data?.codexPresent ?? false;
-  const view: Vendor = codexPresent ? vendor : 'claude';
+  const view: Vendor = codexPresent || openaiOnly ? vendor : 'claude';
   // Claude Code's own row for the ratios only its telemetry can give.
   const claudeRow = view === 'openai' ? null : view === 'all' ? (data?.metricsSplit?.claude ?? null) : (data?.metrics ?? null);
 
@@ -386,12 +388,12 @@ export default function CodePulseOverviewPage() {
                 <span className="flex items-center gap-1.5"><span className="w-2 h-2 rounded-[2px] bg-[#699BFB]" />AI-judged or estimate</span>
               </span>
             </Toolbar>
-            {codexPresent && vendor !== 'all' && (
+            {codexPresent && vendor !== 'all' && !openaiOnly && (
               <p className="m-0 -mt-2 text-[13px] text-[#8F8F8F]">Showing {vendor === 'openai' ? 'Codex' : 'Claude Code'} only.</p>
             )}
 
             {/* Productivity strip: Claude Code's own telemetry (engaged time, lines, pull requests, edits). */}
-            {view === 'openai' ? (
+            {openaiOnly ? null : view === 'openai' ? (
               <Notice tone="info">Engaged time, lines of code, pull requests and edit acceptance come from Claude Code&apos;s own telemetry. Codex doesn&apos;t send them, so they aren&apos;t shown for Codex.</Notice>
             ) : (
               <>
@@ -416,7 +418,7 @@ export default function CodePulseOverviewPage() {
             <CodeBriefingCard />
 
             {data?.githubOverlay && (
-              <ShippingAlignmentChart series={data.githubOverlay.shippingSeries ?? []} codexPresent={codexPresent}>
+              <ShippingAlignmentChart series={data.githubOverlay.shippingSeries ?? []} codexPresent={codexPresent} openaiOnly={openaiOnly}>
                 {(data.githubOverlay.repoCards?.length ?? 0) > 0
                   ? <GithubRepoCards cards={data.githubOverlay.repoCards} />
                   : undefined}

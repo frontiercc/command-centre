@@ -24,7 +24,7 @@ import DelegationBands, { type BandSegment, type PersonDelegation } from '@/comp
 import CoachingPrompts, { type CoachingPromptItem } from '@/components/pulse/CoachingPrompts';
 import HumanTimeCard, { type HumanTimeSummary } from '@/components/pulse/HumanTimeCard';
 import { PageBody, Toolbar, Strip, Figure, Notice, B, cx } from '@/components/precision/ui';
-import { useVendor, VendorSwitch } from '@/components/shared/VendorSwitch';
+import { useVendor, useOpenAiOnly, VendorSwitch } from '@/components/shared/VendorSwitch';
 import { WORK_PULSE_VENDOR_LABELS } from '@/lib/dashboard/vendor';
 import { workSpendFigure } from '@/lib/pulse/spend-figure';
 
@@ -94,6 +94,7 @@ export default function DeptPickerPage() {
   const [delegationWeeks, setDelegationWeeks] = useState<13 | 26 | 52>(13);
   // The All / Claude / OpenAI switch, shared with the dashboard and Executive View.
   const [vendor, setVendor] = useVendor();
+  const openaiOnly = useOpenAiOnly();
 
   const selectedDept = searchParams.get('dept') ?? '';
 
@@ -182,7 +183,7 @@ export default function DeptPickerPage() {
           )}
           <VendorSwitch vendor={vendor} onChange={setVendor} openaiPresent={deptData?.openaiPresent ?? false} labels={WORK_PULSE_VENDOR_LABELS} />
         </Toolbar>
-        {vendor !== 'all' && (
+        {vendor !== 'all' && !openaiOnly && (
           <p className="m-0 -mt-2 text-[13px] text-[#8F8F8F]">
             Showing {WORK_PULSE_VENDOR_LABELS[vendor]} only{vendor === 'openai' ? ': ChatGPT Chat and ChatGPT Work' : ': Claude Cowork and Claude Chat'}.
           </p>

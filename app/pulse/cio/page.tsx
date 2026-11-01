@@ -24,7 +24,7 @@ import ActNextPanel, { type ActNextItem, type DeptProcessBoxItem } from '@/compo
 import { PageBody, Toolbar, Panel, Strip, Figure, BarRow, Tag, Dot, Muted, Notice, B, deltaTone, type Tone } from '@/components/precision/ui';
 import SessionOutputCard, { type SessionOutputReport } from '@/components/pulse/SessionOutputCard';
 import HumanTimeCard, { type HumanTimeSummary } from '@/components/pulse/HumanTimeCard';
-import { useVendor, VendorSwitch, formatSplit } from '@/components/shared/VendorSwitch';
+import { useVendor, useOpenAiOnly, VendorSwitch, formatSplit } from '@/components/shared/VendorSwitch';
 import { WORK_PULSE_VENDOR_LABELS, type Vendor } from '@/lib/dashboard/vendor';
 import { workSpendFigure, formatUsd } from '@/lib/pulse/spend-figure';
 
@@ -306,6 +306,7 @@ export default function CioPulsePage() {
   const [delegationWeeks, setDelegationWeeks] = useState<13 | 26 | 52>(13);
   // The All / Claude / OpenAI switch, shared with the dashboard.
   const [vendor, setVendor] = useVendor();
+  const openaiOnly = useOpenAiOnly();
 
   useEffect(() => {
     fetch(`/api/pulse/cio?weeks=${delegationWeeks}&vendor=${vendor}`)
@@ -380,7 +381,7 @@ export default function CioPulsePage() {
             <Link href="/admin/pulse" className={B.secondary}>Pulse settings</Link>
           </span>
         </Toolbar>
-        {vendor !== 'all' && (
+        {vendor !== 'all' && !openaiOnly && (
           <p className="m-0 -mt-2 text-[13px] text-[#8F8F8F]">
             Showing {WORK_PULSE_VENDOR_LABELS[vendor]} only{vendor === 'openai' ? ': ChatGPT Chat and ChatGPT Work' : ': Claude Cowork and Claude Chat'}.
           </p>

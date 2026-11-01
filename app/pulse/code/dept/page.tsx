@@ -12,7 +12,7 @@ import CodeUserTable, { type CodeUserRow } from '@/components/pulse/code/CodeUse
 import JourneyGrid from '@/components/pulse/JourneyGrid';
 import HumanTimeCard, { type HumanTimeSummary } from '@/components/pulse/HumanTimeCard';
 import { PageBody, Toolbar, Panel, Tag, Notice, B, cx } from '@/components/precision/ui';
-import { useVendor, VendorSwitch } from '@/components/shared/VendorSwitch';
+import { useVendor, useOpenAiOnly, VendorSwitch } from '@/components/shared/VendorSwitch';
 import { DEVELOPER_PULSE_VENDOR_LABELS } from '@/lib/dashboard/vendor';
 
 interface DeptListRow {
@@ -42,6 +42,8 @@ function DeptContent() {
   const [error, setError] = useState<string | null>(null);
   const [vendor, setVendor] = useVendor();
   const [codexPresent, setCodexPresent] = useState(false);
+  const openaiOnly = useOpenAiOnly();
+  const codexView = codexPresent || openaiOnly;
 
   const selectedDept = searchParams.get('dept') ?? '';
 
@@ -98,7 +100,7 @@ function DeptContent() {
     <>
       <TopBar
         title="Developer Pulse: Departments"
-        subtitle={selectedDept ? `Department ${codexPresent ? 'coding' : 'Claude Code'} activity · ${selectedDept}` : 'Select a department'}
+        subtitle={selectedDept ? `Department ${openaiOnly ? 'Codex' : codexPresent ? 'coding' : 'Claude Code'} activity · ${selectedDept}` : 'Select a department'}
       />
       <PageBody>
         {/* Department picker (top-left) */}
@@ -131,9 +133,9 @@ function DeptContent() {
 
         {!detailLoading && detail && (
           <>
-            <CodeStatStrip metrics={detail.metrics} githubRepos={detail.githubRepos} view={codexPresent ? vendor : 'claude'} split={detail.metricsSplit} />
+            <CodeStatStrip metrics={detail.metrics} githubRepos={detail.githubRepos} view={codexView ? vendor : 'claude'} split={detail.metricsSplit} />
 
-            <HumanTimeCard summary={detail.humanTime} surface="code" scope={detail.dept} view={codexPresent ? vendor : 'claude'} />
+            <HumanTimeCard summary={detail.humanTime} surface="code" scope={detail.dept} view={codexView ? vendor : 'claude'} />
 
             {(detail.journeyGrid?.length ?? 0) > 0 && (
               <div className="flex flex-col gap-2">

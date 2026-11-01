@@ -11,6 +11,8 @@ import NavIcon from './NavIcon';
 import { logoFor, type Theme } from '@/lib/theme';
 import PrecisionSidebar, { type NavVisibility } from './PrecisionSidebar';
 import { isCorePlatformRole, canSeeAuditLog, canSeeFinOps, canSeeUseCasesOverview, canSeeCoworkOverview, canSeeCodeOverview } from '@/lib/nav/items';
+import { fetchConfigOnce } from '@/lib/client/config-once';
+import { useOpenAiOnly } from '@/components/shared/VendorSwitch';
 
 const navItems = [
   { href: '/', label: 'Dashboard', icon: 'grid' },
@@ -54,6 +56,8 @@ export default function Sidebar({ theme = 'default' }: { theme?: Theme }) {
   const [chargebackEnabled, setChargebackEnabled] = useState(false);
   const [displayName, setDisplayName] = useState('');
   const [email, setEmail] = useState('');
+  // Only OpenAI connected: no pages built on Claude Code's telemetry alone (Value, Dev Framework).
+  const openaiOnly = useOpenAiOnly();
 
   const onCodePulse = pathname.startsWith('/pulse/code');
 
@@ -90,9 +94,10 @@ export default function Sidebar({ theme = 'default' }: { theme?: Theme }) {
     // Poll every 60 s so AI-generated alerts surface without a page reload
     const pollTimer = setInterval(refreshAlertCount, 60_000);
 
-    fetch('/api/config')
-      .then(r => r.json())
-      .then(data => {
+    fetchConfigOnce()
+      .then(raw => {
+        if (!raw) return;
+        const data = raw as { organisationName?: string; useCasesEnabled?: boolean; chargebackEnabled?: boolean };
         if (data.organisationName) setOrgName(data.organisationName);
         setUseCasesEnabled(data.useCasesEnabled === true);
         setChargebackEnabled(data.chargebackEnabled === true);
@@ -410,12 +415,12 @@ export default function Sidebar({ theme = 'default' }: { theme?: Theme }) {
                   Departments
                 </Link>
               )}
-              {(userRole === 'admin' || userRole === 'manager' || userRole === 'viewer') && (
+              {(userRole === 'admin' || userRole === 'manager' || userRole === 'viewer') && !openaiOnly && (
                 <Link href="/pulse/code/framework" className={subLinkCls('/pulse/code/framework')}>
                   Dev Framework Alignment
                 </Link>
               )}
-              {(userRole === 'admin' || userRole === 'manager' || userRole === 'viewer') && (
+              {(userRole === 'admin' || userRole === 'manager' || userRole === 'viewer') && !openaiOnly && (
                 <Link href="/pulse/code/value" className={subLinkCls('/pulse/code/value')}>
                   Value
                 </Link>

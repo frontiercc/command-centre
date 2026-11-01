@@ -92,7 +92,7 @@ export default function GetStartedPanel() {
     if (s.complete) return null;
     return (
       <p className="m-0 text-[13px] text-[#4D4D4D]">
-        Setup is not finished ({s.done} of 5 done).{' '}
+        Setup is not finished ({s.done} of {s.total} done).{' '}
         <button type="button" className={B.link} onClick={() => post({ action: 'show' })} disabled={busy}>Show setup steps</button>
       </p>
     );
@@ -104,11 +104,12 @@ export default function GetStartedPanel() {
   const codeDone = s.claudeCodeAt !== null || marked('claude-code');
   const coworkDone = s.coworkAt !== null || marked('cowork');
   const noTelemetry = s.claudeCodeAt === null && s.coworkAt === null;
+  const openaiDone = s.openaiAt !== null || marked('openai');
 
   return (
     <Panel
       title="Get started"
-      subtitle={s.complete ? 'All 5 done' : `${s.done} of 5 done`}
+      subtitle={s.complete ? `All ${s.total} done` : `${s.done} of ${s.total} done`}
       right={s.complete
         ? <button type="button" className={B.secondary} onClick={() => post({ action: 'hide' })} disabled={busy}>Close</button>
         : <button type="button" className={B.link} onClick={() => post({ action: 'hide' })} disabled={busy}>Hide</button>}
@@ -116,6 +117,31 @@ export default function GetStartedPanel() {
       {s.complete && (
         <p className="m-0 mb-1 text-[13px] text-[#146C2E]">Setup is complete. Close this panel when you are ready.</p>
       )}
+      {s.openaiOnly ? (
+      <ol className="m-0 p-0 list-none">
+        <Step n={1} done={s.apiKey} title="Add your Claude API key" link={{ href: '/admin/security', label: 'Go to Access & Keys' }} onDone={done('api-key')} busy={busy}>
+          Command Centre&apos;s own analysis runs on Claude: briefings, work classification and summaries. It needs this key even with ChatGPT and Codex as your only products.
+        </Step>
+        <Step n={2} done={openaiDone} title="Connect ChatGPT and Codex" link={{ href: '/admin/security', label: 'Go to Access & Keys' }} onDone={done('openai')} busy={busy}>
+          {arrived(s.openaiAt) ?? <>ChatGPT Enterprise only. Add an OpenAI Admin API key with your workspace ID, and ChatGPT prompts join Work Pulse and Codex prompts join Developer Pulse. This ticks when the first prompt arrives.</>}
+        </Step>
+        <Step n={3} done={s.rubricReviewed} title="Review how work is classified" link={{ href: '/admin/pulse?tab=tiers', label: 'Go to tiers' }} onDone={done('rubric')} busy={busy}>
+          Check the tiers that grade the depth of work people hand to AI, and adjust them for your organisation if needed. This ticks once they are saved.
+        </Step>
+        <Step n={4} done={s.departmentsSet} title="Set people's departments" link={{ href: '/admin/users', label: 'Go to User Insights' }} onDone={done('departments')} busy={busy}>
+          Most views and briefings group people by department.
+        </Step>
+        <Step n={5} optional done={codeDone} title="Connect Claude Code" link={{ href: '/admin/ingestion', label: 'Go to Ingestion' }}>
+          If you also use Claude Code: Admin → Ingestion has your collector&apos;s address and bearer token, and the settings ready to copy.
+        </Step>
+        <Step n={6} optional done={coworkDone} title="Connect Claude Cowork" link={{ href: '/admin/ingestion', label: 'Go to Ingestion' }}>
+          If you also use Claude Cowork: Admin → Ingestion shows what to enter in Claude&apos;s Organization settings, under Data and Privacy → Monitoring.
+        </Step>
+        <Step n={7} optional done={s.chatAt !== null} title="Connect Claude Chat" link={{ href: '/admin/security', label: 'Go to Access & Keys' }}>
+          Claude Enterprise plans only. Add a Compliance Access Key under Enterprise APIs, and Claude Chat prompts join Work Pulse.
+        </Step>
+      </ol>
+      ) : (
       <ol className="m-0 p-0 list-none">
         <Step n={1} done={s.apiKey} title="Add your Claude API key" link={{ href: '/admin/security', label: 'Go to Access & Keys' }} onDone={done('api-key')} busy={busy}>
           Briefings, work classification and summaries use it.
@@ -145,6 +171,7 @@ export default function GetStartedPanel() {
           </Step>
         )}
       </ol>
+      )}
     </Panel>
   );
 }

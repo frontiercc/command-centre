@@ -35,11 +35,13 @@ function toPoints(values: number[], max: number): ChartPoint[] {
  * `children` (optional) render at the foot of the same panel — the Overview
  * puts the per-repo cards there.
  */
-export default function ShippingAlignmentChart({ series, children, codexPresent = false }: {
+export default function ShippingAlignmentChart({ series, children, codexPresent = false, openaiOnly = false }: {
   series: ShippingDay[];
   children?: ReactNode;
   /** Codex data exists: the AI-assisted commits include Codex's. */
   codexPresent?: boolean;
+  /** Only OpenAI is connected: the AI-assisted commits are Codex's alone. */
+  openaiOnly?: boolean;
 }) {
   if (series.length === 0) {
     return children ? <Panel title="Shipping alignment" subtitle="30 days" flush>{children}</Panel> : null;
@@ -62,7 +64,7 @@ export default function ShippingAlignmentChart({ series, children, codexPresent 
     >
       <div className="p-4 flex flex-col gap-2.5">
         <Muted>
-          Daily commits on the GitHub-tracked repos beside commits made inside {codexPresent ? 'Claude Code and Codex' : 'Claude Code'} sessions:
+          Daily commits on the GitHub-tracked repos beside commits made inside {openaiOnly ? 'Codex' : codexPresent ? 'Claude Code and Codex' : 'Claude Code'} sessions:
           same-day volumes, measured on both sides, not attribution. Different denominators: AI
           coding activity is org-wide; GitHub commits cover the tracked repos only.
         </Muted>
