@@ -200,7 +200,7 @@ export default function Sidebar({ theme = 'default' }: { theme?: Theme }) {
     code: userRole === 'admin' || userRole === 'manager' || userRole === 'viewer' || userRole === 'code' || userRole === 'pulse',
     codeOverview: canSeeCodeOverview(userRole),
     codeTeam: userRole === 'admin' || userRole === 'manager' || userRole === 'viewer' || userRole === 'code' || userRole === 'pulse',
-    codeOrg: userRole === 'admin' || userRole === 'manager' || userRole === 'viewer',
+    codeOrg: (userRole === 'admin' || userRole === 'manager' || userRole === 'viewer') && !openaiOnly,
     useCases: useCasesEnabled && (userRole === 'admin' || userRole === 'manager' || userRole === 'viewer'),
     useCasesOverview: canSeeUseCasesOverview(userRole, useCasesEnabled),
     library: userRole !== '',
