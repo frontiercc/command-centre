@@ -507,7 +507,9 @@ export default function CioPulsePage() {
             {spend && (
               <Panel title={spend.label} subtitle="7 days">
                 <p className="m-0 text-[24px] leading-7 font-semibold tabular-nums text-[#0A0A0A]">
-                  {spend.usd === null
+                  {spend.notPriced
+                    ? <span className="text-[15px] font-medium text-[#8F8F8F]">Not priced</span>
+                    : spend.usd === null
                     ? <span className="text-[15px] font-medium text-[#8F8F8F]">Not recorded yet</span>
                     : spend.usd === 0
                       ? <span className="text-[#8F8F8F]">$0.00</span>

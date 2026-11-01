@@ -16,6 +16,8 @@ export interface SpendFigure {
   /** Null: not recorded. */
   usd: number | null;
   sub: string;
+  /** True when ChatGPT has usage but none of its models has a rate: show "Not priced", never $0. */
+  notPriced?: boolean;
 }
 
 export function formatUsd(usd: number): string {
@@ -41,16 +43,20 @@ export function workSpendFigure(
   /** ChatGPT models seen with no rate, left out of the ChatGPT figure. */
   chatgptUnpriced = 0,
 ): SpendFigure | null {
+  // Usage seen, but no ChatGPT model priced: never shown as $0.
+  const chatgptNotPriced = chatgpt === 0 && chatgptUnpriced > 0;
   if (vendor === 'openai') {
     if (chatgpt === undefined) return null;
-    return { label: 'ChatGPT spend', usd: chatgpt, sub: `ChatGPT Chat and ChatGPT Work. ${CHATGPT_NOTE}${unpricedNote(chatgptUnpriced)}` };
+    return { label: 'ChatGPT spend', usd: chatgpt, notPriced: chatgptNotPriced, sub: `ChatGPT Chat and ChatGPT Work. ${CHATGPT_NOTE}${unpricedNote(chatgptUnpriced)}` };
   }
   if (cowork === undefined) return null;
   if (vendor === 'all' && typeof chatgpt === 'number') {
     return {
       label: 'Spend',
       usd: cowork + chatgpt,
-      sub: `Claude Cowork ${formatUsd(cowork)} · ChatGPT ${formatUsd(chatgpt)}. ${CHATGPT_NOTE}${unpricedNote(chatgptUnpriced)}`,
+      // Nothing priced at all: not a $0 total.
+      notPriced: chatgptNotPriced && cowork === 0,
+      sub: `Claude Cowork ${formatUsd(cowork)} · ChatGPT ${chatgptNotPriced ? 'not priced' : formatUsd(chatgpt)}. ${CHATGPT_NOTE}${unpricedNote(chatgptUnpriced)}`,
     };
   }
   return {

@@ -187,6 +187,8 @@ export async function POST(request: NextRequest) {
     'chargebackEnabled',
     'financeModelEfficiencyEnabled',
     'finopsSeatPriceMonthly',
+    'chatgptSeats',
+    'chatgptSeatPriceMonthly',
     'useCasesExtractModel',
     'useCasesIdeateModel',
     'useCasesSuggestUseContent',
@@ -248,7 +250,7 @@ export async function POST(request: NextRequest) {
       'pulseUserBriefingModel',
       // Blank = Developer Pulse briefings use the organisation briefing model again.
       'codeBriefingModel',
-      'licensedSeats', 'finopsSeatPriceMonthly',
+      'licensedSeats', 'finopsSeatPriceMonthly', 'chatgptSeats', 'chatgptSeatPriceMonthly',
       'ssoIssuerUrl', 'ssoClientId', 'ssoProviderLabel', 'ssoRedirectBaseUrl',
       'dxInstanceUrl',
       // Blank = the address falls back to CCC_COLLECTOR_ADDRESS, then localhost.

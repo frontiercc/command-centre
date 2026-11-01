@@ -109,3 +109,15 @@ describe('workSpendFigure', () => {
     expect([formatUsd(0), formatUsd(4.567), formatUsd(1234.4)]).toEqual(['$0.00', '$4.57', '$1234']);
   });
 });
+
+describe('ChatGPT with no priced model', () => {
+  it('says not priced rather than $0, and names the unpriced models', () => {
+    const all = workSpendFigure('all', 0, 0, 3)!;
+    expect(all.notPriced).toBe(true);
+    expect(all.sub).toContain('ChatGPT not priced');
+    expect(all.sub).toContain('3 ChatGPT models have no rate yet');
+    expect(workSpendFigure('openai', undefined, 0, 1)).toMatchObject({ notPriced: true });
+    expect(workSpendFigure('all', 5, 0, 2)?.notPriced).toBe(false);
+    expect(workSpendFigure('all', 5, 4, 0)?.sub).toContain("OpenAI's USD (token-based) contract rates");
+  });
+});

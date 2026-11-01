@@ -224,7 +224,7 @@ export default function PersonalPulsePage() {
             {mySpend && (
               <Figure
                 label={`${mySpend.label}, 7 days`}
-                value={spendValue(mySpend.usd)}
+                value={mySpend.notPriced ? <span className="text-[15px] font-medium text-[#8F8F8F] tracking-normal">Not priced</span> : spendValue(mySpend.usd)}
                 sub={mySpend.sub}
               />
             )}

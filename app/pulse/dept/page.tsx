@@ -266,7 +266,7 @@ export default function DeptPickerPage() {
                   {spend && (
                     <Figure
                       label={`Dept ${spend.label.charAt(0).toLowerCase()}${spend.label.slice(1)}, 7 days`}
-                      value={spendValue(spend.usd)}
+                      value={spend.notPriced ? <span className="text-[15px] font-medium text-[#8F8F8F] tracking-normal">Not priced</span> : spendValue(spend.usd)}
                       sub={spend.sub}
                     />
                   )}

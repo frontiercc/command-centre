@@ -236,6 +236,10 @@ export interface AppConfig {
   financeModelEfficiencyEnabled: boolean;
   // Wasted-seats estimate (Workflow Impact) — price per licensed seat, USD/month.
   finopsSeatPriceMonthly: string;
+  // ChatGPT Enterprise licence: OpenAI charges per assigned seat each month,
+  // apart from usage. Shown beside ChatGPT usage, never added to it. Blank = not set.
+  chatgptSeats: string;
+  chatgptSeatPriceMonthly: string;
   // Dev Framework Alignment (dormant)
   dxFrameworkEnabled: boolean;
   dxFrameworkMock: string;
@@ -488,6 +492,8 @@ export const CONFIG_KEYS: Record<keyof AppConfig, string> = {
   chargebackEnabled: 'chargeback_enabled',
   financeModelEfficiencyEnabled: 'finance_model_efficiency_enabled',
   finopsSeatPriceMonthly: 'finops_seat_price_monthly',
+  chatgptSeats: 'chatgpt_seats',
+  chatgptSeatPriceMonthly: 'chatgpt_seat_price_monthly',
   dxFrameworkEnabled: 'dx_framework_enabled',
   dxFrameworkMock: 'dx_framework_mock',
   dxApiKey: 'dx_api_key',
@@ -888,6 +894,8 @@ export async function getAllConfig(): Promise<AppConfig> {
     chargebackEnabled: resolve('chargebackEnabled', 'false') === 'true',
     financeModelEfficiencyEnabled: resolve('financeModelEfficiencyEnabled', 'false') === 'true',
     finopsSeatPriceMonthly: resolve('finopsSeatPriceMonthly', ''),
+    chatgptSeats: resolve('chatgptSeats', ''),
+    chatgptSeatPriceMonthly: resolve('chatgptSeatPriceMonthly', ''),
     // Dev Framework Alignment (dormant)
     dxFrameworkEnabled: resolve('dxFrameworkEnabled', 'false') === 'true',
     dxFrameworkMock: resolve('dxFrameworkMock', 'false'),
