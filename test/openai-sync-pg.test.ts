@@ -7,7 +7,8 @@
 // at-least-once delivery (repeats stored once), the Work-in-both-logs skip, the
 // retention floor, people created by email, flags on risky prompts, the
 // cursor, spend (hourly costs, ChatGPT reply times, Codex turns) kept apart
-// from Claude's, and that a costs-only key reads costs and nothing else.
+// from Claude's, that a costs-only key reads costs and nothing else, and
+// that people on the exclusion list are dropped.
 import { describe, it, expect, beforeAll, afterAll } from 'vitest';
 import { spawn, type ChildProcess } from 'node:child_process';
 import path from 'node:path';
@@ -50,8 +51,12 @@ describe('OpenAI sync against the stand-in export', () => {
       await setConfigValue('openaiAdminApiKey', 'mock-admin-key');
       await setConfigValue('openaiWorkspaceId', WORKSPACE_ID);
       await setConfigValue('openaiOrganizationId', ORGANIZATION_ID);
-      // Cowork kept for 2 days only: older ChatGPT prompts must not come back.
-      await setConfigValue('retentionCoworkDays', '2');
+      // Cowork kept for a short window only: older ChatGPT prompts must not
+      // come back. The stand-in is mostly quiet at weekends, so the window
+      // always reaches back over a full weekday: 2 days, 3 on a Sunday, 4 on a Monday.
+      const weekday = new Date().getUTCDay();
+      const windowDays = weekday === 0 ? 3 : weekday === 1 ? 4 : 2;
+      await setConfigValue('retentionCoworkDays', String(windowDays));
 
       const syncStartS = Math.floor(Date.now() / 1000);
       const first = await runOpenAiSync({ downloadGapMs: 0, filesPerRun: 100_000 });
@@ -111,8 +116,8 @@ describe('OpenAI sync against the stand-in export', () => {
       expect(costs.some(c => c.product === 'chatgpt' && c.billed_in === 'USD')).toBe(true);
       expect(costs.some(c => c.product === 'chatgpt' && c.billed_in === 'CREDITS')).toBe(true);
       expect(costs.every(c => c.usd > 0)).toBe(true);
-      // ChatGPT costs honour the 2-day Cowork window, like its prompts.
-      for (const c of costs.filter(c => c.product === 'chatgpt')) expect(c.oldest + 3600).toBeGreaterThan(syncStartS - 2 * 86400);
+      // ChatGPT costs honour the Cowork window, like its prompts.
+      for (const c of costs.filter(c => c.product === 'chatgpt')) expect(c.oldest + 3600).toBeGreaterThan(syncStartS - windowDays * 86400);
       const costPeople = await sql.all<{ n: number }>(`SELECT COUNT(*) AS n FROM openai_costs WHERE product = 'chatgpt' AND user_id IS NOT NULL`);
       expect(costPeople[0].n).toBeGreaterThan(0);
       const replies = await sql.all<{ source: string; n: number }>(
@@ -156,14 +161,14 @@ describe('OpenAI sync against the stand-in export', () => {
       );
       expect(workTwice[0].n).toBe(0);
 
-      // Retention floor: no ChatGPT prompt older than the 2-day Cowork window,
+      // Retention floor: no ChatGPT prompt older than the Cowork window,
       // while Codex (Claude Code window, 90 days) keeps the full 5 days.
       const nowS = syncStartS;
       const oldest = await sql.all<{ source: string; oldest: number }>(
         `SELECT source, MIN(occurred_at) AS oldest FROM cowork_messages GROUP BY source`,
       );
       for (const r of oldest) {
-        if (r.source.startsWith('chatgpt')) expect(r.oldest).toBeGreaterThanOrEqual(nowS - 2 * 86400);
+        if (r.source.startsWith('chatgpt')) expect(r.oldest).toBeGreaterThanOrEqual(nowS - windowDays * 86400);
       }
       expect(oldest.find(r => r.source === 'codex')!.oldest).toBeLessThan(nowS - 3 * 86400);
 
@@ -207,7 +212,7 @@ describe('OpenAI sync against the stand-in export', () => {
       if (codexRisky.some(r => r.content_full.includes('personal Dropbox'))) expect(reasonFor('personal Dropbox')).toContain('shadow_it');
       if (codexRisky.some(r => r.content_full.includes('Disable logging'))) expect(reasonFor('Disable logging')).toContain('Intent detected');
       // Every flagged ChatGPT and Codex prompt raises an alert. How many risky
-      // ChatGPT prompts fall inside the 2-day window depends on the date, and
+      // ChatGPT prompts fall inside the window depends on the date, and
       // on some dates there are none, so this checks every source present.
       const flaggedBySource = await sql.all<{ source: string; n: number }>(
         `SELECT source, COUNT(*) AS n FROM cowork_messages WHERE flagged = 1 GROUP BY source`,
@@ -276,6 +281,47 @@ describe('OpenAI sync against the stand-in export', () => {
       expect(Object.keys(JSON.parse(await getConfigValue('openaiSyncCursors')))).toEqual(['COSTS']);
 
       // Let the fire-and-forget alert writes settle before the database goes.
+      await new Promise(r => setTimeout(r, 500));
+    } finally {
+      await cleanup();
+    }
+  }, 300_000);
+
+  it('drops everything for people on the exclusion list', async () => {
+    const { createTestDatabase } = await import('./helpers/db');
+    const { sql, cleanup } = await createTestDatabase();
+    try {
+      const { setConfigValue } = await import('@/lib/config');
+      const { runOpenAiSync } = await import('@/lib/openai/sync');
+      await setConfigValue('openaiAdminApiKey', 'mock-admin-key');
+      await setConfigValue('openaiWorkspaceId', WORKSPACE_ID);
+      await setConfigValue('openaiOrganizationId', ORGANIZATION_ID);
+      // Same key and format as Claude's telemetry; matched ignoring case.
+      await setConfigValue('otelExcludedEmails', JSON.stringify(['Nadia.Okafor@acmecorp.example']));
+
+      const stats = await runOpenAiSync({ downloadGapMs: 0, filesPerRun: 100_000 });
+      expect(stats.errors).toEqual([]);
+      expect(stats.excluded).toBeGreaterThan(0);
+      expect(stats.prompts.chatgpt_chat).toBeGreaterThan(0);
+
+      const person = await sql.all<{ n: number }>(`SELECT COUNT(*) AS n FROM users WHERE lower(email) = 'nadia.okafor@acmecorp.example'`);
+      expect(person[0].n).toBe(0);
+      for (const table of ['cowork_messages', 'openai_costs', 'openai_replies', 'cowork_skill_invocations', 'cowork_mcp_invocations']) {
+        const rows = await sql.all<{ n: number }>(
+          `SELECT COUNT(*) AS n FROM ${table} t JOIN users u ON u.id = t.user_id WHERE lower(u.email) = 'nadia.okafor@acmecorp.example'`);
+        expect(rows[0].n, table).toBe(0);
+      }
+      // Everyone else is still stored.
+      const others = await sql.all<{ n: number }>(`SELECT COUNT(DISTINCT user_id) AS n FROM cowork_messages`);
+      expect(others[0].n).toBeGreaterThan(1);
+
+      // Last seen is each person's latest prompt, not the moment they were created.
+      const stale = await sql.all<{ n: number }>(
+        `SELECT COUNT(*) AS n FROM users u
+           JOIN (SELECT user_id, MAX(occurred_at) AS latest FROM cowork_messages GROUP BY user_id) m ON m.user_id = u.id
+          WHERE u.last_seen_at IS DISTINCT FROM GREATEST(u.first_seen_at, m.latest)`);
+      expect(stale[0].n).toBe(0);
+
       await new Promise(r => setTimeout(r, 500));
     } finally {
       await cleanup();

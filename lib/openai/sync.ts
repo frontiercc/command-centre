@@ -89,6 +89,8 @@ export interface OpenAiSyncStats {
   noPerson: number;
   /** Records older than the backfill or retention window. */
   tooOld: number;
+  /** Records for people on the exclusion list (Admin → Ingestion), dropped unstored. */
+  excluded: number;
   /** Skill uses (ChatGPT) and connector calls (Codex, ChatGPT Work) stored. */
   skillUses: number;
   connectorCalls: number;
@@ -105,7 +107,7 @@ export interface OpenAiSyncStats {
 export function emptyStats(): OpenAiSyncStats {
   return {
     files: 0, records: 0, prompts: { chatgpt_chat: 0, chatgpt_work: 0, codex: 0 },
-    repeats: 0, workInCodexLog: 0, noPerson: 0, tooOld: 0, skillUses: 0, connectorCalls: 0,
+    repeats: 0, workInCodexLog: 0, noPerson: 0, tooOld: 0, excluded: 0, skillUses: 0, connectorCalls: 0,
     replies: 0, codexTurns: 0, costRecords: 0, codexActions: 0, badLines: 0, errors: [],
   };
 }
@@ -489,6 +491,18 @@ export function interpretSpend(raw: unknown, floors: { cowork: number; code: num
   return null;
 }
 
+/** The Admin → Ingestion exclusion list (a JSON array of emails), lower-cased. Malformed reads as empty. */
+export function parseExcludedEmails(raw: string | null | undefined): Set<string> {
+  if (!raw) return new Set();
+  try {
+    const list: unknown = JSON.parse(raw);
+    if (!Array.isArray(list)) return new Set();
+    return new Set(list.filter((e): e is string => typeof e === 'string').map(e => e.trim().toLowerCase()).filter(Boolean));
+  } catch {
+    return new Set();
+  }
+}
+
 function displayNameFromEmail(email: string): string {
   const local = email.split('@')[0];
   return local.split(/[._-]/).filter(Boolean).map(p => p.charAt(0).toUpperCase() + p.slice(1)).join(' ');
@@ -515,6 +529,7 @@ async function storeRecords(
   floors: { cowork: number; code: number },
   stats: OpenAiSyncStats,
   userCache: Map<string, string>,
+  excluded: ReadonlySet<string> = new Set(),
 ): Promise<PendingAlert[]> {
   const nowS = Math.floor(Date.now() / 1000);
   const customCategories = await getCustomCategories();
@@ -539,6 +554,13 @@ async function storeRecords(
       return resolved.userId;
     };
 
+    // The same exclusion list as Claude's telemetry: nothing is written for
+    // these people, no prompt, activity or spend, and no alert is raised.
+    const isExcluded = (email: string | null) => !!email && excluded.has(email.trim().toLowerCase());
+    // Each person's latest prompt in this file, written once at the end: the
+    // OTel receivers keep users.last_seen_at current, and so does this.
+    const lastSeen = new Map<string, number>();
+
     for (const raw of records) {
       stats.records++;
       const it = interpretRecord(raw, floors);
@@ -548,8 +570,10 @@ async function storeRecords(
         else if (it.reason === 'too_old') stats.tooOld++;
         else {
           const activity = interpretActivity(raw, floors);
-          if (activity) await storeActivity(tx, activity, await personFor(activity.email, activity.surface), stats);
           const action = interpretCodexAction(raw, floors);
+          const spend = interpretSpend(raw, floors);
+          if (isExcluded(activity?.email ?? action?.email ?? spend?.email ?? null)) { stats.excluded++; continue; }
+          if (activity) await storeActivity(tx, activity, await personFor(activity.email, activity.surface), stats);
           if (action) {
             const inserted = await tx.insert(schema.codexActions).values({
               id: action.id, user_id: await personFor(action.email, 'code'), session_id: action.sessionId,
@@ -558,7 +582,6 @@ async function storeRecords(
             }).onConflictDoNothing().returning({ id: schema.codexActions.id });
             if (inserted.length > 0) stats.codexActions++;
           }
-          const spend = interpretSpend(raw, floors);
           if (spend) {
             const surface = spend.kind === 'turn' || (spend.kind === 'cost' && spend.product === 'codex') ? 'code' : 'cowork';
             await storeSpend(tx, spend, spend.email ? await personFor(spend.email, surface) : null, stats);
@@ -567,6 +590,7 @@ async function storeRecords(
         continue;
       }
       const row = it.row;
+      if (isExcluded(row.email)) { stats.excluded++; continue; }
       const userId = await personFor(row.email, row.surface);
 
       const piiMatches = detectPiiWithMatches(row.text);
@@ -593,6 +617,7 @@ async function storeRecords(
 
       if (inserted.length === 0) { stats.repeats++; continue; }
       stats.prompts[row.source]++;
+      lastSeen.set(userId, Math.max(lastSeen.get(userId) ?? 0, row.occurredAt));
 
       if (row.surface === 'cowork') {
         // One Cowork session per ChatGPT conversation, as the OTel receiver
@@ -623,6 +648,14 @@ async function storeRecords(
       if (piiMatches.length > 0 || intentMatches.length > 0) {
         pending.push({ userId, source: row.source, surface: row.surface, messageId: row.id, text: row.text, pii: piiMatches, intent: intentMatches });
       }
+    }
+
+    // The prompt's own time, never the sync's (the export runs hours behind),
+    // and never moved backwards by an older file.
+    for (const [userId, at] of lastSeen) {
+      await tx.update(schema.users)
+        .set({ last_seen_at: sql`GREATEST(COALESCE(${schema.users.last_seen_at}, 0), ${at})` })
+        .where(eq(schema.users.id, userId));
     }
   });
 
@@ -764,6 +797,7 @@ export async function runOpenAiSync(opts: RunOptions = {}): Promise<OpenAiSyncSt
   const scopeFor = (t: OpenAiEventType): LogScope =>
     t === 'COSTS' ? { kind: 'organization', id: organizationId } : { kind: 'workspace', id: workspaceId };
   const userCache = new Map<string, string>();
+  const excluded = parseExcludedEmails(await getConfigValue('otelExcludedEmails'));
 
   for (const [index, eventType] of types.entries()) {
     const scope = scopeFor(eventType);
@@ -782,7 +816,7 @@ export async function runOpenAiSync(opts: RunOptions = {}): Promise<OpenAiSyncSt
           const text = await downloadLogFile(apiKey, scope, file.id);
           const { records, badLines } = parseJsonl(text);
           stats.badLines += badLines;
-          const alerts = await storeRecords(client, records, floors, stats, userCache);
+          const alerts = await storeRecords(client, records, floors, stats, userCache, excluded);
           stats.files++;
           budget--;
           share--;

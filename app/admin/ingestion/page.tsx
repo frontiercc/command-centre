@@ -4,6 +4,7 @@
 'use client';
 
 import { useEffect, useState } from 'react';
+import Link from 'next/link';
 import TopBar from '@/components/layout/TopBar';
 import LoadingSpinner from '@/components/shared/LoadingSpinner';
 import { useToast } from '@/components/shared/ToastProvider';
@@ -17,7 +18,16 @@ interface OtelStatus {
   lastOtelEventAt: number | null;
   otelUserCount: number;
   newUsersToday: number;
-  recentOtelUsers: Array<{ id: string; display_name: string | null; email: string | null; department: string | null; last_seen_at: number | null }>;
+  recentOtelUsers: Array<{ id: string; display_name: string | null; email: string | null; department: string | null; last_seen_at: number | null; source: string | null }>;
+  openai: {
+    keySet: boolean;
+    lastSyncAt: number | null;
+    lastSync: { prompts: number; excluded: number; errors: number } | null;
+    lastRecordAt: number | null;
+    people: number;
+    newToday: number;
+    intervalMinutes: number;
+  };
 }
 
 
@@ -75,6 +85,18 @@ export default function IngestionPage() {
     return ageMs < 10 * 60 * 1000 ? 'green' : 'amber';
   })();
 
+  // OpenAI export status: not connected is a choice, not a fault.
+  const openaiStatus = (() => {
+    const o = otelStatus?.openai;
+    if (!o || !o.keySet) return { tone: 'off' as const, text: 'Not connected' };
+    if (!o.lastSyncAt) return { tone: 'amber' as const, text: 'Key set, awaiting the first sync' };
+    if (o.lastSync && o.lastSync.errors > 0) return { tone: 'red' as const, text: 'The last sync reported errors' };
+    // A sync is late after three missed runs.
+    const late = Date.now() - o.lastSyncAt * 1000 > (o.intervalMinutes * 3 + 10) * 60 * 1000;
+    if (late) return { tone: 'amber' as const, text: 'No sync recently' };
+    return { tone: 'green' as const, text: o.lastRecordAt ? 'Syncing, ChatGPT and Codex records arriving' : 'Syncing, no records yet' };
+  })();
+
   const handlePrepopulate = async () => {
     const lines = csvInput.trim().split('\n').filter(Boolean);
     const users = lines.map(line => {
@@ -130,7 +152,7 @@ export default function IngestionPage() {
 
   return (
     <>
-      <TopBar title="Ingestion" subtitle="OpenTelemetry + Enterprise API ingestion, the primary capture paths" />
+      <TopBar title="Ingestion" subtitle="Claude through OpenTelemetry and Anthropic's APIs, ChatGPT and Codex through OpenAI's export" />
       <PageBody className="max-w-[1000px]">
 
         {pageLoading && <LoadingSpinner />}
@@ -177,12 +199,44 @@ export default function IngestionPage() {
               </div>
             </Panel>
 
+            {/* OpenAI export status: ChatGPT and Codex */}
+            <Panel title="OpenAI export status" subtitle="ChatGPT and Codex">
+              <div className="flex items-start gap-3">
+                <span
+                  className="mt-1 h-2.5 w-2.5 rounded-full flex-shrink-0"
+                  style={{ background: openaiStatus.tone === 'green' ? C.good : openaiStatus.tone === 'amber' ? C.medium : openaiStatus.tone === 'red' ? C.high : C.input }}
+                />
+                <div className="min-w-0">
+                  <p className={cx('m-0 text-[14px] font-semibold',
+                    openaiStatus.tone === 'green' ? 'text-[#1A7F37]' :
+                    openaiStatus.tone === 'amber' ? 'text-[#B54708]' :
+                    openaiStatus.tone === 'red' ? 'text-[#B42318]' : 'text-[#333333]')}>
+                    {openaiStatus.text}
+                  </p>
+                  {otelStatus?.openai.keySet ? (
+                    <p className="m-0 mt-0.5 text-[13px] text-[#8F8F8F] tabular-nums">
+                      {otelStatus.openai.people} {otelStatus.openai.people === 1 ? 'person' : 'people'} seen &middot; {otelStatus.openai.newToday} new today
+                      {otelStatus.openai.lastSyncAt ? ` · Last sync ${new Date(otelStatus.openai.lastSyncAt * 1000).toLocaleString()}` : ''}
+                      {otelStatus.openai.lastSync ? ` · ${otelStatus.openai.lastSync.prompts} new prompt${otelStatus.openai.lastSync.prompts === 1 ? '' : 's'} in it` : ''}
+                      {otelStatus.openai.lastSync && otelStatus.openai.lastSync.excluded > 0 ? `, ${otelStatus.openai.lastSync.excluded} excluded` : ''}
+                      {otelStatus.openai.lastRecordAt ? ` · Latest record ${new Date(otelStatus.openai.lastRecordAt * 1000).toLocaleString()}` : ''}
+                    </p>
+                  ) : null}
+                  <p className="m-0 mt-1 text-[13px] text-[#666666]">
+                    OpenAI&apos;s export brings ChatGPT prompts into Work Pulse and Codex prompts into Developer Pulse, a few hours behind.
+                    No collector is involved. The admin key and workspace are set under{' '}
+                    <Link href="/admin/security" className="text-[#245BF3] hover:underline">Security</Link>.
+                  </p>
+                </div>
+              </div>
+            </Panel>
+
             <IdentityConflictsCard />
 
-            {/* Recent OTel Users */}
-            <Panel title="Recent OTel users" flush>
+            {/* Recent users, from either capture path */}
+            <Panel title="Recent users" subtitle="First seen through Claude's telemetry or OpenAI's export" flush>
               {(otelStatus?.recentOtelUsers ?? []).length === 0 ? (
-                <div className="p-4"><Muted>No OTel users yet.</Muted></div>
+                <div className="p-4"><Muted>No users yet.</Muted></div>
               ) : (
                 <div className="overflow-x-auto">
                   <table className={T.table}>
@@ -191,6 +245,7 @@ export default function IngestionPage() {
                         <th className={T.th}>Name</th>
                         <th className={T.th}>Email</th>
                         <th className={T.th}>Department</th>
+                        <th className={T.th}>First seen through</th>
                         <th className={T.th}>Last seen</th>
                       </tr>
                     </thead>
@@ -200,6 +255,7 @@ export default function IngestionPage() {
                           <td className={T.td}>{u.display_name || '—'}</td>
                           <td className={cx(T.tdMute, 'font-mono text-[13px]')}>{u.email || '—'}</td>
                           <td className={T.tdMute}>{u.department || '—'}</td>
+                          <td className={cx(T.tdMute, 'whitespace-nowrap')}>{u.source === 'openai' ? 'OpenAI export' : 'Claude telemetry'}</td>
                           <td className={cx(T.tdMute, 'tabular-nums whitespace-nowrap')}>
                             {u.last_seen_at ? new Date(u.last_seen_at * 1000).toLocaleString() : '—'}
                           </td>
@@ -212,11 +268,12 @@ export default function IngestionPage() {
             </Panel>
 
             {/* Pre-populate Users */}
-            <Panel title="Pre-populate OTel users">
+            <Panel title="Pre-populate users">
               <div className="flex flex-col gap-3">
                 <label htmlFor="otel-prepopulate" className="text-[13px] text-[#666666] leading-5">
                   Paste a CSV list of users (one per line: <code className="text-[12px] font-mono bg-[#F2F2F2] px-1 rounded-[6px]">email,display_name,department</code>).
-                  Rows where the email already exists are skipped.
+                  Rows where the email already exists are skipped. Each person is matched by email when they first appear in
+                  Claude&apos;s telemetry or OpenAI&apos;s export, so their name and department are in place from the start.
                 </label>
                 <textarea
                   id="otel-prepopulate"
@@ -245,10 +302,11 @@ export default function IngestionPage() {
             </Panel>
 
             {/* Exclude OTel Users */}
-            <Panel title="Exclude users from OTel monitoring">
+            <Panel title="Exclude people from monitoring">
               <div className="flex flex-col gap-3">
                 <label htmlFor="otel-excluded" className="text-[13px] text-[#666666] leading-5">
-                  OTel events arriving for these email addresses will be silently dropped: no data written, no alerts fired.
+                  Claude telemetry and OpenAI export records (ChatGPT and Codex) for these email addresses are silently dropped:
+                  no data written, no alerts fired. The match ignores capital letters.
                   Use this for executives, risk teams, or other roles that should not be monitored.
                   One email address per line.
                 </label>
