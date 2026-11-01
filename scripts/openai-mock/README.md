@@ -39,7 +39,7 @@ Add `--write <folder>` to also save the files available at start-up, to read the
 
 Check each of these on a real workspace before release:
 
-- **Model names and prices.** `gpt-5.5`, `gpt-5-mini`, `gpt-5.5-pro`, `gpt-5.5-codex` and `gpt-5-codex-mini`, priced with made-up credit rates at $0.04 a credit.
+- **Model names and prices.** Models take the names on OpenAI's rate cards in lower case with hyphens (`gpt-6`, `gpt-5.3`, `gpt-6-pro`, `gpt-6.1-sol`, `gpt-6-astra`, `gpt-6.1-terra`, `gpt-5.6-sol`); whether the real export names them so is unconfirmed. Credits use the credit rate card's per-token rates at $0.04 a credit, which equals the token-based USD card. On real credit plans Chat is charged per message, not per token.
 - **ChatGPT Work in both logs.** OpenAI says Work appears in both `CONVERSATION_MESSAGE` and `CODEX_LOG`. It documents no shared identifier, so the mock gives none; the two can only be matched on person, prompt text and time.
 - **Codex token counts.** The mock treats cached input as part of input and reasoning as part of output.
 - **Wording.** Error message text, OpenAI's work labels and cost SKU names are illustrative.

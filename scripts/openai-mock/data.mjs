@@ -236,20 +236,26 @@ const CODEX_REPLIES = [
   'The suite passes. Two snapshots changed because the new version formats time zones differently, and the new output is correct.',
 ];
 
-const CHAT_MODELS = [['gpt-5.5', 70], ['gpt-5-mini', 22], ['gpt-5.5-pro', 8]];
-const WORK_MODELS = [['gpt-5.5', 85], ['gpt-5.5-pro', 15]];
-const CODEX_MODELS = [['gpt-5.5-codex', 75], ['gpt-5-codex-mini', 25]];
+// Model names as OpenAI's rate cards name them (lower case, hyphens). Whether
+// the real export names them exactly so is unconfirmed (README).
+const CHAT_MODELS = [['gpt-6', 70], ['gpt-5.3', 22], ['gpt-6-pro', 8]];
+const WORK_MODELS = [['gpt-6.1-sol', 85], ['gpt-6-astra', 15]];
+const CODEX_MODELS = [['gpt-6.1-sol', 75], ['gpt-6.1-terra', 25]];
 const CLIENT_TYPES = [['desktop_web', 50], ['macos_app', 20], ['windows_app', 15], ['ios_app', 10], ['android_app', 5]];
 const CODEX_CLIENTS = [['CODEX_CLI', 40], ['CODEX_IDE_VSCODE', 30], ['CODEX_DESKTOP_APP', 15], ['CODEX_IDE_JETBRAINS_INTELLIJ_IDEA', 10], ['CODEX_WEB', 5]];
 
 // Mock per-million-token prices in credits, used only to build COSTS and
 // CODEX_TURN figures.
 const CREDITS_PER_MTOK = {
-  'gpt-5.5': { in: 31.25, cached: 3.125, out: 250 },
-  'gpt-5-mini': { in: 6.25, cached: 0.625, out: 50 },
-  'gpt-5.5-pro': { in: 375, cached: 375, out: 3000 },
-  'gpt-5.5-codex': { in: 31.25, cached: 3.125, out: 250 },
-  'gpt-5-codex-mini': { in: 6.25, cached: 0.625, out: 50 },
+  // OpenAI's credit-based rate card (Work and Codex, credits per 1M tokens).
+  // At $0.04 a credit these equal its token-based USD card. Chat is charged
+  // per message on credit plans; the mock prices it by token for simplicity.
+  'gpt-6': { in: 50, cached: 5, out: 250 },
+  'gpt-5.3': { in: 43.75, cached: 4.375, out: 350 },
+  'gpt-6-pro': { in: 250, cached: 25, out: 1250 },
+  'gpt-6.1-sol': { in: 50, cached: 2.5, out: 250 },
+  'gpt-6-astra': { in: 250, cached: 25, out: 1250 },
+  'gpt-6.1-terra': { in: 25, cached: 1.25, out: 125 },
 };
 
 function envelope(type, rng, timestampMs, actor) {
@@ -555,7 +561,7 @@ export function buildEvents({ nowMs, days = 14, horizonHours = 24, seed = 42 }) 
     if (t >= endMs) continue;
     const sessionId = rng.uuid();
     const turnId = rng.uuid();
-    const model = 'gpt-5-codex-mini';
+    const model = 'gpt-6.1-terra';
     push('CODEX_LOG', t, {
       ...envelope('CODEX_LOG', rng, t, automator),
       event_type: 'PROMPT_SENT', client_id: 'CODEX_SERVICE_EXEC', workspace_id: WORKSPACE_ID,
@@ -675,10 +681,10 @@ export function buildEvents({ nowMs, days = 14, horizonHours = 24, seed = 42 }) 
         payload: {
           day: new Date(hour).toISOString().slice(0, 10), hour: 11, organization_id: ORGANIZATION_ID,
           identity: { groups: [], agent: { id: 'agt_procurement', name: 'Procurement Review Agent' } },
-          product: 'workspace_agents', surface: 'chatgpt', client: 'web', model: 'gpt-5.5', service_tier: 'default', reasoning: 'medium',
+          product: 'workspace_agents', surface: 'chatgpt', client: 'web', model: 'gpt-5.6-sol', service_tier: 'default', reasoning: 'medium',
           measures: {
             usage: { text_input_tokens: 42_000, text_cached_input_tokens: 0, text_output_tokens: 3_100 },
-            billing: [{ sku: 'workspace_agents.gpt-5.5', quantity: { value: 45_100, unit: 'tokens' }, cost: { value: 2.09, unit: 'CREDITS' }, estimated_cost_usd: { value: 0.0836, unit: 'USD' } }],
+            billing: [{ sku: 'workspace_agents.gpt-5.6-sol', quantity: { value: 45_100, unit: 'tokens' }, cost: { value: 5.75, unit: 'CREDITS' }, estimated_cost_usd: { value: 0.23, unit: 'USD' } }],
           },
         },
       },
