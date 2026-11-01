@@ -9,7 +9,7 @@ import { buildChargeback, type ChargebackReport } from '@/lib/finance/chargeback
 import { currentPeriod } from '@/lib/finance/period';
 import { buildFinopsProjection } from '@/lib/finance/finops-projection';
 import { buildInsightFacts, composeInsightNarrative, type InsightFacts } from '@/lib/finance/insights';
-import { getSeatsSummary } from '@/lib/finance/seats';
+import { getSeatsSummary, getChatgptSeatsSummary } from '@/lib/finance/seats';
 
 export const dynamic = 'force-dynamic';
 
@@ -69,6 +69,9 @@ export async function GET(request: NextRequest) {
   // the chargeback report. Never touches grandTotalUsd/buildChargeback/close
   // snapshots — computed here, not in lib/finance/chargeback.ts.
   const seats = await getSeatsSummary(nowS).catch(() => null);
+  // The ChatGPT licence: OpenAI charges it per seat, apart from usage, so it
+  // sits beside the usage figures and is never added to grandTotalUsd.
+  const chatgptSeats = await getChatgptSeatsSummary(nowS).catch(() => null);
 
-  return NextResponse.json({ ...current, projection, insight, seats });
+  return NextResponse.json({ ...current, projection, insight, seats, chatgptSeats });
 }

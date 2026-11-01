@@ -3,7 +3,11 @@
 
 /**
  * Chargeback rollup engine — attributes measured Code + Cowork API spend to
- * departments ("cost centres") for a given calendar-month period.
+ * departments ("cost centres") for a given calendar-month period, plus
+ * ChatGPT and Codex spend when the OpenAI export is connected (priced from
+ * tokens at OpenAI's USD rates, exactly as Work Pulse and Developer Pulse
+ * price them: lib/openai/spend.ts). Each person's total is all four; the
+ * report also carries a Claude / OpenAI split.
  *
  * Money never gets fabricated: a model with no rate entry contributes $0 but
  * is surfaced in `unpricedModels` (never silently priced at $0 and hidden).
@@ -33,6 +37,9 @@ export interface ChargebackUser {
   displayName: string;
   codeUsd: number;
   coworkUsd: number;
+  /** ChatGPT (Chat and Work) and Codex, at OpenAI's USD token rates. Absent on closed snapshots from before OpenAI. */
+  chatgptUsd?: number;
+  codexUsd?: number;
   totalUsd: number;
   /** Per-user Code token totals (exact, includes unpriced-model usage). */
   tokens: CodeTokens;
@@ -44,6 +51,8 @@ export interface ChargebackCentre {
   totalUsd: number;
   codeUsd: number;
   coworkUsd: number;
+  chatgptUsd?: number;
+  codexUsd?: number;
   users: ChargebackUser[];
 }
 
@@ -84,6 +93,13 @@ export interface ChargebackReport {
    * query, no re-summation). Zero-spend users are excluded.
    */
   leaderboard: LeaderboardEntry[];
+  /**
+   * Claude / OpenAI split of grandTotalUsd. Absent when the OpenAI export has
+   * never sent a ChatGPT cost record or a Codex turn (and on old snapshots).
+   */
+  vendors?: { claudeUsd: number; openaiUsd: number };
+  /** ChatGPT and Codex models seen with no rate: their usage is not in any figure. */
+  openaiUnpricedModels?: string[];
 }
 
 export interface LeaderboardEntry {
@@ -92,6 +108,8 @@ export interface LeaderboardEntry {
   totalUsd: number;
   codeUsd: number;
   coworkUsd: number;
+  chatgptUsd?: number;
+  codexUsd?: number;
 }
 
 /**
@@ -99,8 +117,10 @@ export interface LeaderboardEntry {
  * - 'actual'   — measured spend, e.g. Cowork's stored per-request `cost_usd`.
  * - 'estimate' — priced from token counts via list-rate model tables, e.g. Code.
  * - 'dormant'  — surface not yet captured/priced (Chat, Phase B).
+ * - 'openai_rates' — ChatGPT and Codex: tokens priced at OpenAI's USD rates
+ *   for token-based Enterprise contracts.
  */
-export type SurfaceBasis = 'actual' | 'estimate' | 'dormant';
+export type SurfaceBasis = 'actual' | 'estimate' | 'dormant' | 'openai_rates';
 
 export interface SurfaceSpend {
   usd: number | null;
@@ -112,6 +132,9 @@ export interface SurfaceSummary {
   chat: SurfaceSpend;
   code: SurfaceSpend;
   cowork: SurfaceSpend;
+  /** Present only with OpenAI data (see ChargebackReport.vendors). */
+  chatgpt?: SurfaceSpend;
+  codex?: SurfaceSpend;
   total: { usd: number; tokens: CodeTokens };
 }
 
@@ -122,6 +145,8 @@ interface MutableUser {
   displayName: string;
   codeUsd: number;
   coworkUsd: number;
+  chatgptUsd: number;
+  codexUsd: number;
   tokens: CodeTokens;
 }
 
@@ -169,7 +194,7 @@ export async function buildChargeback(period: string, nowS: number = Math.floor(
     const key = userId ?? NULL_USER_KEY;
     let u = users.get(key);
     if (!u) {
-      u = { userId: key, displayName: key, codeUsd: 0, coworkUsd: 0, tokens: { input: 0, output: 0, cacheWrite: 0, cacheRead: 0 } };
+      u = { userId: key, displayName: key, codeUsd: 0, coworkUsd: 0, chatgptUsd: 0, codexUsd: 0, tokens: { input: 0, output: 0, cacheWrite: 0, cacheRead: 0 } };
       users.set(key, u);
     }
     return u;
@@ -287,6 +312,61 @@ export async function buildChargeback(period: string, nowS: number = Math.floor(
     coworkSurfaceTokens.cacheRead += Number(parsed.cacheReadTokens) || 0;
   }
 
+  // --- ChatGPT and Codex (OpenAI export) ---
+  // Same pricing as lib/openai/spend.ts: ChatGPT is the tokens in OpenAI's
+  // hourly cost records (product 'chatgpt'; Codex cost records are left out,
+  // since Codex is priced per turn), Codex each turn's tokens, both from the
+  // rates table. A model with no rate is named, never counted as $0. Tokens
+  // stay apart from Claude's token totals. Bigint/numeric sums are strings.
+  const openaiSeen = await rawAll<{ x: number }>(
+    db,
+    sql`SELECT 1 AS x WHERE EXISTS (SELECT 1 FROM openai_costs WHERE product = 'chatgpt')
+                        OR EXISTS (SELECT 1 FROM codex_turns)`
+  );
+  const hasOpenAi = openaiSeen.length > 0;
+  const openaiUnpriced = new Set<string>();
+  let chatgptSurfaceUsd: number | null = null;
+  let codexSurfaceUsd = 0;
+  const chatgptTokens: CodeTokens = { input: 0, output: 0, cacheWrite: 0, cacheRead: 0 };
+  const codexTokens: CodeTokens = { input: 0, output: 0, cacheWrite: 0, cacheRead: 0 };
+  if (hasOpenAi) {
+    const anyChatgpt = await rawAll<{ x: number }>(db, sql`SELECT 1 AS x FROM openai_costs WHERE product = 'chatgpt' LIMIT 1`);
+    if (anyChatgpt.length > 0) chatgptSurfaceUsd = 0;
+    const openaiRows = async (query: unknown) => rawAll<{
+      user_id: string | null; model: string | null;
+      inp: number | string | null; cached: number | string | null; outp: number | string | null;
+    }>(db, query);
+    const priceInto = (
+      rows: Awaited<ReturnType<typeof openaiRows>>,
+      tokens: CodeTokens,
+      add: (u: MutableUser, usd: number) => void,
+    ) => {
+      for (const row of rows) {
+        const inp = Number(row.inp ?? 0), cached = Number(row.cached ?? 0), outp = Number(row.outp ?? 0);
+        tokens.input += inp;
+        tokens.output += outp;
+        tokens.cacheRead += cached;
+        // Listed even when unpriced, as Claude Code's users are.
+        const u = getUser(row.user_id);
+        const usd = row.model === null ? null : priceTokens(row.model, {
+          inputTokens: inp, outputTokens: outp, cacheReadTokens: cached, cacheCreationTokens: 0,
+        }, rates);
+        if (usd === null) { openaiUnpriced.add(row.model ?? '(no model)'); continue; }
+        add(u, usd);
+      }
+    };
+    priceInto(await openaiRows(sql`
+      SELECT user_id, model, SUM(input_tokens) AS inp, SUM(cached_input_tokens) AS cached, SUM(output_tokens) AS outp
+      FROM openai_costs
+      WHERE product = 'chatgpt' AND hour_start >= ${start} AND hour_start < ${end}
+      GROUP BY user_id, model`), chatgptTokens, (u, usd) => { u.chatgptUsd += usd; chatgptSurfaceUsd = (chatgptSurfaceUsd ?? 0) + usd; });
+    priceInto(await openaiRows(sql`
+      SELECT user_id, model, SUM(uncached_input_tokens) AS inp, SUM(cached_input_tokens) AS cached, SUM(output_tokens) AS outp
+      FROM codex_turns
+      WHERE started_at >= ${start} AND started_at < ${end}
+      GROUP BY user_id, model`), codexTokens, (u, usd) => { u.codexUsd += usd; codexSurfaceUsd += usd; });
+  }
+
   // --- Cowork cost coverage ---
   // COUNT/SUM come back as bigint → STRING on Postgres; Number()-coerce both.
   const coverageRows = await rawAll<{ total: number | string | null; with_cost: number | string | null }>(
@@ -319,9 +399,11 @@ export async function buildChargeback(period: string, nowS: number = Math.floor(
   const unallocatedUsers: ChargebackUser[] = [];
   let grandTotalUsd = 0;
 
+  let openaiTotalUsd = 0;
   for (const u of users.values()) {
-    const totalUsd = u.codeUsd + u.coworkUsd;
+    const totalUsd = u.codeUsd + u.coworkUsd + u.chatgptUsd + u.codexUsd;
     grandTotalUsd += totalUsd;
+    openaiTotalUsd += u.chatgptUsd + u.codexUsd;
 
     const isNullUser = u.userId === NULL_USER_KEY;
     const userRow = isNullUser ? undefined : deptByUserId.get(u.userId);
@@ -334,6 +416,7 @@ export async function buildChargeback(period: string, nowS: number = Math.floor(
       displayName,
       codeUsd: u.codeUsd,
       coworkUsd: u.coworkUsd,
+      ...(hasOpenAi ? { chatgptUsd: u.chatgptUsd, codexUsd: u.codexUsd } : {}),
       totalUsd,
       tokens: u.tokens,
     };
@@ -345,12 +428,16 @@ export async function buildChargeback(period: string, nowS: number = Math.floor(
       const centreCode = mapped ? mapped.code : null;
       let centre = centreMap.get(centreName);
       if (!centre) {
-        centre = { name: centreName, code: centreCode, totalUsd: 0, codeUsd: 0, coworkUsd: 0, users: [] };
+        centre = { name: centreName, code: centreCode, totalUsd: 0, codeUsd: 0, coworkUsd: 0, ...(hasOpenAi ? { chatgptUsd: 0, codexUsd: 0 } : {}), users: [] };
         centreMap.set(centreName, centre);
       }
       centre.users.push(chargebackUser);
       centre.codeUsd += chargebackUser.codeUsd;
       centre.coworkUsd += chargebackUser.coworkUsd;
+      if (hasOpenAi) {
+        centre.chatgptUsd = (centre.chatgptUsd ?? 0) + (chargebackUser.chatgptUsd ?? 0);
+        centre.codexUsd = (centre.codexUsd ?? 0) + (chargebackUser.codexUsd ?? 0);
+      }
       centre.totalUsd += chargebackUser.totalUsd;
     } else {
       unallocatedUsers.push(chargebackUser);
@@ -391,6 +478,7 @@ export async function buildChargeback(period: string, nowS: number = Math.floor(
       totalUsd: u.totalUsd,
       codeUsd: u.codeUsd,
       coworkUsd: u.coworkUsd,
+      ...(hasOpenAi ? { chatgptUsd: u.chatgptUsd ?? 0, codexUsd: u.codexUsd ?? 0 } : {}),
     }));
 
   // --- By-surface summary (Chat/Code/Cowork) ---
@@ -401,17 +489,22 @@ export async function buildChargeback(period: string, nowS: number = Math.floor(
   };
   const codeSurface: SurfaceSpend = { usd: codeSurfaceUsd, tokens: codeTokens, basis: 'estimate' };
   const coworkSurface: SurfaceSpend = { usd: coworkSurfaceUsd, tokens: coworkSurfaceTokens, basis: 'actual' };
+  const openaiTokens = (t: CodeTokens) => (hasOpenAi ? t : { input: 0, output: 0, cacheWrite: 0, cacheRead: 0 });
   const surfaces: SurfaceSummary = {
     chat: chatSurface,
     code: codeSurface,
     cowork: coworkSurface,
+    ...(hasOpenAi ? {
+      chatgpt: { usd: chatgptSurfaceUsd, tokens: chatgptTokens, basis: 'openai_rates' as const },
+      codex: { usd: codexSurfaceUsd, tokens: codexTokens, basis: 'openai_rates' as const },
+    } : {}),
     total: {
-      usd: codeSurfaceUsd + coworkSurfaceUsd,
+      usd: codeSurfaceUsd + coworkSurfaceUsd + (chatgptSurfaceUsd ?? 0) + codexSurfaceUsd,
       tokens: {
-        input: codeTokens.input + coworkSurfaceTokens.input,
-        output: codeTokens.output + coworkSurfaceTokens.output,
+        input: codeTokens.input + coworkSurfaceTokens.input + openaiTokens(chatgptTokens).input + openaiTokens(codexTokens).input,
+        output: codeTokens.output + coworkSurfaceTokens.output + openaiTokens(chatgptTokens).output + openaiTokens(codexTokens).output,
         cacheWrite: codeTokens.cacheWrite + coworkSurfaceTokens.cacheWrite,
-        cacheRead: codeTokens.cacheRead + coworkSurfaceTokens.cacheRead,
+        cacheRead: codeTokens.cacheRead + coworkSurfaceTokens.cacheRead + openaiTokens(chatgptTokens).cacheRead + openaiTokens(codexTokens).cacheRead,
       },
     },
   };
@@ -433,5 +526,9 @@ export async function buildChargeback(period: string, nowS: number = Math.floor(
     unallocated: { totalUsd: unallocatedTotalUsd, users: unallocatedUsers },
     surfaces,
     leaderboard,
+    ...(hasOpenAi ? {
+      vendors: { claudeUsd: grandTotalUsd - openaiTotalUsd, openaiUsd: openaiTotalUsd },
+      openaiUnpricedModels: Array.from(openaiUnpriced).sort(),
+    } : {}),
   };
 }
