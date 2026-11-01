@@ -320,11 +320,15 @@ Each department is a cost centre by default. Administrators can create named cos
 
 List-rate spend, such as Claude Code through Amazon Bedrock, is labelled "estimated, for visibility, not billing".
 
+**ChatGPT and Codex.** With the OpenAI export connected, each person's and cost centre's spend also includes ChatGPT (Chat and Work) and Codex, priced from tokens at OpenAI's published USD rates for token-based Enterprise contracts, the same figures Work Pulse and Developer Pulse show. The page names each product, adds a Claude / OpenAI split, and says how the OpenAI figures are priced: a credit-based contract, negotiated discounts and seat fees are not reflected. ChatGPT or Codex models with no rate are named and left out, never counted as $0; an administrator adds their rates under **Admin → Developer Pulse → Rates**. Where an administrator records ChatGPT seats and a seat price under **Admin → System**, the licence cost appears on its own line, never added to usage, with how many seats were used in the last 30 days. Claude's own seat count leaves out ChatGPT and Codex users. With only OpenAI connected, the page shows no Claude figures.
+
 An administrator can close a month, which stores an immutable snapshot; every later view and CSV export of that month returns the snapshot exactly, so a billed figure cannot drift.
 
 ### Spend Review
 
 Spend Review shows, for one person and one month, what the spend went on, whether it produced anything and whether a better route exists. For each kind of work it shows spend, sessions, typical session cost and model split. Where at least three colleagues and five sessions of the same kind of work exist in the last 90 days, it compares the person with them without naming anyone and suggests routes: a skill or connector colleagues commonly use, a cheaper model colleagues use with comparable outcomes, a stronger model where their outcomes are clearly better, or a change of approach where long conversations spend heavily on re-reading context. Spend Review also identifies scheduled tasks running repeatedly on the most expensive class of model. Savings are estimates based on list prices. An index lists everyone's spend and suggested routes. Administrators and managers can open any review; each person can open their own.
+
+With the OpenAI export connected, Spend Review also covers ChatGPT and Codex. Codex sessions carry the cost of their own turns. OpenAI reports ChatGPT cost per person, model and hour, not per conversation, so each hour's cost is shared evenly across the replies in that hour; a conversation's ChatGPT figure is therefore an estimate, and the page says so. Cost in an hour with no reply on record stays in the person's total, which always equals FinOps's. Each product's work is compared only with colleagues' work on the same product, and model suggestions stay with the same vendor: Codex work is never pointed at a model OpenAI offers only in Chat, and no suggestion names a research model.
 
 ## Governance and risk
 
