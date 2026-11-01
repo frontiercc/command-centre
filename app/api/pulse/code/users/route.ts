@@ -14,6 +14,8 @@ import { NextRequest, NextResponse } from 'next/server';
 import { sql } from 'drizzle-orm';
 import { getAdminSession, canAccessCodePulse, isDeptScoped } from '@/lib/auth/admin-auth';
 import { getTypedClient } from '@/lib/db/client';
+import { parseVendor } from '@/lib/dashboard/vendor';
+import { hasCodexData, pickCodeMetricsSource } from '@/lib/pulse/code/vendor-view';
 
 export const dynamic = 'force-dynamic';
 
@@ -65,18 +67,23 @@ export async function GET(request: NextRequest) {
     ? (session.department ?? null)
     : request.nextUrl.searchParams.get('dept');
 
+  // Developer Pulse's All / Claude / Codex switch.
+  const vendor = parseVendor(request.nextUrl.searchParams.get('vendor'));
+  const codexPresent = await hasCodexData();
+
   // Latest user-scope code_metrics row per user, joined to identity.
   // Users with no Code activity are excluded — this is a Developer Pulse view.
+  const { table, only } = await pickCodeMetricsSource(vendor, codexPresent);
   const rawRows = await rawAll<RawUserRow>(client, sql`
      SELECT cm.scope_id AS user_id,
             u.display_name, u.email, u.department,
             cm.spend_usd, cm.autonomy_ratio, cm.cache_hit_ratio,
             cm.session_count, cm.repo_count, cm.commit_count, cm.skill_leverage,
             cm.input_tokens, cm.output_tokens, cm.computed_at
-     FROM code_metrics cm
+     FROM ${table} cm
      JOIN (
        SELECT scope_id, MAX(id) AS max_id
-       FROM code_metrics WHERE scope_type = 'user' AND granularity = 'rolling'
+       FROM ${table} WHERE scope_type = 'user' AND granularity = 'rolling' ${only}
        GROUP BY scope_id
      ) latest ON latest.max_id = cm.id
      LEFT JOIN users u ON u.id = cm.scope_id
@@ -84,6 +91,17 @@ export async function GET(request: NextRequest) {
        ${dept ? sql`AND u.department = ${dept}` : sql``}
      ORDER BY cm.spend_usd DESC NULLS LAST
   `);
+
+  // Which coding tools each person used in the last 30 days, for the tags
+  // beside a name once Codex data exists.
+  const productRows = !codexPresent || rawRows.length === 0 ? [] : await rawAll<{ user_id: string; product: string }>(client, sql`
+     SELECT DISTINCT user_id, CASE WHEN session_id LIKE 'codex:%' THEN 'codex' ELSE 'claude_code' END AS product
+     FROM code_session_stats
+     WHERE last_at >= ${Math.floor(Date.now() / 1000) - 30 * 86400}
+       AND user_id IN (${sql.join(rawRows.map(r => sql`${r.user_id}`), sql`, `)})
+  `);
+  const productsByUser = new Map<string, string[]>();
+  for (const r of productRows) productsByUser.set(r.user_id, [...(productsByUser.get(r.user_id) ?? []), r.product].sort());
 
   const rows = rawRows.map(r => ({
     user_id: r.user_id,
@@ -100,7 +118,8 @@ export async function GET(request: NextRequest) {
     input_tokens: Number(r.input_tokens),
     output_tokens: Number(r.output_tokens),
     computed_at: Number(r.computed_at),
+    products: productsByUser.get(r.user_id) ?? [],
   }));
 
-  return NextResponse.json({ users: rows });
+  return NextResponse.json({ users: rows, vendor, codexPresent });
 }

@@ -439,7 +439,9 @@ function RatesPanel({ prefillModel }: { prefillModel: string | null }) {
           Overrides and additions to the built-in Anthropic list rates. A model with no entry here (and no
           normalisable Bedrock/Vertex match) prices as unpriced, never silently zero. Add the exact
           provider-decorated model ID (e.g. <code className={inlineCode}>us.anthropic.claude-opus-4-6-v1</code>)
-          for real AWS/GCP cost instead of the Anthropic list-rate estimate.
+          for real AWS/GCP cost instead of the Anthropic list-rate estimate. Codex models (for example{' '}
+          <code className={inlineCode}>gpt-5.5-codex</code>) are priced from this table too; there are no
+          built-in OpenAI rates, so add each Codex model you see listed below.
         </p>
 
         {data.unpricedModels.length > 0 && (
@@ -686,6 +688,7 @@ function CodePulseAdminContent() {
   const [clfIncludePrompt, setClfIncludePrompt] = useState(true);
   const [briefingModel, setBriefingModel] = useState('');
   const [humanTimeCode, setHumanTimeCode] = useState<boolean | null>(null);
+  const [classifyCodex, setClassifyCodex] = useState(true);
   // The organisation briefing model a blank Code briefing model falls back to
   // (getOrgBriefingModel) — named on the page so it never shows a guess.
   const [orgBriefingModel, setOrgBriefingModel] = useState('');
@@ -739,6 +742,7 @@ function CodePulseAdminContent() {
       .then(d => {
         setBriefingModel(d.codeBriefingModel ?? ''); setOrgBriefingModel(d.pulseBriefingModel ?? '');
         setHumanTimeCode(effectiveCodeHumanTime(d.humanTimeCodeEnabled, d.humanTimeEnabled));
+        setClassifyCodex(d.codeClassifyCodex !== 'false');
       })
       .catch(() => {});
   }, []);
@@ -753,6 +757,7 @@ function CodePulseAdminContent() {
           codeClassifierEnabled: String(clfEnabled),
           codeClassifierModel: clfModel,
           codeClassifierIncludePrompt: String(clfIncludePrompt),
+          codeClassifyCodex: String(classifyCodex),
           codeBriefingModel: briefingModel,
           // Code's own human-time switch; once saved it no longer follows Cowork's.
           ...(humanTimeCode !== null ? { humanTimeCodeEnabled: humanTimeCode ? 'true' : 'false' } : {}),
@@ -845,6 +850,12 @@ function CodePulseAdminContent() {
                   onChange={setHumanTimeCode}
                 />
               )}
+              <ToggleRow
+                label="Classify Codex sessions"
+                hint={<>The classifier judges Codex sessions from OpenAI&apos;s export the same way as Claude Code sessions, using the Anthropic API key and the classifier model below, so Work mix and the delegation journey cover Codex too. With Include first prompt on, a Codex session&apos;s first prompt is sent as well. Off stops new Codex sessions being judged; those already judged stay. Applies once Codex sessions arrive.</>}
+                checked={classifyCodex}
+                onChange={setClassifyCodex}
+              />
               <ToggleRow
                 label="Include first prompt"
                 hint="Adds the session's first prompt as intent context for classification. Turn off for a metadata-only privacy posture."

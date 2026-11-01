@@ -238,7 +238,7 @@ Each person has a weekly briefing on their own work, administrators and managers
 
 ## Developer Pulse
 
-Developer Pulse is the productivity view of Claude Code: an overview, a personal view ("My Developer Pulse"), a list of people, a department view and a value estimate. Developer Pulse's figures are measured, with one AI-judged layer.
+Developer Pulse is the productivity view of Claude Code, and of Codex once OpenAI's export is connected: an overview, a personal view ("My Developer Pulse"), a list of people, a department view and a value estimate. Developer Pulse's figures are measured, with one AI-judged layer.
 
 The productivity strip shows four measured figures for the last seven days: engaged time (active, Claude-assisted engineering time), code output (lines added and removed), shipping (Claude-assisted commits and pull requests) and edit acceptance (proposed edits accepted against rejected). Around these sit:
 
@@ -247,9 +247,11 @@ The productivity strip shows four measured figures for the last seven days: enga
 - **Model mix and cache use**, showing which models carried the work and how much came from the prompt cache.
 - **Skills and subagents** in use, and the programming-language mix of Claude's edits.
 
+Once Codex data arrives, a switch reading All, Claude or Codex appears on the overview, My Developer Pulse, the list of people and the department view; it is the dashboard's switch, where Codex appears under OpenAI, and the choice carries across them. In the All view each headline figure shows its Claude Code and Codex parts, and Work Mix shows each kind of work's split; choosing Claude or Codex narrows the figures to that tool. Codex's spend is priced from the same rate table, so each Codex model needs a rate; until it has one it is listed as unpriced, never counted as zero. Codex's actions, failed actions and commits come from its log, counted and never stored as commands. Engaged time, code output, pull requests, edit acceptance, languages, and spend by skill and subagent come from Claude Code's own telemetry, which Codex does not send, so they show Claude Code only and are not shown for Codex. The value estimate and Dev Framework Alignment stay Claude Code only.
+
 ### Work Mix and tiers
 
-The session classifier grades each Claude Code session once it has been idle for 30 minutes, assigning a kind of work and a tier from a short digest of the session; a session still running after two hours receives a provisional grade that is replaced when it ends. This drives the AI-judged Work Mix card and the tier progression on each person's page. A Classifier Health tab shows the classifier's queue, confidence and failures.
+The session classifier grades each Claude Code session once it has been idle for 30 minutes, assigning a kind of work and a tier from a short digest of the session; a session still running after two hours receives a provisional grade that is replaced when it ends. This drives the AI-judged Work Mix card and the tier progression on each person's page. Codex sessions are graded the same way unless an administrator switches off **Classify Codex sessions** under **Admin → Developer Pulse**. A Classifier Health tab shows the classifier's queue, confidence and failures, and, once Codex sessions exist, classified and failed sessions for each tool.
 
 ### GitHub overlay
 

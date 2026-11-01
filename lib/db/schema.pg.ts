@@ -251,6 +251,21 @@ export const openaiReplies = pgTable('openai_replies', {
     index('idx_openai_replies_session').on(t.session_id),
 ]);
 
+/** One Codex tool call: failed or not, and whether it was a commit. No command text (migration 0041). */
+export const codexActions = pgTable('codex_actions', {
+    id: text().primaryKey(),
+    user_id: text().notNull(),
+    session_id: text().notNull(),
+    tool_name: text(),
+    failed: integer().notNull().default(0),
+    commit_count: integer().notNull().default(0),
+    occurred_at: bigint({ mode: 'number' }).notNull(),
+    ingested_at: bigint({ mode: 'number' }).notNull().default(sql`extract(epoch from now())`),
+}, (t) => [
+    index('idx_codex_actions_session').on(t.session_id),
+    index('idx_codex_actions_user_time').on(t.user_id, t.occurred_at),
+]);
+
 /** One Codex turn: tokens priced from the rates table, OpenAI's own estimate beside them. */
 export const codexTurns = pgTable('codex_turns', {
     id: text().primaryKey(),
@@ -317,6 +332,42 @@ export const codeMetrics = pgTable('code_metrics', {
 }, (t) => [
     uniqueIndex('idx_code_metrics_week').on(t.scope_type, t.scope_id, t.period_start).where(sql`granularity = 'week'`),
     index('idx_code_metrics_scope').on(t.scope_type, t.scope_id, t.period_end),
+]);
+
+/**
+ * Developer Pulse figures for one product view at a time ('all', 'claude',
+ * 'openai'), beside code_metrics, which is unchanged (migration 0042). Same
+ * columns and meaning as code_metrics; written only once Codex data exists.
+ */
+export const codeMetricsVendor = pgTable('code_metrics_vendor', {
+    id: integer().generatedByDefaultAsIdentity().primaryKey(),
+    vendor: text().notNull(),
+    scope_type: text().notNull(),
+    scope_id: text().notNull(),
+    period_start: bigint({ mode: 'number' }).notNull(),
+    period_end: bigint({ mode: 'number' }).notNull(),
+    spend_usd: numeric(),
+    input_tokens: bigint({ mode: 'number' }).notNull().default(0),
+    output_tokens: bigint({ mode: 'number' }).notNull().default(0),
+    cache_hit_ratio: doublePrecision(),
+    autonomy_ratio: doublePrecision(),
+    session_count: integer().notNull().default(0),
+    repo_count: integer().notNull().default(0),
+    skill_leverage: doublePrecision(),
+    friction_index: doublePrecision(),
+    computed_at: bigint({ mode: 'number' }).notNull(),
+    commit_count: integer().notNull().default(0),
+    active_time_user_s: bigint({ mode: 'number' }).notNull().default(0),
+    active_time_cli_s: bigint({ mode: 'number' }).notNull().default(0),
+    lines_added: integer().notNull().default(0),
+    lines_removed: integer().notNull().default(0),
+    pr_count: integer().notNull().default(0),
+    edit_accept_count: integer().notNull().default(0),
+    edit_reject_count: integer().notNull().default(0),
+    granularity: text().notNull().default('rolling'),
+}, (t) => [
+    uniqueIndex('idx_code_metrics_vendor_week').on(t.vendor, t.scope_type, t.scope_id, t.period_start).where(sql`granularity = 'week'`),
+    index('idx_code_metrics_vendor_scope').on(t.vendor, t.scope_type, t.scope_id, t.period_end),
 ]);
 
 export const codeOtelMetrics = pgTable('code_otel_metrics', {
@@ -1316,6 +1367,8 @@ export const pgSchema = {
   openaiCosts,
   openaiReplies,
   codexTurns,
+  codexActions,
+  codeMetricsVendor,
   pulseRubricVersions,
   pulseAuditCycles,
   pulseAuditItems,

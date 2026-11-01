@@ -129,6 +129,7 @@ The features in the table below send people's prompt text, masked for personal d
 | Human time vs Claude time · Cowork | Admin → Work Pulse → Overview | Off |
 | Human time vs Claude time · Code | Admin → Developer Pulse → Overview | Follows the Cowork switch |
 | Include first prompt (Code session classifier) | Admin → Developer Pulse → Overview | On |
+| Classify Codex sessions | Admin → Developer Pulse → Overview | On |
 | Content analysis (use case judging and process suggestions) | Admin → Use Cases | On |
 | Include named shout-outs (Weekly Highlights) | Admin → System → Weekly highlights | Off |
 
@@ -152,7 +153,7 @@ Once a month, use **Admin → Work Pulse → Audit** to start an audit cycle wit
 
 Developer Pulse measures Claude Code use (spend, engaged time, lines changed, AI-assisted commits and pull requests, edit acceptance) without judgement, and adds one AI-judged layer: a kind of work and a tier for each finished session.
 
-1. In **Admin → Developer Pulse → Overview**, confirm **Session classifier enabled** is on, choose the **Classifier model** and **Briefing model**, set **Human time vs Claude time · Code** and **Include first prompt**, and save.
+1. In **Admin → Developer Pulse → Overview**, confirm **Session classifier enabled** is on, choose the **Classifier model** and **Briefing model**, set **Human time vs Claude time · Code**, **Classify Codex sessions** and **Include first prompt**, and save. **Classify Codex sessions** applies once Codex sessions arrive from OpenAI's export.
 2. Review the session rubric in **Admin → Developer Pulse → Tiers**. As with Work Pulse, saving applies from now on.
 3. Review **Admin → Developer Pulse → Rates** (see the FinOps section) and, after the first day of data, **Data quality**, which lists models with no price and telemetry that arrived without an identity.
 4. In **Admin → Developer Pulse → Value**, replace the default calibrations (productivity lift, loaded annual compensation, coding hours per week, and minutes saved per pull request, AI-assisted commit, Claude Cowork session and Claude Chat conversation) with your own figures. Every estimate on the Value view is labelled as such and shown apart from the measured figures beside it.

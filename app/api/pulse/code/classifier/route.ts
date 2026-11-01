@@ -13,7 +13,7 @@ import { schema } from '@/lib/db/schema';
 import { getConfigValue, setConfigValue } from '@/lib/config';
 import { runCodeClassifierJob, getClassifierQueueDepth } from '@/lib/pulse/code/classifier';
 import { drainJob } from '@/lib/pulse/drain';
-import { getClassifierHealth, getTierDistribution, getConfidenceHistogram, getCurrentFailures } from '@/lib/pulse/code/classifier-health';
+import { getClassifierHealth, getTierDistribution, getConfidenceHistogram, getCurrentFailures, getClassifierByProduct } from '@/lib/pulse/code/classifier-health';
 import { getCodeClassifierConfig, buildCodeClassifierSystemMessage, DEFAULT_CODE_CLASSIFIER_CONFIG, type CodeClassifierConfig } from '@/lib/pulse/code/tier-config';
 
 export const dynamic = 'force-dynamic';
@@ -57,6 +57,7 @@ export async function GET(request: NextRequest) {
   const tierDistribution = await getTierDistribution().catch(() => ({ tier1: 0, tier2: 0, tier3: 0 }));
   const confidenceHistogram = await getConfidenceHistogram().catch(() => new Array(11).fill(0));
   const currentFailures = await getCurrentFailures().catch(() => []);
+  const byProduct = await getClassifierByProduct().catch(() => []);
 
   return NextResponse.json({
     briefings: Number(briefings?.c ?? 0),
@@ -70,6 +71,8 @@ export async function GET(request: NextRequest) {
     tierDistribution,
     confidenceHistogram,
     currentFailures,
+    byProduct,
+    classifyCodex: (await getConfigValue('codeClassifyCodex')) !== 'false',
     config: classifierConfig,
     defaults: DEFAULT_CODE_CLASSIFIER_CONFIG,
   });

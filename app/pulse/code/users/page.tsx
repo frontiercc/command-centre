@@ -13,6 +13,8 @@ import ModelMixBar, { type ModelMixItem } from '@/components/pulse/code/ModelMix
 import JourneyGrid from '@/components/pulse/JourneyGrid';
 import HumanTimeCard, { type HumanTimeSummary } from '@/components/pulse/HumanTimeCard';
 import { PageBody, Toolbar, Panel, Tag, Empty, Muted, B, cx } from '@/components/precision/ui';
+import { useVendor, VendorSwitch } from '@/components/shared/VendorSwitch';
+import { DEVELOPER_PULSE_VENDOR_LABELS, type Vendor } from '@/lib/dashboard/vendor';
 
 interface SessionRow {
   session_id: string;
@@ -30,6 +32,9 @@ interface SessionRow {
 }
 
 interface UserData {
+  vendor?: Vendor;
+  codexPresent?: boolean;
+  metricsSplit?: { claude: CodeMetricsRow | null; openai: CodeMetricsRow | null } | null;
   userId: string | null;
   displayName: string | null;
   metrics: CodeMetricsRow | null;
@@ -45,6 +50,8 @@ interface UserListRow {
   display_name: string | null;
   email: string | null;
   department: string | null;
+  /** 'claude_code' and/or 'codex', once Codex data exists. */
+  products?: string[];
 }
 
 function formatDuration(first: number, last: number): string {
@@ -65,16 +72,19 @@ function CodeUsersContent() {
   const [usersLoading, setUsersLoading] = useState(true);
   const [data, setData] = useState<UserData | null>(null);
   const [dataLoading, setDataLoading] = useState(false);
+  const [vendor, setVendor] = useVendor();
+  const [codexPresent, setCodexPresent] = useState(false);
 
   const selectedUserId = searchParams.get('userId') ?? '';
 
   // Load the user list for the dropdown
   useEffect(() => {
-    fetch('/api/pulse/code/users')
+    fetch(`/api/pulse/code/users?vendor=${vendor}`)
       .then(r => r.json())
       .then(d => {
+        setCodexPresent(!!d.codexPresent);
         const list: UserListRow[] = (d.users ?? []).map((u: UserListRow) => ({
-          user_id: u.user_id, display_name: u.display_name, email: u.email, department: u.department,
+          user_id: u.user_id, display_name: u.display_name, email: u.email, department: u.department, products: u.products,
         }));
         setUsers(list);
         // Default to the first user (highest spend) when none selected
@@ -86,17 +96,17 @@ function CodeUsersContent() {
       })
       .catch(() => {})
       .finally(() => setUsersLoading(false));
-  }, []); // eslint-disable-line react-hooks/exhaustive-deps
+  }, [vendor]); // eslint-disable-line react-hooks/exhaustive-deps
 
   const loadUser = useCallback((userId: string) => {
     if (!userId) return;
     setDataLoading(true);
-    fetch(`/api/pulse/code/me?userId=${encodeURIComponent(userId)}`)
+    fetch(`/api/pulse/code/me?userId=${encodeURIComponent(userId)}&vendor=${vendor}`)
       .then(r => r.json())
       .then(setData)
       .catch(() => {})
       .finally(() => setDataLoading(false));
-  }, []);
+  }, [vendor]);
 
   useEffect(() => {
     if (selectedUserId) loadUser(selectedUserId);
@@ -115,7 +125,7 @@ function CodeUsersContent() {
     <>
       <TopBar
         title="Developer Pulse: Users"
-        subtitle={displayName ? `Per-user Claude Code activity · ${displayName}` : 'Select a user'}
+        subtitle={displayName ? `Per-user ${codexPresent ? 'coding' : 'Claude Code'} activity · ${displayName}` : 'Select a user'}
       />
       <PageBody>
         {/* User picker (top-left) */}
@@ -135,6 +145,7 @@ function CodeUsersContent() {
                   {users.map(u => (
                     <option key={u.user_id} value={u.user_id}>
                       {u.display_name ?? u.email}{u.department ? ` · ${u.department}` : ''}
+                      {codexPresent && (u.products?.length ?? 0) > 0 ? ` · ${u.products!.map(p => p === 'codex' ? 'Codex' : 'Claude Code').join(', ')}` : ''}
                     </option>
                   ))}
                 </select>
@@ -144,6 +155,7 @@ function CodeUsersContent() {
                   Person 360
                 </Link>
               )}
+              <VendorSwitch vendor={vendor} onChange={setVendor} openaiPresent={codexPresent} labels={DEVELOPER_PULSE_VENDOR_LABELS} />
             </span>
           }
         />
@@ -152,12 +164,12 @@ function CodeUsersContent() {
 
         {!dataLoading && data && (
           !data.userId ? (
-            <Empty title="No Claude Code activity for this user yet">
+            <Empty title={codexPresent ? 'No coding activity for this user yet' : 'No Claude Code activity for this user yet'}>
               Activity appears after the next hourly aggregation.
             </Empty>
           ) : (
             <>
-              <CodeStatStrip metrics={data.metrics} githubRepos={data.githubRepos} />
+              <CodeStatStrip metrics={data.metrics} githubRepos={data.githubRepos} view={codexPresent ? vendor : 'claude'} split={data.metricsSplit} />
 
               <HumanTimeCard summary={data.humanTime} surface="code" scope="Personal" />
 
@@ -196,7 +208,7 @@ function CodeUsersContent() {
                               {s.spend_usd === null ? '—' : formatCurrency(s.spend_usd)}
                             </span>
                             <span className="text-[13px] text-[#8F8F8F] tabular-nums">{formatTokens(s.input_tokens + s.output_tokens)} tokens</span>
-                            <Tag>{s.source === 'otel' ? 'OTel' : 'Agent'}</Tag>
+                            <Tag>{s.source === 'codex' ? 'Codex' : s.source === 'otel' ? 'OTel' : 'Agent'}</Tag>
                           </div>
                         </li>
                       ))}

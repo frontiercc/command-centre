@@ -10,6 +10,8 @@ import { getAdminSession, isDeptScoped, canAccessCodePulse } from '@/lib/auth/ad
 import { getTypedClient } from '@/lib/db/client';
 import { schema } from '@/lib/db/schema';
 import { getCodeDeptMembers } from '@/lib/pulse/code/dept';
+import { parseVendor } from '@/lib/dashboard/vendor';
+import { hasCodexData, readCodeMetrics, pickCodeMetricsSource, codeSessionVendor } from '@/lib/pulse/code/vendor-view';
 import { readHumanTime } from '@/lib/pulse/human-time-summary';
 
 export const dynamic = 'force-dynamic';
@@ -46,16 +48,19 @@ export async function GET(
   }
 
   const client = await getTypedClient();
-  const cm = schema.codeMetrics;
   const csc = schema.codeSessionClassifications;
   const css = schema.codeSessionStats;
   const u = schema.users;
   const now = Math.floor(Date.now() / 1000);
   const sixWeeksAgo = now - 42 * 24 * 3600;
 
+  // Developer Pulse's All / Claude / Codex switch.
+  const vendor = parseVendor(request.nextUrl.searchParams.get('vendor'));
+  const codexPresent = await hasCodexData();
+
   // Latest department-scope rollup — the aggregator writes dept rollups as
   // scope_type='function' (not 'dept'), matching the Cowork dept route.
-  const metricsRows = await client
+  const latestDeptRow = (cm: typeof schema.codeMetrics, only: ReturnType<typeof eq> | undefined) => client
     .select({
       spend_usd: cm.spend_usd, input_tokens: cm.input_tokens, output_tokens: cm.output_tokens,
       cache_hit_ratio: cm.cache_hit_ratio, autonomy_ratio: cm.autonomy_ratio,
@@ -63,17 +68,23 @@ export async function GET(
       skill_leverage: cm.skill_leverage, friction_index: cm.friction_index,
     })
     .from(cm)
-    .where(and(eq(cm.scope_type, 'function'), eq(cm.scope_id, dept), eq(cm.granularity, 'rolling')))
+    .where(and(eq(cm.scope_type, 'function'), eq(cm.scope_id, dept), eq(cm.granularity, 'rolling'), only))
     .orderBy(desc(cm.computed_at))
     .limit(1);
-  const metricsRaw = metricsRows[0] ?? null;
-  const metrics = metricsRaw
-    ? { ...metricsRaw, spend_usd: metricsRaw.spend_usd !== null ? Number(metricsRaw.spend_usd) : null }
+  const toMetrics = <R extends { spend_usd: string | null }>(r: R | undefined) =>
+    r ? { ...r, spend_usd: r.spend_usd !== null ? Number(r.spend_usd) : null } : null;
+  const metrics = toMetrics((await readCodeMetrics(vendor, codexPresent, latestDeptRow))[0]);
+  // All view, once Codex data exists: the department's Claude Code and Codex figures.
+  const metricsSplit = vendor === 'all' && codexPresent
+    ? {
+        claude: toMetrics((await readCodeMetrics('claude', true, latestDeptRow))[0]),
+        openai: toMetrics((await readCodeMetrics('openai', true, latestDeptRow))[0]),
+      }
     : null;
 
   // Members — the full department roster (membership-first), so members without
   // recent Code activity still appear with null/zero metrics. See lib/pulse/code/dept.ts.
-  const members = await getCodeDeptMembers(dept);
+  const members = await getCodeDeptMembers(dept, await pickCodeMetricsSource(vendor, codexPresent));
 
   // Per-user + dept-wide GitHub repo activity (mapped-scoped).
   // Mirrors /api/pulse/code/me's null-semantics: a 35d window
@@ -115,7 +126,7 @@ export async function GET(
     .from(csc)
     .innerJoin(css, eq(css.session_id, csc.session_id))
     .innerJoin(u, eq(u.id, csc.user_id))
-    .where(and(eq(u.department, dept), eq(csc.status, 'classified'), gte(css.last_at, sixWeeksAgo)));
+    .where(and(eq(u.department, dept), eq(csc.status, 'classified'), gte(css.last_at, sixWeeksAgo), codeSessionVendor(css.session_id, vendor)));
 
   const counts = new Map<string, number>();
   const provisionalCounts = new Map<string, number>();
@@ -130,6 +141,6 @@ export async function GET(
     return { week, tier, count, provisionalCount: provisionalCounts.get(k) ?? 0 };
   });
 
-  const humanTime = await readHumanTime('code', memberIds);
-  return NextResponse.json({ dept, metrics, members, journeyGrid, githubRepos, humanTime });
+  const humanTime = await readHumanTime('code', memberIds, vendor);
+  return NextResponse.json({ dept, vendor, codexPresent, metricsSplit, metrics, members, journeyGrid, githubRepos, humanTime });
 }

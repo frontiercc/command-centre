@@ -473,6 +473,9 @@ export async function runRetentionCleanup(): Promise<CleanupResult> {
       await tx.delete(schema.codexTurns).where(lt(schema.codexTurns.started_at, codeCutoff))
     );
     codeAffected += rowsAffected(
+      await tx.delete(schema.codexActions).where(lt(schema.codexActions.occurred_at, codeCutoff))
+    );
+    codeAffected += rowsAffected(
       await tx.delete(schema.openaiCosts).where(and(eq(schema.openaiCosts.product, 'codex'), lt(schema.openaiCosts.hour_start, codeCutoff)))
     );
     coworkAffected += rowsAffected(
@@ -507,6 +510,11 @@ export async function runRetentionCleanup(): Promise<CleanupResult> {
     const codeMetricsFutureDeleted = rowsAffected(
       await tx.delete(schema.codeMetrics).where(gt(schema.codeMetrics.computed_at, nowSeconds))
     );
+    // Per-product twin (migration 0042): the same three cuts.
+    const cmv = schema.codeMetricsVendor;
+    codeMetricsAffected += rowsAffected(await tx.delete(cmv).where(and(eq(cmv.granularity, 'rolling'), lt(cmv.computed_at, rollingCutoff))));
+    codeMetricsAffected += rowsAffected(await tx.delete(cmv).where(and(eq(cmv.granularity, 'week'), lt(cmv.computed_at, weeklyCutoff))));
+    codeMetricsAffected += rowsAffected(await tx.delete(cmv).where(gt(cmv.computed_at, nowSeconds)));
     codeMetricsAffected += codeMetricsRollingDeleted + codeMetricsWeeklyDeleted + codeMetricsFutureDeleted;
 
     const pulseMetricsRollingDeleted = rowsAffected(

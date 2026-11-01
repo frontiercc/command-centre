@@ -148,6 +148,7 @@ export async function POST(request: NextRequest) {
     'pulseClassifyChatgpt',
     'humanTimeEnabled',
     'humanTimeCodeEnabled',
+    'codeClassifyCodex',
     'systemHealthAlertsEnabled',
     'telemetrySilenceHours',
     'telemetrySilenceTimezone',

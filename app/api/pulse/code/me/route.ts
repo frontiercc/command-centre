@@ -17,6 +17,8 @@ import { getWeeklySeries, getWeeklyDelta } from '@/lib/pulse/trends';
 import { readHumanTime } from '@/lib/pulse/human-time-summary';
 import { getAllConfig } from '@/lib/config';
 import { canViewSpendReview } from '@/lib/finance/spend-review-access';
+import { parseVendor } from '@/lib/dashboard/vendor';
+import { hasCodexData, readCodeMetrics, trendVendor, codeSessionVendor } from '@/lib/pulse/code/vendor-view';
 
 export const dynamic = 'force-dynamic';
 
@@ -32,7 +34,6 @@ export async function GET(request: NextRequest) {
   const client = await getTypedClient();
   const au = schema.adminUsers;
   const u = schema.users;
-  const cm = schema.codeMetrics;
   const css = schema.codeSessionStats;
   const cam = schema.codeAssistantMeta;
   const csc = schema.codeSessionClassifications;
@@ -83,6 +84,14 @@ export async function GET(request: NextRequest) {
   const sevenDaysAgo = now - 7 * 24 * 3600;
   const thirtyDaysAgo = now - 30 * 24 * 3600;
 
+  // Developer Pulse's All / Claude / Codex switch.
+  const vendor = parseVendor(request.nextUrl.searchParams.get('vendor'));
+  const codexPresent = await hasCodexData();
+  const tv = trendVendor(vendor, codexPresent);
+  const withClaude = vendor !== 'openai';
+  const withCodex = vendor !== 'claude' && codexPresent;
+  const sessionVendor = codeSessionVendor(sql`${css.session_id}`, vendor);
+
   // Per-user GitHub repos: 35d window rows scoped to
   // currently-mapped repos. null = no window rows at all ("Not captured"
   // rendering); count7d: 0 = window rows exist but none in the last 7 days.
@@ -106,7 +115,8 @@ export async function GET(request: NextRequest) {
     }
   }
 
-  const metricsRows = await client
+  const uid = userId;
+  const latestUserRow = (cm: typeof schema.codeMetrics, only: ReturnType<typeof eq> | undefined) => client
     .select({
       spend_usd: cm.spend_usd, input_tokens: cm.input_tokens, output_tokens: cm.output_tokens,
       cache_hit_ratio: cm.cache_hit_ratio, autonomy_ratio: cm.autonomy_ratio, session_count: cm.session_count,
@@ -117,26 +127,32 @@ export async function GET(request: NextRequest) {
       period_start: cm.period_start, period_end: cm.period_end, computed_at: cm.computed_at,
     })
     .from(cm)
-    .where(and(eq(cm.scope_type, 'user'), eq(cm.scope_id, userId), eq(cm.granularity, 'rolling')))
+    .where(and(eq(cm.scope_type, 'user'), eq(cm.scope_id, uid), eq(cm.granularity, 'rolling'), only))
     .orderBy(desc(cm.computed_at))
     .limit(1);
-  const metricsRaw = metricsRows[0] ?? null;
-  const metrics = metricsRaw
-    ? { ...metricsRaw, spend_usd: metricsRaw.spend_usd !== null ? Number(metricsRaw.spend_usd) : null }
+  const toMetrics = <R extends { spend_usd: string | null }>(r: R | undefined) =>
+    r ? { ...r, spend_usd: r.spend_usd !== null ? Number(r.spend_usd) : null } : null;
+  const metrics = toMetrics((await readCodeMetrics(vendor, codexPresent, latestUserRow))[0]);
+  // All view, once Codex data exists: this person's Claude Code and Codex figures.
+  const metricsSplit = vendor === 'all' && codexPresent
+    ? {
+        claude: toMetrics((await readCodeMetrics('claude', true, latestUserRow))[0]),
+        openai: toMetrics((await readCodeMetrics('openai', true, latestUserRow))[0]),
+      }
     : null;
 
-  const priorMetricsRows = await client
+  const priorMetricsRows = await readCodeMetrics(vendor, codexPresent, (cm, only) => client
     .select({
       spend_usd: cm.spend_usd, autonomy_ratio: cm.autonomy_ratio, cache_hit_ratio: cm.cache_hit_ratio,
       session_count: cm.session_count, repo_count: cm.repo_count,
     })
     .from(cm)
     .where(and(
-      eq(cm.scope_type, 'user'), eq(cm.scope_id, userId), eq(cm.granularity, 'rolling'),
-      sql`${cm.computed_at} <= ${sevenDaysAgo}`,
+      eq(cm.scope_type, 'user'), eq(cm.scope_id, uid), eq(cm.granularity, 'rolling'),
+      sql`${cm.computed_at} <= ${sevenDaysAgo}`, only,
     ))
     .orderBy(desc(cm.computed_at))
-    .limit(1);
+    .limit(1));
   const priorMetricsRaw = priorMetricsRows[0] ?? null;
   const priorMetrics = priorMetricsRaw
     ? { ...priorMetricsRaw, spend_usd: priorMetricsRaw.spend_usd !== null ? Number(priorMetricsRaw.spend_usd) : null }
@@ -157,17 +173,47 @@ export async function GET(request: NextRequest) {
       // expression (mirrors lib/pulse/code/aggregator.ts's dirty-sessions
       // UNION) rather than embedding the `cam` table object in `sql`, which
       // Drizzle does not guarantee renders to a bare identifier.
-      source: sql<string>`COALESCE(
+      // A Codex session is tagged Codex, never the old 'agent' fallback.
+      source: sql<string>`CASE WHEN ${css.session_id} LIKE 'codex:%' THEN 'codex' ELSE COALESCE(
         (SELECT source FROM code_assistant_meta WHERE session_id = ${css.session_id} AND model != '' LIMIT 1),
         'agent'
-      )`,
+      ) END`,
     })
     .from(css)
-    .where(eq(css.user_id, userId))
+    .where(and(eq(css.user_id, userId), sessionVendor))
     .orderBy(desc(css.last_at))
     .limit(20);
 
+  // Codex sessions: spend and tokens from their turns, priced from the rates table.
+  const codexIds = rawSessions.map(s => s.session_id).filter(id => id.startsWith('codex:'));
+  const codexBySession = new Map<string, { spend: number | null; input: number; output: number; cached: number }>();
+  if (codexIds.length > 0) {
+    const ct = schema.codexTurns;
+    const turnRows = await client
+      .select({
+        session_id: ct.session_id, model: ct.model,
+        inp: sql<number | string>`SUM(${ct.uncached_input_tokens})`, cached: sql<number | string>`SUM(${ct.cached_input_tokens})`,
+        outp: sql<number | string>`SUM(${ct.output_tokens})`,
+      })
+      .from(ct)
+      .where(inArray(ct.session_id, codexIds))
+      .groupBy(ct.session_id, ct.model);
+    for (const r of turnRows) {
+      const e = codexBySession.get(r.session_id) ?? { spend: null, input: 0, output: 0, cached: 0 };
+      e.input += Number(r.inp); e.cached += Number(r.cached); e.output += Number(r.outp);
+      const usd = r.model ? priceTokens(r.model, { inputTokens: Number(r.inp), outputTokens: Number(r.outp), cacheReadTokens: Number(r.cached), cacheCreationTokens: 0 }, rates) : null;
+      if (usd !== null) e.spend = (e.spend ?? 0) + usd;
+      codexBySession.set(r.session_id, e);
+    }
+  }
+
   const sessions = rawSessions.map(s => {
+    const codex = codexBySession.get(s.session_id);
+    if (codex) {
+      const rest: Record<string, unknown> = { ...s };
+      delete rest.models_json;
+      return { ...rest, input_tokens: codex.input + codex.cached, output_tokens: codex.output, cache_read_tokens: codex.cached, spend_usd: codex.spend };
+    }
     let spendUsd: number | null = null;
     if (s.models_json) {
       try {
@@ -188,7 +234,7 @@ export async function GET(request: NextRequest) {
     return { ...rest, spend_usd: spendUsd };
   });
 
-  const modelMixRaw = await client
+  const modelMixRaw = !withClaude ? [] : await client
     .select({
       model: cam.model,
       input_tokens: sql<number | string>`SUM(${cam.input_tokens})`,
@@ -210,6 +256,25 @@ export async function GET(request: NextRequest) {
     cache_read_tokens: Number(m.cache_read_tokens),
     turns: Number(m.turns),
   }));
+  if (withCodex) {
+    const ct = schema.codexTurns;
+    const codexModels = await client
+      .select({
+        model: ct.model,
+        inp: sql<number | string>`SUM(${ct.uncached_input_tokens})`, cached: sql<number | string>`SUM(${ct.cached_input_tokens})`,
+        outp: sql<number | string>`SUM(${ct.output_tokens})`, turns: sql<number | string>`COUNT(*)`,
+      })
+      .from(ct)
+      .where(and(eq(ct.user_id, userId), gte(ct.started_at, thirtyDaysAgo), sql`${ct.model} IS NOT NULL`))
+      .groupBy(ct.model);
+    for (const m of codexModels) {
+      modelMix.push({
+        model: m.model, input_tokens: Number(m.inp), output_tokens: Number(m.outp),
+        cache_creation_tokens: 0, cache_read_tokens: Number(m.cached), turns: Number(m.turns),
+      });
+    }
+    modelMix.sort((a, b) => (b.input_tokens + b.output_tokens) - (a.input_tokens + a.output_tokens));
+  }
 
   // Journey grid (judged layer): weekly session-tier counts over 6 weeks.
   // Bucketed by when the work HAPPENED (session last_at), not when classified.
@@ -218,7 +283,7 @@ export async function GET(request: NextRequest) {
     .select({ tier: csc.tier, provisional: csc.provisional, last_at: css.last_at })
     .from(csc)
     .innerJoin(css, eq(css.session_id, csc.session_id))
-    .where(and(eq(csc.user_id, userId), eq(csc.status, 'classified'), gte(css.last_at, sixWeeksAgo)));
+    .where(and(eq(csc.user_id, userId), eq(csc.status, 'classified'), gte(css.last_at, sixWeeksAgo), sessionVendor));
 
   const journeyCounts = new Map<string, number>();
   const journeyProvisional = new Map<string, number>();
@@ -246,8 +311,8 @@ export async function GET(request: NextRequest) {
 
   // Personal 8-week sparklines — Engaged Time and Code Output, user scope.
   const personalTrend = async (column: 'active_time_user_s' | 'lines_added') => ({
-    series: await getWeeklySeries('code_metrics', 'user', userId!, column, 8),
-    delta: await getWeeklyDelta('code_metrics', 'user', userId!, column, 8),
+    series: await getWeeklySeries('code_metrics', 'user', userId!, column, 8, now, tv),
+    delta: await getWeeklyDelta('code_metrics', 'user', userId!, column, 8, now, tv),
   });
   const trends = {
     engagedTime: await personalTrend('active_time_user_s'),
@@ -256,10 +321,10 @@ export async function GET(request: NextRequest) {
 
   // Person-level human time: admins and managers for anyone, everyone else for themselves only.
   const seesPerson = session.role === 'admin' || session.role === 'manager' || userId === (await resolveMyUserId());
-  const humanTime = seesPerson ? await readHumanTime('code', [userId]) : null;
+  const humanTime = seesPerson ? await readHumanTime('code', [userId], vendor) : null;
   // Link to this person's Spend Review, for whoever may open it
   // (lib/finance/spend-review-access.ts); it lives under FinOps and is hidden with it.
   const canSeeSpendReview = (await getAllConfig()).chargebackEnabled === true
     && await canViewSpendReview(session, userId);
-  return NextResponse.json({ userId, displayName, metrics, priorMetrics, trends, sessions, modelMix, journeyGrid, githubRepos, humanTime, canSeeSpendReview });
+  return NextResponse.json({ userId, displayName, vendor, codexPresent, metricsSplit, metrics, priorMetrics, trends, sessions, modelMix, journeyGrid, githubRepos, humanTime, canSeeSpendReview });
 }

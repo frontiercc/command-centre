@@ -9,23 +9,25 @@ import { Strip, Figure } from '@/components/precision/ui';
 import { formatCurrency, formatTokens, type CodeMetricsRow } from '@/components/pulse/code/CodeStatStrip';
 
 interface BandData {
+  codexPresent?: boolean;
   metrics: CodeMetricsRow | null;
   githubOverlay: { totalCommits7d: number; reposActive7d?: number; trackedRepoCount?: number } | null;
 }
 
-export default function CodePulseBand() {
+/** `vendor` is the dashboard's switch: Developer Pulse's figures follow it (Codex in the OpenAI view). */
+export default function CodePulseBand({ vendor = 'all' }: { vendor?: 'all' | 'claude' | 'openai' }) {
   const [data, setData] = useState<BandData | null>(null);
   const [forbidden, setForbidden] = useState(false);
 
   useEffect(() => {
-    fetch('/api/pulse/code/org-summary')
+    fetch(`/api/pulse/code/org-summary?vendor=${vendor}`)
       .then(r => {
         if (r.status === 403 || r.status === 401) { setForbidden(true); return null; }
         return r.json();
       })
       .then(d => { if (d) setData(d); })
       .catch(() => {});
-  }, []);
+  }, [vendor]);
 
   if (forbidden || !data) return null;
   const m = data.metrics;
@@ -35,7 +37,7 @@ export default function CodePulseBand() {
   const shipping = String(m?.commit_count ?? 0);
   const shippingDesc = data.githubOverlay && data.githubOverlay.totalCommits7d > 0
     ? `AI-assisted commits this week · ${data.githubOverlay.totalCommits7d} on GitHub across tracked repos`
-    : 'Commits made inside Claude Code sessions';
+    : `Commits made inside ${!data.codexPresent || vendor === 'claude' ? 'Claude Code' : vendor === 'openai' ? 'Codex' : 'Claude Code and Codex'} sessions`;
 
   const githubRepos = (m?.repo_count ?? 0) === 0 && data.githubOverlay?.reposActive7d !== undefined;
 
@@ -57,7 +59,7 @@ export default function CodePulseBand() {
         <Figure
           label="Automation"
           value={m?.autonomy_ratio == null ? '—' : `${m.autonomy_ratio.toFixed(1)}×`}
-          sub="Actions Claude takes per instruction"
+          sub={`Actions ${!data.codexPresent || vendor === 'claude' ? 'Claude' : vendor === 'openai' ? 'Codex' : 'the AI'} takes per instruction`}
         />
         <Figure label="Shipping" value={shipping} sub={shippingDesc} />
         {githubRepos ? (

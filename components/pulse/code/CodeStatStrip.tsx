@@ -93,14 +93,29 @@ export function formatDuration(seconds: number): string {
   return `${seconds}s`;
 }
 
-export default function CodeStatStrip({ metrics, githubRepos }: { metrics: CodeMetricsRow | null; githubRepos?: { count7d: number; names7d: string[] } | null }) {
+export default function CodeStatStrip({ metrics, githubRepos, view = 'claude', split }: {
+  metrics: CodeMetricsRow | null;
+  githubRepos?: { count7d: number; names7d: string[] } | null;
+  /** Developer Pulse's switch, 'claude' until Codex data exists. */
+  view?: 'all' | 'claude' | 'openai';
+  /** All view: Claude Code's and Codex's own figures, for the line under each value. */
+  split?: { claude: CodeMetricsRow | null; openai: CodeMetricsRow | null } | null;
+}) {
+  const part = (pick: (r: CodeMetricsRow) => number | null, fmt: (v: number) => string) => {
+    if (!split) return null;
+    const c = split.claude ? pick(split.claude) : null;
+    const o = split.openai ? pick(split.openai) : null;
+    return `Claude Code ${c == null ? 'n/a' : fmt(c)} · Codex ${o == null ? 'n/a' : fmt(o)}`;
+  };
+  const actor = view === 'openai' ? 'Codex' : view === 'all' ? 'the AI' : 'Claude';
   const signals: CodeSignal[] = [
     {
-      label: 'Claude spend · 7 days',
+      label: view === 'openai' ? 'Codex spend · 7 days' : view === 'all' ? 'Spend · 7 days' : 'Claude spend · 7 days',
       value: metrics === null ? null : metrics.spend_usd === null
         ? null
         : formatCurrency(metrics.spend_usd),
-      sublabel: 'API cost of Claude Code work',
+      sublabel: part(r => r.spend_usd, formatCurrency)
+        ?? (view === 'openai' ? 'Codex tokens priced from the rates table' : 'API cost of Claude Code work'),
       hint: metrics?.spend_usd === null && (metrics.input_tokens + metrics.output_tokens) > 0
         ? 'Models seen have no price set, see rates config'
         : `${formatTokens(metrics?.input_tokens ?? 0)} in · ${formatTokens(metrics?.output_tokens ?? 0)} out`,
@@ -109,7 +124,7 @@ export default function CodeStatStrip({ metrics, githubRepos }: { metrics: CodeM
     {
       label: 'Automation',
       value: metrics?.autonomy_ratio == null ? null : `${metrics.autonomy_ratio.toFixed(1)}×`,
-      sublabel: 'Actions Claude takes per instruction given',
+      sublabel: part(r => r.autonomy_ratio, v => `${v.toFixed(1)}×`) ?? `Actions ${actor} takes per instruction given`,
       hint: 'Tool actions ÷ human prompts, per session',
     },
     // GitHub takes precedence even where a session-derived repo_count also
@@ -132,13 +147,13 @@ export default function CodeStatStrip({ metrics, githubRepos }: { metrics: CodeM
             label: 'Repos active · 7 days',
             value: null,
             pending: 'Not captured',
-            sublabel: 'Codebases with Claude activity',
+            sublabel: 'Codebases with coding activity',
             hint: `${metrics.session_count} session${metrics.session_count === 1 ? '' : 's'} · no repo attribution in these sessions`,
           }
         : {
             label: 'Repos active · 7 days',
             value: metrics == null ? null : String(metrics.repo_count),
-            sublabel: 'Codebases with Claude activity',
+            sublabel: 'Codebases with coding activity',
             hint: `${metrics?.session_count ?? 0} session${(metrics?.session_count ?? 0) === 1 ? '' : 's'} · ${metrics?.commit_count ?? 0} AI-assisted commit${(metrics?.commit_count ?? 0) === 1 ? '' : 's'}`,
           },
     {

@@ -91,7 +91,7 @@ export default function CodeUserTable({ users, showDepartment = true }: { users:
                 colSpan={(showDepartment ? 9 : 8) - (showRepos ? 0 : 1) + (showGithubRepos ? 1 : 0)}
                 className="px-4 py-6 text-center text-[13px] text-[#8F8F8F]"
               >
-                No Claude Code activity captured yet.
+                No coding activity captured yet.
               </td>
             </tr>
           ) : sorted.map(u => (

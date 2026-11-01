@@ -45,7 +45,7 @@ export const DEFAULT_CODE_CLASSIFIER_CONFIG: CodeClassifierConfig = {
 export function buildCodeClassifierSystemMessage(config: CodeClassifierConfig, opts: { humanTime?: boolean } = {}): string {
   const workTypeList = config.workTypes.map(w => `${w.name} (${w.description})`).join(', ');
   const { tier1, tier2, tier3 } = config.tiers;
-  return `You classify Claude Code engineering sessions from their telemetry digests.
+  return `You classify engineering sessions run in an AI coding tool (Claude Code or Codex) from their telemetry digests.
 
 For each session, assign:
 

@@ -53,6 +53,10 @@ export interface CodexSpend {
   /** OpenAI's own estimate for the same turns, for comparison. */
   openaiUsd: number;
   turns: number;
+  /** Uncached input, cached input and output tokens across the turns. */
+  inputTokens: number;
+  cachedTokens: number;
+  outputTokens: number;
   /** Models with no rate: their turns are not in `usd`. */
   unpricedModels: string[];
 }
@@ -79,9 +83,13 @@ export async function codexSpend(
   let usd: number | null = null;
   let openaiUsd = 0;
   let turns = 0;
+  let inputTokens = 0, cachedTokens = 0, outputTokens = 0;
   const unpriced: string[] = [];
   for (const row of rows) {
     turns += Number(row.turns);
+    inputTokens += Number(row.uncached);
+    cachedTokens += Number(row.cached);
+    outputTokens += Number(row.output);
     openaiUsd += Number(row.openai_usd ?? 0);
     const priced = row.model === null ? null : priceTokens(row.model, {
       inputTokens: Number(row.uncached),
@@ -92,5 +100,5 @@ export async function codexSpend(
     if (priced === null) unpriced.push(row.model ?? '(no model)');
     else usd = (usd ?? 0) + priced;
   }
-  return { usd, openaiUsd, turns, unpricedModels: unpriced.sort() };
+  return { usd, openaiUsd, turns, inputTokens, cachedTokens, outputTokens, unpricedModels: unpriced.sort() };
 }

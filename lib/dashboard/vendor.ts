@@ -29,6 +29,16 @@ export const WORK_PULSE_VENDOR_LABELS: Record<Vendor, string> = {
   openai: 'ChatGPT',
 };
 
+/**
+ * Developer Pulse's labels for the same switch. Codex is its only OpenAI
+ * product, so on its pages the OpenAI view is named Codex.
+ */
+export const DEVELOPER_PULSE_VENDOR_LABELS: Record<Vendor, string> = {
+  all: 'All',
+  claude: 'Claude',
+  openai: 'Codex',
+};
+
 export type WorkKind = 'chat' | 'work' | 'code';
 
 export function parseVendor(v: string | null | undefined): Vendor {

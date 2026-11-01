@@ -32,6 +32,12 @@ export async function GET(request: NextRequest) {
     .selectDistinct({ model: cam.model })
     .from(cam)
     .where(ne(cam.model, ''));
+  // Codex models (OpenAI export) are priced from this same table.
+  const codexModels = await client
+    .selectDistinct({ model: schema.codexTurns.model })
+    .from(schema.codexTurns)
+    .where(ne(schema.codexTurns.model, ''));
+  seenModels.push(...codexModels.filter(m => !seenModels.some(s => s.model === m.model)));
   // Same rule as health.ts: a provider id priced via the normalised fallback is estimated, not unpriced.
   const unpricedModels = seenModels.map(m => m.model).filter((m): m is string => !!m && !rates[m] && !isEstimatedPricing(m, rates));
 

@@ -288,6 +288,20 @@
       "when": 1791244800000,
       "tag": "0040_openai_spend",
       "breakpoints": true
+    },
+    {
+      "idx": 41,
+      "version": "7",
+      "when": 1791331200000,
+      "tag": "0041_codex_actions",
+      "breakpoints": true
+    },
+    {
+      "idx": 42,
+      "version": "7",
+      "when": 1791417600000,
+      "tag": "0042_code_metrics_vendor",
+      "breakpoints": true
     }
   ]
 }

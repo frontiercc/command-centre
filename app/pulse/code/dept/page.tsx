@@ -12,6 +12,8 @@ import CodeUserTable, { type CodeUserRow } from '@/components/pulse/code/CodeUse
 import JourneyGrid from '@/components/pulse/JourneyGrid';
 import HumanTimeCard, { type HumanTimeSummary } from '@/components/pulse/HumanTimeCard';
 import { PageBody, Toolbar, Panel, Tag, Notice, B, cx } from '@/components/precision/ui';
+import { useVendor, VendorSwitch } from '@/components/shared/VendorSwitch';
+import { DEVELOPER_PULSE_VENDOR_LABELS } from '@/lib/dashboard/vendor';
 
 interface DeptListRow {
   department: string;
@@ -19,6 +21,8 @@ interface DeptListRow {
 }
 
 interface DeptDetail {
+  codexPresent?: boolean;
+  metricsSplit?: { claude: CodeMetricsRow | null; openai: CodeMetricsRow | null } | null;
   humanTime?: HumanTimeSummary | null;
   dept: string;
   metrics: CodeMetricsRow | null;
@@ -36,18 +40,21 @@ function DeptContent() {
   const [detail, setDetail] = useState<DeptDetail | null>(null);
   const [detailLoading, setDetailLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [vendor, setVendor] = useVendor();
+  const [codexPresent, setCodexPresent] = useState(false);
 
   const selectedDept = searchParams.get('dept') ?? '';
 
   // Load the department list for the dropdown
   useEffect(() => {
-    fetch('/api/pulse/code/depts')
+    fetch(`/api/pulse/code/depts?vendor=${vendor}`)
       .then(async r => {
         const d = await r.json().catch(() => ({}));
         if (!r.ok) throw new Error(d.message || d.error || "Couldn't load this page. Try again.");
         return d;
       })
       .then(d => {
+        setCodexPresent(!!d.codexPresent);
         const list: DeptListRow[] = d.depts ?? [];
         setDepts(list);
         if (!searchParams.get('dept') && list.length > 0) {
@@ -58,7 +65,7 @@ function DeptContent() {
       })
       .catch(e => setError(e.message))
       .finally(() => setDeptsLoading(false));
-  }, []); // eslint-disable-line react-hooks/exhaustive-deps
+  }, [vendor]); // eslint-disable-line react-hooks/exhaustive-deps
 
   const loadDept = useCallback((dept: string) => {
     if (!dept) return;
@@ -66,7 +73,7 @@ function DeptContent() {
     // A refusal (no department assigned, or another department) shows the
     // server's message; storing it as the department's data would crash the
     // page.
-    fetch(`/api/pulse/code/dept/${encodeURIComponent(dept)}`)
+    fetch(`/api/pulse/code/dept/${encodeURIComponent(dept)}?vendor=${vendor}`)
       .then(async r => {
         const d = await r.json().catch(() => ({}));
         if (!r.ok) throw new Error(d.message || (r.status === 403 ? 'You can only view your own department.' : d.error) || "Couldn't load this page. Try again.");
@@ -75,7 +82,7 @@ function DeptContent() {
       .then(d => { setError(null); setDetail(d); })
       .catch(e => { setDetail(null); setError(e.message); })
       .finally(() => setDetailLoading(false));
-  }, []);
+  }, [vendor]);
 
   useEffect(() => {
     if (selectedDept) loadDept(selectedDept);
@@ -91,7 +98,7 @@ function DeptContent() {
     <>
       <TopBar
         title="Developer Pulse: Departments"
-        subtitle={selectedDept ? `Department Claude Code activity · ${selectedDept}` : 'Select a department'}
+        subtitle={selectedDept ? `Department ${codexPresent ? 'coding' : 'Claude Code'} activity · ${selectedDept}` : 'Select a department'}
       />
       <PageBody>
         {/* Department picker (top-left) */}
@@ -115,14 +122,16 @@ function DeptContent() {
               </select>
             )
           }
-        />
+        >
+          <VendorSwitch vendor={vendor} onChange={setVendor} openaiPresent={codexPresent} labels={DEVELOPER_PULSE_VENDOR_LABELS} />
+        </Toolbar>
 
         {error && <Notice tone="error">{error}</Notice>}
         {detailLoading && <LoadingSpinner />}
 
         {!detailLoading && detail && (
           <>
-            <CodeStatStrip metrics={detail.metrics} githubRepos={detail.githubRepos} />
+            <CodeStatStrip metrics={detail.metrics} githubRepos={detail.githubRepos} view={codexPresent ? vendor : 'claude'} split={detail.metricsSplit} />
 
             <HumanTimeCard summary={detail.humanTime} surface="code" scope={detail.dept} />
 

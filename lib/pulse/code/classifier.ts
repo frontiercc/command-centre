@@ -53,8 +53,11 @@ export function classifierCandidateWhere(
   css: typeof schema.codeSessionStats,
   csc: typeof schema.codeSessionClassifications,
   now: number,
+  /** Admin → Developer Pulse "Classify Codex sessions"; off leaves 'codex:' sessions alone. */
+  classifyCodex = true,
 ) {
   const cutoff = now - SESSION_QUIET_SECONDS;
+  const codexRule = classifyCodex ? undefined : sql`${css.session_id} NOT LIKE 'codex:%'`;
   // A session qualifies for pass 1/2 when it has no classification row yet
   // (isNull, via the LEFT JOIN) OR its row failed with attempts still under
   // the ceiling — a failure is retried rather than being permanent, matching
@@ -75,6 +78,7 @@ export function classifierCandidateWhere(
       notYetClassified,
       lt(css.last_at, cutoff),
       or(gt(css.assistant_turns, 0), gt(css.user_msg_count, 0)),
+      codexRule,
     ),
     // Pass 2 — provisional: still active but long-running (≥ 2h), never
     // classified (or retryable-failed).
@@ -83,6 +87,7 @@ export function classifierCandidateWhere(
       gte(css.last_at, cutoff),
       lt(css.first_at, now - PROVISIONAL_MIN_AGE_SECONDS),
       or(gt(css.assistant_turns, 0), gt(css.user_msg_count, 0)),
+      codexRule,
     ),
     // Pass 3 — finalise: has a provisional classification and has gone idle
     // with new activity since it was provisionally classified.
@@ -90,6 +95,7 @@ export function classifierCandidateWhere(
       eq(csc.provisional, 1),
       lt(css.last_at, cutoff),
       gt(css.last_at, csc.classified_at),
+      codexRule,
     ),
   };
 }
@@ -110,7 +116,7 @@ export async function getClassifierQueueDepth(nowS?: number): Promise<{
   const client = await getTypedClient();
   const css = schema.codeSessionStats;
   const csc = schema.codeSessionClassifications;
-  const w = classifierCandidateWhere(css, csc, now);
+  const w = classifierCandidateWhere(css, csc, now, (await getConfigValue('codeClassifyCodex')) !== 'false');
 
   const countWith = async (join: 'left' | 'inner', where: ReturnType<typeof and>) => {
     const q = client.select({ c: sql<number | string>`COUNT(*)` }).from(css);
@@ -254,7 +260,7 @@ export async function runCodeClassifierJob(): Promise<{ selected: number; classi
   const css = schema.codeSessionStats;
   const csc = schema.codeSessionClassifications;
   const cutoff = now - SESSION_QUIET_SECONDS;
-  const candidateWhere = classifierCandidateWhere(css, csc, now);
+  const candidateWhere = classifierCandidateWhere(css, csc, now, (await getConfigValue('codeClassifyCodex')) !== 'false');
 
   const digestCols = {
     session_id: css.session_id,

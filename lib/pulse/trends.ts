@@ -19,6 +19,7 @@
 import { sql } from 'drizzle-orm';
 import { getTypedClient } from '@/lib/db/client';
 import { weekStart, weekStarts } from '@/lib/pulse/period';
+import type { Vendor } from '@/lib/dashboard/vendor';
 
 export type TrendTable = 'code_metrics' | 'pulse_metrics';
 
@@ -77,15 +78,19 @@ export async function getWeeklySeries(
   column: string,
   nWeeks: number,
   now: number = Math.floor(Date.now() / 1000),
+  /** code_metrics only: read one product view's rows from code_metrics_vendor instead. */
+  vendor?: Vendor,
 ): Promise<WeeklyPoint[]> {
   assertColumn(table, column);
   const client = await getTypedClient();
   const weeks = weekStarts(now, nWeeks);
   const currentWeek = weekStart(now);
+  const byVendor = vendor !== undefined && table === 'code_metrics';
 
   const query = sql`
-    SELECT period_start, ${sql.raw(column)} AS value FROM ${sql.raw(table)}
+    SELECT period_start, ${sql.raw(column)} AS value FROM ${sql.raw(byVendor ? 'code_metrics_vendor' : table)}
     WHERE granularity = 'week' AND scope_type = ${scopeType} AND scope_id = ${scopeId} AND period_start >= ${weeks[0]}
+      ${byVendor ? sql`AND vendor = ${vendor}` : sql``}
     ORDER BY period_start
   `;
   // Policy B: period_start (bigint) and value (numeric/bigint columns, e.g.
@@ -122,11 +127,12 @@ export async function getWeeklyDelta(
   column: string,
   nWeeks: number,
   now: number = Math.floor(Date.now() / 1000),
+  vendor?: Vendor,
 ): Promise<WeeklyDelta> {
   // assertColumn happens inside getWeeklySeries; nWeeks+1 not needed since we
   // only ever look at completed weeks within the requested series and drop
   // the trailing (partial) entry.
-  const series = await getWeeklySeries(table, scopeType, scopeId, column, nWeeks, now);
+  const series = await getWeeklySeries(table, scopeType, scopeId, column, nWeeks, now, vendor);
   const completed = series.filter(p => !p.partial);
   const current = completed.length > 0 ? completed[completed.length - 1].value : null;
   const prior = completed.length > 1 ? completed[completed.length - 2].value : null;

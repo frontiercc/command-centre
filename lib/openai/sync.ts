@@ -31,6 +31,10 @@
 //     the rates table, with OpenAI's own estimate beside them
 // Reply TEXT is never stored.
 //
+// Codex tool calls (TOOL_CALL_COMPLETED / TOOL_CALL_FAILED) → codex_actions,
+// one row each with whether it failed and whether it was a `git commit`, for
+// Developer Pulse. The command is read to spot a commit and never stored.
+//
 // ChatGPT Work also appears in CODEX_LOG with a CODEX_WORK_* app, carrying the
 // same prompt. Work is taken from CONVERSATION_MESSAGE only, so those Codex
 // log records are skipped rather than stored twice.
@@ -92,6 +96,8 @@ export interface OpenAiSyncStats {
   replies: number;
   codexTurns: number;
   costRecords: number;
+  /** Codex tool calls stored (Developer Pulse's actions, failures and commits). */
+  codexActions: number;
   badLines: number;
   errors: string[];
 }
@@ -100,7 +106,7 @@ export function emptyStats(): OpenAiSyncStats {
   return {
     files: 0, records: 0, prompts: { chatgpt_chat: 0, chatgpt_work: 0, codex: 0 },
     repeats: 0, workInCodexLog: 0, noPerson: 0, tooOld: 0, skillUses: 0, connectorCalls: 0,
-    replies: 0, codexTurns: 0, costRecords: 0, badLines: 0, errors: [],
+    replies: 0, codexTurns: 0, costRecords: 0, codexActions: 0, badLines: 0, errors: [],
   };
 }
 
@@ -128,6 +134,8 @@ interface CodexLogRecord extends Envelope {
     session_id?: string; prompt_text?: string; model?: string;
     // APP_MCP_CALL: the MCP tool's name and optional metadata naming its connector.
     name?: string; tool_meta?: { connector?: unknown };
+    // TOOL_CALL_*: the tool and its input (read only to spot a commit).
+    tool_name?: string; tool_input?: unknown; call_id?: string; tool_call_id?: string;
   };
 }
 
@@ -318,6 +326,59 @@ export function interpretActivity(raw: unknown, floors: { cowork: number; code: 
   return null;
 }
 
+/** A Codex tool call ready to store: whether it failed and whether it was a commit. No text. */
+export interface CodexActionRow {
+  id: string; sessionId: string; email: string; toolName: string | null;
+  failed: boolean; commits: number; occurredAt: number;
+}
+
+/**
+ * True when a tool input runs `git commit`. Reads a shell command given as an
+ * argument list (["git", "commit", ...]), an object with a `command` list or
+ * string, or a plain string. The input itself is never kept.
+ */
+export function isGitCommit(input: unknown): boolean {
+  let v: unknown = input;
+  if (typeof v === 'string') {
+    try { v = JSON.parse(v); } catch { /* a plain command string */ }
+  }
+  if (v && typeof v === 'object' && !Array.isArray(v)) v = (v as { command?: unknown; cmd?: unknown }).command ?? (v as { cmd?: unknown }).cmd;
+  const words = Array.isArray(v)
+    ? v.filter((w): w is string => typeof w === 'string')
+    : typeof v === 'string' ? v.trim().split(/\s+/) : [];
+  // `bash -lc "git commit ..."` and the like: look inside the last argument too.
+  const flat = words.flatMap((w) => w.includes(' ') ? w.trim().split(/\s+/) : [w]);
+  for (let i = 0; i < flat.length - 1; i++) {
+    if (flat[i] === 'git' && flat[i + 1] === 'commit') return true;
+  }
+  return false;
+}
+
+/**
+ * A Codex tool call from the Codex log, or null. ChatGPT Work's calls
+ * (CODEX_WORK_* apps) are not Codex work and are skipped. Pure.
+ */
+export function interpretCodexAction(raw: unknown, floors: { cowork: number; code: number }): CodexActionRow | null {
+  const r = raw as CodexLogRecord;
+  if (!r || typeof r !== 'object' || r.type !== 'CODEX_LOG') return null;
+  if (r.event_type !== 'TOOL_CALL_COMPLETED' && r.event_type !== 'TOOL_CALL_FAILED') return null;
+  if ((r.client_id ?? '').startsWith('CODEX_WORK_')) return null;
+  const d = r.event_details;
+  const sessionId = d?.session_id;
+  if (!sessionId || !r.event_id) return null;
+  const email = r.actor?.user_email ?? '';
+  if (!isPlainEmail(email)) return null;
+  const occurredAt = toSeconds(r.timestamp);
+  if (occurredAt === null || occurredAt < floors.code) return null;
+  const failed = r.event_type === 'TOOL_CALL_FAILED';
+  return {
+    id: `codex-action:${r.event_id}`, sessionId: `codex:${sessionId}`, email,
+    toolName: d?.tool_name ?? null, failed,
+    commits: !failed && isGitCommit(d?.tool_input) ? 1 : 0,
+    occurredAt,
+  };
+}
+
 /** A spend record ready to store. No text. */
 export type SpendRow =
   | {
@@ -488,6 +549,15 @@ async function storeRecords(
         else {
           const activity = interpretActivity(raw, floors);
           if (activity) await storeActivity(tx, activity, await personFor(activity.email, activity.surface), stats);
+          const action = interpretCodexAction(raw, floors);
+          if (action) {
+            const inserted = await tx.insert(schema.codexActions).values({
+              id: action.id, user_id: await personFor(action.email, 'code'), session_id: action.sessionId,
+              tool_name: action.toolName, failed: action.failed ? 1 : 0, commit_count: action.commits,
+              occurred_at: action.occurredAt,
+            }).onConflictDoNothing().returning({ id: schema.codexActions.id });
+            if (inserted.length > 0) stats.codexActions++;
+          }
           const spend = interpretSpend(raw, floors);
           if (spend) {
             const surface = spend.kind === 'turn' || (spend.kind === 'cost' && spend.product === 'codex') ? 'code' : 'cowork';

@@ -30,7 +30,7 @@
  */
 import { and, desc, eq, gte, ne } from 'drizzle-orm';
 import { getTypedClient } from '@/lib/db/client';
-import { schema } from '@/lib/db/schema';
+import { readCodeMetrics } from '@/lib/pulse/code/vendor-view';
 import { weekStart, weekStarts } from '@/lib/pulse/period';
 import { ORG_SCOPE_ID } from '@/lib/pulse/code/aggregator';
 
@@ -49,7 +49,7 @@ interface WeekRow {
   commit_count: number;
 }
 
-export async function computeObservedLift(): Promise<ObservedLift | null> {
+export async function computeObservedLift(codexPresent = false): Promise<ObservedLift | null> {
   const client = await getTypedClient();
   const now = Math.floor(Date.now() / 1000);
   const currentWeek = weekStart(now);
@@ -57,8 +57,8 @@ export async function computeObservedLift(): Promise<ObservedLift | null> {
   const candidateWeeks = weekStarts(now, LOOKBACK_WEEKS + 4);
   const rangeStart = candidateWeeks[0];
 
-  const t = schema.codeMetrics;
-  const rows = await client
+  // Claude Code's own weekly rows once Codex data exists (lib/pulse/code/vendor-view.ts).
+  const rows = await readCodeMetrics('claude', codexPresent, (t, only) => client
     .select({
       period_start: t.period_start,
       active_time_user_s: t.active_time_user_s,
@@ -71,8 +71,9 @@ export async function computeObservedLift(): Promise<ObservedLift | null> {
       eq(t.scope_id, ORG_SCOPE_ID),
       gte(t.period_start, rangeStart),
       ne(t.period_start, currentWeek),
+      only,
     ))
-    .orderBy(desc(t.period_start));
+    .orderBy(desc(t.period_start)));
 
   return computeFromRows(rows as WeekRow[]);
 }

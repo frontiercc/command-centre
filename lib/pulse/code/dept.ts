@@ -9,7 +9,7 @@
 // (Policy B), same for the COALESCE'd integer aggregates. `department` is
 // matched with plain `=` (never LIKE), which is case-sensitive — no ILIKE
 // needed.
-import { sql } from 'drizzle-orm';
+import { sql, type SQL } from 'drizzle-orm';
 import { getTypedClient } from '@/lib/db/client';
 
 export interface CodeDeptMember {
@@ -70,7 +70,11 @@ interface RawDeptMemberRow {
  * latest user-scope `code_metrics`, so members with no recent Code activity still
  * appear with null/zero metrics instead of being dropped.
  */
-export async function getCodeDeptMembers(dept: string): Promise<CodeDeptMember[]> {
+export async function getCodeDeptMembers(
+  dept: string,
+  /** Developer Pulse's switch: which code_metrics rows to read (lib/pulse/code/vendor-view.ts). */
+  source: { table: SQL; only: SQL } = { table: sql.raw('code_metrics'), only: sql`` },
+): Promise<CodeDeptMember[]> {
   const client = await getTypedClient();
   const rows = await rawAll<RawDeptMemberRow>(client, sql`
      SELECT roster.id AS user_id, roster.display_name, roster.email,
@@ -89,10 +93,10 @@ export async function getCodeDeptMembers(dept: string): Promise<CodeDeptMember[]
         WHERE au.department = ${dept}
      ) roster
      LEFT JOIN (
-       SELECT scope_id, MAX(id) AS max_id FROM code_metrics
-       WHERE scope_type = 'user' AND granularity = 'rolling' GROUP BY scope_id
+       SELECT scope_id, MAX(id) AS max_id FROM ${source.table}
+       WHERE scope_type = 'user' AND granularity = 'rolling' ${source.only} GROUP BY scope_id
      ) latest ON latest.scope_id = roster.id
-     LEFT JOIN code_metrics cm ON cm.id = latest.max_id AND cm.granularity = 'rolling'
+     LEFT JOIN ${source.table} cm ON cm.id = latest.max_id AND cm.granularity = 'rolling'
      ORDER BY cm.spend_usd DESC NULLS LAST, roster.display_name
   `);
 

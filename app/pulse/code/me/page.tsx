@@ -16,6 +16,8 @@ import Sparkline from '@/components/pulse/Sparkline';
 import WeeklyDeltaBadge from '@/components/pulse/WeeklyDeltaBadge';
 import HumanTimeCard, { type HumanTimeSummary } from '@/components/pulse/HumanTimeCard';
 import { PageBody, Toolbar, Panel, Tag, Empty, Muted, B } from '@/components/precision/ui';
+import { useVendor, VendorSwitch } from '@/components/shared/VendorSwitch';
+import { DEVELOPER_PULSE_VENDOR_LABELS, type Vendor } from '@/lib/dashboard/vendor';
 
 interface SessionRow {
   session_id: string;
@@ -44,6 +46,9 @@ interface WeeklyTrend {
 }
 
 interface MeData {
+  vendor?: Vendor;
+  codexPresent?: boolean;
+  metricsSplit?: { claude: CodeMetricsRow | null; openai: CodeMetricsRow | null } | null;
   humanTime?: HumanTimeSummary | null;
   canSeeSpendReview?: boolean;
   userId: string | null;
@@ -111,7 +116,7 @@ function RecentSessions({ sessions }: { sessions: SessionRow[] }) {
                 <span className="text-[13px] text-[#8F8F8F] tabular-nums">
                   {formatTokens(s.input_tokens + s.output_tokens)} tokens
                 </span>
-                <Tag>{s.source === 'otel' ? 'OTel' : 'Agent'}</Tag>
+                <Tag>{s.source === 'codex' ? 'Codex' : s.source === 'otel' ? 'OTel' : 'Agent'}</Tag>
               </div>
             </li>
           ))}
@@ -130,15 +135,17 @@ function MyCodePulseContent() {
 
   const [data, setData] = useState<MeData | null>(null);
   const [loading, setLoading] = useState(true);
+  const [vendor, setVendor] = useVendor();
 
   useEffect(() => {
-    const qs = viewUserId ? `?userId=${encodeURIComponent(viewUserId)}` : '';
-    fetch(`/api/pulse/code/me${qs}`)
+    const qs = new URLSearchParams({ vendor });
+    if (viewUserId) qs.set('userId', viewUserId);
+    fetch(`/api/pulse/code/me?${qs.toString()}`)
       .then(r => r.json())
       .then(setData)
       .catch(() => {})
       .finally(() => setLoading(false));
-  }, [viewUserId]);
+  }, [viewUserId, vendor]);
 
   if (loading) return <LoadingSpinner />;
 
@@ -146,7 +153,9 @@ function MyCodePulseContent() {
     <>
       <TopBar
         title={viewUserId ? `Developer Pulse: ${viewName || viewUserId}` : 'My Developer Pulse'}
-        subtitle={viewUserId ? 'Per-user Claude Code activity' : 'Your Claude Code activity, spend, and autonomy'}
+        subtitle={data?.codexPresent
+          ? (viewUserId ? 'Per-user coding activity: Claude Code and Codex' : 'Your coding activity, spend, and autonomy: Claude Code and Codex')
+          : (viewUserId ? 'Per-user Claude Code activity' : 'Your Claude Code activity, spend, and autonomy')}
       />
       <PageBody>
         {!data?.userId ? (
@@ -155,17 +164,26 @@ function MyCodePulseContent() {
           </Empty>
         ) : (
           <>
-            {data.canSeeSpendReview && (
+            {(data.canSeeSpendReview || data.codexPresent) && (
               <Toolbar>
-                <Link href={`/finops/spend-review/${encodeURIComponent(data.userId)}`} className={B.link}>
-                  {viewUserId ? 'Spend review' : 'Your spend review'}
-                </Link>
+                <span className="flex flex-wrap items-center gap-3">
+                  <VendorSwitch vendor={vendor} onChange={setVendor} openaiPresent={data.codexPresent ?? false} labels={DEVELOPER_PULSE_VENDOR_LABELS} />
+                  {data.canSeeSpendReview && (
+                    <Link href={`/finops/spend-review/${encodeURIComponent(data.userId)}`} className={B.link}>
+                      {viewUserId ? 'Spend review' : 'Your spend review'}
+                    </Link>
+                  )}
+                </span>
               </Toolbar>
             )}
 
-            <CodeStatStrip metrics={data.metrics} githubRepos={data.githubRepos} />
+            <CodeStatStrip metrics={data.metrics} githubRepos={data.githubRepos} view={data.codexPresent ? vendor : 'claude'} split={data.metricsSplit} />
 
-            <CodeProductivityStrip metrics={data.metrics} />
+            {data.codexPresent && vendor === 'openai'
+              ? <Muted>Engaged time, lines of code, pull requests and edit acceptance come from Claude Code&apos;s own telemetry. Codex doesn&apos;t send them.</Muted>
+              : <CodeProductivityStrip metrics={data.codexPresent && vendor === 'all' && data.metricsSplit?.claude && data.metrics
+                  ? { ...data.metricsSplit.claude, commit_count: data.metrics.commit_count }
+                  : data.metrics} />}
 
             <HumanTimeCard summary={data.humanTime} surface="code" scope="Personal" />
 

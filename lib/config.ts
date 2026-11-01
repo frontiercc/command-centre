@@ -110,6 +110,9 @@ export interface AppConfig {
   humanTimeEnabled: string;
   // Code's own human-time switch (Admin → Developer Pulse). '' = follow humanTimeEnabled.
   humanTimeCodeEnabled: string;
+  // 'false' stops the Developer Pulse session classifier judging Codex sessions
+  // (OpenAI export), which it otherwise does like Claude Code sessions. Default 'true'.
+  codeClassifyCodex: string;
   // 'true' raises an alert (and so a Slack message, if Slack alerts are on) for
   // system health problems, once per failure. Off by default: System health on
   // /admin/system shows them regardless.
@@ -401,6 +404,7 @@ export const CONFIG_KEYS: Record<keyof AppConfig, string> = {
   pulseClassifyChatgpt: 'pulse_classify_chatgpt',
   humanTimeEnabled: 'human_time_enabled',
   humanTimeCodeEnabled: 'human_time_code_enabled',
+  codeClassifyCodex: 'code_classify_codex',
   systemHealthAlertsEnabled: 'system_health_alerts_enabled',
   telemetrySilenceHours: 'telemetry_silence_hours',
   telemetrySilenceTimezone: 'telemetry_silence_timezone',
@@ -789,6 +793,7 @@ export async function getAllConfig(): Promise<AppConfig> {
     pulseClassifyChatgpt: resolve('pulseClassifyChatgpt', 'true'),
     humanTimeEnabled: resolve('humanTimeEnabled', 'false'),
     humanTimeCodeEnabled: resolve('humanTimeCodeEnabled'),
+    codeClassifyCodex: resolve('codeClassifyCodex', 'true'),
     systemHealthAlertsEnabled: resolve('systemHealthAlertsEnabled', 'false'),
     telemetrySilenceHours: resolve('telemetrySilenceHours', '3'),
     telemetrySilenceTimezone: resolve('telemetrySilenceTimezone', 'Europe/London'),

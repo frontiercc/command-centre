@@ -364,10 +364,10 @@ export default function DashboardPage() {
         {/* Work Pulse band with the Developer Pulse strip nested directly below its signal strip */}
         {pulseEnabled ? (
           <PulseBand vendor={vendor} showVendor={data.openaiPresent}>
-            <CodePulseBand />
+            <CodePulseBand vendor={vendor} />
           </PulseBand>
         ) : (
-          <CodePulseBand />
+          <CodePulseBand vendor={vendor} />
         )}
       </PageBody>
     </>

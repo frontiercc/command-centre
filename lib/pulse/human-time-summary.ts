@@ -13,6 +13,8 @@
 import { and, eq, gt, gte, inArray, isNotNull, lt, type SQL } from 'drizzle-orm';
 import { getTypedClient } from '@/lib/db/client';
 import { schema } from '@/lib/db/schema';
+import type { Vendor } from '@/lib/dashboard/vendor';
+import { codeSessionVendor } from '@/lib/pulse/code/vendor-view';
 import { buildSessionTaskTypeMap, MECHANISM_TASK_TYPES } from '@/lib/finance/model-efficiency';
 import { MIN_SESSIONS_FOR_RATE } from '@/lib/pulse/cowork/session-output-rate';
 
@@ -79,6 +81,8 @@ export async function buildHumanTimeSummary(opts: {
   minSessionsForRatio: number;
   /** A fixed [startS, endS) window (e.g. a completed week) instead of the last 30 days. */
   range?: { startS: number; endS: number };
+  /** Developer Pulse's switch (Code only): Claude Code or Codex sessions. */
+  vendor?: Vendor;
 }): Promise<HumanTimeSummary> {
   const nowS = opts.nowS ?? Math.floor(Date.now() / 1000);
   const since = opts.range?.startS ?? nowS - WINDOW_DAYS * 86400;
@@ -94,6 +98,8 @@ export async function buildHumanTimeSummary(opts: {
     const where: SQL[] = [gte(css.first_at, since), isNotNull(csc.human_minutes_likely), gt(css.active_secs, 0)];
     if (until !== null) where.push(lt(css.first_at, until));
     if (opts.userIds) where.push(inArray(css.user_id, opts.userIds));
+    // Developer Pulse's switch: Codex sessions are 'codex:' ids.
+    if (opts.vendor && opts.vendor !== 'all') where.push(codeSessionVendor(css.session_id, opts.vendor));
     const r = await client
       .select({
         session_id: css.session_id, low: csc.human_minutes_low, likely: csc.human_minutes_likely,
@@ -137,13 +143,13 @@ export async function buildHumanTimeSummary(opts: {
  * read fails (the card hides; the rest of the page is unaffected). Callers
  * decide the scope and who may see it.
  */
-export async function readHumanTime(surface: 'code' | 'cowork', userIds?: string[]): Promise<(HumanTimeSummary & { check: { period: string; reviewed: number; aboutRight: number } | null }) | null> {
+export async function readHumanTime(surface: 'code' | 'cowork', userIds?: string[], vendor: Vendor = 'all'): Promise<(HumanTimeSummary & { check: { period: string; reviewed: number; aboutRight: number } | null }) | null> {
   try {
     const { getConfigValue } = await import('@/lib/config');
     const { humanTimeOn } = await import('@/lib/pulse/human-time-flags');
     if (!(await humanTimeOn(surface))) return null;
     const min = parseInt(await getConfigValue('humanTimeMinSessionsForRatio'), 10);
-    const summary = await buildHumanTimeSummary({ surface, userIds, minSessionsForRatio: Number.isFinite(min) && min > 0 ? min : 20 });
+    const summary = await buildHumanTimeSummary({ surface, userIds, vendor, minSessionsForRatio: Number.isFinite(min) && min > 0 ? min : 20 });
     // The spot-check result (counts only), so the card can say how well the estimates held up.
     const { latestCheckResult } = await import('@/lib/pulse/human-time-checks');
     return { ...summary, check: await latestCheckResult(surface) };
