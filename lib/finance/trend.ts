@@ -3,7 +3,7 @@
 
 /**
  * 12-month spend trend — one point per calendar month up to the current,
- * each priced via `buildChargeback` (measured Code + Cowork spend). The UI
+ * each priced via `buildChargeback` (Claude Code and Cowork, plus ChatGPT and Codex when connected). The UI
  * hides the chart unless at least 3 months have real (>0) spend, so a brand
  * new deployment with 1 month of data doesn't render a misleading trend.
  */

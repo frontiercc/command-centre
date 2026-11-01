@@ -78,7 +78,8 @@ export interface ChargebackReport {
   /** Org-total Code token breakdown (exact, includes unpriced-model tokens). */
   codeTokens: CodeTokens;
   /**
-   * List-rate ESTIMATE of $ saved by cache reads vs paying full input rate.
+   * List-rate ESTIMATE of $ saved by cache reads vs paying full input rate,
+   * Claude's and (with OpenAI connected) ChatGPT's and Codex's cached input.
    * NOT part of grandTotalUsd (informational). null when any priced model
    * seen lacks a cache-read rate (never fabricated).
    */
@@ -353,6 +354,13 @@ export async function buildChargeback(period: string, nowS: number = Math.floor(
         }, rates);
         if (usd === null) { openaiUnpriced.add(row.model ?? '(no model)'); continue; }
         add(u, usd);
+        // Cached input is billed at OpenAI's discounted rate: the saving joins the caching estimate.
+        const r = rates[row.model!] ?? rates[normalizeModelId(row.model!)];
+        if (r && typeof r.in === 'number' && typeof r.cacheRead === 'number') {
+          cacheSavingsUsd += (cached / 1_000_000) * (r.in - r.cacheRead);
+        } else if (cached > 0) {
+          cacheSavingsUnknown = true;
+        }
       }
     };
     priceInto(await openaiRows(sql`

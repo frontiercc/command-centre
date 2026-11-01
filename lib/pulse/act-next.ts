@@ -96,7 +96,9 @@ export async function buildActNext(role: string, nowS: number): Promise<ActNextR
     try {
       const period = currentPeriod(nowS);
       const modelRows: ActNextRow[] = [];
-      for (const surface of ['code', 'cowork'] as const) {
+      // ChatGPT and Codex too: a review flag names a cheaper model the same
+      // people already use for that work, so it never crosses vendors.
+      for (const surface of ['code', 'cowork', 'chatgpt', 'codex'] as const) {
         const report = await buildModelEfficiency(surface, period, nowS);
         for (const activity of report.activities) {
           const flag = activity.flag;

@@ -461,9 +461,9 @@ export default function CostChargebackPage() {
                   {' '}{report.chatgptSeats.activeUsers30d} of {report.chatgptSeats.licensed} seats used ChatGPT in the last 30 days.
                 </p>
               )}
-              {((report.cacheSavingsUsd != null && report.cacheSavingsUsd > 0 && claudeShown) || (report.seats != null && isCurrentMonth && claudeShown)) && (
+              {((report.cacheSavingsUsd != null && report.cacheSavingsUsd > 0) || (report.seats != null && isCurrentMonth && claudeShown)) && (
                 <div className="flex gap-x-5 gap-y-1 flex-wrap text-[13px]">
-                  {report.cacheSavingsUsd != null && report.cacheSavingsUsd > 0 && claudeShown && (
+                  {report.cacheSavingsUsd != null && report.cacheSavingsUsd > 0 && (
                     <span className="text-[#245BF3]">
                       Prompt caching saved about {fmtUsd(report.cacheSavingsUsd)} this month (estimate, at list rates)
                     </span>

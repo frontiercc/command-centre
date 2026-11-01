@@ -704,7 +704,7 @@ export default function SystemPage() {
             disabled={financeSaving}
           />
           <div className="px-4 py-3 border-t border-[#F2F2F2]">
-            <Field label="Seat price (USD/month)" hint="Used only for the unused-seats estimate on FinOps." className="max-w-xs">
+            <Field label="Claude seat price (USD/month)" hint="With Licensed seats under General, used only for the unused Claude seats estimate on FinOps." className="max-w-xs">
               <input
                 type="number"
                 min={0}

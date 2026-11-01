@@ -30,6 +30,15 @@ import type {
 } from '@/lib/finance/model-efficiency';
 import { formatModelLabel } from '@/lib/pulse/code/model-label';
 import { Panel, Tag, Pill, T, Segmented, Notice, Muted, SubHead, cx } from '@/components/precision/ui';
+import { useConnectedProducts } from '@/components/shared/VendorSwitch';
+
+/** A surface's name in this box. With OpenAI connected, Claude's say Claude. */
+function surfaceLabel(surface: Surface, openai: boolean): string {
+  if (surface === 'chatgpt') return 'ChatGPT';
+  if (surface === 'codex') return 'Codex';
+  if (surface === 'code') return openai ? 'Claude Code' : 'Code';
+  return openai ? 'Claude Cowork' : 'Cowork';
+}
 import { MODEL_COLOURS, MODEL_OTHER, SHARE_BAR } from '@/lib/ui/chart-colours';
 
 const fmtUsd = (n: number) => n.toLocaleString('en-US', { style: 'currency', currency: 'USD' });
@@ -328,12 +337,12 @@ export function CostDrivers({ report, scope }: { report: CostDriverFigures; scop
   );
 }
 
-function EmptyState({ surface, period }: { surface: Surface; period: string }) {
+function EmptyState({ surface, period, openai }: { surface: Surface; period: string; openai: boolean }) {
   return (
     <div className="p-4">
       <div className="border border-dashed border-[#DADADA] rounded-[14px] px-6 py-8 text-center">
         <p className="m-0 text-[14px] text-[#8F8F8F]">
-          No priced {surface === 'code' ? 'Code' : 'Cowork'} spend for {period}.
+          No priced {surfaceLabel(surface, openai)} spend for {period}.
         </p>
       </div>
     </div>
@@ -341,7 +350,13 @@ function EmptyState({ surface, period }: { surface: Surface; period: string }) {
 }
 
 export default function ModelEfficiencySection({ period }: { period: string }) {
-  const [surface, setSurface] = useState<Surface>('code');
+  // Tabs follow what is connected: Claude's when Claude is (or nothing yet), ChatGPT and Codex when OpenAI is.
+  const connected = useConnectedProducts();
+  const openai = !!connected?.openai;
+  const claude = !connected || connected.claude || !connected.openai;
+  const surfaces: Surface[] = [...(claude ? ['code', 'cowork'] as const : []), ...(openai ? ['chatgpt', 'codex'] as const : [])];
+  const [chosen, setSurface] = useState<Surface>('code');
+  const surface: Surface = surfaces.includes(chosen) ? chosen : surfaces[0];
   const [report, setReport] = useState<ModelEfficiencyReport | null>(null);
   const [loading, setLoading] = useState(true);
   const [notEnabled, setNotEnabled] = useState(false);
@@ -383,7 +398,7 @@ export default function ModelEfficiencySection({ period }: { period: string }) {
 
   const belowVolumeKeys = new Set((report?.belowVolume ?? []).map((b) => b.key));
   const opportunities = (report?.activities ?? []).filter((a) => a.flag && !a.flag.suppressedReason);
-  const isShareBasedOnly = surface === 'cowork';
+  const isShareBasedOnly = surface === 'cowork' || surface === 'chatgpt';
 
   return (
     <Panel
@@ -394,14 +409,14 @@ export default function ModelEfficiencySection({ period }: { period: string }) {
           label="Surface"
           value={surface}
           onChange={setSurface}
-          options={[{ value: 'code', label: 'Code' }, { value: 'cowork', label: 'Cowork' }]}
+          options={surfaces.map(s => ({ value: s, label: surfaceLabel(s, openai) }))}
         />
       }
       flush
     >
       {loading && <p className="m-0 p-6 text-center text-[13px] text-[#8F8F8F]">Loading…</p>}
 
-      {!loading && report && !report.hasData && <EmptyState surface={surface} period={period} />}
+      {!loading && report && !report.hasData && <EmptyState surface={surface} period={period} openai={openai} />}
 
       {!loading && report && report.hasData && (
         <>
@@ -450,13 +465,24 @@ export default function ModelEfficiencySection({ period }: { period: string }) {
             </div>
           )}
 
-          <CostDrivers report={report} scope={surface === 'code' ? 'Claude Code' : 'Cowork'} />
+          {surface === 'chatgpt' && (
+            <div className="px-4 pb-3">
+              <Muted>ChatGPT spend by kind of work is an estimate: OpenAI reports cost per person, model and hour, so each hour&apos;s cost is shared evenly across the replies in that hour. Priced at OpenAI&apos;s USD token rates.</Muted>
+            </div>
+          )}
+          {surface === 'codex' && (
+            <div className="px-4 pb-3">
+              <Muted>Codex spend is each turn&apos;s tokens, priced at OpenAI&apos;s USD token rates.</Muted>
+            </div>
+          )}
+
+          <CostDrivers report={report} scope={surfaceLabel(surface, openai)} />
 
           {opportunities.length > 0 && (
             <div className="border-t border-[#EAEAEA] px-4 py-3 flex flex-col gap-2">
               <span className="text-[14px] font-semibold text-[#0A0A0A]">Opportunities to review</span>
               {isShareBasedOnly && (
-                <Notice tone="warn">Share-based: there is no friction check on Cowork, so review manually before acting.</Notice>
+                <Notice tone="warn">Share-based: there is no friction check on {surfaceLabel(surface, openai)}, so review manually before acting.</Notice>
               )}
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
                 {opportunities.map((activity) => (

@@ -154,6 +154,7 @@ export function renderFinopsSection(
   coworkEff: ModelEfficiencyReport,
   periodStart: string,
   periodEnd: string,
+  openaiEff: { chatgpt: ModelEfficiencyReport; codex: ModelEfficiencyReport } | null = null,
 ): string {
   const period = monthOf(periodEnd);
 
@@ -186,15 +187,19 @@ Unallocated (users with no department or no matching cost centre): **${usd(repor
 
 ### Model efficiency
 
-${modelEfficiencyBlock('Code', codeEff)}
+${modelEfficiencyBlock(openaiEff ? 'Claude Code' : 'Code', codeEff)}
 
-${modelEfficiencyBlock('Cowork', coworkEff)}
+${modelEfficiencyBlock(openaiEff ? 'Claude Cowork' : 'Cowork', coworkEff)}
+${openaiEff ? `
+${modelEfficiencyBlock('ChatGPT (spend by kind of work estimated: OpenAI reports cost per hour)', openaiEff.chatgpt)}
 
+${modelEfficiencyBlock('Codex', openaiEff.codex)}
+` : ''}
 Cache savings this period: ${usdOrNone(report.cacheSavingsUsd)}.
 
 ### Data quality
 
-${dataQualityNotes(report, [codeEff, coworkEff])}`;
+${dataQualityNotes(report, openaiEff ? [codeEff, coworkEff, openaiEff.chatgpt, openaiEff.codex] : [codeEff, coworkEff])}`;
 }
 
 /**
@@ -208,5 +213,8 @@ export async function buildFinopsSection(periodStart: string, periodEnd: string)
     buildModelEfficiency('code', period),
     buildModelEfficiency('cowork', period),
   ]);
-  return renderFinopsSection(report, codeEff, coworkEff, periodStart, periodEnd);
+  const openaiEff = report.vendors
+    ? { chatgpt: await buildModelEfficiency('chatgpt', period), codex: await buildModelEfficiency('codex', period) }
+    : null;
+  return renderFinopsSection(report, codeEff, coworkEff, periodStart, periodEnd, openaiEff);
 }
