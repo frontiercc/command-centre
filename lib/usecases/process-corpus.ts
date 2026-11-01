@@ -381,6 +381,17 @@ export async function gatherSessionFacts(sessionIds: string[]): Promise<SessionF
       activeSum += Number(statRows[0]?.s ?? 0);
     }
 
+    // ChatGPT conversations' time is in chatgpt_session_time (no cowork_session_stats row).
+    const ct = schema.chatgptSessionTime;
+    const gptRows = await client
+      .select({ n: sql<number>`COUNT(*)`, s: sql<number>`COALESCE(SUM(${ct.active_secs}), 0)` })
+      .from(ct)
+      .where(inArray(ct.session_id, ids));
+    if (Number(gptRows[0]?.n ?? 0) > 0) {
+      anyActiveNonNull = true;
+      activeSum += Number(gptRows[0]?.s ?? 0);
+    }
+
     const pc = schema.pulseClassifications;
     const cm = schema.coworkMessages;
     const tierRows = await client

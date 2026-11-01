@@ -40,12 +40,12 @@ function makeImpact(overrides?: Partial<UseCaseImpact>): UseCaseImpact {
       },
       ...absentWeeks,
     ],
-    totals: { durationSecs: 3600, engagedSecs: 1800, sessions: 2, estimateHours: 1, coworkDurationSecs: 2400, codeDurationSecs: 1200 },
+    totals: { durationSecs: 3600, engagedSecs: 1800, sessions: 2, estimateHours: 1, coworkDurationSecs: 2400, codeDurationSecs: 1200, chatgptDurationSecs: null, codexDurationSecs: null },
     participation: {
       skills: [{ name: 'docx', sessions: 2 }],
       connectors: [{ name: 'salesforce', sessions: 1 }],
       models: [{ name: 'claude-opus-4-6', sessions: 2 }],
-      surfaces: { cowork: 1, code: 1 },
+      surfaces: { cowork: 1, code: 1, chatgpt: 0, codex: 0 },
       cappedAt: null,
     },
     depth: { weeks: [], rubricChangesAt: [] },
@@ -102,7 +102,7 @@ describe('generateImpactSummary', () => {
         skills: [{ name: 'docx', sessions: 2 }],
         connectors: [{ name: 'salesforce', sessions: 1 }],
         models: [{ name: 'claude-haiku-4-5', sessions: 2 }],
-        surfaces: { cowork: 1, code: 1 },
+        surfaces: { cowork: 1, code: 1, chatgpt: 0, codex: 0 },
         cappedAt: null,
       },
     });
@@ -126,7 +126,7 @@ describe('generateImpactSummary', () => {
         skills: [{ name: 'docx', sessions: 2 }],
         connectors: [{ name: 'salesforce', sessions: 1 }],
         models: [{ name: 'claude-haiku-4-5', sessions: 2 }],
-        surfaces: { cowork: 1, code: 1 },
+        surfaces: { cowork: 1, code: 1, chatgpt: 0, codex: 0 },
         cappedAt: null,
       },
     });
@@ -145,7 +145,7 @@ describe('generateImpactSummary', () => {
         skills: [{ name: 'docx', sessions: 2 }],
         connectors: [{ name: 'salesforce', sessions: 1 }],
         models: [{ name: 'claude-haiku-4-5', sessions: 2 }],
-        surfaces: { cowork: 1, code: 1 },
+        surfaces: { cowork: 1, code: 1, chatgpt: 0, codex: 0 },
         cappedAt: null,
       },
     });
@@ -167,7 +167,7 @@ describe('generateImpactSummary', () => {
         skills: [{ name: 'docx', sessions: 2 }],
         connectors: [{ name: 'salesforce', sessions: 1 }],
         models: [{ name: 'claude-sonnet-5', sessions: 2 }],
-        surfaces: { cowork: 1, code: 1 },
+        surfaces: { cowork: 1, code: 1, chatgpt: 0, codex: 0 },
         cappedAt: null,
       },
     });
@@ -186,7 +186,7 @@ describe('generateImpactSummary', () => {
         skills: [{ name: 'docx', sessions: 2 }],
         connectors: [{ name: 'salesforce', sessions: 1 }],
         models: [{ name: 'claude-sonnet-5', sessions: 2 }],
-        surfaces: { cowork: 1, code: 1 },
+        surfaces: { cowork: 1, code: 1, chatgpt: 0, codex: 0 },
         cappedAt: null,
       },
     });
@@ -215,7 +215,7 @@ describe('generateImpactSummary', () => {
           toolErrors: null, coworkToolErrors: null, editRejects: null, editAccepts: null, flagged: null,
         })),
       ],
-      totals: { durationSecs: null, engagedSecs: null, sessions: 11144477735, estimateHours: null, coworkDurationSecs: null, codeDurationSecs: null },
+      totals: { durationSecs: null, engagedSecs: null, sessions: 11144477735, estimateHours: null, coworkDurationSecs: null, codeDurationSecs: null, chatgptDurationSecs: null, codexDurationSecs: null },
     });
     const reply = 'Contact 11144477735 for details.';
 

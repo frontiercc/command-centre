@@ -13,7 +13,8 @@ import { randomUUID } from 'node:crypto';
 import { and, desc, eq, inArray, isNotNull, isNull, sql } from 'drizzle-orm';
 import { getTypedClient } from '@/lib/db/client';
 import { schema } from '@/lib/db/schema';
-import { groupDeptBoxes, type DeptBox, type SuggestionSurface } from '@/lib/usecases/dept-boxes';
+import { groupDeptBoxes, surfaceLabels, type DeptBox, type SuggestionSurface } from '@/lib/usecases/dept-boxes';
+import { getConnectedProducts } from '@/lib/sources/connected';
 
 export interface SignalSet { skills: string[]; connectors: string[]; taskTypes: string[] }
 export interface SuggestionEvidence { distinctUsers: number; sessionCount: number; departments: string[] }
@@ -229,5 +230,5 @@ export async function listSuggestionTitlesByDepartment(department: string): Prom
 /** Open department suggestions, one box per department, alphabetical; Cowork and Claude Code
  *  suggestions are separate lists inside it, each ranked by people then sessions. */
 export async function listOpenDeptBoxes(): Promise<DeptProcessBox[]> {
-  return groupDeptBoxes(await listOpenSuggestions());
+  return groupDeptBoxes(await listOpenSuggestions(), surfaceLabels(await getConnectedProducts()));
 }

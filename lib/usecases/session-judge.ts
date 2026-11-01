@@ -4,7 +4,8 @@
 /**
  * Who is doing a use case, judged by the work.
  *
- * For each finished Cowork or Code session (idle 30 minutes) whose person's
+ * For each finished session (idle 30 minutes): Claude Cowork and ChatGPT as Work,
+ * Claude Code and Codex as Code; whose person's
  * department has live use cases (confirmed or candidate; a use case with no
  * department applies to everyone), a model reads up to six of the session's
  * prompts, cleaned and spread across the session, plus the tools used, and
@@ -205,6 +206,12 @@ async function loadReadySessions(nowS: number): Promise<ReadySession[]> {
       SELECT 'code', session_id, user_id, first_at, last_at
         FROM code_session_stats
        WHERE user_id IS NOT NULL AND last_at >= ${since} AND last_at < ${idleBefore}
+      UNION ALL
+      -- ChatGPT conversations: no cowork_session_stats row; their times come
+      -- from chatgpt_session_time. Judged as Work ('cowork'), as Work Pulse does.
+      SELECT 'cowork', session_id, user_id, first_at, last_at
+        FROM chatgpt_session_time
+       WHERE last_at >= ${since} AND last_at < ${idleBefore}
     )
     SELECT s.surface, s.session_id, s.user_id, COALESCE(s.first_at, s.last_at) AS first_at, s.last_at,
            COALESCE(NULLIF(TRIM(u.department), ''), NULLIF(TRIM(au.department), '')) AS dept,

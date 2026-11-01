@@ -14,6 +14,8 @@ import ImpactPanel, { type UseCaseImpact, type ImpactSummary } from '@/component
 import SkillDraftPanel, { type SkillDraftView } from '@/components/usecases/SkillDraftPanel';
 import { buildActivateEvidenceLine, tierDepthLabel, humaniseMatchedSignals } from '@/lib/usecases/activate-evidence-format';
 import { PageBody, Toolbar, Panel, PanelFoot, SubHead, T, Tag, Pill, B, Notice, Empty, Muted, cx } from '@/components/precision/ui';
+import { useConnectedProducts } from '@/components/shared/VendorSwitch';
+import { labelForUseCaseSurface } from '@/lib/usecases/dept-boxes';
 
 interface WeekActivity {
   weekStart: number;
@@ -109,6 +111,7 @@ export default function UseCaseDetailPage() {
   const router = useRouter();
   const params = useParams();
   const id = decodeURIComponent(String(params?.id ?? ''));
+  const connected = useConnectedProducts();
 
   const [checked, setChecked] = useState(false);
   const [uc, setUc] = useState<UseCase | null>(null);
@@ -424,7 +427,7 @@ export default function UseCaseDetailPage() {
                     {uc.departments.map(d => (
                       <span key={d} className="text-[13px] text-[#4D4D4D] bg-[#F2F2F2] rounded-[6px] px-1.5 py-0.5">{d}</span>
                     ))}
-                    {uc.surfaces.map(s => <Tag key={s}>{s}</Tag>)}
+                    {uc.surfaces.map(s => <Tag key={s}>{labelForUseCaseSurface(s, connected)}</Tag>)}
                   </div>
                 )}
                 {uc.sourceExcerpt && (

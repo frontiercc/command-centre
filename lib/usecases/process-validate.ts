@@ -188,7 +188,7 @@ export function validateProcessCandidates(
  * The mining prompt already forbids them, but measured
  * (nine runs per surface) the instruction did not hold:
  * certification exam practice came up in every run that found it, and so did
- * jobs about running Claude itself ("long-running agent session monitoring",
+ * jobs about running Claude, ChatGPT or Codex itself ("long-running agent session monitoring",
  * "subagent delegation report review"). Phrases, not single loose words, so
  * real work survives ("insurance agent commissions", "model availability and
  * cost checks", "promotional video localisation").
@@ -197,7 +197,7 @@ export function validateProcessCandidates(
  * the same purpose, which was kept (option 1).
  */
 const PERSONAL_STUDY = /\b(certifications?|exams?|practice (tests?|questions?)|study (plans?|notes?)|revision notes?|career (plans?|planning|development)|personal development|promotion (cases?|justifications?|write-?ups?))\b/i;
-const RUNNING_CLAUDE = /\b(sub-?agents?|agentic|claude)\b|\bagents?\s+(sessions?|conversations?|runs?|progress|delegation|dispatch|hand-?backs?|monitoring)\b|\b(background|autonomous|long-running|headless|unattended)\s+(agents?|builds?|sessions?|runs?)\b|\bheadless\b.*\b(runs?|dispatch)\b|\bsession monitoring\b|\bturn-by-turn\b|\b(conversation|session) turns?\b/i;
+const RUNNING_CLAUDE = /\b(sub-?agents?|agentic|claude|chatgpt|codex)\b|\bagents?\s+(sessions?|conversations?|runs?|progress|delegation|dispatch|hand-?backs?|monitoring)\b|\b(background|autonomous|long-running|headless|unattended)\s+(agents?|builds?|sessions?|runs?)\b|\bheadless\b.*\b(runs?|dispatch)\b|\bsession monitoring\b|\bturn-by-turn\b|\b(conversation|session) turns?\b/i;
 const SLIDE_WORK = /\b(slides?|slide ?decks?|decks?|presentations?|powerpoint)\b/i;
 
 export type ExcludedKind = 'personal study' | 'about running Claude' | 'slide work';

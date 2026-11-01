@@ -103,6 +103,21 @@ export async function recomputeWeekImpact(useCaseId: string, weekStartS: number)
     }
     toolErrors += Number(cdRows[0]?.e ?? 0);
 
+    // ChatGPT conversations: their working time is in chatgpt_session_time.
+    const ct = schema.chatgptSessionTime;
+    const gptRows = await client
+      .select({ d: sql<number>`COALESCE(SUM(${ct.active_secs}), 0)`, n: sql<number>`COUNT(*)` })
+      .from(ct).where(inArray(ct.session_id, ids));
+    if (Number(gptRows[0]?.n ?? 0) > 0) {
+      measuredDurationSecs = (measuredDurationSecs ?? 0) + Number(gptRows[0]?.d ?? 0);
+    }
+    // Codex: failed actions are in codex_actions (its code_session_stats row carries no errors).
+    const ca = schema.codexActions;
+    const cxRows = await client
+      .select({ e: sql<number>`COALESCE(SUM(${ca.failed}), 0)` })
+      .from(ca).where(inArray(ca.session_id, ids));
+    toolErrors += Number(cxRows[0]?.e ?? 0);
+
     const om = schema.codeOtelMetrics;
     const actRows = await client
       .select({ v: sql<number>`SUM(${om.value})`, n: sql<number>`COUNT(*)` })

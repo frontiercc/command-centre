@@ -12,7 +12,8 @@ import { formatSuggestionEvidenceLine } from '@/lib/usecases/suggestion-format';
 import DeptProcessBoxes from '@/components/usecases/DeptProcessBoxes';
 import ProcessCanvasCard from '@/components/usecases/ProcessCanvasCard';
 import type { ProcessCanvas } from '@/lib/usecases/suggestion-store';
-import { groupDeptBoxes } from '@/lib/usecases/dept-boxes';
+import { groupDeptBoxes, surfaceLabels } from '@/lib/usecases/dept-boxes';
+import { useConnectedProducts } from '@/components/shared/VendorSwitch';
 import { PageBody, Toolbar, Panel, PanelFoot, SubHead, T, Tag, Pill, B, Notice, Empty, cx } from '@/components/precision/ui';
 
 interface UseCase {
@@ -199,15 +200,16 @@ export default function UseCasesRegisterPage() {
   };
 
   const visibleSuggestions = suggestions ?? [];
+  const connected = useConnectedProducts();
 
-  // One box per department; Cowork and Claude Code suggestions are lists inside it.
+  // One box per department; Work and Code suggestions are lists inside it.
   const { deptBoxes, orgSuggestions } = useMemo(() => {
     return {
-      deptBoxes: groupDeptBoxes(visibleSuggestions),
+      deptBoxes: groupDeptBoxes(visibleSuggestions, surfaceLabels(connected)),
       orgSuggestions: visibleSuggestions.filter(s => !s.department),
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [suggestions]);
+  }, [suggestions, connected]);
 
   const openSuggestion = suggestions?.find(s => s.id === openSuggestionId) ?? null;
 

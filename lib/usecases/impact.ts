@@ -59,8 +59,12 @@ export interface UseCaseImpact {
     // non-null active_secs rows exist on that surface for the window.
     coworkDurationSecs: number | null;
     codeDurationSecs: number | null;
+    /** ChatGPT (chatgpt_session_time) and Codex (its code_session_stats rows); Claude's two above leave them out. */
+    chatgptDurationSecs: number | null;
+    codexDurationSecs: number | null;
   };
-  participation: { skills: ImpactParticipationItem[]; connectors: ImpactParticipationItem[]; models: ImpactParticipationItem[]; surfaces: { cowork: number; code: number }; cappedAt: number | null };
+  /** Session counts per product: cowork and code are Claude's; chatgpt and codex OpenAI's. */
+  participation: { skills: ImpactParticipationItem[]; connectors: ImpactParticipationItem[]; models: ImpactParticipationItem[]; surfaces: { cowork: number; code: number; chatgpt: number; codex: number }; cappedAt: number | null };
   depth: { weeks: ImpactDepthWeek[]; rubricChangesAt: number[] };
 }
 
@@ -236,6 +240,17 @@ async function modelParticipation(sessionIds: string[]): Promise<ImpactParticipa
       .select({ models_json: schema.codeSessionStats.models_json })
       .from(schema.codeSessionStats)
       .where(inArray(schema.codeSessionStats.session_id, ids));
+    // Codex sessions' models are on their turns, ChatGPT conversations' on their replies.
+    const cxRows = await client
+      .selectDistinct({ s: schema.codexTurns.session_id, m: schema.codexTurns.model })
+      .from(schema.codexTurns)
+      .where(inArray(schema.codexTurns.session_id, ids));
+    const gptRows = await client
+      .selectDistinct({ s: schema.openaiReplies.session_id, m: schema.openaiReplies.model })
+      .from(schema.openaiReplies)
+      .where(inArray(schema.openaiReplies.session_id, ids));
+    for (const row of [...cxRows, ...gptRows]) if (row.m) acc.set(row.m, (acc.get(row.m) ?? 0) + 1);
+
     for (const row of cdRows) {
       if (!row.models_json) continue;
       try {
@@ -313,16 +328,24 @@ export async function buildUseCaseImpact(useCaseId: string, nowS: number): Promi
   const minutes = parseInt(config.useCasesMinutesSavedPerSession || '30', 10) || 30;
 
   const { sessionIds, cappedAt } = await windowSessionIds(useCaseId, windowStarts);
+  // Codex sessions have code_session_stats rows too: counted as Codex, never as Claude Code.
+  const codexIds = sessionIds.filter(id => id.startsWith('codex:'));
+  const chatgptIds = sessionIds.filter(id => id.startsWith('chatgpt:'));
+  const claudeIds = sessionIds.filter(id => !id.startsWith('codex:') && !id.startsWith('chatgpt:'));
 
-  const [skills, connectors, models, cowork, code, depthWeeks, coworkDurationSecs, codeDurationSecs] = await Promise.all([
+  const [skills, connectors, models, cowork, code, chatgpt, codex, depthWeeks, coworkDurationSecs, codeDurationSecs, chatgptDurationSecs, codexDurationSecs] = await Promise.all([
     topByName(schema.coworkSkillInvocations, schema.coworkSkillInvocations.skill_name, sessionIds, PARTICIPATION_TOP_N),
     topByName(schema.coworkMcpInvocations, schema.coworkMcpInvocations.mcp_server, sessionIds, PARTICIPATION_TOP_N),
     modelParticipation(sessionIds),
-    countSessionsIn(schema.coworkSessionStats, sessionIds),
-    countSessionsIn(schema.codeSessionStats, sessionIds),
+    countSessionsIn(schema.coworkSessionStats, claudeIds),
+    countSessionsIn(schema.codeSessionStats, claudeIds),
+    countSessionsIn(schema.chatgptSessionTime, chatgptIds),
+    countSessionsIn(schema.codeSessionStats, codexIds),
     depthByWeek(sessionIds, windowStartsSet),
-    sumActiveSecs(schema.coworkSessionStats, sessionIds),
-    sumActiveSecs(schema.codeSessionStats, sessionIds),
+    sumActiveSecs(schema.coworkSessionStats, claudeIds),
+    sumActiveSecs(schema.codeSessionStats, claudeIds),
+    sumActiveSecs(schema.chatgptSessionTime, chatgptIds),
+    sumActiveSecs(schema.codeSessionStats, codexIds),
   ]);
 
   const totals = {
@@ -332,6 +355,8 @@ export async function buildUseCaseImpact(useCaseId: string, nowS: number): Promi
     estimateHours: totalSessions === 0 ? null : (totalSessions * minutes) / 60,
     coworkDurationSecs,
     codeDurationSecs,
+    chatgptDurationSecs,
+    codexDurationSecs,
   };
 
   return {
@@ -340,7 +365,7 @@ export async function buildUseCaseImpact(useCaseId: string, nowS: number): Promi
     totals,
     participation: {
       skills, connectors, models,
-      surfaces: { cowork, code },
+      surfaces: { cowork, code, chatgpt, codex },
       cappedAt,
     },
     // Rubric saves no longer mark the depth panel, the same

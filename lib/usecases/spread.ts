@@ -147,7 +147,11 @@ async function readCodifiedSkill(ucId: string): Promise<string | null> {
   return rows[0] && rows[0].at != null ? rows[0].name : null;
 }
 
-/** Judged sessions of this use case per person, last SPREAD_ACTIVITY_WINDOW_WEEKS completed weeks. */
+/**
+ * Judged sessions of this use case per person, last SPREAD_ACTIVITY_WINDOW_WEEKS
+ * completed weeks. Claude sessions only: the skill is a Claude skill, so
+ * someone doing the work in ChatGPT or Codex is not told to use it.
+ */
 async function readWorkActivity(ucId: string, nowS: number): Promise<ActivityRow[]> {
   const client = await getTypedClient();
   const wm = schema.useCaseWeekMatches;
@@ -156,7 +160,8 @@ async function readWorkActivity(ucId: string, nowS: number): Promise<ActivityRow
   const rows = await client
     .select({ user_id: wm.user_id, n: sql<number | string>`COUNT(DISTINCT CASE WHEN ${wm.session_id} <> '' THEN ${wm.session_id} END)` })
     .from(wm)
-    .where(and(eq(wm.use_case_id, ucId), gte(wm.week_start, start), lt(wm.week_start, end)))
+    .where(and(eq(wm.use_case_id, ucId), gte(wm.week_start, start), lt(wm.week_start, end),
+      sql`${wm.session_id} NOT LIKE 'chatgpt:%'`, sql`${wm.session_id} NOT LIKE 'codex:%'`))
     .groupBy(wm.user_id);
   const meta = await getUserMeta(rows.map(r => r.user_id));
   return rows.flatMap(r => {
