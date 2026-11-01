@@ -825,3 +825,22 @@ export async function runOpenAiSync(opts: RunOptions = {}): Promise<OpenAiSyncSt
   if (Object.values(stats.prompts).some((n) => n > 0)) await noteFirstTelemetry('openai');
   return stats;
 }
+
+/**
+ * Writes OpenAI export files straight into the tables, through the same code
+ * as the sync, without fetching anything: the sample data's ChatGPT and Codex
+ * activity (scripts/demo/11-chatgpt-codex.ts). Does not record a first OpenAI
+ * prompt, so the sample loader can still tell sample rows from real ones.
+ */
+export async function importOpenAiFiles(files: unknown[][], nowS: number = Math.floor(Date.now() / 1000)): Promise<OpenAiSyncStats> {
+  const stats = emptyStats();
+  const client = await getTypedClient();
+  const floors = { cowork: nowS - 90 * 86400, code: nowS - 90 * 86400 };
+  const userCache = new Map<string, string>();
+  const excluded = await loadExcludedEmails();
+  for (const records of files) {
+    raiseAlerts(await storeRecords(client, records, floors, stats, userCache, excluded));
+    stats.files++;
+  }
+  return stats;
+}

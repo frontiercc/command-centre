@@ -2,7 +2,9 @@
 // SPDX-License-Identifier: Apache-2.0
 
 // Loads sample data: a fictional organisation and its activity, so every
-// page of Command Centre has something to show.
+// page of Command Centre has something to show: Claude Code, Cowork and Chat,
+// and ChatGPT and Codex (11-chatgpt-codex.ts, written through the OpenAI
+// sync's own code).
 //
 // It adds the organisation's fictional people (Acme Corp UK,
 // acme-people.json) first, then runs the sample scripts in order, each
@@ -97,11 +99,16 @@ const run = (cmd, args) => execFileSync(cmd, args, { stdio: 'inherit', env: proc
   // since removed), so any Cowork, Claude Code or Chat message whose id does
   // not carry a sample prefix also counts as real. All three live in
   // cowork_messages (Claude Chat as surface 'chat' since migration 0038).
+  // The OpenAI sync records its first real prompt (setup_first_openai_at); the
+  // sample's ChatGPT and Codex rows go through the sync's code but never set
+  // it, so OpenAI rows count as real only once that record exists.
   const markers = await db.query(
-    "SELECT key FROM config WHERE key IN ('setup_first_code_at', 'setup_first_cowork_at', 'compliance_last_sync_at')");
+    "SELECT key FROM config WHERE key IN ('setup_first_code_at', 'setup_first_cowork_at', 'compliance_last_sync_at', 'setup_first_openai_at')");
   const samplePatterns = STEPS.map(([prefix]) => `${prefix}%`);
   const notSample = samplePatterns.map((_, i) => `id NOT LIKE $${i + 1}`).join(' AND ');
-  const real = await db.query(`SELECT COUNT(*)::int AS n FROM cowork_messages WHERE ${notSample}`, samplePatterns);
+  const real = await db.query(
+    `SELECT COUNT(*)::int AS n FROM cowork_messages WHERE ${notSample}
+       AND (source IS NULL OR source NOT IN ('chatgpt_chat', 'chatgpt_work', 'codex'))`, samplePatterns);
   const realMessages = real.rows[0].n;
   if ((markers.rows.length > 0 || realMessages > 0) && process.env.SAMPLE_DATA_FORCE !== '1') {
     console.error('This installation already holds real Claude data, so sample data was not loaded.');
@@ -136,6 +143,11 @@ const run = (cmd, args) => execFileSync(cmd, args, { stdio: 'inherit', env: proc
     try { run('node', [path.join(__dirname, script)]); }
     catch { console.error(`${script} failed; continuing with the rest.`); }
   }
+
+  // ChatGPT and Codex: the same Acme Corp people, through the OpenAI sync's code.
+  console.log('\nAdding ChatGPT and Codex activity...');
+  try { run('npx', ['tsx', path.join(__dirname, '11-chatgpt-codex.ts')]); }
+  catch { console.error('11-chatgpt-codex.ts failed; continuing with the rest.'); }
 
   // The sample S&C Board entries, use cases (with their weekly figures and
   // matches) and department process suggestions. Nothing in them is tied to
