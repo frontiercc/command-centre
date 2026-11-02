@@ -10,7 +10,7 @@ describe('use case labels by product', () => {
   it('names the lists by what is connected', () => {
     expect(surfaceLabels(null)).toEqual({ cowork: 'Cowork', code: 'Claude Code' });
     expect(surfaceLabels({ claude: true, openai: false })).toEqual({ cowork: 'Cowork', code: 'Claude Code' });
-    expect(surfaceLabels({ claude: true, openai: true })).toEqual({ cowork: 'Cowork and ChatGPT', code: 'Claude Code and Codex' });
+    expect(surfaceLabels({ claude: true, openai: true })).toEqual({ cowork: 'Claude Cowork and ChatGPT', code: 'Claude Code and Codex' });
     expect(surfaceLabels({ claude: false, openai: true })).toEqual({ cowork: 'ChatGPT', code: 'Codex' });
   });
 
@@ -25,6 +25,6 @@ describe('use case labels by product', () => {
       [{ department: 'Sales', surface: 'cowork' }, { department: 'Sales', surface: 'code' }] as never,
       surfaceLabels({ claude: true, openai: true }),
     );
-    expect(boxes[0].groups.map(g => g.label)).toEqual(['Cowork and ChatGPT', 'Claude Code and Codex']);
+    expect(boxes[0].groups.map(g => g.label)).toEqual(['Claude Cowork and ChatGPT', 'Claude Code and Codex']);
   });
 });

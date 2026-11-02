@@ -12,22 +12,33 @@ import { listLogFiles, OpenAiApiError, type OpenAiEventType } from '@/lib/openai
  * sync reads. Scopes are per log type, so a key can read one and not the other;
  * the reply names each type the key cannot read.
  */
-async function testOpenAiKey(formKey: string | undefined, formWorkspace: string | undefined) {
+async function testOpenAiKey(formKey: string | undefined, formWorkspace: string | undefined, formOrganization: string | undefined) {
   const apiKey = formKey?.trim() || await getConfigValue('openaiAdminApiKey');
   const workspaceId = formWorkspace?.trim() || (await getConfigValue('openaiWorkspaceId')).trim();
+  const organizationId = formOrganization !== undefined ? formOrganization.trim() : (await getConfigValue('openaiOrganizationId')).trim();
   if (!apiKey) return NextResponse.json({ ok: false, error: 'Key not configured' });
   if (!workspaceId) return NextResponse.json({ ok: false, error: 'Enter the ChatGPT workspace ID first' });
 
   const after = new Date(Date.now() - 3600_000).toISOString();
-  const labels: Record<string, string> = { CONVERSATION_MESSAGE: 'ChatGPT conversations', CODEX_LOG: 'Codex logs' };
+  const labels: Record<string, string> = {
+    CONVERSATION_MESSAGE: 'ChatGPT conversations', CODEX_LOG: 'Codex logs', CODEX_TURN: 'Codex turns', COSTS: 'costs',
+  };
+  // Every log the sync reads (lib/openai/sync.ts SYNCED_TYPES); costs are
+  // listed by organisation, so they are checked only once its ID is entered.
+  const checks: Array<{ type: OpenAiEventType; scope: { kind: 'workspace' | 'organization'; id: string } }> = [
+    { type: 'CONVERSATION_MESSAGE', scope: { kind: 'workspace', id: workspaceId } },
+    { type: 'CODEX_LOG', scope: { kind: 'workspace', id: workspaceId } },
+    { type: 'CODEX_TURN', scope: { kind: 'workspace', id: workspaceId } },
+    ...(organizationId ? [{ type: 'COSTS' as OpenAiEventType, scope: { kind: 'organization' as const, id: organizationId } }] : []),
+  ];
   const missing: string[] = [];
-  for (const type of ['CONVERSATION_MESSAGE', 'CODEX_LOG'] as OpenAiEventType[]) {
+  for (const { type, scope } of checks) {
     try {
-      await listLogFiles(apiKey, { kind: 'workspace', id: workspaceId }, type, after, 1);
+      await listLogFiles(apiKey, scope, type, after, 1);
     } catch (err) {
       if (err instanceof OpenAiApiError) {
         if (err.status === 401) return NextResponse.json({ ok: false, error: 'Invalid key' });
-        if (err.status === 404) return NextResponse.json({ ok: false, error: 'OpenAI did not find this workspace ID' });
+        if (err.status === 404) return NextResponse.json({ ok: false, error: scope.kind === 'organization' ? 'OpenAI did not find this organisation ID' : 'OpenAI did not find this workspace ID' });
         if (err.status === 403) { missing.push(labels[type]); continue; }
         return NextResponse.json({ ok: false, error: `OpenAI did not accept the request (status ${err.status}).` });
       }
@@ -36,19 +47,23 @@ async function testOpenAiKey(formKey: string | undefined, formWorkspace: string 
     }
   }
   if (missing.length > 0) {
-    return NextResponse.json({ ok: false, error: `Key is valid but cannot read ${missing.join(' or ')}: it needs the matching Compliance Logs Platform read permission` });
+    return NextResponse.json({ ok: false, error: `Key is valid but cannot read ${missing.join(', ')}: it needs the matching Compliance Logs Platform read permission` });
   }
-  return NextResponse.json({ ok: true });
+  return NextResponse.json(organizationId ? { ok: true } : { ok: true, note: 'Spend is not checked until you enter the OpenAI organisation ID.' });
 }
 
 export async function POST(request: NextRequest) {
   if (!(await requireAdmin(request))) {
     return NextResponse.json({ error: 'Forbidden: admin role required' }, { status: 403 });
   }
-  const { key, value, workspaceId } = await request.json();
+  const { key, value, workspaceId, organizationId } = await request.json();
 
   if (key === 'openaiAdminApiKey') {
-    return testOpenAiKey(typeof value === 'string' ? value : undefined, typeof workspaceId === 'string' ? workspaceId : undefined);
+    return testOpenAiKey(
+      typeof value === 'string' ? value : undefined,
+      typeof workspaceId === 'string' ? workspaceId : undefined,
+      typeof organizationId === 'string' ? organizationId : undefined,
+    );
   }
 
   const fourDaysAgo = new Date(Date.now() - 4 * 86400_000).toISOString().split('T')[0];

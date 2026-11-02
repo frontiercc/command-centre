@@ -50,7 +50,7 @@ export const SURFACE_LABEL: Record<SuggestionSurface, string> = { cowork: 'Cowor
 export function surfaceLabels(connected?: { claude: boolean; openai: boolean } | null): Record<SuggestionSurface, string> {
   if (!connected?.openai) return SURFACE_LABEL;
   if (!connected.claude) return { cowork: 'ChatGPT', code: 'Codex' };
-  return { cowork: 'Cowork and ChatGPT', code: 'Claude Code and Codex' };
+  return { cowork: 'Claude Cowork and ChatGPT', code: 'Claude Code and Codex' };
 }
 
 /** A use case's surface as the register names it: Work and Code take in ChatGPT and Codex too. */

@@ -354,12 +354,14 @@ export default function SecurityPage() {
       const res = await fetch('/api/config/test', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ key: 'openaiAdminApiKey', value: isUnchangedMask ? undefined : openaiAdminApiKey, workspaceId: openaiWorkspaceId }),
+        body: JSON.stringify({ key: 'openaiAdminApiKey', value: isUnchangedMask ? undefined : openaiAdminApiKey, workspaceId: openaiWorkspaceId, organizationId: openaiOrganizationId }),
       });
       const result = await res.json();
       setOpenaiTestStatus(result.ok ? 'success' : 'error');
       setOpenaiTestOk(Boolean(result.ok));
-      setOpenaiTestMessage(result.ok ? 'The key can read ChatGPT conversations and Codex logs.' : String(result.error || 'The test failed.'));
+      setOpenaiTestMessage(result.ok
+        ? `The key can read ChatGPT conversations, Codex logs and Codex turns${result.note ? `. ${result.note}` : ', and costs.'}`
+        : String(result.error || 'The test failed.'));
     } catch {
       setOpenaiTestStatus('error');
       setOpenaiTestOk(false);
@@ -1515,7 +1517,7 @@ export default function SecurityPage() {
               testStatus={openaiTestStatus}
               onTest={testOpenAi}
               placeholder="OpenAI admin key"
-              hint="Created by a ChatGPT workspace owner at admin.openai.com under Credentials → Admin keys. ChatGPT Enterprise or Edu only. Give it read access to Conversation messages and Codex logs. Brings ChatGPT prompts into Work Pulse and Codex prompts into Developer Pulse."
+              hint="Created by a ChatGPT workspace owner at admin.openai.com under Credentials → Admin keys. ChatGPT Enterprise or Edu only. Give it read access to conversation messages, Codex logs, Codex turns and costs. Brings ChatGPT prompts into Work Pulse, Codex prompts into Developer Pulse, and their spend into FinOps."
               configKey="openaiAdminApiKey"
               resetsNote="sync position, last-sync status"
               onRemoved={() => {

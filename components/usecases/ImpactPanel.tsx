@@ -222,7 +222,7 @@ export default function ImpactPanel({ impact, summary, useCaseId, canRegenerate 
           <span className="flex items-center gap-1.5"><span className={`w-2.5 h-2.5 ${TIER_CLS[2]} rounded-full inline-block`} aria-hidden="true" /> Tier 2</span>
           <span className="flex items-center gap-1.5"><span className={`w-2.5 h-2.5 ${TIER_CLS[3]} rounded-full inline-block`} aria-hidden="true" /> Tier 3</span>
         </div>
-        <p className="m-0 text-[13px] text-[#8F8F8F]">Cowork and ChatGPT work is counted per message, Code and Codex per session.</p>
+        <p className="m-0 text-[13px] text-[#8F8F8F]">Claude Cowork and ChatGPT work is counted per message, Claude Code and Codex per session.</p>
       </div>
 
       {impact.participation.cappedAt !== null && (

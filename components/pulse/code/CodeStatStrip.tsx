@@ -115,7 +115,7 @@ export default function CodeStatStrip({ metrics, githubRepos, view = 'claude', s
         ? null
         : formatCurrency(metrics.spend_usd),
       sublabel: part(r => r.spend_usd, formatCurrency)
-        ?? (view === 'openai' ? "Codex tokens at OpenAI's USD (token-based) contract rates" : 'API cost of Claude Code work'),
+        ?? (view === 'openai' ? "Codex tokens at OpenAI's USD token rates" : 'API cost of Claude Code work'),
       hint: metrics?.spend_usd === null && (metrics.input_tokens + metrics.output_tokens) > 0
         ? 'Models seen have no price set, see rates config'
         : `${formatTokens(metrics?.input_tokens ?? 0)} in · ${formatTokens(metrics?.output_tokens ?? 0)} out`,

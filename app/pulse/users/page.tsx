@@ -207,7 +207,7 @@ export default function UsersPickerPage() {
             <>
               <FrontierHero view={d.frontier} canOpenUseCases={d.frontierAccess?.canOpenUseCases ?? false} />
 
-              <HumanTimeCard summary={d.humanTime} surface="cowork" scope="Personal" />
+              <HumanTimeCard summary={d.humanTime} surface="cowork" scope="Personal" view="all" />
 
               <StatStrip
                 oti={m?.oti ?? null} dds={m?.dds ?? null}

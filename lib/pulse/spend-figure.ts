@@ -25,7 +25,7 @@ export function formatUsd(usd: number): string {
   return usd >= 100 ? `$${usd.toFixed(0)}` : `$${usd.toFixed(2)}`;
 }
 
-const CHATGPT_NOTE = "ChatGPT is priced from its tokens at OpenAI's USD (token-based) contract rates, a few hours behind.";
+const CHATGPT_NOTE = "ChatGPT is priced from its tokens at OpenAI's USD token rates and runs a few hours behind.";
 
 function unpricedNote(n: number): string {
   return n > 0 ? ` ${n} ChatGPT model${n === 1 ? ' has' : 's have'} no rate yet and ${n === 1 ? 'is' : 'are'} not included: see Admin → Developer Pulse → Rates.` : '';
