@@ -4,9 +4,13 @@
 // Deterministic Developer Pulse section for the governance report.
 //
 // Reads the latest ROLLING org-scope `code_metrics` row — the same row the
-// /pulse/code overview reads — rather than recomputing anything. Any new query
-// against code_metrics must filter `granularity` explicitly ('rolling' for
-// snapshots, 'week' for history); an unfiltered read silently mixes the two.
+// /pulse/code overview reads — rather than recomputing anything. Once Codex
+// data exists it reads Claude Code's and Codex's own rows instead
+// (code_metrics_vendor, lib/pulse/code/vendor-view.ts), as the page does, and
+// shows them as two tables: the combined row mixes signals Codex never sends.
+// Any new query against code_metrics must filter `granularity` explicitly
+// ('rolling' for snapshots, 'week' for history); an unfiltered read silently
+// mixes the two.
 //
 // MEASURED vs JUDGED: everything under "Measured" comes from telemetry. The
 // work mix and session tiers come from the Haiku session classifier and are
@@ -18,6 +22,8 @@ import { getTypedClient } from '@/lib/db/client';
 import { schema } from '@/lib/db/schema';
 import { ORG_SCOPE_ID } from '@/lib/pulse/code/aggregator';
 import { computeEngagedHours } from '@/lib/pulse/code/framework';
+import { hasCodexData, readCodeMetrics, codeSessionVendor } from '@/lib/pulse/code/vendor-view';
+import type { Vendor } from '@/lib/dashboard/vendor';
 
 export interface CodePulseFacts {
   hasData: boolean;
@@ -77,7 +83,57 @@ export function perUnit(total: number | null, units: number): number | null {
   return total / units;
 }
 
-export function renderCodePulseSection(f: CodePulseFacts): string {
+/** One product's measured table. Codex sends no engaged time, lines, pull requests or edit decisions. */
+function measuredTable(f: CodePulseFacts, codex: boolean): string {
+  const acceptance = safeRatio(f.editAccept, f.editAccept + f.editReject);
+  const claudeOnly = 'not captured (Claude Code telemetry only)';
+  return `| Signal | Value |
+|---|---|
+| Engaged time | ${codex ? claudeOnly : f.engagedHours === null ? 'not measured' : `${f.engagedHours.toFixed(1)} hours`} |
+| Lines added / removed | ${codex ? claudeOnly : `${int(f.linesAdded)} / ${int(f.linesRemoved)}`} |
+| Commits | ${int(f.commitCount)} |
+| Pull requests | ${codex ? claudeOnly : int(f.prCount)} |
+| Edit acceptance | ${codex ? claudeOnly : `${pct(acceptance)} (${int(f.editAccept)} accepted, ${int(f.editReject)} rejected)`} |
+| Sessions | ${int(f.sessionCount)} |
+| Repositories touched | ${int(f.repoCount)} |
+| Spend | ${usd(f.spendUsd)}${codex && f.spendUsd !== null ? " (at OpenAI's USD token rates)" : ''} |
+| Cost per pull request | ${codex ? claudeOnly : usd(perUnit(f.spendUsd, f.prCount))} |
+| Cost per commit | ${usd(perUnit(f.spendUsd, f.commitCount))} |
+| Autonomy ratio | ${num(f.autonomyRatio)} |
+| Cache hit ratio | ${pct(f.cacheHitRatio)} |
+| Skill leverage | ${num(f.skillLeverage)} |
+| Friction index | ${num(f.frictionIndex)} |`;
+}
+
+function judgedText(f: CodePulseFacts): string {
+  return f.workMix.length === 0 && f.tierMix.length === 0
+    ? 'No sessions have been classified yet, so no work mix is available.'
+    : `${f.workMix.length > 0
+        ? `Work mix: ${f.workMix.map(w => `${w.workType} (${int(w.count)})`).join('; ')}.`
+        : ''}${f.workMix.length > 0 && f.tierMix.length > 0 ? '\n\n' : ''}${f.tierMix.length > 0
+        ? `Delegation depth by session: ${f.tierMix.map(t => `tier ${t.tier} (${int(t.count)})`).join(', ')}.`
+        : ''}`;
+}
+
+/**
+ * With Codex connected: Claude Code and Codex as separate tables and work
+ * mixes. `codex` null (no Codex data) renders the single Claude Code section.
+ */
+export function renderCodePulseSection(f: CodePulseFacts, codex: CodePulseFacts | null = null): string {
+  if (codex) {
+    const part = (name: string, facts: CodePulseFacts, isCodex: boolean) => facts.hasData
+      ? `### ${name} (measured)\n\n${measuredTable(facts, isCodex)}\n\n### ${name} work mix (AI-judged)\n\n${judgedText(facts)}`
+      : `### ${name}\n\nNo ${name} metrics have been computed yet.`;
+    return `## Developer Pulse
+
+Claude Code and Codex are shown separately: Codex's figures come from OpenAI's compliance export and carry no engaged time, lines of code, pull requests or edit decisions.
+
+${part('Claude Code', f, false)}
+
+${part('Codex', codex, true)}
+
+Values shown as "not measured" have no underlying data for this window; they are not zero. The work mix is produced by a language model classifying completed sessions, not measured from telemetry. Treat it as an indication of the shape of the work, not as counts of record.`;
+  }
   if (!f.hasData) {
     return `## Developer Pulse
 
@@ -125,37 +181,43 @@ ${judged}`;
 }
 
 export async function buildCodePulseSection(): Promise<string> {
-  const db = await getTypedClient();
-  const cm = schema.codeMetrics;
+  const codexPresent = await hasCodexData();
+  if (!codexPresent) return renderCodePulseSection(await factsFor('all', false));
+  return renderCodePulseSection(await factsFor('claude', true), await factsFor('openai', true));
+}
 
-  const rows = await db
+/** One view's facts: the latest rolling org row and its classified sessions (Codex sessions are 'codex:' ids). */
+async function factsFor(vendor: Vendor, codexPresent: boolean): Promise<CodePulseFacts> {
+  const db = await getTypedClient();
+  const rows = await readCodeMetrics(vendor, codexPresent, (t, only) => db
     .select()
-    .from(cm)
-    .where(and(eq(cm.scope_type, 'organisation'), eq(cm.scope_id, ORG_SCOPE_ID), eq(cm.granularity, 'rolling')))
-    .orderBy(desc(cm.computed_at))
-    .limit(1);
+    .from(t)
+    .where(and(eq(t.scope_type, 'organisation'), eq(t.scope_id, ORG_SCOPE_ID), eq(t.granularity, 'rolling'), only))
+    .orderBy(desc(t.computed_at))
+    .limit(1));
 
   const row = rows[0];
-  if (!row) return renderCodePulseSection({ ...emptyFacts, hasData: false });
+  if (!row) return { ...emptyFacts, hasData: false };
 
   const csc = schema.codeSessionClassifications;
   const codeLabel = await getCodeWorkTypeLabeller();
+  const sessionsOf = codeSessionVendor(csc.session_id, vendor);
   const [workMixRows, tierRows] = await Promise.all([
     db
       .select({ workType: csc.work_type, count: sql<number | string>`count(*)` })
       .from(csc)
-      .where(eq(csc.status, 'classified'))
+      .where(and(eq(csc.status, 'classified'), sessionsOf))
       .groupBy(csc.work_type)
       .orderBy(desc(sql`count(*)`)),
     db
       .select({ tier: csc.tier, count: sql<number | string>`count(*)` })
       .from(csc)
-      .where(eq(csc.status, 'classified'))
+      .where(and(eq(csc.status, 'classified'), sessionsOf))
       .groupBy(csc.tier)
       .orderBy(csc.tier),
   ]);
 
-  return renderCodePulseSection({
+  return {
     hasData: true,
     spendUsd: toNum(row.spend_usd),
     engagedHours: computeEngagedHours(row.active_time_user_s, row.active_time_cli_s),
@@ -173,7 +235,7 @@ export async function buildCodePulseSection(): Promise<string> {
     frictionIndex: toNum(row.friction_index),
     workMix: workMixRows.map(r => ({ workType: codeLabel(r.workType), count: Number(r.count) })),
     tierMix: tierRows.map(r => ({ tier: Number(r.tier), count: Number(r.count) })),
-  });
+  };
 }
 
 const emptyFacts: CodePulseFacts = {

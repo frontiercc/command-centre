@@ -1,6 +1,7 @@
 // Copyright 2026 Lee James
 // SPDX-License-Identifier: Apache-2.0
 
+import { OPENAI_USER_SOURCE } from '@/lib/openai/sources';
 import { and, eq, gte, sql } from 'drizzle-orm';
 import { getConfigValue, getDataSourceStatus } from '@/lib/config';
 import { getTypedClient } from '@/lib/db/client';
@@ -246,8 +247,9 @@ export async function buildIso27001Section(periodStart: string, periodEnd: strin
   const totalOpen = Object.values(alertCounts).reduce((a, b) => a + b, 0);
   const incidentStatus = `${totalOpen} open (${alertCounts.high ?? 0} high, ${alertCounts.medium ?? 0} medium)`;
 
-  // Access control: OTel users
+  // Access control: people first seen through Claude's telemetry, and through OpenAI's export.
   let otelUserCount = 0;
+  let openaiUserCount = 0;
   try {
     const db = await getTypedClient();
     const otelRows = await db
@@ -255,10 +257,17 @@ export async function buildIso27001Section(periodStart: string, periodEnd: strin
       .from(schema.users)
       .where(eq(schema.users.source, 'otel'));
     otelUserCount = Number(otelRows[0]?.count ?? 0);
+    const openaiRows = await db
+      .select({ count: sql<number | string>`count(*)` })
+      .from(schema.users)
+      .where(eq(schema.users.source, OPENAI_USER_SOURCE));
+    openaiUserCount = Number(openaiRows[0]?.count ?? 0);
   } catch { /* users table may not exist */ }
 
-  const accessControlStatus = otelUserCount > 0
-    ? `${otelUserCount} OTel user${otelUserCount !== 1 ? 's' : ''}`
+  const otelPart = otelUserCount > 0 ? `${otelUserCount} OTel user${otelUserCount !== 1 ? 's' : ''}` : null;
+  const openaiPart = openaiUserCount > 0 ? `${openaiUserCount} first seen through OpenAI's export` : null;
+  const accessControlStatus = otelPart || openaiPart
+    ? [otelPart, openaiPart].filter(Boolean).join('; ')
     : 'No OTel users registered';
 
   // Audit logging — count surfaces with data
@@ -268,11 +277,13 @@ export async function buildIso27001Section(periodStart: string, periodEnd: strin
     surfaceData = await getSurfaceBreakdown();
   } catch { /* graceful degradation */ }
 
-  const surfaces = [];
+  const surfaces: string[] = [];
   if (surfaceData.chat > 0) surfaces.push('Chat');
   if (surfaceData.code > 0) surfaces.push('Code');
   if (surfaceData.agentCowork > 0) surfaces.push('Cowork (Agent)');
   if (surfaceData.otelCowork > 0) surfaces.push('Cowork (OTel)');
+  const products = await productsWithData();
+  if (products) surfaces.splice(0, surfaces.length, ...products);
 
   const auditStatus = surfaces.length > 0
     ? `Logging active on ${surfaces.length} surface${surfaces.length !== 1 ? 's' : ''}: ${surfaces.join(', ')}`
@@ -324,6 +335,19 @@ export async function buildIso27001Section(periodStart: string, periodEnd: strin
   ].join('\n');
 }
 
+/**
+ * With ChatGPT or Codex captured, the products that have logged prompts, by
+ * name (Claude Chat, Claude Cowork, Claude Code, ChatGPT Chat, ChatGPT Work,
+ * Codex). Null on a Claude-only installation, which keeps its surface list.
+ */
+async function productsWithData(): Promise<string[] | null> {
+  try {
+    const { getProductFigures } = await import('@/lib/reports/product-figures');
+    const figures = await getProductFigures(0, 0);
+    return figures.some(f => f.vendor === 'openai') ? figures.map(f => f.label) : null;
+  } catch { return null; }
+}
+
 // ─── ISO/IEC 42001:2023 Section ─────────────────────────────────────────
 
 /**
@@ -345,11 +369,14 @@ export async function buildIso42001Section(periodStart: string, periodEnd: strin
     surfaceData = await getSurfaceBreakdown();
   } catch { /* graceful degradation */ }
 
-  const surfacesWithData = [];
+  const surfacesWithData: string[] = [];
   if (surfaceData.chat > 0) surfacesWithData.push('Chat');
   if (surfaceData.code > 0) surfacesWithData.push('Code');
   if (surfaceData.agentCowork > 0) surfacesWithData.push('Cowork (Agent)');
   if (surfaceData.otelCowork > 0) surfacesWithData.push('Cowork (OTel)');
+  // With ChatGPT or Codex captured, every AI product in use, by name.
+  const products = await productsWithData();
+  if (products) surfacesWithData.splice(0, surfacesWithData.length, ...products);
 
   // Alert system
   let alertCounts: Record<string, number> = { low: 0, medium: 0, high: 0, critical: 0 };
@@ -364,7 +391,9 @@ export async function buildIso42001Section(periodStart: string, periodEnd: strin
     ? '**Not started**'
     : capitalize(assessmentStatus);
   const policyStatus = acceptableUsePolicy ? 'Declared' : '**Not declared**';
-  const inventoryStatus = `${surfacesWithData.length} surface${surfacesWithData.length !== 1 ? 's' : ''} active`;
+  const inventoryStatus = products
+    ? `${products.length} AI product${products.length !== 1 ? 's' : ''} in use: ${products.join(', ')}`
+    : `${surfacesWithData.length} surface${surfacesWithData.length !== 1 ? 's' : ''} active`;
   const dataQualityStatus = `${PII_PATTERNS.length} detection patterns (${piiCount} detection${piiCount !== 1 ? 's' : ''} in period)`;
   const loggingStatus = surfacesWithData.length > 0
     ? `Active on ${surfacesWithData.join(', ')}`

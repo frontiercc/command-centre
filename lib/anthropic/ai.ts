@@ -454,12 +454,10 @@ export async function generateGovernanceReport(
   const {
     getAlerts,
     getCoworkSessionCount,
-    getCoworkMessageCount,
     hasCoworkContent,
     getRecentCoworkSessions,
     getChatMessageCount,
     getChatFlaggedCount,
-    getCodeEventCount,
   } = await import('@/lib/db/queries');
   const alerts = await getAlerts({ department });
   const coworkSessions = await getCoworkSessionCount();
@@ -481,6 +479,22 @@ export async function generateGovernanceReport(
   // worse than no statement at all. Derived from live signals instead:
   // users.source='otel' for the OTLP path, the Claude Chat rows' own source for Chat.
   const otelPath = dataSources.otelCowork;
+
+  // Prompts per product (Claude Chat, Cowork, Code; ChatGPT Chat, Work, Codex),
+  // with the dashboard's own product rule, so no OpenAI row is counted under a
+  // Claude name. The Claude counts below leave OpenAI rows out.
+  const { getProductFigures, productsForMessages } = await import('@/lib/reports/product-figures');
+  const { vendorClause } = await import('@/lib/dashboard/product-sql');
+  const periodStartS = Math.floor(new Date(periodStart).getTime() / 1000);
+  const periodEndS = Math.floor(new Date(periodEnd).getTime() / 1000) + 86400;
+  const productFigures = await getProductFigures(periodStartS, periodEndS);
+  const fig = (id: string) => productFigures.find(p => p.id === id);
+  const openaiPresent = productFigures.some(p => p.vendor === 'openai');
+  const claudeOnly = sql.raw(vendorClause('claude'));
+  const { getConfigValue } = await import('@/lib/config');
+  const openaiLastSyncAt = parseInt(await getConfigValue('openaiLastSyncAt') || '0', 10) || 0;
+  let openaiSyncErrors = 0;
+  try { openaiSyncErrors = (JSON.parse(await getConfigValue('openaiLastSyncStats') || '{}').errors ?? []).length; } catch { /* no stats yet */ }
 
   const captureLabel = (surface: 'cowork' | 'code'): string => {
     if (otelPath) return 'OTLP push (OpenTelemetry collector → this hub)';
@@ -505,17 +519,38 @@ export async function generateGovernanceReport(
   // Build tier-aware Cowork section
   let coworkSection: string;
 
-  // hasCoworkContent/getCoworkMessageCount/getRecentCoworkSessions
+  // hasCoworkContent/getRecentCoworkSessions
   // are now async (converted in queries.ts) — await first.
-  if (dataSources.coworkContent && await hasCoworkContent()) {
-    const messageCount = await getCoworkMessageCount();
-    const sessions = await getRecentCoworkSessions(10);
+  // ChatGPT Work, from OpenAI's export, beside Claude Cowork (counted on its own, never as Cowork).
+  const gptWork = fig('chatgpt_work');
+  const chatgptWorkBlock = gptWork ? `
+
+**ChatGPT Work** (OpenAI's compliance export): prompts are stored as text; ChatGPT's replies are recorded as model and time only, never as text.
+
+- **ChatGPT Work prompts captured:** ${gptWork.prompts}
+- **Flagged prompts (PII/policy):** ${gptWork.flagged}${gptWork.flagged > 0 ? `\n\n**Action required:** ${gptWork.flagged} ChatGPT Work prompts have been flagged for PII or policy concerns. Review these in the Audit Log.` : ''}` : '';
+
+  // Claude Cowork's rows only: ChatGPT Work, Claude Code and Claude Chat have their own lines.
+  let claudeMessageCount = 0;
+  try {
+    const rows = await dbClient
+      .select({ count: sql<number | string>`count(*)` })
+      .from(schema.coworkMessages)
+      // Claude Cowork only: Claude Chat and Claude Code have their own sections.
+      .where(and(sql`${schema.coworkMessages.surface} IS DISTINCT FROM 'chat'`, sql`${schema.coworkMessages.surface} IS DISTINCT FROM 'code'`, claudeOnly));
+    claudeMessageCount = Number(rows[0]?.count ?? 0);
+  } catch { /* table might not exist */ }
+
+  if (dataSources.coworkContent && await hasCoworkContent() && claudeMessageCount > 0) {
+    const messageCount = claudeMessageCount;
+    // ChatGPT conversations also have a cowork_sessions row: Claude's only here.
+    const sessions = (await getRecentCoworkSessions(40)).filter(s => !s.id.startsWith('chatgpt:'));
     let flaggedCount = 0;
     try {
       const flaggedRows = await dbClient
         .select({ count: sql<number | string>`count(*)` })
         .from(schema.coworkMessages)
-        .where(eq(schema.coworkMessages.flagged, 1));
+        .where(and(eq(schema.coworkMessages.flagged, 1), sql`${schema.coworkMessages.surface} IS DISTINCT FROM 'chat'`, sql`${schema.coworkMessages.surface} IS DISTINCT FROM 'code'`, claudeOnly));
       flaggedCount = Number(flaggedRows[0]?.count ?? 0);
     } catch { /* table might not exist */ }
 
@@ -533,7 +568,7 @@ ${otelPath
 - **Flagged messages (PII/policy):** ${flaggedCount}
 - **Recent sessions:** ${sessions.length > 0 ? sessions.slice(0, 5).map(s => `Session ${s.id.slice(0, 8)} (${s.model || 'unknown model'})`).join(', ') : 'None'}
 
-${flaggedCount > 0 ? `**Action required:** ${flaggedCount} Cowork messages have been flagged for PII or policy concerns. Review these in the Audit Log.` : 'No policy flags detected in Cowork content during this period.'}`;
+${flaggedCount > 0 ? `**Action required:** ${flaggedCount} Cowork messages have been flagged for PII or policy concerns. Review these in the Audit Log.` : 'No policy flags detected in Cowork content during this period.'}${chatgptWorkBlock}`;
   } else {
     coworkSection = `## Cowork Audit Coverage
 
@@ -545,46 +580,48 @@ ${otelPath
   ? 'Telemetry is arriving over OTLP but no Cowork prompt content has been recorded. That usually means no Cowork sessions have run since the collector was connected, or clients are exporting metrics without the logs pipeline that carries prompts.'
   : 'To capture Cowork activity, point clients at this hub over OTLP (see the OTel collector guide).'}
 
-Cowork sessions seen in metadata: ${coworkSessions}`;
+Cowork sessions seen in metadata: ${coworkSessions}${chatgptWorkBlock}`;
   }
 
   // Build Code Audit section
   let codeSection: string;
   {
-    // getCodeEventCount is now async (converted in queries.ts) — await first.
-    const codeEventCount7d = await getCodeEventCount();
+    // Claude Code's rows only; Codex (OpenAI's export) has its own lines.
+    const weekAgoS = Math.floor(Date.now() / 1000) - 7 * 86400;
     let totalCodeMessages = 0;
+    let codeEventCount7d = 0;
     let codeFlaggedCount = 0;
-    let codexCounted = false;
     try {
-      const totalRows = await dbClient
-        .select({ count: sql<number | string>`count(*)` })
+      const rows = await dbClient
+        .select({
+          total: sql<number | string>`count(*)`,
+          week: sql<number | string>`count(*) FILTER (WHERE ${schema.coworkMessages.occurred_at} >= ${weekAgoS})`,
+          flagged: sql<number | string>`count(*) FILTER (WHERE ${schema.coworkMessages.flagged} = 1)`,
+        })
         .from(schema.coworkMessages)
-        .where(eq(schema.coworkMessages.surface, 'code'));
-      totalCodeMessages = Number(totalRows[0]?.count ?? 0);
-      const flaggedRows = await dbClient
-        .select({ count: sql<number | string>`count(*)` })
-        .from(schema.coworkMessages)
-        .where(and(eq(schema.coworkMessages.surface, 'code'), eq(schema.coworkMessages.flagged, 1)));
-      codeFlaggedCount = Number(flaggedRows[0]?.count ?? 0);
-      const codexRows = await dbClient
-        .select({ count: sql<number | string>`count(*)` })
-        .from(schema.coworkMessages)
-        .where(and(eq(schema.coworkMessages.surface, 'code'), eq(schema.coworkMessages.source, 'codex')));
-      codexCounted = Number(codexRows[0]?.count ?? 0) > 0;
+        .where(and(eq(schema.coworkMessages.surface, 'code'), claudeOnly));
+      totalCodeMessages = Number(rows[0]?.total ?? 0);
+      codeEventCount7d = Number(rows[0]?.week ?? 0);
+      codeFlaggedCount = Number(rows[0]?.flagged ?? 0);
     } catch { /* table might not exist */ }
+    const codex = fig('codex');
+    const codeSource = otelPath
+      ? `${captureLabel('code')}${codex ? '; Codex from OpenAI\'s compliance export' : ''}`
+      : codex ? 'Codex from OpenAI\'s compliance export. No Claude Code telemetry has arrived' : captureLabel('code');
 
     codeSection = `## Code Audit
 
-**Data source:** ${captureLabel('code')}
+**Data source:** ${codeSource}
 
-User prompts and tool-usage metadata are captured from Claude Code sessions${codexCounted ? ', and Codex sessions from OpenAI\'s export' : ''}. Assistant responses are never stored, only model, token and tool metadata.
+User prompts and tool-usage metadata are captured from Claude Code sessions${codex ? ', and Codex sessions from OpenAI\'s export' : ''}. Assistant responses are never stored, only model, token and tool metadata.
 
-- **Total Code events:** ${totalCodeMessages}
+- **Total Claude Code events:** ${totalCodeMessages}
 - **Events in last 7 days:** ${codeEventCount7d}
-- **Flagged events (PII/policy):** ${codeFlaggedCount}
+- **Flagged events (PII/policy):** ${codeFlaggedCount}${codex ? `
+- **Codex prompts captured:** ${codex.prompts} (${codex.last7} in the last 7 days)
+- **Flagged Codex prompts (PII/policy):** ${codex.flagged}` : ''}
 
-${codeFlaggedCount > 0 ? `**Action required:** ${codeFlaggedCount} Code events have been flagged for PII or policy concerns. Review these in the Audit Log.` : 'No policy flags detected in Code surface content during this period.'}`;
+${codeFlaggedCount + (codex?.flagged ?? 0) > 0 ? `**Action required:** ${codeFlaggedCount + (codex?.flagged ?? 0)} Code events have been flagged for PII or policy concerns${codex?.flagged ? ` (${codex.flagged} from Codex)` : ''}. Review these in the Audit Log.` : 'No policy flags detected in Code surface content during this period.'}`;
   }
 
   // Build Chat Audit section
@@ -595,16 +632,19 @@ ${codeFlaggedCount > 0 ? `**Action required:** ${codeFlaggedCount} Code events h
     const chatMessageCount = await getChatMessageCount();
     const chatFlagged = await getChatFlaggedCount();
 
+    const gptChat = fig('chatgpt_chat');
     chatSection = `## Chat Audit
 
-**Data source:** ${chatCaptureLabel}
+**Data source:** ${gptChat ? (chatSources.length > 0 ? `${chatCaptureLabel} (Claude Chat); OpenAI's compliance export (ChatGPT Chat)` : `OpenAI's compliance export (ChatGPT Chat). No Claude Chat prompts have been captured`) : chatCaptureLabel}
 
-Only user-side content is available: user prompts are stored as text, and assistant replies are recorded as metadata only (model, artifact and generated-file counts), never as text.
+Only user-side content is available: user prompts are stored as text, and assistant replies are recorded as metadata only (Claude: model, artifact and generated-file counts${gptChat ? '; ChatGPT: model and time' : ''}), never as text.
 
-- **Total Chat prompts captured:** ${chatMessageCount}
-- **Flagged prompts (PII/policy):** ${chatFlagged}
+- **Total ${gptChat ? 'Claude ' : ''}Chat prompts captured:** ${chatMessageCount}
+- **Flagged prompts (PII/policy):** ${chatFlagged}${gptChat ? `
+- **ChatGPT Chat prompts captured:** ${gptChat.prompts}
+- **Flagged ChatGPT Chat prompts (PII/policy):** ${gptChat.flagged}` : ''}
 
-${chatFlagged > 0 ? `**Action required:** ${chatFlagged} Chat prompts have been flagged for PII or policy concerns. Review these in the Audit Log.` : 'No policy flags detected in Chat prompts during this period.'}`;
+${chatFlagged + (gptChat?.flagged ?? 0) > 0 ? `**Action required:** ${chatFlagged + (gptChat?.flagged ?? 0)} Chat prompts have been flagged for PII or policy concerns${gptChat?.flagged ? ` (${gptChat.flagged} from ChatGPT Chat)` : ''}. Review these in the Audit Log.` : 'No policy flags detected in Chat prompts during this period.'}`;
   }
 
   // Build tier-aware data source summary
@@ -612,9 +652,10 @@ ${chatFlagged > 0 ? `**Action required:** ${chatFlagged} Chat prompts have been 
 
 | Source | Status | Coverage |
 |--------|--------|----------|
-| OTLP push (OpenTelemetry) | ${otelPath ? 'Active' : 'Not detected'} | The primary path for Cowork and Code: user prompts as text, plus tool, session and model metadata. Assistant responses are not stored. |
-| Compliance API | ${chatSources.includes('compliance') ? 'Active' : dataSources.complianceApi ? 'Configured' : 'Not configured'} | Chat prompts as text, assistant replies as metadata only, plus the org-wide activity feed. Requires a Claude Enterprise plan. |
-| Analytics API | ${dataSources.analyticsApi ? 'Configured' : 'Not configured'} | Org-wide per-user engagement snapshots (Enterprise only). |`;
+| OTLP push (OpenTelemetry) | ${otelPath ? 'Active' : 'Not detected'} | The primary path for Claude Cowork and Claude Code: user prompts as text, plus tool, session and model metadata. Assistant responses are not stored. |
+| Compliance API | ${chatSources.includes('compliance') ? 'Active' : dataSources.complianceApi ? 'Configured' : 'Not configured'} | Claude Chat prompts as text, assistant replies as metadata only, plus the org-wide activity feed. Requires a Claude Enterprise plan. |
+| Analytics API | ${dataSources.analyticsApi ? 'Configured' : 'Not configured'} | Org-wide per-user engagement snapshots (Enterprise only). |${dataSources.openai || openaiPresent ? `
+| OpenAI compliance export | ${openaiSyncErrors > 0 ? 'Configured, last sync had errors' : openaiPresent ? 'Active' : 'Configured, no data yet'}${openaiLastSyncAt ? ` (last sync ${new Date(openaiLastSyncAt * 1000).toISOString().slice(0, 10)})` : ''} | ChatGPT Chat, ChatGPT Work and Codex prompts as text; replies as model and time only; hourly costs and Codex turns. Requires ChatGPT Enterprise or Edu. |` : ''}`;
 
   // Build compliance sections (deterministic, code-generated). buildGdprSection
   // / buildComplianceGaps are now async — they call getChatFlaggedCount(),
@@ -637,10 +678,10 @@ ${chatFlagged > 0 ? `**Action required:** ${chatFlagged} Chat prompts have been 
     promptSections.push(`${++sectionNum}. The following data source summary (include EXACTLY as provided, do not modify):\n\n${dataSourceSummary}`);
   }
   if (include('usage')) {
-    promptSections.push(`${++sectionNum}. Usage by surface (Chat / Code / Cowork) with week-on-week change`);
+    promptSections.push(`${++sectionNum}. Usage by product (${productFigures.map(p => p.label).join(', ') || 'none captured yet'}) with week-on-week change, using the "Product usage" figures in the data. Report only those products; never estimate a product that is not listed`);
   }
   if (include('adoption')) {
-    promptSections.push(`${++sectionNum}. Adoption status: seats active vs total, by department if available`);
+    promptSections.push(`${++sectionNum}. Adoption status: people active per product (from "Product usage") and seats active vs total from the Analytics snapshots where present, by department if available`);
   }
   if (include('gdpr')) {
     promptSections.push(`${++sectionNum}. The following GDPR compliance section (include EXACTLY as provided, do not modify):\n\n${gdprSection}\n\nThen write 2-3 sentences interpreting the GDPR evidence above.`);
@@ -697,7 +738,7 @@ ${chatFlagged > 0 ? `**Action required:** ${chatFlagged} Chat prompts have been 
   if (include('human_time')) {
     const { buildHumanTimeSection } = await import('@/lib/reports/human-time-sections');
     const humanTimeSection = await buildHumanTimeSection(periodStart, periodEnd);
-    promptSections.push(`${++sectionNum}. The following Human time vs Claude time section (${VERBATIM}):\n\n${humanTimeSection}`);
+    promptSections.push(`${++sectionNum}. The following Human time vs AI time section (${VERBATIM}):\n\n${humanTimeSection}`);
   }
   if (include('cowork_audit')) {
     promptSections.push(`${++sectionNum}. The following Cowork audit section (include EXACTLY as provided, do not modify):\n\n${coworkSection}`);
@@ -735,12 +776,26 @@ ${topFiles.length > 0
     promptSections.push(`${++sectionNum}. Recommended actions for next period, referencing specific regulatory obligations\n    (e.g. "GDPR Art. 35", "EU AI Act Art. 50", "ISO 27001 A.5.24") where applicable.`);
   }
 
+  // Each alert from a prompt names its product (an intent alert's evidence
+  // records only the stored surface, which is 'cowork' for ChatGPT too).
+  const topAlerts = alerts.slice(0, 20);
+  const alertMessageIds = topAlerts.flatMap(a => {
+    try { const id = JSON.parse(String(a.raw_evidence ?? '{}')).message_id; return typeof id === 'string' ? [id] : []; } catch { return []; }
+  });
+  const alertProducts = await productsForMessages(alertMessageIds);
+  const labelledAlerts = topAlerts.map(a => {
+    let product: string | undefined;
+    try { const id = JSON.parse(String(a.raw_evidence ?? '{}')).message_id; if (typeof id === 'string') product = alertProducts.get(id); } catch { /* not JSON */ }
+    return product ? { ...a, product } : a;
+  });
+
   const client = await getClient();
   const coreModel = await getCoreAiModel();
   const message = await queueAiCall(() => client.messages.create({
     model: coreModel,
     max_tokens: 12288,
-    system: `You are writing a governance and compliance report for a UK organisation using AI assistants: Claude, and ChatGPT and Codex where connected.
+    system: `You are writing a governance and compliance report for a UK organisation using AI assistants: ${openaiPresent ? 'Claude (Claude Chat, Claude Cowork, Claude Code) and OpenAI (ChatGPT Chat, ChatGPT Work, Codex)' : 'Claude (Claude Chat, Claude Cowork, Claude Code)'}.
+Name each product as it is named in the data and the sections; never count an OpenAI product's activity under a Claude product's name, or the other way round. Each alert carries a "product" field where it came from a prompt.
 Write in formal but accessible British English. Use markdown formatting. NEVER use em dashes or en dashes; use commas, colons, semicolons, or full stops instead.
 
 Context (for your reference, do not state this directly in the report opening): the deployment tier is "${dataSources.mode}". Use this to inform your analysis but do not open the report by describing the deployment mode.
@@ -763,7 +818,7 @@ Report period: ${periodStart} to ${periodEnd}`,
     messages: [
       {
         role: 'user',
-        content: `Generate the governance report using this data:\n\n<report-data>\nAnalytics:\n${JSON.stringify(snapshots.slice(0, 50), null, 2)}\n\nAlerts:\n${JSON.stringify(alerts.slice(0, 20), null, 2)}\n</report-data>`,
+        content: `Generate the governance report using this data:\n\n<report-data>\nProduct usage (measured by Command Centre: prompts and people per product; last 7 days, the 7 days before, and the report period):\n${JSON.stringify(productFigures.map(p => ({ product: p.label, prompts_last_7_days: p.last7, prompts_previous_7_days: p.prior7, people_last_7_days: p.peopleLast7, prompts_in_period: p.promptsInPeriod, people_in_period: p.peopleInPeriod })), null, 2)}\n\nAnalytics (Anthropic Analytics API, Claude only):\n${JSON.stringify(snapshots.slice(0, 50), null, 2)}\n\nAlerts:\n${JSON.stringify(labelledAlerts, null, 2)}\n</report-data>`,
       },
     ],
   }, { timeout: LONG_AI_CALL_TIMEOUT_MS })); // long output: up to 12,288 tokens

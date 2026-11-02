@@ -1719,6 +1719,14 @@ export async function exportUserData(userId: string): Promise<{
   compliance_events: ComplianceEvent[];
   analytics_snapshots: AnalyticsSnapshot[];
   alerts: Alert[];
+  /** ChatGPT and Codex (OpenAI's export): reply model and time, conversation times, Codex turns and actions, hourly costs. Never reply text. */
+  openai: {
+    chatgpt_replies: (typeof schema.openaiReplies.$inferSelect)[];
+    chatgpt_conversation_times: (typeof schema.chatgptSessionTime.$inferSelect)[];
+    codex_turns: (typeof schema.codexTurns.$inferSelect)[];
+    codex_actions: (typeof schema.codexActions.$inferSelect)[];
+    hourly_costs: (typeof schema.openaiCosts.$inferSelect)[];
+  };
 } | null> {
   const db = await getTypedClient();
   const u = schema.users;
@@ -1744,6 +1752,14 @@ export async function exportUserData(userId: string): Promise<{
     db.select().from(asnap).where(eq(asnap.user_id, userId)).orderBy(desc(asnap.snapshot_date)),
     db.select().from(al).where(eq(al.user_id, userId)).orderBy(desc(al.generated_at)),
   ]);
+  // The person's ChatGPT and Codex records beyond their prompts (which are in cowork_messages).
+  const [gptReplies, gptTimes, cxTurns, cxActions, oaCosts] = await Promise.all([
+    db.select().from(schema.openaiReplies).where(eq(schema.openaiReplies.user_id, userId)).orderBy(desc(schema.openaiReplies.occurred_at)),
+    db.select().from(schema.chatgptSessionTime).where(eq(schema.chatgptSessionTime.user_id, userId)).orderBy(desc(schema.chatgptSessionTime.first_at)),
+    db.select().from(schema.codexTurns).where(eq(schema.codexTurns.user_id, userId)).orderBy(desc(schema.codexTurns.started_at)),
+    db.select().from(schema.codexActions).where(eq(schema.codexActions.user_id, userId)).orderBy(desc(schema.codexActions.occurred_at)),
+    db.select().from(schema.openaiCosts).where(eq(schema.openaiCosts.user_id, userId)).orderBy(desc(schema.openaiCosts.hour_start)),
+  ]);
 
   return {
     export_date: new Date().toISOString(),
@@ -1761,6 +1777,7 @@ export async function exportUserData(userId: string): Promise<{
     compliance_events: complianceEvents.map((r) => ({ ...r, metadata: jsonToText(r.metadata) })) as ComplianceEvent[],
     analytics_snapshots: analyticsSnapshots as AnalyticsSnapshot[],
     alerts: alerts.map((r) => ({ ...r, raw_evidence: jsonToText(r.raw_evidence) })) as Alert[],
+    openai: { chatgpt_replies: gptReplies, chatgpt_conversation_times: gptTimes, codex_turns: cxTurns, codex_actions: cxActions, hourly_costs: oaCosts },
   };
 }
 
