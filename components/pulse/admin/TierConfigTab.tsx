@@ -75,12 +75,17 @@ export default function TierConfigTab() {
   const loadPreview = async () => {
     setPreviewLoading(true);
     try {
+      // preview: true returns the prompt without saving the edits.
       const res = await fetch('/api/pulse/admin/tiers', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ config }),
+        body: JSON.stringify({ config, preview: true }),
       });
-      const data = await res.json();
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok) {
+        setSaveMsg(typeof data.error === 'string' ? data.error : "Couldn't build the preview. Try again.");
+        return;
+      }
       setPreview(data.promptPreview);
       setShowPreview(true);
     } finally {

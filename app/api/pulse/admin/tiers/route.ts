@@ -33,7 +33,7 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({ error: 'Forbidden' }, { status: 403 });
   }
 
-  let body: { config: TierConfig };
+  let body: { config: TierConfig; preview?: boolean };
   try {
     body = await request.json();
   } catch {
@@ -56,6 +56,12 @@ export async function POST(request: NextRequest) {
   if (typeof config.confidenceThreshold !== 'number' ||
       config.confidenceThreshold < 0 || config.confidenceThreshold > 1) {
     return NextResponse.json({ error: 'confidenceThreshold must be 0.0–1.0' }, { status: 400 });
+  }
+
+  // Preview prompt: the text the classifier would receive with these edits.
+  // Nothing is saved and no history row is written.
+  if (body.preview === true) {
+    return NextResponse.json({ promptPreview: buildClassifierSystemMessage(config) });
   }
 
   await setConfigValue('pulseClassifierConfig', JSON.stringify(config));
