@@ -55,6 +55,7 @@ import type { IntentMatch } from '@/lib/intent/types';
 import { createIntentAlerts } from '@/lib/alerts/intent-alerts';
 import { createPiiAlertsWithDedup } from '@/lib/alerts/pii-alerts';
 import { recordPiiAlertFailure } from '@/lib/alerts/pii-alert-failure';
+import { createFileUploadAlerts } from '@/lib/alerts/file-upload-alerts';
 import { CONTENT_PREVIEW_CHARS, CONTENT_FULL_CHARS } from '@/lib/otel/content-limits';
 import { resolveOtelUser } from '@/lib/otel/resolve-user';
 import { isPlainEmail } from '@/lib/email/address';
@@ -502,9 +503,12 @@ interface PendingAlert {
   source: OpenAiSource;
   surface: 'cowork' | 'code';
   messageId: string;
+  sessionId: string;
   text: string;
   pii: PiiMatch[];
   intent: IntentMatch[];
+  /** Names of files attached to the message (ChatGPT only). */
+  files: string[];
 }
 
 /**
@@ -634,8 +638,9 @@ async function storeRecords(
         }
       }
 
-      if (piiMatches.length > 0 || intentMatches.length > 0) {
-        pending.push({ userId, source: row.source, surface: row.surface, messageId: row.id, text: row.text, pii: piiMatches, intent: intentMatches });
+      const files = row.surface === 'cowork' ? row.fileNames : [];
+      if (piiMatches.length > 0 || intentMatches.length > 0 || files.length > 0) {
+        pending.push({ userId, source: row.source, surface: row.surface, messageId: row.id, sessionId: row.sessionId, text: row.text, pii: piiMatches, intent: intentMatches, files });
       }
     }
 
@@ -747,6 +752,11 @@ function raiseAlerts(alerts: PendingAlert[]): void {
     if (a.intent.length > 0) {
       createIntentAlerts(a.userId, a.surface, a.messageId, a.text, a.intent).catch((e: Error) => {
         console.error('[openai-sync] intent alert error:', e.message);
+      });
+    }
+    if (a.files.length > 0 && (a.source === 'chatgpt_chat' || a.source === 'chatgpt_work')) {
+      createFileUploadAlerts(a.userId, a.sessionId, a.files, a.source).catch((e: Error) => {
+        console.error('[openai-sync] file upload alert error:', e.message);
       });
     }
   }

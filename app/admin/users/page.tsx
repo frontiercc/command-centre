@@ -188,7 +188,7 @@ export default function UsersPage() {
                     <tr className={T.headRow}>
                       <th className={T.th}>Name / email</th>
                       <th className={T.th}>Last active</th>
-                      <th className={T.th}>Primary surface</th>
+                      <th className={T.th}>Main product</th>
                       <th className={T.thRight}>Messages (7d)</th>
                       <th className={T.th}>Adoption</th>
                       <th className={T.thRight}>Alerts</th>
@@ -215,7 +215,7 @@ export default function UsersPage() {
                           </td>
                           <td className={cx(T.tdMute, 'whitespace-nowrap tabular-nums')}>{formatDate(user.last_seen_at)}</td>
                           <td className={T.td}>
-                            <Tag>{user.primary_surface.toLowerCase()}</Tag>
+                            <Tag>{user.primary_surface}</Tag>
                           </td>
                           <td className={cx(T.tdRight, 'font-medium')}>{user.messages_7d}</td>
                           <td className={T.td}>

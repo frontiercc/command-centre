@@ -30,6 +30,10 @@ describe('clearAuditAndAlerts — audit log view + alert view', () => {
     // Claude Chat prompts are cowork_messages rows (surface 'chat') since
     // migration 0038, so chat_messages no longer exists to be cleared.
     expect(t).not.toContain('chat_messages');
+    // ChatGPT and Codex metadata goes with the prompts it belongs to.
+    for (const openai of ['openai_replies', 'chatgpt_session_time', 'codex_actions', 'codex_turns', 'openai_costs']) {
+      expect(t).toContain(openai);
+    }
     // FK-children must be deleted before their parent cowork_messages
     for (const child of ['pulse_classifications', 'pulse_events', 'pulse_skill_runs']) {
       expect(t.indexOf(child)).toBeLessThan(t.indexOf('cowork_messages'));

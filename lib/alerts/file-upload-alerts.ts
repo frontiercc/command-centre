@@ -128,13 +128,25 @@ async function loadOrgRules(): Promise<OrgRule[]> {
  * Creates one deduped alert per matched rule per user per 24h.
  *
  * Called at ingest time from the OTel receiver immediately after
- * files_uploaded is updated on the session.
+ * files_uploaded is updated on the session, and by the OpenAI sync for files
+ * attached to a ChatGPT message, once that file's records have committed.
  */
+/** Where a file was uploaded: the alert names the product. */
+export type UploadProduct = 'claude_cowork' | 'chatgpt_chat' | 'chatgpt_work';
+
+const UPLOAD_PLACE: Record<UploadProduct, { vendor: string; place: string }> = {
+  claude_cowork: { vendor: 'Claude', place: 'a Claude Cowork session' },
+  chatgpt_chat: { vendor: 'ChatGPT', place: 'a ChatGPT Chat conversation' },
+  chatgpt_work: { vendor: 'ChatGPT', place: 'a ChatGPT Work conversation' },
+};
+
 export async function createFileUploadAlerts(
   userId: string,
   sessionId: string,
   filenames: string[],
+  product: UploadProduct = 'claude_cowork',
 ): Promise<number> {
+  const where = UPLOAD_PLACE[product];
   if (filenames.length === 0) return 0;
 
   const orgRules = await loadOrgRules();
@@ -172,8 +184,8 @@ export async function createFileUploadAlerts(
           user_id: userId,
           alert_type: 'policy',
           severity: rule.severity,
-          title: `Sensitive file uploaded to Claude: ${rule.label}`,
-          explanation: `"${filename}" was uploaded to a Claude Cowork session. Pattern matched: ${rule.pattern} (${rule.label}).`,
+          title: `Sensitive file uploaded to ${where.vendor}: ${rule.label}`,
+          explanation: `"${filename}" was uploaded to ${where.place}. Pattern matched: ${rule.pattern} (${rule.label}).`,
           raw_evidence: JSON.stringify({
             file_alert_label: rule.label,
             filename,

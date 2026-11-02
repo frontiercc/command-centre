@@ -11,6 +11,8 @@ import { and, asc, eq, gte, isNull, lte, ne, notInArray, or, sql, type SQL } fro
 import { getTypedClient } from '@/lib/db/client';
 import { schema } from '@/lib/db/schema';
 import { getAdminSession } from '@/lib/auth/admin-auth';
+import { productExpr } from '@/lib/dashboard/product-sql';
+import { PRODUCTS, PRODUCT_IDS, type ProductId } from '@/lib/dashboard/vendor';
 
 export const dynamic = 'force-dynamic';
 
@@ -27,6 +29,8 @@ function rowToCSV(cols: unknown[]): string {
   return cols.map(escapeCSV).join(',');
 }
 
+const productLabel = (id: string) => PRODUCTS.find(p => p.id === id)?.label ?? '';
+
 export async function GET(request: NextRequest) {
   const session = await getAdminSession(request);
   if (!session.authenticated || session.role !== 'admin') {
@@ -34,14 +38,20 @@ export async function GET(request: NextRequest) {
   }
 
   const params = request.nextUrl.searchParams;
-  const surface = params.get('surface') || 'all';
+  // `product` narrows to one product (Claude Cowork, ChatGPT Chat, Codex...);
+  // `surface` is the older filter, kept for callers that still send it.
+  const productParam = params.get('product');
+  const product = productParam && (PRODUCT_IDS as string[]).includes(productParam) ? productParam as ProductId : null;
+  const surface = product
+    ? (product === 'claude_chat' ? 'chat' : product === 'claude_code' || product === 'codex' ? 'code' : 'cowork')
+    : params.get('surface') || 'all';
   const dateFrom = params.get('dateFrom') ? parseInt(params.get('dateFrom')!) : undefined;
   const dateTo   = params.get('dateTo')   ? parseInt(params.get('dateTo')!)   : undefined;
 
   const client = await getTypedClient();
   const lines: string[] = [];
 
-  const header = ['Timestamp (UTC)', 'User', 'Department', 'Surface', 'Event Type', 'Content Preview'];
+  const header = ['Timestamp (UTC)', 'User', 'Department', 'Surface', 'Product', 'Event Type', 'Content Preview'];
   lines.push(rowToCSV(header));
 
   // Cowork + Code messages
@@ -54,11 +64,13 @@ export async function GET(request: NextRequest) {
     if (surface !== 'all') conditions.push(eq(cm.surface, surface));
     // Claude Chat prompts (surface 'chat') are exported in the Chat block below.
     else conditions.push(or(isNull(cm.surface), ne(cm.surface, 'chat'))!);
+    if (product) conditions.push(sql`${sql.raw(productExpr('cowork_messages.'))} = ${product}`);
     if (dateFrom) conditions.push(gte(cm.occurred_at, dateFrom));
     if (dateTo) conditions.push(lte(cm.occurred_at, dateTo));
 
     const rows = await client
       .select({
+        product: sql<string>`${sql.raw(productExpr('cowork_messages.'))}`,
         occurred_at: cm.occurred_at,
         display_name: u.display_name,
         user_id: cm.user_id,
@@ -75,7 +87,7 @@ export async function GET(request: NextRequest) {
     for (const r of rows) {
       const ts = new Date(r.occurred_at * 1000).toISOString().replace('T', ' ').replace('Z', '');
       const user = r.display_name || (r.user_id ? r.user_id.split('@')[0] : '');
-      lines.push(rowToCSV([ts, user, r.department ?? '', r.surface ?? '', r.message_type, r.content_preview ?? '']));
+      lines.push(rowToCSV([ts, user, r.department ?? '', r.surface ?? '', productLabel(r.product), r.message_type, r.content_preview ?? '']));
     }
   }
 
@@ -104,7 +116,7 @@ export async function GET(request: NextRequest) {
     for (const r of rows) {
       const ts = new Date(r.occurred_at * 1000).toISOString().replace('T', ' ').replace('Z', '');
       const user = r.display_name || (r.user_id ? r.user_id.split('@')[0] : '');
-      lines.push(rowToCSV([ts, user, r.department ?? '', 'chat', 'chat_prompt', r.prompt_text ?? '']));
+      lines.push(rowToCSV([ts, user, r.department ?? '', 'chat', productLabel('claude_chat'), 'chat_prompt', r.prompt_text ?? '']));
     }
   }
 

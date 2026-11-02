@@ -115,6 +115,8 @@ In **Admin → Data → Data retention**, set each period (minimum 7 days) and t
 | Error events retention | 90 |
 | Alerts retention (resolved and dismissed only) | 90 |
 
+With ChatGPT or Codex connected, **Cowork content retention** also covers ChatGPT Chat and ChatGPT Work prompts, reply times and spend, and **Code retention** covers Codex prompts, turns, actions and spend. On a hub with only OpenAI connected these two read **ChatGPT retention** and **Codex retention**, and the settings for Claude-only stores (OTel events, adoption analytics, compliance events and Claude Chat) are hidden.
+
 **Strip content (keep metadata)**, the default, replaces prompt text past its period with a fixed marker and keeps the rows, so counts and trends survive. **Full purge (delete rows)** deletes them. Metadata-only records, such as those kept for Claude's replies in Claude Chat, are deleted in both modes.
 
 **Check:** select **Run cleanup now** once; the result line reports rows affected per area.

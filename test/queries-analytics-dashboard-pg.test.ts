@@ -178,10 +178,10 @@ async function runSpec(): Promise<void> {
     // ── getUserAdoptionHealth / getUserPrimarySurface / getUserMessageCount7d
     //    PRIMARY path (user-4/5, snapshot-driven) ────────────────────────
     expect(await getUserAdoptionHealth('user-4')).toBe('inactive'); // messages_sent=4 < 5
-    expect(await getUserPrimarySurface('user-4')).toBe('Chat'); // chat=3 is max
+    expect(await getUserPrimarySurface('user-4')).toBe('Claude Chat'); // chat=3 is max
     expect(await getUserMessageCount7d('user-4')).toBe(4);
     expect(await getUserAdoptionHealth('user-5')).toBe('inactive'); // messages_sent=2 < 5
-    expect(await getUserPrimarySurface('user-5')).toBe('Chat');
+    expect(await getUserPrimarySurface('user-5')).toBe('Claude Chat');
     expect(await getUserMessageCount7d('user-5')).toBe(2);
 
     //    FALLBACK path (user-1/2/3, no snapshot rows) ─────────────────────
@@ -200,17 +200,17 @@ async function runSpec(): Promise<void> {
     // (TODAY) -> tie broken toward Cowork (checked before Chat).
     // messages_7d fallback = cowork_messages count (7d), Claude Chat prompts
     // (surface 'chat') left out as before they moved into this table: 2.
-    expect(await getUserPrimarySurface('user-1')).toBe('Cowork');
+    expect(await getUserPrimarySurface('user-1')).toBe('Claude Cowork');
     expect(await getUserMessageCount7d('user-1')).toBe(2);
     // user-2's synthesised messages_sent total = 1(TODAY code) + 1
     // (LIVE_ONLY_DAY cowork) + 1(OVERLAY_DAY cowork) = 3 < 5 -> 'inactive'.
     expect(await getUserAdoptionHealth('user-2')).toBe('inactive');
     // Primary-surface fallback: coworkCount=2, codeCount=1, chatCount=0 -> Cowork.
-    expect(await getUserPrimarySurface('user-2')).toBe('Cowork');
+    expect(await getUserPrimarySurface('user-2')).toBe('Claude Cowork');
     expect(await getUserMessageCount7d('user-2')).toBe(3);
     // user-3's synthesised messages_sent total = 1(OVERLAY_DAY cowork) < 5 -> 'inactive'.
     expect(await getUserAdoptionHealth('user-3')).toBe('inactive');
-    expect(await getUserPrimarySurface('user-3')).toBe('Cowork');
+    expect(await getUserPrimarySurface('user-3')).toBe('Claude Cowork');
     expect(await getUserMessageCount7d('user-3')).toBe(1);
 
     // ── getAllUser*Map builders: mixed primary (user-4/5) + fallback
@@ -225,11 +225,11 @@ async function runSpec(): Promise<void> {
     expect(msgMap.get('user-5')).toBe(2);
 
     const surfaceMap = await getAllUserPrimarySurfaces();
-    expect(surfaceMap.get('user-1')).toBe('Cowork');
-    expect(surfaceMap.get('user-2')).toBe('Cowork');
-    expect(surfaceMap.get('user-3')).toBe('Cowork');
-    expect(surfaceMap.get('user-4')).toBe('Chat');
-    expect(surfaceMap.get('user-5')).toBe('Chat');
+    expect(surfaceMap.get('user-1')).toBe('Claude Cowork');
+    expect(surfaceMap.get('user-2')).toBe('Claude Cowork');
+    expect(surfaceMap.get('user-3')).toBe('Claude Cowork');
+    expect(surfaceMap.get('user-4')).toBe('Claude Chat');
+    expect(surfaceMap.get('user-5')).toBe('Claude Chat');
 
     // getAllUserAdoptionHealth does NOT delegate to getSnapshotsForUser — its
     // fallback is a direct raw COUNT(*) over cowork_messages, so user-1/2/3

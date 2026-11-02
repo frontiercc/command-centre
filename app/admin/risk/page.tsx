@@ -9,6 +9,8 @@ import TopBar from '@/components/layout/TopBar';
 import LoadingSpinner from '@/components/shared/LoadingSpinner';
 import { useToast } from '@/components/shared/ToastProvider';
 import SecretRemoveButton from '@/components/admin/SecretRemoveButton';
+import { useConnectedProducts } from '@/components/shared/VendorSwitch';
+import { isOpenAiOnly } from '@/lib/sources/connected-shared';
 import { PageBody, Panel, Notice, SubHead, Dot, SEVERITY_COLOR, B, cx } from '@/components/precision/ui';
 
 
@@ -61,6 +63,9 @@ const DEFAULT_SEVERITY: Record<string, string> = {
 export default function AdminRiskPage() {
   // Threshold state
   const [tokenMultiplier, setTokenMultiplier] = useState('3');
+  const connectedProducts = useConnectedProducts();
+  const openaiConnected = !!connectedProducts?.openai;
+  const openaiOnly = isOpenAiOnly(connectedProducts);
   const [fileAccessLimit, setFileAccessLimit] = useState('50');
   const [inactivityDays, setInactivityDays] = useState('14');
   const [sensitivity, setSensitivity] = useState('balanced');
@@ -358,7 +363,7 @@ export default function AdminRiskPage() {
         {/* Section 3c: File Upload Alert Settings */}
         <Panel title="File upload alert settings">
           <p className="m-0 mb-4 text-[13px] text-[#666666] leading-5">
-            Alert when a user uploads a file to a Cowork session whose name matches a glob pattern.
+            Alert when a user {openaiOnly ? 'attaches a file to a ChatGPT conversation' : openaiConnected ? 'uploads a file to a Claude Cowork session or attaches one to a ChatGPT conversation' : 'uploads a file to a Claude Cowork session'} whose name matches a glob pattern.
             Built-in patterns below are always active. Add org-specific patterns (e.g. <code className="bg-[#F2F2F2] px-1 rounded-[6px] text-[12px] font-mono">*.xlsx</code>, <code className="bg-[#F2F2F2] px-1 rounded-[6px] text-[12px] font-mono">*payroll*</code>) to extend coverage.
           </p>
 
