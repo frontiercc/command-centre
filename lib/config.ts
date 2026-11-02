@@ -169,6 +169,8 @@ export interface AppConfig {
   codeAlertCostSpikeEnabled: boolean;
   codeCostSpikeMultiplier: number;
   codeCostSpikeFloorUsd: number;
+  codexAlertSpendEnabled: boolean;      // Codex daily spend alert (default on)
+  codexDailySpendLimitUsd: number;      // Codex's own daily limit, default 500
   codeAlertModelPolicyEnabled: boolean;
   codeModelAllowlist: string;
   codeAlertRepoExposureEnabled: boolean;
@@ -439,6 +441,8 @@ export const CONFIG_KEYS: Record<keyof AppConfig, string> = {
   codeAlertCostSpikeEnabled: 'code_alert_cost_spike_enabled',
   codeCostSpikeMultiplier: 'code_cost_spike_multiplier',
   codeCostSpikeFloorUsd: 'code_cost_spike_floor_usd',
+  codexAlertSpendEnabled: 'codex_alert_spend_enabled',
+  codexDailySpendLimitUsd: 'codex_daily_spend_limit_usd',
   codeAlertModelPolicyEnabled: 'code_alert_model_policy_enabled',
   codeModelAllowlist: 'code_model_allowlist',
   codeAlertRepoExposureEnabled: 'code_alert_repo_exposure_enabled',
@@ -831,6 +835,8 @@ export async function getAllConfig(): Promise<AppConfig> {
     codeAlertCostSpikeEnabled: resolve('codeAlertCostSpikeEnabled', 'true') === 'true',
     codeCostSpikeMultiplier: parseFloat(resolve('codeCostSpikeMultiplier', '3')),
     codeCostSpikeFloorUsd: parseFloat(resolve('codeCostSpikeFloorUsd', '100')),
+    codexAlertSpendEnabled: resolve('codexAlertSpendEnabled', 'true') === 'true',
+    codexDailySpendLimitUsd: parseFloat(resolve('codexDailySpendLimitUsd', '500')),
     codeAlertModelPolicyEnabled: resolve('codeAlertModelPolicyEnabled', 'false') === 'true',
     codeModelAllowlist: resolve('codeModelAllowlist', '[]'),
     codeAlertRepoExposureEnabled: resolve('codeAlertRepoExposureEnabled', 'false') === 'true',

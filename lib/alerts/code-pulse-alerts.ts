@@ -7,6 +7,7 @@
  *
  * Types:
  *   code_cost_spike    — user's Claude Code spend in the last 24h is over a fixed daily limit
+ *   codex_cost_spike   — the same for Codex, against Codex's own daily limit
  *   code_model_policy  — model seen that is not on the admin allowlist (empty list = disabled)
  *   code_repo_exposure — session in a repo matching a sensitive pattern (off by default)
  *   code_friction      — session with high tool-error density (off by default)
@@ -76,11 +77,13 @@ const MONTHS = ['January', 'February', 'March', 'April', 'May', 'June', 'July', 
  */
 export function costSpikeExplanation(f: {
   who: string; spend24: number; windowEnd: number; monthToDate: number; dailyLimit: number;
+  /** The product the spend was on (default Claude Code). */
+  product?: string;
 }): string {
   const d = new Date(f.windowEnd * 1000);
   const hhmm = `${String(d.getUTCHours()).padStart(2, '0')}:${String(d.getUTCMinutes()).padStart(2, '0')}`;
   const when = `${d.getUTCDate()} ${MONTHS[d.getUTCMonth()].slice(0, 3)}, ${hhmm} UTC`;
-  return `${f.who} spent $${f.spend24.toFixed(2)} on Claude Code in the 24 hours to ${when} (${MONTHS[d.getUTCMonth()]} so far: $${f.monthToDate.toFixed(2)}), `
+  return `${f.who} spent $${f.spend24.toFixed(2)} on ${f.product ?? 'Claude Code'} in the 24 hours to ${when} (${MONTHS[d.getUTCMonth()]} so far: $${f.monthToDate.toFixed(2)}), `
     + `over the daily limit of $${f.dailyLimit.toFixed(2)}. Could be a heavy work burst or a runaway loop worth a look.`;
 }
 
@@ -147,15 +150,28 @@ async function checkCostSpikes(): Promise<void> {
     perUser.set(userId, u);
   }
 
+  await raiseSpendAlerts('code_cost_spike', 'Claude Code', perUser, dailyLimit, now);
+}
+
+/**
+ * One alert per person over the limit. One per person per 24 hours, except
+ * that an alert first raised as medium steps up: once spend passes twice the
+ * limit inside those 24 hours a high alert is raised, which the Slack sweep
+ * sends. Before this, the hourly check caught most people just over the line
+ * (medium, not sent to Slack) and the 24-hour dedup then hid them however high
+ * they went.
+ */
+async function raiseSpendAlerts(
+  alertType: 'code_cost_spike' | 'codex_cost_spike',
+  product: string,
+  perUser: Map<string, { spend24: number; spendMonth: number }>,
+  dailyLimit: number,
+  now: number,
+): Promise<void> {
   for (const [userId, { spend24, spendMonth }] of perUser) {
     if (spend24 <= dailyLimit) continue;
     const severity = spend24 > dailyLimit * 2 ? 'high' : 'medium';
-    // One alert per person per 24 hours, except that an alert first raised as
-    // medium steps up: once spend passes twice the limit inside those 24 hours
-    // a high alert is raised, which the Slack sweep sends. Before this, the
-    // hourly check caught most people just over the line (medium, not sent to
-    // Slack) and the 24-hour dedup then hid them however high they went.
-    const recent = await recentAlertSeverities('code_cost_spike', userId);
+    const recent = await recentAlertSeverities(alertType, userId);
     if (recent.length > 0 && (severity !== 'high' || recent.includes('high'))) continue;
     // The person's name, never the raw id: Slack sends this text as stored.
     const who = await personLabel(userId);
@@ -163,13 +179,70 @@ async function checkCostSpikes(): Promise<void> {
     await insertAlert({
       id: uuidv4(),
       user_id: userId,
-      alert_type: 'code_cost_spike',
+      alert_type: alertType,
       severity,
-      title: `Claude Code spend over the daily limit: $${spend24.toFixed(2)} in 24h`,
-      explanation: costSpikeExplanation({ who, spend24, windowEnd: now, monthToDate: spendMonth, dailyLimit }),
+      title: `${product} spend over the daily limit: $${spend24.toFixed(2)} in 24h`,
+      explanation: costSpikeExplanation({ who, spend24, windowEnd: now, monthToDate: spendMonth, dailyLimit, product }),
       raw_evidence: JSON.stringify({ source: 'code_pulse', user_id: userId, spend_24h: spend24, month_to_date: spendMonth, daily_limit_usd: dailyLimit }),
     });
   }
+}
+
+// ── codex_cost_spike ─────────────────────────────────────────────────────────
+
+/** Codex's daily limit when the hub has not set one (config codex_daily_spend_limit_usd). */
+export const DEFAULT_CODEX_DAILY_LIMIT_USD = 500;
+
+/**
+ * Codex against its own daily limit (config codex_daily_spend_limit_usd), on
+ * the same rule as Claude Code. Spend is priced as FinOps prices Codex
+ * (lib/finance/chargeback.ts): each turn's uncached input, cached input and
+ * output tokens at the model's rate; an unpriced model adds nothing.
+ */
+async function checkCodexSpend(): Promise<void> {
+  if ((await getConfigValue('codexAlertSpendEnabled')) === 'false') return;
+  const dailyLimit = await num('codexDailySpendLimitUsd', DEFAULT_CODEX_DAILY_LIMIT_USD);
+
+  const client = await getTypedClient();
+  const ct = schema.codexTurns;
+  const rates = await getCodeModelRates();
+  const now = Math.floor(Date.now() / 1000);
+  const dayAgo = now - DAY;
+  const nowDate = new Date(now * 1000);
+  const monthStart = Date.UTC(nowDate.getUTCFullYear(), nowDate.getUTCMonth(), 1) / 1000;
+
+  const rows = await client
+    .select({
+      user_id: ct.user_id,
+      model: ct.model,
+      inp24: sql<number | string>`SUM(CASE WHEN ${ct.started_at} >= ${dayAgo} THEN ${ct.uncached_input_tokens} ELSE 0 END)`,
+      cached24: sql<number | string>`SUM(CASE WHEN ${ct.started_at} >= ${dayAgo} THEN ${ct.cached_input_tokens} ELSE 0 END)`,
+      out24: sql<number | string>`SUM(CASE WHEN ${ct.started_at} >= ${dayAgo} THEN ${ct.output_tokens} ELSE 0 END)`,
+      inpM: sql<number | string>`SUM(CASE WHEN ${ct.started_at} >= ${monthStart} THEN ${ct.uncached_input_tokens} ELSE 0 END)`,
+      cachedM: sql<number | string>`SUM(CASE WHEN ${ct.started_at} >= ${monthStart} THEN ${ct.cached_input_tokens} ELSE 0 END)`,
+      outM: sql<number | string>`SUM(CASE WHEN ${ct.started_at} >= ${monthStart} THEN ${ct.output_tokens} ELSE 0 END)`,
+    })
+    .from(ct)
+    .where(and(isNotNull(ct.model), gte(ct.started_at, Math.min(dayAgo, monthStart))))
+    .groupBy(ct.user_id, ct.model);
+
+  const perUser = new Map<string, { spend24: number; spendMonth: number }>();
+  for (const r of rows) {
+    const u = perUser.get(r.user_id) ?? { spend24: 0, spendMonth: 0 };
+    const s24 = priceTokens(r.model as string, {
+      inputTokens: Number(r.inp24 ?? 0), outputTokens: Number(r.out24 ?? 0),
+      cacheReadTokens: Number(r.cached24 ?? 0), cacheCreationTokens: 0,
+    }, rates);
+    const sM = priceTokens(r.model as string, {
+      inputTokens: Number(r.inpM ?? 0), outputTokens: Number(r.outM ?? 0),
+      cacheReadTokens: Number(r.cachedM ?? 0), cacheCreationTokens: 0,
+    }, rates);
+    if (s24 !== null) u.spend24 += s24;
+    if (sM !== null) u.spendMonth += sM;
+    perUser.set(r.user_id, u);
+  }
+
+  await raiseSpendAlerts('codex_cost_spike', 'Codex', perUser, dailyLimit, now);
 }
 
 // ── code_model_policy ────────────────────────────────────────────────────────
@@ -286,6 +359,7 @@ async function checkFriction(): Promise<void> {
 
 export async function runCodePulseAlerts(): Promise<void> {
   try { await checkCostSpikes(); } catch (err) { console.error('[CodePulseAlerts] cost spike check failed:', err instanceof Error ? err.message : err); }
+  try { await checkCodexSpend(); } catch (err) { console.error('[CodePulseAlerts] Codex spend check failed:', err instanceof Error ? err.message : err); }
   try { await checkModelPolicy(); } catch (err) { console.error('[CodePulseAlerts] model policy check failed:', err instanceof Error ? err.message : err); }
   try { await checkRepoExposure(); } catch (err) { console.error('[CodePulseAlerts] repo exposure check failed:', err instanceof Error ? err.message : err); }
   try { await checkFriction(); } catch (err) { console.error('[CodePulseAlerts] friction check failed:', err instanceof Error ? err.message : err); }

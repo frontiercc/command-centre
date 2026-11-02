@@ -120,6 +120,8 @@ export async function POST(request: NextRequest) {
     'codeAlertFrictionEnabled',
     'codeCostSpikeMultiplier',
     'codeCostSpikeFloorUsd',
+    'codexAlertSpendEnabled',
+    'codexDailySpendLimitUsd',
     'codeFrictionThreshold',
     'codeModelAllowlist',
     'codeSensitiveRepoPatterns',

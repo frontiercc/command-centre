@@ -96,6 +96,8 @@ export default function AdminRiskPage() {
 
   // Developer Pulse alert thresholds
   const [codeCostFloor, setCodeCostFloor] = useState('100');
+  const [codexSpendEnabled, setCodexSpendEnabled] = useState(true);
+  const [codexSpendLimit, setCodexSpendLimit] = useState('500');
   const [codeFrictionPct, setCodeFrictionPct] = useState('25');
   const [codeModelAllowlist, setCodeModelAllowlist] = useState('');
   const [codeRepoPatterns, setCodeRepoPatterns] = useState('');
@@ -135,6 +137,8 @@ export default function AdminRiskPage() {
         if (data.codeAlertRepoExposureEnabled !== undefined) setCodeRepoExposureEnabled(data.codeAlertRepoExposureEnabled);
         if (data.codeAlertFrictionEnabled !== undefined) setCodeFrictionEnabled(data.codeAlertFrictionEnabled);
         if (data.codeCostSpikeFloorUsd) setCodeCostFloor(String(data.codeCostSpikeFloorUsd));
+        if (data.codexAlertSpendEnabled !== undefined) setCodexSpendEnabled(data.codexAlertSpendEnabled);
+        if (data.codexDailySpendLimitUsd) setCodexSpendLimit(String(data.codexDailySpendLimitUsd));
         if (data.codeFrictionThreshold) setCodeFrictionPct(String(Math.round(data.codeFrictionThreshold * 100)));
         try { if (data.codeModelAllowlist) setCodeModelAllowlist((JSON.parse(data.codeModelAllowlist) as string[]).join(', ')); } catch { /* leave blank */ }
         try { if (data.codeSensitiveRepoPatterns) setCodeRepoPatterns((JSON.parse(data.codeSensitiveRepoPatterns) as string[]).join(', ')); } catch { /* leave blank */ }
@@ -177,6 +181,8 @@ export default function AdminRiskPage() {
           codeAlertRepoExposureEnabled: String(codeRepoExposureEnabled),
           codeAlertFrictionEnabled: String(codeFrictionEnabled),
           codeCostSpikeFloorUsd: codeCostFloor,
+          codexAlertSpendEnabled: String(codexSpendEnabled),
+          codexDailySpendLimitUsd: codexSpendLimit,
           codeFrictionThreshold: String((parseFloat(codeFrictionPct) || 25) / 100),
           codeModelAllowlist: JSON.stringify(codeModelAllowlist.split(',').map(s => s.trim()).filter(Boolean)),
           codeSensitiveRepoPatterns: JSON.stringify(codeRepoPatterns.split(',').map(s => s.trim()).filter(Boolean)),
@@ -309,6 +315,7 @@ export default function AdminRiskPage() {
               { label: 'Finance reconciliation drift', desc: 'Command Centre\'s own spend estimate diverges from Anthropic\'s reported cost by more than the configured threshold (FinOps). Deterministic, no AI judgement.', value: financeDriftEnabled, setter: setFinanceDriftEnabled },
               { label: 'Use case at-risk', desc: 'A tracked use case that was piloting or adopted has gone quiet for several weeks (Use Cases lifecycle tracker). Deterministic, no AI judgement.', value: useCaseAlertEnabled, setter: setUseCaseAlertEnabled },
               { label: 'Developer Pulse: daily spend limit', desc: 'A user\'s Claude Code spend in the last 24 hours is over the daily limit below. Over twice the limit is high and goes to Slack. Deterministic, no AI judgement.', value: codeCostSpikeEnabled, setter: setCodeCostSpikeEnabled },
+              ...(openaiConnected ? [{ label: 'Developer Pulse: Codex daily spend limit', desc: 'A user\'s Codex spend in the last 24 hours is over the Codex daily limit below. Over twice the limit is high and goes to Slack. Deterministic, no AI judgement.', value: codexSpendEnabled, setter: setCodexSpendEnabled }] : []),
               { label: 'Developer Pulse: model policy', desc: 'A model not on the approved list was used in Claude Code. Requires an allowlist in config (code_model_allowlist). Off by default.', value: codeModelPolicyEnabled, setter: setCodeModelPolicyEnabled },
               { label: 'Developer Pulse: sensitive repo', desc: 'Claude Code activity in a repo matching a sensitive-path pattern (code_sensitive_repo_patterns). Off by default.', value: codeRepoExposureEnabled, setter: setCodeRepoExposureEnabled },
               { label: 'Developer Pulse: high friction', desc: 'Over a quarter of tool actions failed in a session: a coaching signal. Off by default; visible on the Developer Pulse Overview regardless.', value: codeFrictionEnabled, setter: setCodeFrictionEnabled },
@@ -327,13 +334,22 @@ export default function AdminRiskPage() {
         {/* Section 3b: Developer Pulse Alert Settings */}
         <Panel title="Developer Pulse alert settings" subtitle="Thresholds for the deterministic Developer Pulse alerts. Evaluated hourly. Changes take effect on the next cycle, no restart needed.">
           <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mb-4">
-            <Field label="Daily spend limit ($)" hint="Alert when someone's Claude Code spend in the last 24 hours is over this. Over twice this is high and goes to Slack">
+            <Field label={openaiConnected ? 'Claude Code daily spend limit ($)' : 'Daily spend limit ($)'} hint="Alert when someone's Claude Code spend in the last 24 hours is over this. Over twice this is high and goes to Slack">
               <input
                 type="number" min="0" step="1" value={codeCostFloor}
                 onChange={e => setCodeCostFloor(e.target.value)}
                 className={cx(B.input, 'w-full')}
               />
             </Field>
+            {openaiConnected && (
+              <Field label="Codex daily spend limit ($)" hint="Alert when someone's Codex spend in the last 24 hours is over this. Over twice this is high and goes to Slack">
+                <input
+                  type="number" min="0" step="1" value={codexSpendLimit}
+                  onChange={e => setCodexSpendLimit(e.target.value)}
+                  className={cx(B.input, 'w-full')}
+                />
+              </Field>
+            )}
             <Field label="Friction threshold (%)" hint={<>Alert when more than this share of a session&apos;s tool actions fail</>}>
               <input
                 type="number" min="1" max="100" step="1" value={codeFrictionPct}

@@ -268,3 +268,61 @@ describe('cost spike wording names the window and the month so far', () => {
     expect(alert.explanation).toContain(`(${month} so far: $${earlierThisMonth ? '40.00' : '30.00'})`);
   });
 });
+
+describe('codex_cost_spike: Codex against its own daily limit', () => {
+  // gpt-5.3-codex: $1.75/MTok uncached input, $0.175 cached, $14 output.
+  async function seedCodex(id: string, uncached: number, cached: number, output: number, startedAt: number) {
+    await sql.run(`INSERT INTO codex_turns (id, user_id, session_id, model, started_at, uncached_input_tokens, cached_input_tokens, output_tokens)
+      VALUES (?, 'user-1', 'codex:s1', 'gpt-5.3-codex', ?, ?, ?, ?)`, [id, startedAt, uncached, cached, output]);
+  }
+  const codexAlerts = async () => sql.all<{ title: string; severity: string; explanation: string }>(
+    `SELECT title, severity, explanation FROM alerts WHERE alert_type = 'codex_cost_spike' ORDER BY generated_at`);
+
+  beforeEach(async () => {
+    await sql.exec(`DELETE FROM codex_turns; DELETE FROM config WHERE key LIKE 'codex_%';`);
+  });
+
+  it('alerts on Codex spend over the Codex limit, naming Codex', async () => {
+    await setConfig('codex_daily_spend_limit_usd', '25');
+    await seedCodex('t1', 10_000_000, 0, 1_000_000, NOW - 3600); // $17.50 + $14 = $31.50
+    await runCodePulseAlerts();
+    const a = await codexAlerts();
+    expect(a).toHaveLength(1);
+    expect(a[0].title).toBe('Codex spend over the daily limit: $31.50 in 24h');
+    expect(a[0].severity).toBe('medium');
+    expect(a[0].explanation).toContain('on Codex in the 24 hours');
+    expect(a[0].explanation).toContain('over the daily limit of $25.00');
+  });
+
+  it('uses its own limit, not Claude Code\'s, and defaults to $500', async () => {
+    // Claude Code's limit is $25 in these tests. $490 of Codex is under Codex's default $500.
+    await seedCodex('t1', 0, 0, 35_000_000, NOW - 3600); // 35M output at $14 = $490
+    await runCodePulseAlerts();
+    expect(await codexAlerts()).toHaveLength(0);
+    expect((await sql.all(`SELECT 1 FROM alerts WHERE alert_type = 'code_cost_spike'`))).toHaveLength(0);
+    await seedCodex('t2', 0, 0, 1_000_000, NOW - 1800);  // + $14 = $504
+    await runCodePulseAlerts();
+    expect((await codexAlerts()).map(a => a.title)).toEqual(['Codex spend over the daily limit: $504.00 in 24h']);
+  });
+
+  it('counts only the last 24 hours and prices cached input at the cached rate', async () => {
+    await setConfig('codex_daily_spend_limit_usd', '25');
+    await seedCodex('old', 100_000_000, 0, 0, NOW - 2 * 86400);   // outside the 24 hours
+    await seedCodex('t1', 0, 100_000_000, 0, NOW - 3600);         // $17.50 cached: under
+    await runCodePulseAlerts();
+    expect(await codexAlerts()).toHaveLength(0);
+  });
+
+  it('steps up to high past twice the limit, and respects its own switch', async () => {
+    await setConfig('codex_daily_spend_limit_usd', '10');
+    await seedCodex('t1', 10_000_000, 0, 1_000_000, NOW - 3600); // $31.50: over twice $10
+    await setConfig('codex_alert_spend_enabled', 'false');
+    await runCodePulseAlerts();
+    expect(await codexAlerts()).toHaveLength(0);
+    await setConfig('codex_alert_spend_enabled', 'true');
+    await runCodePulseAlerts();
+    expect((await codexAlerts()).map(a => a.severity)).toEqual(['high']);
+    await runCodePulseAlerts();
+    expect(await codexAlerts()).toHaveLength(1);
+  });
+});
