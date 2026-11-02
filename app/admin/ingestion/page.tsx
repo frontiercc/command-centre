@@ -216,10 +216,10 @@ export default function IngestionPage() {
                   {otelStatus?.openai.keySet ? (
                     <p className="m-0 mt-0.5 text-[13px] text-[#8F8F8F] tabular-nums">
                       {otelStatus.openai.people} {otelStatus.openai.people === 1 ? 'person' : 'people'} seen &middot; {otelStatus.openai.newToday} new today
-                      {otelStatus.openai.lastSyncAt ? ` · Last sync ${new Date(otelStatus.openai.lastSyncAt * 1000).toLocaleString()}` : ''}
+                      {otelStatus.openai.lastSyncAt ? ` · Last sync ${new Date(otelStatus.openai.lastSyncAt * 1000).toLocaleString('en-GB')}` : ''}
                       {otelStatus.openai.lastSync ? ` · ${otelStatus.openai.lastSync.prompts} new prompt${otelStatus.openai.lastSync.prompts === 1 ? '' : 's'} in it` : ''}
                       {otelStatus.openai.lastSync && otelStatus.openai.lastSync.excluded > 0 ? `, ${otelStatus.openai.lastSync.excluded} excluded` : ''}
-                      {otelStatus.openai.lastRecordAt ? ` · Latest record ${new Date(otelStatus.openai.lastRecordAt * 1000).toLocaleString()}` : ''}
+                      {otelStatus.openai.lastRecordAt ? ` · Latest record ${new Date(otelStatus.openai.lastRecordAt * 1000).toLocaleString('en-GB')}` : ''}
                     </p>
                   ) : null}
                   <p className="m-0 mt-1 text-[13px] text-[#666666]">

@@ -104,6 +104,12 @@ export interface OpenAiSyncStats {
   codexActions: number;
   badLines: number;
   errors: string[];
+  /**
+   * The key was removed or replaced while this run was going: it stopped
+   * before the next file and kept no sync position, so Remove leaves nothing
+   * behind and a new key starts again.
+   */
+  keyChanged?: boolean;
 }
 
 export function emptyStats(): OpenAiSyncStats {
@@ -816,7 +822,10 @@ export async function runOpenAiSync(opts: RunOptions = {}): Promise<OpenAiSyncSt
   const userCache = new Map<string, string>();
   const excluded = await loadExcludedEmails();
 
-  for (const [index, eventType] of types.entries()) {
+  // A run can take minutes, so Remove (or a new key) is honoured between files.
+  const keyStillSet = async () => (await getConfigValue('openaiAdminApiKey')) === apiKey;
+
+  types: for (const [index, eventType] of types.entries()) {
     const scope = scopeFor(eventType);
     // Each type gets a fair share of what is left, so a long backfill of one
     // log never holds the others back; a type that needs less leaves the rest
@@ -830,6 +839,7 @@ export async function runOpenAiSync(opts: RunOptions = {}): Promise<OpenAiSyncSt
         for (const file of page.data) {
           if (share <= 0) break;
           if (stats.files > 0 && gap > 0) await new Promise(r => setTimeout(r, gap));
+          if (!(await keyStillSet())) { stats.keyChanged = true; break types; }
           const text = await downloadLogFile(apiKey, scope, file.id);
           const { records, badLines } = parseJsonl(text);
           stats.badLines += badLines;
@@ -838,9 +848,10 @@ export async function runOpenAiSync(opts: RunOptions = {}): Promise<OpenAiSyncSt
           budget--;
           share--;
           after = file.end_time;
+          raiseAlerts(alerts);
+          if (!(await keyStillSet())) { stats.keyChanged = true; break types; }
           cursors[eventType] = after;
           await setConfigValue('openaiSyncCursors', JSON.stringify(cursors));
-          raiseAlerts(alerts);
         }
         if (!page.has_more) break;
       }

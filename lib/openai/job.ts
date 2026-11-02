@@ -23,6 +23,8 @@ export async function runOpenAiSyncJob(opts?: { force?: boolean } & RunOptions):
   if (!opts?.force && nowS - lastAt < intervalMin * 60) return { skipped: true, stats: null };
 
   const stats = await runOpenAiSync(opts);
+  // The key was removed mid-run: Remove has cleared the status, so leave it clear.
+  if (stats.keyChanged) return { skipped: false, stats };
   // ChatGPT conversation times, which Use Cases (judging, hours) and human time
   // read, kept current as prompts and replies arrive. Never fails the sync.
   if (Object.values(stats.prompts).some((n) => n > 0)) await rollupChatgptSessionTime(nowS).catch(() => 0);

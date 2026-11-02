@@ -1547,12 +1547,12 @@ export default function SecurityPage() {
                 value={openaiOrganizationId}
                 onChange={e => setOpenaiOrganizationId(e.target.value)}
                 className={cx(B.input, 'w-full font-mono')}
-                placeholder="org-…, used for ChatGPT and Codex spend"
+                placeholder="org-…, needed for ChatGPT spend"
               />
             </FormField>
             {openaiLastSyncAt && (
               <p className="m-0 text-[13px] text-[#666666] tabular-nums">
-                Last sync: {new Date(parseInt(openaiLastSyncAt, 10) * 1000).toLocaleString()}
+                Last sync: {new Date(parseInt(openaiLastSyncAt, 10) * 1000).toLocaleString('en-GB')}
                 {(() => {
                   try {
                     const s = JSON.parse(openaiLastSyncStats || '{}');

@@ -338,4 +338,32 @@ describe('OpenAI sync against the stand-in export', () => {
       await cleanup();
     }
   }, 300_000);
+
+  it('stops between files when the key is removed mid-run, and keeps no sync position', async () => {
+    const { createTestDatabase } = await import('./helpers/db');
+    const { sql, cleanup } = await createTestDatabase();
+    try {
+      const { setConfigValue, deleteConfigValues, getConfigValue } = await import('@/lib/config');
+      const { runOpenAiSyncJob } = await import('@/lib/openai/job');
+      await setConfigValue('openaiAdminApiKey', 'mock-admin-key');
+      await setConfigValue('openaiWorkspaceId', WORKSPACE_ID);
+
+      // Remove the key the way Admin → Access & Keys does, while the run is going.
+      const run = runOpenAiSyncJob({ force: true, downloadGapMs: 150, filesPerRun: 60 });
+      await new Promise(r => setTimeout(r, 900));
+      await deleteConfigValues(['openaiAdminApiKey', 'openaiSyncCursors', 'openaiLastSyncAt', 'openaiLastSyncStats']);
+      const { stats } = await run;
+
+      expect(stats?.keyChanged).toBe(true);
+      expect(stats!.files).toBeGreaterThan(0);
+      expect(stats!.files).toBeLessThan(60);
+      // Nothing written back after Remove: a key added later starts again.
+      expect(await getConfigValue('openaiSyncCursors')).toBe('');
+      expect(await getConfigValue('openaiLastSyncAt')).toBe('');
+      const rows = await sql.all<{ n: number }>(`SELECT COUNT(*) AS n FROM config WHERE key IN ('openai_sync_cursors', 'openai_last_sync_at', 'openai_last_sync_stats')`);
+      expect(rows[0].n).toBe(0);
+    } finally {
+      await cleanup();
+    }
+  }, 120_000);
 });
