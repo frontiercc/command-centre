@@ -225,7 +225,7 @@ export default function IngestionPage() {
                   <p className="m-0 mt-1 text-[13px] text-[#666666]">
                     OpenAI&apos;s export brings ChatGPT prompts into Work Pulse and Codex prompts into Developer Pulse, a few hours behind.
                     No collector is involved. The admin key and workspace are set under{' '}
-                    <Link href="/admin/security" className="text-[#245BF3] hover:underline">Security</Link>.
+                    <Link href="/admin/security" className="text-[#245BF3] hover:underline">Access &amp; Keys</Link>.
                   </p>
                 </div>
               </div>
