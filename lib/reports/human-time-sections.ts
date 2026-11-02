@@ -51,6 +51,7 @@ export function renderHumanTimeSection(h: OrgHumanTime | null): string {
 
 export async function buildHumanTimeSection(periodStart: string, periodEnd: string): Promise<string> {
   const startS = Math.floor(new Date(periodStart).getTime() / 1000);
-  const endS = Math.floor(new Date(periodEnd).getTime() / 1000);
+  // The end date is a whole day: the window runs to the following midnight.
+  const endS = Math.floor(new Date(periodEnd).getTime() / 1000) + 86400;
   return renderHumanTimeSection(await readOrgHumanTime(startS, endS));
 }

@@ -21,15 +21,16 @@ function capitalize(s: string): string {
 }
 
 /**
- * Count PII detections in the report period (occurred_at >= startUnix):
- *   cowork_messages flagged (Cowork, Code and Claude Chat, surface 'chat')
- * Each PII alert is raised from one of these flagged prompts, so the alerts
- * table is deliberately NOT added — it would count the same detection twice.
- * (A query against a non-existent compliance_events.alert_type column used to
- * sit here; it always failed silently and added 0. Removed, along
- * with the chat count ignoring the report period.)
+ * Count personal-data detections in the report period [startUnix, endUnix):
+ * prompts whose flag reason records a personal-data match ("PII detected: …",
+ * lib/pii/flag-reason.ts), from every product, Claude's and OpenAI's. A prompt
+ * flagged only for risky intent ("Intent detected: …") is not a personal-data
+ * detection and is not counted. Each PII alert is raised from one of these
+ * prompts, so the alerts table is deliberately NOT added: it would count the
+ * same detection twice. A match the confirmation check dismissed is still
+ * counted: the pattern matched and was reviewed.
  */
-async function countPiiDetections(startUnix: number): Promise<number> {
+async function countPiiDetections(startUnix: number, endUnix: number = Number.MAX_SAFE_INTEGER): Promise<number> {
   let total = 0;
 
   try {
@@ -37,7 +38,12 @@ async function countPiiDetections(startUnix: number): Promise<number> {
     const rows = await db
       .select({ count: sql<number | string>`count(*)` })
       .from(schema.coworkMessages)
-      .where(and(eq(schema.coworkMessages.flagged, 1), gte(schema.coworkMessages.occurred_at, startUnix)));
+      .where(and(
+        eq(schema.coworkMessages.flagged, 1),
+        sql`${schema.coworkMessages.flag_reason} LIKE 'PII detected:%'`,
+        gte(schema.coworkMessages.occurred_at, startUnix),
+        sql`${schema.coworkMessages.occurred_at} < ${endUnix}`,
+      ));
     total += Number(rows[0]?.count ?? 0);
   } catch { /* table may not exist */ }
 
@@ -59,7 +65,7 @@ export async function buildGdprSection(periodStart: string, periodEnd: string): 
   const retentionMode = await getConfigValue('retentionMode') || 'strip';
   const archiveEnabled = await getConfigValue('archiveEnabled') === 'true';
 
-  const piiCount = await countPiiDetections(startUnix);
+  const piiCount = await countPiiDetections(startUnix, toUnix(periodEnd) + 86400);
 
   const dpoStatus = dpo ? dpo : '**Not declared**';
 
@@ -120,7 +126,7 @@ export async function buildLgpdSection(periodStart: string, periodEnd: string): 
   const retentionMode = await getConfigValue('retentionMode') || 'strip';
   const archiveEnabled = await getConfigValue('archiveEnabled') === 'true';
 
-  const piiCount = await countPiiDetections(startUnix);
+  const piiCount = await countPiiDetections(startUnix, toUnix(periodEnd) + 86400);
 
   const encarregadoStatus = encarregado ? encarregado : '**Not declared**';
 
@@ -360,7 +366,7 @@ export async function buildIso42001Section(periodStart: string, periodEnd: strin
   const assessmentStatus = await getConfigValue('iso42001AssessmentStatus') || 'not-started';
   const acceptableUsePolicy = await getConfigValue('acceptableUsePolicy');
 
-  const piiCount = await countPiiDetections(startUnix);
+  const piiCount = await countPiiDetections(startUnix, toUnix(periodEnd) + 86400);
 
   // Surface tracking
   let surfaceData: { chat: number; code: number; agentCowork: number; otelCowork: number } = { chat: 0, code: 0, agentCowork: 0, otelCowork: 0 };

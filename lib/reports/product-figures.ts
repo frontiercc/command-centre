@@ -25,6 +25,7 @@ export interface ProductFigure {
   peopleLast7: number;
   /** Within the report period. */
   promptsInPeriod: number;
+  flaggedInPeriod: number;
   peopleInPeriod: number;
 }
 
@@ -45,6 +46,7 @@ export async function getProductFigures(periodStartS: number, periodEndS: number
            COUNT(*) FILTER (WHERE occurred_at >= ${twoWeeksAgo} AND occurred_at < ${weekAgo}) AS prior7,
            COUNT(DISTINCT user_id) FILTER (WHERE occurred_at >= ${weekAgo}) AS people_last7,
            COUNT(*) FILTER (WHERE occurred_at >= ${periodStartS} AND occurred_at < ${periodEndS}) AS in_period,
+           COUNT(*) FILTER (WHERE flagged = 1 AND occurred_at >= ${periodStartS} AND occurred_at < ${periodEndS}) AS flagged_in_period,
            COUNT(DISTINCT user_id) FILTER (WHERE occurred_at >= ${periodStartS} AND occurred_at < ${periodEndS}) AS people_in_period
       FROM cowork_messages
      WHERE message_type IN ('cowork_user_message', 'code_user_message')
@@ -57,7 +59,7 @@ export async function getProductFigures(periodStartS: number, periodEndS: number
       id: p.id, label: p.label, vendor: p.vendor,
       prompts: Number(r.prompts), flagged: Number(r.flagged),
       last7: Number(r.last7), prior7: Number(r.prior7), peopleLast7: Number(r.people_last7),
-      promptsInPeriod: Number(r.in_period), peopleInPeriod: Number(r.people_in_period),
+      promptsInPeriod: Number(r.in_period), flaggedInPeriod: Number(r.flagged_in_period), peopleInPeriod: Number(r.people_in_period),
     }];
   });
 }

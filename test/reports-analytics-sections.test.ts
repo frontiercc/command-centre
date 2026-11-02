@@ -136,8 +136,9 @@ describe('renderCoworkPulseSection', () => {
 
   it('shows not measured for null scores', () => {
     const md = renderCoworkPulseSection(coworkFacts({ dds: null, ors: null }));
-    expect(md).toContain('(DDS) | not measured');
-    expect(md).toContain('(ORS) | not measured');
+    expect(md).toContain('Delegation depth (average tier handed to AI) | not measured');
+    expect(md).toContain("Resilience (how widely capability is shared; 0.7 means organisation-owned) | not measured");
+    expect(md).not.toMatch(/(DDS|OTI|PSR|ORS)/);
   });
 
   it('states when there are no emerging candidates', () => {
@@ -146,7 +147,7 @@ describe('renderCoworkPulseSection', () => {
   });
 
   it('says plainly when no metrics exist', () => {
-    expect(renderCoworkPulseSection(coworkFacts({ hasData: false }))).toContain('No Work Pulse metrics');
+    expect(renderCoworkPulseSection(coworkFacts({ hasData: false }))).toContain('No Work Pulse figures were computed in this period');
   });
 });
 

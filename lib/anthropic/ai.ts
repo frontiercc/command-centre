@@ -3,7 +3,7 @@
 
 import Anthropic from '@anthropic-ai/sdk';
 import { createAnthropicClient, LONG_AI_CALL_TIMEOUT_MS } from '@/lib/anthropic/client';
-import { eq, and, sql } from 'drizzle-orm';
+import { eq, and, gte, lt, sql } from 'drizzle-orm';
 import { getTypedClient } from '@/lib/db/client';
 import { schema } from '@/lib/db/schema';
 import { getConfigValue, getAllConfig } from '@/lib/config';
@@ -456,8 +456,6 @@ export async function generateGovernanceReport(
     getCoworkSessionCount,
     hasCoworkContent,
     getRecentCoworkSessions,
-    getChatMessageCount,
-    getChatFlaggedCount,
   } = await import('@/lib/db/queries');
   const alerts = await getAlerts({ department });
   const coworkSessions = await getCoworkSessionCount();
@@ -527,22 +525,29 @@ export async function generateGovernanceReport(
 
 **ChatGPT Work** (OpenAI's compliance export): prompts are stored as text; ChatGPT's replies are recorded as model and time only, never as text.
 
-- **ChatGPT Work prompts captured:** ${gptWork.prompts}
-- **Flagged prompts (PII/policy):** ${gptWork.flagged}${gptWork.flagged > 0 ? `\n\n**Action required:** ${gptWork.flagged} ChatGPT Work prompts have been flagged for PII or policy concerns. Review these in the Audit Log.` : ''}` : '';
+- **ChatGPT Work prompts in this period:** ${gptWork.promptsInPeriod}
+- **Flagged prompts in this period (PII/policy):** ${gptWork.flaggedInPeriod}${gptWork.flaggedInPeriod > 0 ? `\n\n**Action required:** ${gptWork.flaggedInPeriod} ChatGPT Work prompts were flagged for PII or policy concerns in this period. Review these in the Audit Log.` : ''}` : '';
 
   // Claude Cowork's rows only: ChatGPT Work, Claude Code and Claude Chat have their own lines.
+  // Counts are for the report period; whether Cowork content exists at all decides the wording.
+  const inPeriod = and(gte(schema.coworkMessages.occurred_at, periodStartS), lt(schema.coworkMessages.occurred_at, periodEndS));
   let claudeMessageCount = 0;
+  let claudeMessagesInPeriod = 0;
   try {
     const rows = await dbClient
-      .select({ count: sql<number | string>`count(*)` })
+      .select({
+        count: sql<number | string>`count(*)`,
+        inPeriod: sql<number | string>`count(*) FILTER (WHERE ${inPeriod})`,
+      })
       .from(schema.coworkMessages)
       // Claude Cowork only: Claude Chat and Claude Code have their own sections.
       .where(and(sql`${schema.coworkMessages.surface} IS DISTINCT FROM 'chat'`, sql`${schema.coworkMessages.surface} IS DISTINCT FROM 'code'`, claudeOnly));
     claudeMessageCount = Number(rows[0]?.count ?? 0);
+    claudeMessagesInPeriod = Number(rows[0]?.inPeriod ?? 0);
   } catch { /* table might not exist */ }
 
   if (dataSources.coworkContent && await hasCoworkContent() && claudeMessageCount > 0) {
-    const messageCount = claudeMessageCount;
+    const messageCount = claudeMessagesInPeriod;
     // ChatGPT conversations also have a cowork_sessions row: Claude's only here.
     const sessions = (await getRecentCoworkSessions(40)).filter(s => !s.id.startsWith('chatgpt:'));
     let flaggedCount = 0;
@@ -550,7 +555,7 @@ export async function generateGovernanceReport(
       const flaggedRows = await dbClient
         .select({ count: sql<number | string>`count(*)` })
         .from(schema.coworkMessages)
-        .where(and(eq(schema.coworkMessages.flagged, 1), sql`${schema.coworkMessages.surface} IS DISTINCT FROM 'chat'`, sql`${schema.coworkMessages.surface} IS DISTINCT FROM 'code'`, claudeOnly));
+        .where(and(eq(schema.coworkMessages.flagged, 1), sql`${schema.coworkMessages.surface} IS DISTINCT FROM 'chat'`, sql`${schema.coworkMessages.surface} IS DISTINCT FROM 'code'`, claudeOnly, inPeriod));
       flaggedCount = Number(flaggedRows[0]?.count ?? 0);
     } catch { /* table might not exist */ }
 
@@ -563,12 +568,12 @@ ${otelPath
   ? 'Cowork activity reaches this Command Centre as OpenTelemetry data pushed from client machines. User prompts are captured as text; tool usage, session and file metadata are captured alongside them. Assistant responses are NOT stored on this path.'
   : 'Cowork messages are stored, but no Cowork telemetry has arrived over OpenTelemetry. The stored messages come from an earlier capture path that has been retired.'}
 
-- **Cowork sessions captured:** ${coworkSessions}
-- **Total Cowork messages:** ${messageCount}
-- **Flagged messages (PII/policy):** ${flaggedCount}
+- **Cowork sessions captured (all time):** ${coworkSessions}
+- **Cowork messages in this period:** ${messageCount}
+- **Flagged messages in this period (PII/policy):** ${flaggedCount}
 - **Recent sessions:** ${sessions.length > 0 ? sessions.slice(0, 5).map(s => `Session ${s.id.slice(0, 8)} (${s.model || 'unknown model'})`).join(', ') : 'None'}
 
-${flaggedCount > 0 ? `**Action required:** ${flaggedCount} Cowork messages have been flagged for PII or policy concerns. Review these in the Audit Log.` : 'No policy flags detected in Cowork content during this period.'}${chatgptWorkBlock}`;
+${flaggedCount > 0 ? `**Action required:** ${flaggedCount} Cowork messages were flagged for PII or policy concerns in this period. Review these in the Audit Log.` : 'No policy flags detected in Cowork content during this period.'}${chatgptWorkBlock}`;
   } else {
     coworkSection = `## Cowork Audit Coverage
 
@@ -580,7 +585,7 @@ ${otelPath
   ? 'Telemetry is arriving over OTLP but no Cowork prompt content has been recorded. That usually means no Cowork sessions have run since the collector was connected, or clients are exporting metrics without the logs pipeline that carries prompts.'
   : 'To capture Cowork activity, point clients at this hub over OTLP (see the OTel collector guide).'}
 
-Cowork sessions seen in metadata: ${coworkSessions}${chatgptWorkBlock}`;
+Cowork sessions seen in metadata (all time): ${coworkSessions}${chatgptWorkBlock}`;
   }
 
   // Build Code Audit section
@@ -594,9 +599,9 @@ Cowork sessions seen in metadata: ${coworkSessions}${chatgptWorkBlock}`;
     try {
       const rows = await dbClient
         .select({
-          total: sql<number | string>`count(*)`,
+          total: sql<number | string>`count(*) FILTER (WHERE ${inPeriod})`,
           week: sql<number | string>`count(*) FILTER (WHERE ${schema.coworkMessages.occurred_at} >= ${weekAgoS})`,
-          flagged: sql<number | string>`count(*) FILTER (WHERE ${schema.coworkMessages.flagged} = 1)`,
+          flagged: sql<number | string>`count(*) FILTER (WHERE ${schema.coworkMessages.flagged} = 1 AND ${inPeriod})`,
         })
         .from(schema.coworkMessages)
         .where(and(eq(schema.coworkMessages.surface, 'code'), claudeOnly));
@@ -615,13 +620,13 @@ Cowork sessions seen in metadata: ${coworkSessions}${chatgptWorkBlock}`;
 
 User prompts and tool-usage metadata are captured from Claude Code sessions${codex ? ', and Codex sessions from OpenAI\'s export' : ''}. Assistant responses are never stored, only model, token and tool metadata.
 
-- **Total Claude Code events:** ${totalCodeMessages}
-- **Events in last 7 days:** ${codeEventCount7d}
-- **Flagged events (PII/policy):** ${codeFlaggedCount}${codex ? `
-- **Codex prompts captured:** ${codex.prompts} (${codex.last7} in the last 7 days)
-- **Flagged Codex prompts (PII/policy):** ${codex.flagged}` : ''}
+- **Claude Code events in this period:** ${totalCodeMessages}
+- **Events in the last 7 days:** ${codeEventCount7d}
+- **Flagged events in this period (PII/policy):** ${codeFlaggedCount}${codex ? `
+- **Codex prompts in this period:** ${codex.promptsInPeriod} (${codex.last7} in the last 7 days)
+- **Flagged Codex prompts in this period (PII/policy):** ${codex.flaggedInPeriod}` : ''}
 
-${codeFlaggedCount + (codex?.flagged ?? 0) > 0 ? `**Action required:** ${codeFlaggedCount + (codex?.flagged ?? 0)} Code events have been flagged for PII or policy concerns${codex?.flagged ? ` (${codex.flagged} from Codex)` : ''}. Review these in the Audit Log.` : 'No policy flags detected in Code surface content during this period.'}`;
+${codeFlaggedCount + (codex?.flaggedInPeriod ?? 0) > 0 ? `**Action required:** ${codeFlaggedCount + (codex?.flaggedInPeriod ?? 0)} Code events were flagged for PII or policy concerns in this period${codex?.flaggedInPeriod ? ` (${codex.flaggedInPeriod} from Codex)` : ''}. Review these in the Audit Log.` : 'No policy flags detected in Code surface content during this period.'}`;
   }
 
   // Build Chat Audit section
@@ -629,8 +634,20 @@ ${codeFlaggedCount + (codex?.flagged ?? 0) > 0 ? `**Action required:** ${codeFla
   {
     // getChatMessageCount/getChatFlaggedCount are now async
     // (converted in queries.ts) — await first.
-    const chatMessageCount = await getChatMessageCount();
-    const chatFlagged = await getChatFlaggedCount();
+    // Claude Chat's prompts in the report period (surface 'chat').
+    let chatMessageCount = 0;
+    let chatFlagged = 0;
+    try {
+      const rows = await dbClient
+        .select({
+          count: sql<number | string>`count(*)`,
+          flagged: sql<number | string>`count(*) FILTER (WHERE ${schema.coworkMessages.flagged} = 1)`,
+        })
+        .from(schema.coworkMessages)
+        .where(and(eq(schema.coworkMessages.surface, 'chat'), inPeriod));
+      chatMessageCount = Number(rows[0]?.count ?? 0);
+      chatFlagged = Number(rows[0]?.flagged ?? 0);
+    } catch { /* table might not exist */ }
 
     const gptChat = fig('chatgpt_chat');
     chatSection = `## Chat Audit
@@ -639,12 +656,12 @@ ${codeFlaggedCount + (codex?.flagged ?? 0) > 0 ? `**Action required:** ${codeFla
 
 Only user-side content is available: user prompts are stored as text, and assistant replies are recorded as metadata only (Claude: model, artifact and generated-file counts${gptChat ? '; ChatGPT: model and time' : ''}), never as text.
 
-- **Total ${gptChat ? 'Claude ' : ''}Chat prompts captured:** ${chatMessageCount}
-- **Flagged prompts (PII/policy):** ${chatFlagged}${gptChat ? `
-- **ChatGPT Chat prompts captured:** ${gptChat.prompts}
-- **Flagged ChatGPT Chat prompts (PII/policy):** ${gptChat.flagged}` : ''}
+- **${gptChat ? 'Claude ' : ''}Chat prompts in this period:** ${chatMessageCount}
+- **Flagged prompts in this period (PII/policy):** ${chatFlagged}${gptChat ? `
+- **ChatGPT Chat prompts in this period:** ${gptChat.promptsInPeriod}
+- **Flagged ChatGPT Chat prompts in this period (PII/policy):** ${gptChat.flaggedInPeriod}` : ''}
 
-${chatFlagged + (gptChat?.flagged ?? 0) > 0 ? `**Action required:** ${chatFlagged + (gptChat?.flagged ?? 0)} Chat prompts have been flagged for PII or policy concerns${gptChat?.flagged ? ` (${gptChat.flagged} from ChatGPT Chat)` : ''}. Review these in the Audit Log.` : 'No policy flags detected in Chat prompts during this period.'}`;
+${chatFlagged + (gptChat?.flaggedInPeriod ?? 0) > 0 ? `**Action required:** ${chatFlagged + (gptChat?.flaggedInPeriod ?? 0)} Chat prompts were flagged for PII or policy concerns in this period${gptChat?.flaggedInPeriod ? ` (${gptChat.flaggedInPeriod} from ChatGPT Chat)` : ''}. Review these in the Audit Log.` : 'No policy flags detected in Chat prompts during this period.'}`;
   }
 
   // Build tier-aware data source summary
@@ -722,7 +739,7 @@ ${chatFlagged + (gptChat?.flagged ?? 0) > 0 ? `**Action required:** ${chatFlagge
   }
   if (include('cowork_pulse')) {
     const { buildCoworkPulseSection } = await import('@/lib/reports/cowork-pulse-sections');
-    const coworkPulseSection = await buildCoworkPulseSection();
+    const coworkPulseSection = await buildCoworkPulseSection(periodStart, periodEnd);
     promptSections.push(`${++sectionNum}. The following Work Pulse section (${VERBATIM}):\n\n${coworkPulseSection}`);
   }
   if (include('sc_board')) {
@@ -789,6 +806,14 @@ ${topFiles.length > 0
     return product ? { ...a, product } : a;
   });
 
+  // Product usage figures and alerts go to the model only for the sections that write from them.
+  const usesAlerts = ['executive_summary', 'alerts', 'recommendations'].some(include);
+  const alertsData = usesAlerts ? `\n\nAlerts:\n${JSON.stringify(labelledAlerts, null, 2)}` : '';
+  const usesProductFigures = ['executive_summary', 'usage', 'adoption', 'recommendations'].some(include);
+  const productUsageData = usesProductFigures
+    ? `Product usage (measured by Command Centre: prompts and people per product; last 7 days, the 7 days before, and the report period):\n${JSON.stringify(productFigures.map(p => ({ product: p.label, prompts_last_7_days: p.last7, prompts_previous_7_days: p.prior7, people_last_7_days: p.peopleLast7, prompts_in_period: p.promptsInPeriod, people_in_period: p.peopleInPeriod })), null, 2)}\n\n`
+    : '';
+
   const client = await getClient();
   const coreModel = await getCoreAiModel();
   const message = await queueAiCall(() => client.messages.create({
@@ -800,8 +825,7 @@ Write in formal but accessible British English. Use markdown formatting. NEVER u
 
 Context (for your reference, do not state this directly in the report opening): the deployment tier is "${dataSources.mode}". Use this to inform your analysis but do not open the report by describing the deployment mode.
 
-Start the executive summary with the overall compliance posture and key findings, not with a description of the deployment setup.
-
+${include('executive_summary') ? 'Start the executive summary with the overall compliance posture and key findings, not with a description of the deployment setup.\n' : ''}
 IMPORTANT: Use measured, proportionate language when describing security alerts and flagged activity.
 - Alerts represent flagged activity awaiting review, NOT confirmed incidents or breaches.
 - Say "flagged for review" or "identified for investigation", not "attempts at" or "incidents of".
@@ -810,7 +834,7 @@ IMPORTANT: Use measured, proportionate language when describing security alerts 
 - Only use definitive language ("confirmed", "breach", "violation") if the alert has been explicitly marked as confirmed.
 - The tone should be informative and actionable, not alarmist. This is a governance report, not a breach notification.
 
-The report MUST include these sections in this order:
+The report MUST include these sections in this order, and no others: no added introduction, findings, observations or conclusion sections.
 
 ${promptSections.join('\n\n')}
 
@@ -818,7 +842,7 @@ Report period: ${periodStart} to ${periodEnd}`,
     messages: [
       {
         role: 'user',
-        content: `Generate the governance report using this data:\n\n<report-data>\nProduct usage (measured by Command Centre: prompts and people per product; last 7 days, the 7 days before, and the report period):\n${JSON.stringify(productFigures.map(p => ({ product: p.label, prompts_last_7_days: p.last7, prompts_previous_7_days: p.prior7, people_last_7_days: p.peopleLast7, prompts_in_period: p.promptsInPeriod, people_in_period: p.peopleInPeriod })), null, 2)}\n\nAnalytics (Anthropic Analytics API, Claude only):\n${JSON.stringify(snapshots.slice(0, 50), null, 2)}\n\nAlerts:\n${JSON.stringify(labelledAlerts, null, 2)}\n</report-data>`,
+        content: `Generate the governance report using this data:\n\n<report-data>\n${productUsageData}Analytics (Anthropic Analytics API, Claude only):\n${JSON.stringify(snapshots.slice(0, 50), null, 2)}${alertsData}\n</report-data>`,
       },
     ],
   }, { timeout: LONG_AI_CALL_TIMEOUT_MS })); // long output: up to 12,288 tokens
