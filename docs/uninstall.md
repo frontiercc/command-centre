@@ -1,8 +1,8 @@
 # Frontier Command Centre: Uninstall
 
-Removing Command Centre has three parts: what you set in Claude, the keys you gave Command Centre, and what runs on your computer or server.
+Removing Command Centre has three parts: what you set in Claude and OpenAI, the keys you gave Command Centre, and what runs on your computer or server.
 
-## 1. Stop Claude sending telemetry
+## 1. Stop Claude telemetry and the OpenAI sync
 
 If you connected Claude to Command Centre:
 
@@ -22,6 +22,8 @@ If you connected Claude to Command Centre:
   sudo defaults delete "/Library/Managed Preferences/$(whoami)/com.anthropic.claudefordesktop" otlpContentCapture
   ```
 
+If you connected ChatGPT and Codex, stop the OpenAI sync: on **Admin → Access & Keys → OpenAI (ChatGPT and Codex)**, select **Remove** beside the OpenAI Admin API Key. This deletes the key and the sync position from Command Centre. If you set the key in the `OPENAI_ADMIN_API_KEY` environment variable, Remove does not clear it: delete the variable from `.env` or your secret store and restart the Hub.
+
 ## 2. Revoke the keys you gave it
 
 Delete or revoke each key you entered in Command Centre, where you created it:
@@ -30,6 +32,7 @@ Delete or revoke each key you entered in Command Centre, where you created it:
 - the Compliance Access Key, in claude.ai → Organization settings → API;
 - the Analytics API key, if you set one, at [claude.ai/analytics/api-keys](https://claude.ai/analytics/api-keys);
 - the Admin API key, if you set one, in the Claude Console;
+- the OpenAI Admin API key, if you set one, in OpenAI's admin console;
 - any GitHub token, single sign-on client secret, Slack webhook, SMTP password, and the AWS access key used for the archive.
 
 ## 3. Remove Command Centre

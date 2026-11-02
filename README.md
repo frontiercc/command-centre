@@ -7,7 +7,7 @@
 
 **Understand, measure and manage how AI is transforming your organisation.**
 
-Works with Claude Code, Claude Cowork and Claude Chat.
+Works with Claude Code, Claude Cowork and Claude Chat, and with ChatGPT and Codex.
 
 [![CI](https://github.com/frontiercc/command-centre/actions/workflows/ci.yml/badge.svg?branch=main)](https://github.com/frontiercc/command-centre/actions/workflows/ci.yml) [![CodeQL](https://github.com/frontiercc/command-centre/actions/workflows/codeql.yml/badge.svg?branch=main)](https://github.com/frontiercc/command-centre/actions/workflows/codeql.yml) [![OpenSSF Scorecard](https://api.scorecard.dev/projects/github.com/frontiercc/command-centre/badge)](https://scorecard.dev/viewer/?uri=github.com/frontiercc/command-centre) [![OpenSSF Best Practices](https://www.bestpractices.dev/projects/15963/badge)](https://www.bestpractices.dev/projects/15963) [![Licence: Apache 2.0](https://img.shields.io/badge/licence-Apache%202.0-blue)](LICENSE)
 
@@ -15,7 +15,7 @@ Works with Claude Code, Claude Cowork and Claude Chat.
 
 https://github.com/user-attachments/assets/a8c40ba5-dd3a-4647-9eec-08b2e7ce3263
 
-Command Centre gives organisations a complete picture of how Claude is being used across their business, the work it's delivering, what it costs, where the risks sit and whether their investment is creating measurable value. It brings together productivity, adoption, financial management and governance across Claude Code, Claude Cowork and Claude Chat, providing visibility from individual employees through to departments, engineering teams and the organisation as a whole.
+Command Centre gives organisations a complete picture of how Claude is being used across their business, the work it's delivering, what it costs, where the risks sit and whether their investment is creating measurable value. It brings together productivity, adoption, financial management and governance across Claude Code, Claude Cowork and Claude Chat, providing visibility from individual employees through to departments, engineering teams and the organisation as a whole. Organisations on ChatGPT Enterprise or Edu can bring in ChatGPT and Codex activity too, shown beside Claude.
 
 Command Centre shows how employees are progressing from simple prompting to delegating substantial work and entire business processes, while identifying valuable use cases that may otherwise remain undiscovered. Organisations can turn repeated processes into reusable skills, track how those capabilities spread, understand engineering output and identify where coaching or further investment will deliver the greatest benefit.
 
@@ -40,7 +40,14 @@ Command Centre works with Claude for Teams and Claude for Enterprise:
 | **Claude Cowork** | Prompts, models, tokens and cost, the tools, skills, connectors and subagents used, and the files people upload and Claude produces | Yes | Yes |
 | **Claude Chat** | Every conversation: people's prompts in full, the files they attach, the model, the connectors used, and the artifacts and files Claude made | No | Yes |
 
-**Get started:** [1. Try it with sample data](#1-quick-start-try-it-with-sample-data) · [2. Connect Claude for Teams](#2-connect-claude-for-teams) · [3. Connect Claude for Enterprise](#3-connect-claude-for-enterprise)
+It also works with ChatGPT Enterprise and Edu, through OpenAI's export:
+
+| OpenAI product | What Command Centre receives |
+|---|---|
+| **ChatGPT Chat and ChatGPT Work** | Prompts, the names of files people attach, the skills ChatGPT used, the model and time of each reply, and spend from OpenAI's hourly cost records |
+| **Codex** | Prompts, models, tokens and cost for each turn, the connectors used, and each action's outcome, including commits |
+
+**Get started:** [1. Try it with sample data](#1-quick-start-try-it-with-sample-data) · [2. Connect Claude for Teams](#2-connect-claude-for-teams) · [3. Connect Claude for Enterprise](#3-connect-claude-for-enterprise) · [4. Connect ChatGPT and Codex](#4-connect-chatgpt-and-codex)
 
 **Explore:** [What it does](#what-it-does) · [How it works](#how-it-works) · [Your first ten minutes](docs/first-ten-minutes.md) · [Walkthrough video](https://vimeo.com/1238818389) · [FAQ](#questions-people-ask-first) · [Documentation](#documentation)
 
@@ -86,23 +93,24 @@ Command Centre is two parts that you run, the **Hub** (the web application you s
 
 ### How it integrates
 
-| Claude product | How it connects | Plans |
+| Product | How it connects | Plans |
 |---|---|---|
-| **Claude Code** | OpenTelemetry, set up in Claude Code's managed settings in claude.ai Organization settings | Teams and Enterprise |
-| **Claude Cowork** | OpenTelemetry, set up in the monitoring settings in claude.ai Organization settings | Teams and Enterprise |
-| **Claude Chat** | Anthropic's Compliance API, using a Compliance Access Key | Enterprise |
+| **Claude Code** | OpenTelemetry, set up in Claude Code's managed settings in claude.ai Organization settings | Claude for Teams and Enterprise |
+| **Claude Cowork** | OpenTelemetry, set up in the monitoring settings in claude.ai Organization settings | Claude for Teams and Enterprise |
+| **Claude Chat** | Anthropic's Compliance API, using a Compliance Access Key | Claude for Enterprise |
+| **ChatGPT and Codex** | OpenAI's Compliance Logs Platform, using an OpenAI Admin API key | ChatGPT Enterprise and Edu |
 
-Command Centre's own AI features, such as grading work, briefings and reports, send requests to Claude through Anthropic's API, using the Claude API key you enter on **Admin → Access & Keys**. [AI data flow](docs/ai-data-flow.md) lists every feature, what it sends and how to switch each one off.
+Command Centre's own AI features, such as grading work, briefings and reports, send requests to Claude through Anthropic's API, using the Claude API key you enter on **Admin → Access & Keys**. With ChatGPT and Codex connected, these features send their prompts to Anthropic too. [AI data flow](docs/ai-data-flow.md) lists every feature, what it sends and how to switch each one off.
 
-Command Centre sees prompts only after they reach Claude: it can flag them, alert on them and control who reads them, but it cannot stop or change them. Command Centre stores what people asked, never Claude's replies.
+Command Centre sees prompts only after they reach Claude, ChatGPT or Codex: it can flag them, alert on them and control who reads them, but it cannot stop or change them. Command Centre stores what people asked, never the replies of Claude, ChatGPT or Codex.
 
 ### Measured and AI-judged
 
-**Measured** figures are counted from Claude Code, Claude Cowork and Claude Chat activity, such as the number of prompts, spend, lines of code and commits. **AI-judged** figures are Claude's assessment of that work, such as how deeply someone delegated a task, or which use case a session belongs to. The app labels judged figures as AI judgements. [What is measured and what is AI-judged](docs/ai-data-flow.md#measured-and-ai-judged) lists each one, and how the AI's judgements are checked.
+**Measured** figures are counted from Claude Code, Claude Cowork and Claude Chat activity, and from ChatGPT and Codex activity when connected, such as the number of prompts, spend, lines of code and commits. **AI-judged** figures are Claude's assessment of that work, such as how deeply someone delegated a task, or which use case a session belongs to. The app labels judged figures as AI judgements. [What is measured and what is AI-judged](docs/ai-data-flow.md#measured-and-ai-judged) lists each one, and how the AI's judgements are checked.
 
 ### Your data stays with you
 
-Frontier Command Centre runs on your own computer, server or cloud account, and everything it collects stays there. It sends no telemetry, usage data or heartbeat to anyone. The only outside services it calls are the ones you set up: Anthropic's API for its AI features, and optionally your sign-in provider, email server, Slack or GitHub. It stores people's prompts, never Claude's replies. [Security and data protection](docs/security-and-data-protection.md) has the detail.
+Frontier Command Centre runs on your own computer, server or cloud account, and everything it collects stays there. It sends no telemetry, usage data or heartbeat to anyone. The only outside services it calls are the ones you set up: Anthropic's API for its AI features, and optionally OpenAI's API for ChatGPT and Codex, your sign-in provider, email server, Slack or GitHub. It stores people's prompts, never the AI's replies. [Security and data protection](docs/security-and-data-protection.md) has the detail.
 
 ## 1. Quick start: try it with sample data
 
@@ -195,7 +203,7 @@ Select **Dashboard** in the sidebar. The Dashboard's **Get started** panel is yo
 - **Add your Claude API key** under Admin → Access & Keys. Use its test button, then select **Save settings**.
 - **Review how work is classified**: check that the three tiers Work Pulse and Developer Pulse use to grade work fit your organisation. In Work Pulse they run from routine tasks to whole processes, and in Developer Pulse from single-step edits to substantial work the engineer supervises. Admins can change both: **Tier config** in Admin → Work Pulse, and **Tiers** in Admin → Developer Pulse.
 
-You don't need the panel's other three steps for the sample data. They are for connecting your own organisation, in journey 2 or 3.
+You don't need the panel's other steps for the sample data. They are for running it for your own organisation, as in journeys 2 to 4.
 
 ### You have finished when
 
@@ -330,6 +338,26 @@ This does everything in journey 2 and adds Claude Chat.
 
 Claude Chat prompts appear in the **Audit Log** alongside Claude Code and Claude Cowork, within a few minutes. The first sync brings in the last 30 days of Claude Chat.
 
+## 4. Connect ChatGPT and Codex
+
+This brings ChatGPT prompts into Work Pulse, Codex prompts into Developer Pulse, and their spend into FinOps. You can do it on its own or alongside journey 2 or 3.
+
+### Before you begin
+
+- ChatGPT Enterprise or Edu, and a ChatGPT workspace owner to create an OpenAI Admin API key.
+- Command Centre installed on the server, served over HTTPS and with your Claude API key added: journey 2, steps 1 to 6. The collector address is needed only for Claude Code and Claude Cowork. Command Centre fetches ChatGPT and Codex activity itself. Its AI features still need the Claude API key.
+
+### Steps
+
+1. **Create the key in OpenAI's admin console**, with read access to conversation messages, Codex logs, Codex turns and costs. Note your ChatGPT workspace ID and OpenAI organisation ID. ChatGPT spend needs the organisation ID.
+2. **Enter them in Command Centre.** Open **Admin → Access & Keys → OpenAI (ChatGPT and Codex)**, fill in the three fields, select **Test**, then **Save settings**.
+
+[Connect ChatGPT and Codex](docs/configure-command-centre.md#connect-chatgpt-and-codex) explains each step, and what to check in OpenAI's console.
+
+### You have finished when
+
+The **Last sync** line under the fields shows ChatGPT and Codex prompts, and they appear in the **Audit Log**. The first sync reaches back 30 days, oldest first, so on a busy workspace the newest activity can take some hours to arrive.
+
 ## Questions people ask first
 
 **Is it free?** Yes. It is open source under Apache 2.0. You pay only for where you run it, and for the Claude API calls its AI features make. See [Indicative costs](docs/costs.md).
@@ -338,7 +366,9 @@ Claude Chat prompts appear in the **Audit Log** alongside Claude Code and Claude
 
 **Which Claude plans does it work with?** Claude Code and Claude Cowork on Claude for Teams and Claude for Enterprise. Claude Chat on Claude for Enterprise, through Anthropic's Compliance API.
 
-**Do I need a Claude API key?** Not to explore the sample data, but yes if you want to bring every feature to life. Grading work, briefings and summaries use your organisation's own key.
+**Does it work with ChatGPT and Codex?** Yes, on ChatGPT Enterprise and Edu, through OpenAI's export. See [4. Connect ChatGPT and Codex](#4-connect-chatgpt-and-codex).
+
+**Do I need a Claude API key?** Not to explore the sample data, but yes if you want to bring every feature to life. Grading work, briefings and summaries use your organisation's own key, including when ChatGPT and Codex are your only products.
 
 **Can it block risky prompts?** No. It sees activity after it reaches Claude, so it flags and alerts rather than blocks.
 
@@ -351,6 +381,7 @@ Claude Chat prompts appear in the **Audit Log** alongside Claude Code and Claude
 | See what to look at first in the sample data | [Your first ten minutes](docs/first-ten-minutes.md) |
 | Understand everything Command Centre does | [Product overview](docs/product-overview.md) |
 | Change how Claude is connected | [Connect Claude](docs/connect-claude.md) |
+| Connect ChatGPT and Codex | [Connect ChatGPT and Codex](docs/configure-command-centre.md#connect-chatgpt-and-codex) |
 | Run it on AWS or Azure | [Running in Azure or AWS](docs/running-in-azure-or-aws.md) |
 | Set up every feature, such as single sign-on | [Configure Command Centre](docs/configure-command-centre.md) |
 | Know what it costs to run | [Indicative costs](docs/costs.md) |
@@ -365,7 +396,6 @@ Claude Chat prompts appear in the **Audit Log** alongside Claude Code and Claude
 - Signing in with SAML.
 - A benchmark kit, so you can test Command Centre's AI grading against your own examples.
 - Publishing skills drafted in Command Centre to your organisation's skills marketplace, through GitHub.
-- ChatGPT and Codex activity, coming through Work Pulse and Developer Pulse alongside Claude.
 
 Vote or add ideas in [Discussions](https://github.com/frontiercc/command-centre/discussions).
 

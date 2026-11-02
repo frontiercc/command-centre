@@ -8,11 +8,11 @@ Everything here applies however Command Centre is run. AI data flows are covered
 
 ## Security model
 
-Command Centre consists of a web application (the Hub), an OpenTelemetry Collector and a PostgreSQL database. With the supported Docker Compose installation, all three run as containers on a machine you control; the Hub can instead use a managed PostgreSQL database. Claude clients on your organisation's machines (Claude Code and Claude Cowork) export telemetry to the collector, which forwards it to the Hub. On Claude for Enterprise, the Hub also pulls Claude Chat conversations from Anthropic's Compliance API using a read-only key that you create.
+Command Centre consists of a web application (the Hub), an OpenTelemetry Collector and a PostgreSQL database. With the supported Docker Compose installation, all three run as containers on a machine you control; the Hub can instead use a managed PostgreSQL database. Claude clients on your organisation's machines (Claude Code and Claude Cowork) export telemetry to the collector, which forwards it to the Hub. On Claude for Enterprise, the Hub also pulls Claude Chat conversations from Anthropic's Compliance API using a read-only key that you create. With ChatGPT and Codex connected, the Hub also pulls their activity from OpenAI's export, using an OpenAI Admin API key that you create with read permissions.
 
 Command Centre is a downstream observer. Telemetry reaches it only after a prompt has gone to Claude, so it cannot block, alter or delay anything a person sends. Command Centre can flag, alert on, restrict access to and delete what it stores. Controls that must act before content reaches Claude belong in Claude's own administrative settings, your identity provider and your endpoint controls.
 
-All data Command Centre stores remains on infrastructure you control. The Command Centre project operates no service in the data path and receives no telemetry from your deployment. The Hub makes outbound calls only to services you configure: the Anthropic API (AI features and the read-only Compliance, Analytics and Admin API pulls; the Analytics and Admin pulls are on the roadmap), your identity provider, your SMTP relay, Slack webhooks you supply, the GitHub API and, if you enable archiving, your own Amazon S3 bucket.
+All data Command Centre stores remains on infrastructure you control. The Command Centre project operates no service in the data path and receives no telemetry from your deployment. The Hub makes outbound calls only to services you configure: the Anthropic API (AI features and the read-only Compliance, Analytics and Admin API pulls; the Analytics and Admin pulls are on the roadmap), OpenAI's API at `api.chatgpt.com` and the download links it returns (if you connect ChatGPT and Codex), your identity provider, your SMTP relay, Slack webhooks you supply, the GitHub API and, if you enable archiving, your own Amazon S3 bucket.
 
 ![Trust boundaries](diagrams/Trust%20boundaries.png)
 
@@ -67,7 +67,7 @@ A locked-out administrator is recovered with a tool run inside the Hub container
 
 1. **First administrator.** On first start the Hub prints a one-time setup token in its log and stores only its hash. Claiming it deletes it in a single statement, so exactly one request can create the first administrator.
 2. **Created by an administrator**, with a role and department.
-3. **Auto-enrolled from telemetry.** When a person first appears in Claude telemetry or the Compliance API, an account is created with the `pulse` role, no usable password and SSO disabled. Observation alone never grants sign-in.
+3. **Auto-enrolled from telemetry.** When a person first appears in Claude telemetry, the Compliance API or OpenAI's export, an account is created with the `pulse` role, no usable password and SSO disabled. Observation alone never grants sign-in.
 
 An auto-enrolled account becomes usable when an administrator sets a password or enables SSO for it, or when the person completes a self-service password reset, which also enables SSO for the account. Self-service activation is allowed only when another account on the same email domain already has a real password or SSO enabled.
 
@@ -125,6 +125,7 @@ The Hub container runs as a non-root user on a Node.js 22 Alpine image that carr
 | Compliance Access Key | Hub pulling Claude.ai chats | Encrypted in the database | Created by you with read scopes only; Command Centre makes only read requests |
 | Claude API key | Hub AI features | Encrypted in the database, or from an environment variable | Removing it stops all model calls |
 | Analytics API key and Admin API key (on the roadmap) | Hub reading usage counts, the cost report and spend limits | Encrypted in the database | Created by you; Command Centre makes only read requests |
+| OpenAI Admin API key | Hub reading ChatGPT and Codex activity from OpenAI's export | Encrypted in the database, or from the `OPENAI_ADMIN_API_KEY` environment variable | Created by you with read permissions; Command Centre makes only read requests. The key goes only to OpenAI's API, never to the download links it returns |
 | GitHub token | Hub reading repository activity | Encrypted in the database | Read scope is sufficient |
 
 The bearer token and the collector token authorise ingest only; they cannot call any other route and grant no sign-in. Identity in telemetry is reported by the client: a person's email and Claude organisation come from their Claude sign-in, and a department can be added as a resource attribute through your managed settings.
@@ -141,6 +142,8 @@ Command Centre processes personal data about your employees to measure how teams
 | Claude Cowork and Claude Code prompts | Text a person typed: first 4,000 characters plus a 250-character preview | 90 days per surface, then content removed | Claude Code only, in its telemetry settings |
 | Claude Chat prompts (Enterprise plan) | Text typed in Claude.ai, in full | 90 days, then content removed | Yes, by not configuring the Compliance Access Key |
 | Claude Chat reply metadata | Model, counts of artifacts and generated files | 90 days, then deleted | Yes, with Claude Chat capture |
+| ChatGPT and Codex prompts (OpenAI export) | Text a person typed: first 4,000 characters plus a 250-character preview; names of files attached in ChatGPT | ChatGPT on the Cowork window, Codex on the Code window (90 days each), then content removed | Yes, by not configuring the OpenAI Admin API key |
+| ChatGPT and Codex activity and spend | ChatGPT reply model and time (never the text); skill and connector names; Codex turns (model, tokens, OpenAI's cost figures); Codex tool calls (tool name, whether it failed, whether it was a commit; never the command); hourly cost per person, model and product | Same windows as the prompts, then deleted | Yes, with ChatGPT and Codex capture |
 | Activity metadata | Session timing, active time, model, tokens, cost, tool names and outcomes, connector and skill names, uploaded and produced file names | Message rows for the same period as prompts; Claude Cowork session summaries until erased | Claude Code tool detail depends on client settings |
 | Code metrics | Lines added and removed, commits, pull requests, edit decisions | 90 days; weekly aggregates 400 days | Yes, client metrics setting |
 | AI-judged results | Delegation tier and kind of work, session descriptions, use case matches, hand-work time estimates, briefings, drafted skills | Mostly for the same period as the prompts they came from; briefings, Claude Cowork session estimates, use cases and skill drafts until deleted | Yes, per AI feature |
@@ -156,9 +159,13 @@ Everything except the collector queue and archive copies is held in the PostgreS
 
 What Command Centre receives is decided by Claude's own telemetry settings: for Claude Code, the settings you distribute through Claude managed settings; for Claude Cowork, the monitoring settings in Claude's Organization settings. Claude Code sends prompt text only when prompt logging is enabled; without it the Hub receives a redaction marker, and the Audit Log, PII detection and the AI features that read prompts lose their input. With detailed tool telemetry enabled, Claude Code sends tool parameters that can include file content Claude writes and exact shell commands. Claude Cowork always includes prompt text and tool parameters in its telemetry. That data travels over TLS to your Collector, waits in its disk queue until delivered, and is read in memory by the Hub, which keeps from those logs and metrics only the tool, connector and skill names, whether each call succeeded and how long it took, whether a commit was made, and an output's file name, and discards the rest. If you prefer that Claude Code's tool parameters never leave the client, leave its detailed tool telemetry off; Command Centre then loses per-prompt commit counts and connector tool names for Claude Code.
 
+For ChatGPT and Codex, what Command Centre receives is decided by the read permissions on the OpenAI Admin API key. It reads four logs from OpenAI's export (conversation messages, Codex logs, Codex turns and costs), keeps only what the inventory above lists, and discards the rest of each file once read.
+
 ### What Command Centre never stores
 
 - Claude's replies, from any surface. For Claude.ai chats only the model and counts of artifacts and generated files are kept.
+- ChatGPT's and Codex's replies. For ChatGPT replies only the model and time are kept.
+- The commands Codex runs. They are read only to spot a `git commit`.
 - The content of tool calls: file contents, shell commands, tool inputs and outputs. The Collector supplied with Command Centre forwards logs and metrics only, never traces. The Hub does not accept traces.
 - Commit identifiers, commit messages or code from GitHub.
 - Plain passwords, session tokens, reset tokens, setup tokens, recovery codes or Metrics Connector tokens; each is stored only as a one-way hash.
@@ -174,6 +181,7 @@ What Command Centre receives is decided by Claude's own telemetry settings: for 
 | Collector to Hub | Over your private network (with Docker Compose, the containers' own network); separate bearer token. Use HTTPS if they run on different hosts |
 | Hub to database | Chosen automatically: any database other than the bundled one gets TLS with the certificate verified; the bundled database, inside the containers' own network, gets none. `CCC_PG_SSL` overrides this (`require`, `disable` or `no-verify`) |
 | Hub to the Anthropic API, GitHub API, Slack and Amazon S3 | HTTPS with certificate validation; Slack webhook URLs must be HTTPS |
+| Hub to OpenAI's API | HTTPS with certificate validation. Export files are fetched from short-lived download links over HTTPS only, without the admin key |
 | Hub to identity provider | HTTPS when the issuer URL you configure uses HTTPS |
 | Hub to SMTP relay | Implicit TLS on port 465; STARTTLS on other ports when the relay offers it |
 
@@ -181,7 +189,7 @@ What Command Centre receives is decided by Claude's own telemetry settings: for 
 
 Command Centre does not encrypt the database files or the Collector's queue itself. Use disk encryption on the host, or a managed database that encrypts at rest, and encrypt backups the same way.
 
-The application additionally encrypts two kinds of data before they reach the database, so a dump or snapshot alone does not expose them: every secret entered in the administration pages (Anthropic keys, the Compliance Access Key, GitHub token, SSO client secret, SMTP password, Slack webhooks, archive credentials), and each user's TOTP seed. Both use AES-256-GCM with a key derived from `CCC_ENCRYPTION_KEY`, and any value found unencrypted at start-up is encrypted then. Secret values are masked whenever settings are read, so a stored secret is never returned to the browser in full.
+The application additionally encrypts two kinds of data before they reach the database, so a dump or snapshot alone does not expose them: every secret entered in the administration pages (Anthropic keys, the Compliance Access Key, the OpenAI Admin API key, GitHub token, SSO client secret, SMTP password, Slack webhooks, archive credentials), and each user's TOTP seed. Both use AES-256-GCM with a key derived from `CCC_ENCRYPTION_KEY`, and any value found unencrypted at start-up is encrypted then. Secret values are masked whenever settings are read, so a stored secret is never returned to the browser in full.
 
 `CCC_ENCRYPTION_KEY` is held in `.env` with Docker Compose, or in your secret store, apart from the database, and also seals the short-lived MFA and SSO sign-in cookies. `CCC_ENCRYPTION_KEY` must not change once data is stored, because stored secrets and MFA seeds can be read only with the key they were saved under. An undecryptable secret is recorded as an error and shown on the System health page.
 
@@ -198,7 +206,7 @@ Every prompt is checked at ingest, in full before any truncation, against 20 pat
 
 The number and identifier patterns carry token boundaries so that identifiers inside longer strings (record identifiers, hashes, timestamps) do not match. Card numbers must pass the Luhn checksum and CPF numbers their check digits.
 
-A match flags the message in the Audit Log and raises an alert; on Claude Cowork and Claude Code prompts, a repeat of the same identifier type for the same person within 24 hours is flagged without a further alert. Seven patterns identify a value by shape alone (National Insurance number, UK, US and Brazilian phone numbers, IBAN, IP address and US Social Security number); for these, on Claude Cowork and Claude Code prompts, a Claude call first asks whether the match is genuinely that identifier in context. A dismissed match raises no alert but stays flagged, with the dismissal and a one-sentence reason recorded. Every failure of the check (no key, an error, a timeout, an unexpected answer) raises the alert as normal, so the check can reduce false alerts but never silence a real one. The other thirteen patterns are identified by a checksum, a distinctive prefix, a required label or, for email addresses, an unambiguous format.
+A match flags the message in the Audit Log and raises an alert; on Claude Cowork, Claude Code, ChatGPT and Codex prompts, a repeat of the same identifier type for the same person within 24 hours is flagged without a further alert. Seven patterns identify a value by shape alone (National Insurance number, UK, US and Brazilian phone numbers, IBAN, IP address and US Social Security number); for these, on Claude Cowork, Claude Code, ChatGPT and Codex prompts, a Claude call first asks whether the match is genuinely that identifier in context. A dismissed match raises no alert but stays flagged, with the dismissal and a one-sentence reason recorded. Every failure of the check (no key, an error, a timeout, an unexpected answer) raises the alert as normal, so the check can reduce false alerts but never silence a real one. The other thirteen patterns are identified by a checksum, a distinctive prefix, a required label or, for email addresses, an unambiguous format.
 
 Detection also covers twelve intent categories, among them data exfiltration, credential harvesting, access escalation, policy evasion and destructive actions, with an AI severity assessment that takes account of your acceptable use policy where one is configured. Like PII detection, it flags and alerts; it cannot stop a prompt.
 
@@ -215,6 +223,8 @@ A retention job runs daily in a single database transaction, so a run either com
 | Claude Cowork prompts and activity messages | 90 days |
 | Claude Code prompts, metadata and metrics | 90 days |
 | Claude.ai chat prompts and reply metadata | 90 days |
+| ChatGPT prompts, reply records, conversation times and spend | The Claude Cowork window, 90 days |
+| Codex prompts, turns, tool calls and spend | The Claude Code window, 90 days |
 | Raw telemetry events | 30 days |
 | Compliance API activity events | 365 days |
 | Operational errors | 90 days |
@@ -224,7 +234,7 @@ A retention job runs daily in a single database transaction, so a run either com
 
 In **strip** mode, the default, rows keep their metadata but lose their content: prompt text is replaced with a fixed marker, and full text, tool previews, PII dismissal reasons and output file names are cleared. In **purge** mode the rows are deleted. In both modes, AI-derived records tied to expired messages (classifications, capability events, session descriptions, use case judgements) and metadata-only tables such as chat reply metadata are deleted.
 
-People and accounts, Claude Cowork session summaries (including uploaded file names), the use case register, drafted skills, coaching acknowledgements, Skills and Connectors Board entries and both logs are not time-limited. Records tied to a person among them are removed by erasure; the register, drafted skills and Board entries are removed by an administrator or manager; the two logs are kept. The chat pull never imports messages older than the chat retention window, so content removed by retention is not re-imported.
+People and accounts, Claude Cowork session summaries and the matching ChatGPT conversation records (including uploaded and attached file names), the use case register, drafted skills, coaching acknowledgements, Skills and Connectors Board entries and both logs are not time-limited. Records tied to a person among them are removed by erasure; the register, drafted skills and Board entries are removed by an administrator or manager; the two logs are kept. The chat pull never imports messages older than the chat retention window, so content removed by retention is not re-imported. The OpenAI sync likewise never imports a record older than the Claude Cowork window (ChatGPT) or the Claude Code window (Codex).
 
 ### Archive before purge
 
@@ -232,9 +242,9 @@ Archiving to your Amazon S3 bucket is off by default; Azure Blob Storage and Goo
 
 ### Erasure and export of a person's data
 
-An administrator can export a monitored person's record, Claude Cowork and Claude Code prompts and activity messages, Claude Chat prompts and the metadata kept for Claude's replies, telemetry events, Compliance activity, analytics snapshots and alerts as JSON, and erase that person. Erasure deletes the person's monitoring record and every record keyed to them in one transaction; if any step fails, nothing is deleted and the failure is recorded. A build-pipeline test fails when a new table carrying a person identifier is not covered. The access audit log keeps a record of the erasure (who, when, and the erased person's identifier and email) as evidence.
+An administrator can export a monitored person's record, Claude Cowork and Claude Code prompts and activity messages, Claude Chat prompts and the metadata kept for Claude's replies, ChatGPT and Codex prompts with their reply records, conversation times, Codex turns and tool calls and hourly costs, telemetry events, Compliance activity, analytics snapshots and alerts as JSON, and erase that person. Erasure deletes the person's monitoring record and every record keyed to them in one transaction; if any step fails, nothing is deleted and the failure is recorded. A build-pipeline test fails when a new table carrying a person identifier is not covered. The access audit log keeps a record of the erasure (who, when, and the erased person's identifier and email) as evidence.
 
-Erasure removes stored data; a person's Claude client continues to send telemetry until it is stopped at the client or in Claude's administrative settings. A person's sign-in account is removed separately, by deleting the account in user administration.
+Erasure removes stored data; a person's Claude client continues to send telemetry until it is stopped at the client or in Claude's administrative settings. The OpenAI sync also carries on: it imports the person's new ChatGPT and Codex activity, and if the OpenAI key is removed and added again it starts again from up to 30 days back and imports their earlier activity too. To prevent both, add the person's email to the exclusion list on **Admin → Ingestion** before you erase them. A person's sign-in account is removed separately, by deleting the account in user administration.
 
 ## Audit logging
 
@@ -276,7 +286,7 @@ Detection draws on the access audit log, authentication events, active sessions,
 | Locked-out administrator | Run the recovery tool in the Hub container |
 | Bearer token exposed | Set a new `OTEL_ENDPOINT_SECRET`, run `docker compose up -d`, and update Claude managed settings and the Claude Cowork monitoring settings (see [Troubleshooting and FAQ](troubleshooting.md#settings)) |
 | Collector token exposed | Replace `CCC_COLLECTOR_TOKEN` for both services and run `docker compose up -d` |
-| Connector or third-party key exposed | Revoke it at source (Anthropic, Claude.ai, GitHub, Slack) or in the administration area, then remove it from Command Centre, which also resets that integration's sync state |
+| Connector or third-party key exposed | Revoke it at source (Anthropic, Claude.ai, OpenAI, GitHub, Slack) or in the administration area, then remove it from Command Centre, which also resets that integration's sync state |
 | Stop AI processing | Remove the Claude API key, or switch off individual features |
 | Stop telemetry intake or restrict access | Stop the collector (`docker compose stop otel-collector`), or restrict who can reach it at your firewall or proxy |
 | Preserve evidence | Export the access audit log, save the containers' logs and back up the database before remediation |

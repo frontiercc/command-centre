@@ -1,6 +1,6 @@
 # Frontier Command Centre: Connect Claude
 
-How to send Claude Code and Claude Cowork telemetry to Command Centre, for any installation: Docker on one machine, or a deployment on AWS or Azure. Claude Chat needs no client settings: on Claude for Enterprise, Command Centre reads its conversations from Anthropic's Compliance API, using the Compliance Access Key entered under **Admin → Access & Keys**.
+How to send Claude Code and Claude Cowork telemetry to Command Centre, for any installation: Docker on one machine, or a deployment on AWS or Azure. Claude Chat needs no client settings: on Claude for Enterprise, Command Centre reads its conversations from Anthropic's Compliance API, using the Compliance Access Key entered under **Admin → Access & Keys**. To connect ChatGPT and Codex, see [Connect ChatGPT and Codex](configure-command-centre.md#connect-chatgpt-and-codex).
 
 **The quickest way:** open **Admin → Ingestion** in Command Centre. The page's **Connect Claude** panel shows the collector address and, with Docker, the bearer token, and copies the Claude Code settings for you, filled in. The rest of this guide explains each setting and the other ways to distribute them.
 

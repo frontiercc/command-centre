@@ -9,6 +9,7 @@ Several major features are off until you enable them.
 | Area | Where | State on a new instance |
 |---|---|---|
 | Claude API key, Compliance Access Key, SSO, SMTP, user accounts | Admin → Access & Keys | Empty |
+| ChatGPT and Codex: OpenAI Admin API key, workspace ID, organisation ID | Admin → Access & Keys → OpenAI (ChatGPT and Codex) | Empty |
 | Core AI model, FinOps, seats, Weekly Digest, Weekly Highlights, Metrics Connector, system health | Admin → System | FinOps, digest and highlights off |
 | Departments (bulk), monitoring exclusions, collector status | Admin → Ingestion | Empty |
 | Work Pulse settings and tiers | Admin → Work Pulse | On |
@@ -18,7 +19,7 @@ Several major features are off until you enable them.
 | Retention | Admin → Data | Defaults applied |
 | Alerts, thresholds, Slack alerts | Admin → Risk Scoring | Slack alerts off; Claude Code daily spend limit $100; Codex daily spend limit $500 |
 
-**Contents:** [Claude API key and models](#claude-api-key-and-models) · [Claude Chat capture through the Compliance API](#claude-chat-capture-through-the-compliance-api) · [Single sign-on](#single-sign-on) · [Email (SMTP)](#email-smtp) · [Users, roles and departments](#users-roles-and-departments) · [Cost centres, licensed seats and seat price](#cost-centres-licensed-seats-and-seat-price) · [Retention](#retention) · [Content and AI switches](#content-and-ai-switches) · [Work Pulse](#work-pulse) · [Developer Pulse and the GitHub overlay](#developer-pulse-and-the-github-overlay) · [Use Cases](#use-cases) · [Skills and Connectors Board](#skills-and-connectors-board) · [Weekly Digest](#weekly-digest) · [Weekly Highlights](#weekly-highlights) · [High-priority alerts to Slack](#high-priority-alerts-to-slack) · [System health and telemetry-silence alerts](#system-health-and-telemetry-silence-alerts) · [Metrics Connector](#metrics-connector) · [Reports](#reports)
+**Contents:** [Claude API key and models](#claude-api-key-and-models) · [Claude Chat capture through the Compliance API](#claude-chat-capture-through-the-compliance-api) · [Connect ChatGPT and Codex](#connect-chatgpt-and-codex) · [Single sign-on](#single-sign-on) · [Email (SMTP)](#email-smtp) · [Users, roles and departments](#users-roles-and-departments) · [Cost centres, licensed seats and seat price](#cost-centres-licensed-seats-and-seat-price) · [Retention](#retention) · [Content and AI switches](#content-and-ai-switches) · [Work Pulse](#work-pulse) · [Developer Pulse and the GitHub overlay](#developer-pulse-and-the-github-overlay) · [Use Cases](#use-cases) · [Skills and Connectors Board](#skills-and-connectors-board) · [Weekly Digest](#weekly-digest) · [Weekly Highlights](#weekly-highlights) · [High-priority alerts to Slack](#high-priority-alerts-to-slack) · [System health and telemetry-silence alerts](#system-health-and-telemetry-silence-alerts) · [Metrics Connector](#metrics-connector) · [Reports](#reports)
 
 ## Claude API key and models
 
@@ -41,6 +42,29 @@ Command Centre captures Claude Chat by pulling it from the Anthropic Compliance 
 The sync runs every two minutes, up to 200 changed chats per run. The first run reaches back 30 days, or less if your Chat retention period is shorter.
 
 **Check:** a **Last sync** line appears under the key within a few minutes, showing chats, prompts, connectors and activities, with an error count added only when a run has errors. The figures count what the run examined, so read the absence of errors as the signal of health. Claude Chat prompts then appear in the Audit Log with the Compliance API as their source.
+
+## Connect ChatGPT and Codex
+
+Command Centre reads ChatGPT and Codex activity from OpenAI's Compliance Logs Platform, which needs ChatGPT Enterprise or Edu. ChatGPT Chat and ChatGPT Work prompts join Work Pulse, Codex prompts join Developer Pulse, and their spend joins FinOps and Spend Review. Command Centre only reads from OpenAI. It stores people's prompts and the names of files they attach in ChatGPT. It never stores ChatGPT's or Codex's replies. [The OpenAI export pull](ai-data-flow.md#the-openai-export-pull) lists everything it stores.
+
+Command Centre's own AI features run on Claude, so add your Claude API key first, even if ChatGPT and Codex are your only products.
+
+1. **Create an OpenAI Admin API key.** A ChatGPT workspace owner creates it in OpenAI's admin console. The hint on the Access & Keys page names **Credentials → Admin keys** at admin.openai.com. OpenAI controls that menu, so check where it is in your own console.
+2. **Give the key read access to four logs:** conversation messages, Codex logs, Codex turns and costs. Use the matching read permissions as OpenAI's console names them. Command Centre makes only read requests.
+3. **Find your two IDs** in OpenAI's admin console: the ChatGPT workspace ID and the OpenAI organisation ID. ChatGPT spend needs the organisation ID. Without it, Command Centre skips OpenAI's cost records and shows no ChatGPT spend. Codex spend comes from Codex's own turn records and needs only the workspace ID.
+4. **Enter them in Command Centre.** In **Admin → Access & Keys → OpenAI (ChatGPT and Codex)**, paste the key into **OpenAI Admin API Key**, then fill in **ChatGPT workspace ID** and **OpenAI organisation ID**.
+5. **Select Test.** It checks that the key can read conversations, Codex logs and Codex turns, and costs once an organisation ID is entered. A failure names each log the key cannot read.
+6. **Select Save settings**, below the Endpoint security panel. The test does not save.
+
+Command Centre checks for new files about every five minutes. Its first sync reaches back 30 days, or less if your Cowork or Code retention period is shorter. It reads the oldest files first, at most 300 files a run, so on a busy workspace the first sync spreads over several runs and can take hours. The newest activity arrives last. How often OpenAI publishes new files, and how long it keeps them, is up to OpenAI: check its documentation.
+
+People are matched to Command Centre accounts by email, as for Claude. A record with no single plain email address is skipped, and so are people on the exclusion list (see [Users, roles and departments](#users-roles-and-departments)).
+
+With ChatGPT and Codex connected, Command Centre's AI features also send their prompts to Anthropic. [ChatGPT and Codex prompts in AI features](ai-data-flow.md#chatgpt-and-codex-prompts-in-ai-features) lists which features do, and how to stop each.
+
+To disconnect, select **Remove** beside the key. This also resets the sync position, so a key added later starts again from up to 30 days back. Prompts already stored stay until retention removes them. If the key was set in the `OPENAI_ADMIN_API_KEY` environment variable, Remove does not clear it: delete the variable and restart the Hub.
+
+**Check:** **Test** reports success. Within a few minutes a **Last sync** line appears under the fields, showing the files read and the ChatGPT Chat, ChatGPT Work and Codex prompts found, with an error count when a run had errors. **Admin → Ingestion → OpenAI export status** reads "Syncing, ChatGPT and Codex records arriving". ChatGPT and Codex prompts then appear in the Audit Log, each marked with its product.
 
 ## Single sign-on
 
@@ -66,7 +90,7 @@ Email carries password reset links and the Weekly Digest.
 
 ## Users, roles and departments
 
-People appear in Command Centre automatically the first time their telemetry or Claude Chat activity arrives, matched by email, with the contributor role "Pulse (Cowork + Code)" and no password. Your job is to assign departments and to give the right people wider roles.
+People appear in Command Centre automatically the first time their telemetry, Claude Chat activity or ChatGPT and Codex activity arrives, matched by email, with the contributor role "Pulse (Cowork + Code)" and no password. Your job is to assign departments and to give the right people wider roles.
 
 | Role | What it can see |
 |---|---|
@@ -87,12 +111,12 @@ If your Claude Code settings send a `department` attribute with telemetry, Comma
 
 ## Cost centres, licensed seats and seat price
 
-FinOps rolls up each person's measured AI spend on Claude Code and Claude Cowork by cost centre for a calendar month, and Spend Review shows, person by person, where the money goes and whether a cheaper route exists. FinOps is visible to administrators and managers only, because individual cost is close to salary information; Spend Review shows administrators and managers everyone's review and each person their own. Spend figures are measured from telemetry: Claude Code spend is priced from the model rates in Developer Pulse, and Claude Cowork spend is the cost each Claude Cowork request reports. Claude Chat cost is not part of the chargeback total.
+FinOps rolls up each person's measured AI spend on Claude Code and Claude Cowork, and on ChatGPT and Codex when connected, by cost centre for a calendar month, and Spend Review shows, person by person, where the money goes and whether a cheaper route exists. FinOps is visible to administrators and managers only, because individual cost is close to salary information; Spend Review shows administrators and managers everyone's review and each person their own. Spend figures are measured from telemetry: Claude Code spend is priced from the model rates in Developer Pulse, and Claude Cowork spend is the cost each Claude Cowork request reports. ChatGPT and Codex spend is priced from OpenAI's token counts with the same rate table, which includes OpenAI's published rates. Claude Chat cost is not part of the chargeback total.
 
 1. In **Admin → System → FinOps**, switch on **Enable FinOps (cost and chargeback)**. Switch on **Model efficiency (FinOps)** as well if you want the spend-by-activity and model view. Enter **Seat price (USD/month)**. If you use ChatGPT Enterprise, also enter **ChatGPT seats** and **ChatGPT seat price (USD/month)**: OpenAI charges per seat assigned at the start of each month, apart from usage, and FinOps shows that licence cost beside ChatGPT usage, never added to it. Save.
 2. In **Admin → System → General**, enter **Licensed seats** and save. FinOps uses seats and price to estimate the cost of unused seats; the estimate never enters the chargeback total.
 3. In **Admin → Cost Centres**, create each cost centre with its optional **GL code**, then use **Department mapping** to assign each department. A department with no mapping is its own cost centre; people with no department fall into Unallocated.
-4. Check the model prices in **Admin → Developer Pulse → Rates** against your agreement with Anthropic, and add any provider-specific model identifiers you use. A model with no price is shown as unpriced, never as zero.
+4. Check the model prices in **Admin → Developer Pulse → Rates** against your agreement with Anthropic and, for ChatGPT and Codex, with OpenAI. Add any provider-specific model identifiers you use. A model with no price is shown as unpriced, never as zero.
 
 At month end an administrator can close a period on the FinOps page, which freezes an immutable snapshot for billing; a closed period cannot be reopened.
 
@@ -131,17 +155,18 @@ The features in the table below send people's prompt text, masked for personal d
 | Human time vs AI time (Claude Cowork and ChatGPT) | Admin → Work Pulse → Overview | Off |
 | Human time vs AI time · Code (Claude Code and Codex) | Admin → Developer Pulse → Overview | Follows the Work Pulse switch |
 | Include first prompt (Code session classifier) | Admin → Developer Pulse → Overview | On |
+| Classify ChatGPT prompts | Admin → Work Pulse → Overview | On |
 | Classify Codex sessions | Admin → Developer Pulse → Overview | On |
 | Content analysis (use case judging and process suggestions) | Admin → Use Cases | On |
 | Include named shout-outs (Weekly Highlights) | Admin → System → Weekly highlights | Off |
 
-Turning off **Content analysis** stops use case judging and suggestions, so use case tracking pauses except for sessions that run a use case's own skill. Turning off **Include first prompt** gives the Code classifier metadata only.
+Turning off **Content analysis** stops use case judging and suggestions, so use case tracking pauses except for sessions that run a use case's own skill. Turning off **Include first prompt** gives the Code classifier metadata only. **Classify ChatGPT prompts** and **Classify Codex sessions** stop only the ChatGPT and Codex parts of the two classifiers. Other features still send ChatGPT and Codex prompts to Anthropic: [ChatGPT and Codex prompts in AI features](ai-data-flow.md#chatgpt-and-codex-prompts-in-ai-features) lists them.
 
 Three further settings shape alerting. **Admin → Risk Scoring → Developer Pulse alert settings → Daily spend limit** sets the Claude Code spend in 24 hours above which a person is alerted ($100 by default; over twice the limit is high priority and goes to Slack when Slack alerts are on). Set it to a figure your organisation would want to hear about for a single person in a day. With Codex connected, **Codex daily spend limit** does the same for Codex spend, on its own limit ($500 by default) and its own switch under **Alert types**. **Admin → System → General → Acceptable use policy** takes your policy text, which the AI intent assessment and the dashboard briefing take into account and the compliance report sections record as declared. **Admin → Intent Detection** lists the twelve built-in intent categories, each on by default and switchable off, and lets you add your own with plain phrases.
 
 ## Work Pulse
 
-Work Pulse shows the depth of work people hand to Claude in Claude Cowork: a judged tier for each prompt, whether that depth is growing and spreading by department, and what capability the organisation has built. The tiers are AI-judged and labelled as such; time and session counts are measured.
+Work Pulse shows the depth of work people hand to Claude in Claude Cowork, and to ChatGPT when it is connected: a judged tier for each prompt, whether that depth is growing and spreading by department, and what capability the organisation has built. The tiers are AI-judged and labelled as such; time and session counts are measured.
 
 1. In **Admin → Work Pulse → Overview → Module settings**, confirm **Pulse enabled** is on, choose the **Classifier model**, **Organisation briefing model** and **Personal briefing model**, set **Human time vs AI time**, **Session descriptions** and **Classify ChatGPT prompts** to your decision, and select **Save**. **Classify ChatGPT prompts** applies once ChatGPT prompts arrive from OpenAI's export.
 2. Review the rubric in **Admin → Work Pulse → Tier config**: the tier definitions, the connector and skill evidence rules, the task type taxonomy and the detection criteria. The classifier's instructions are built entirely from this page, and it previews the exact text the classifier receives. Clearing the connector and skill evidence rules leaves the tier definitions alone to decide. Changes apply from the next classification onward and never rewrite history.
@@ -153,7 +178,7 @@ Once a month, use **Admin → Work Pulse → Audit** to start an audit cycle wit
 
 ## Developer Pulse and the GitHub overlay
 
-Developer Pulse measures Claude Code use (spend, engaged time, lines changed, AI-assisted commits and pull requests, edit acceptance) without judgement, and adds one AI-judged layer: a kind of work and a tier for each finished session.
+Developer Pulse measures Claude Code use (spend, engaged time, lines changed, AI-assisted commits and pull requests, edit acceptance) without judgement, and adds one AI-judged layer: a kind of work and a tier for each finished session. With Codex connected, it also shows Codex's spend, actions and commits, and grades Codex sessions the same way. Engaged time, lines changed, pull requests and edit acceptance stay Claude Code only, because Codex's logs do not carry them.
 
 1. In **Admin → Developer Pulse → Overview**, confirm **Session classifier enabled** is on, choose the **Classifier model** and **Briefing model**, set **Human time vs AI time · Code**, **Classify Codex sessions** and **Include first prompt**, and save. **Classify Codex sessions** applies once Codex sessions arrive from OpenAI's export.
 2. Review the session rubric in **Admin → Developer Pulse → Tiers**. As with Work Pulse, saving applies from now on.
@@ -187,7 +212,7 @@ Then register your first use cases on the Use Cases page, by guided form, transc
 
 ## Skills and Connectors Board
 
-The Skills and Connectors Board needs no configuration. The Board discovers the skills and connectors used in Claude Cowork and Claude Code, and the connectors used in Claude Chat, and invites the people who built them to claim and document them. A set of Anthropic's own skills, such as the document skills, is recognised and published automatically. After the first week, encourage the owners of unclaimed entries to claim them; an entry can be installed from the Board only once it is claimed and has an install guide. Administrators and managers can restrict an entry to one department.
+The Skills and Connectors Board needs no configuration. The Board discovers the skills and connectors used in Claude Cowork and Claude Code, and the connectors used in Claude Chat, and invites the people who built them to claim and document them. With ChatGPT and Codex connected, it also lists the skills ChatGPT used and the connectors called through Codex, each tagged with its product. A set of Anthropic's own skills, such as the document skills, is recognised and published automatically. After the first week, encourage the owners of unclaimed entries to claim them; an entry can be installed from the Board only once it is claimed and has an install guide. Administrators and managers can restrict an entry to one department.
 
 ## Weekly Digest
 

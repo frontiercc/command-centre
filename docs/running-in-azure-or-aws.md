@@ -14,7 +14,7 @@ This is a deployment reference, not a supported infrastructure template. Cloud s
 | **PostgreSQL 16** | Reachable only from the Hub, with a database for Command Centre. The Hub must connect directly: a transaction pooler in between stops the scheduled jobs running |
 | **HTTPS** | Two addresses with valid certificates: one where people sign in (the Hub) and one where Claude sends its activity (the collector) |
 | **Persistent storage for the collector's queue** | So telemetry waiting to be delivered survives a restart |
-| **Outbound access** | HTTPS from the Hub to `api.anthropic.com`, and to any service you switch on, such as Slack or your identity provider |
+| **Outbound access** | HTTPS from the Hub to `api.anthropic.com`, and to any service you switch on, such as Slack or your identity provider. For ChatGPT and Codex, also to `api.chatgpt.com` and the download links it returns, whose host OpenAI chooses |
 
 | Container | Port | Health check | Settings |
 |---|---|---|---|
@@ -79,7 +79,7 @@ These show one way to build each, for reference. You do not need to follow them.
 1. **Check it is running.** `https://<hub address>/api/health` returns `{"status":"ok"}`.
 2. **Create your admin account** straight away. Search the Hub's log for `setup token`, open the Hub's address and enter the token. The token works once, and only until the first admin exists. If you lose it, wait ten minutes and restart the Hub for a new one.
 3. **Add your Claude API key** under **Admin → Access & Keys**.
-4. **Connect Claude.** On **Admin → Ingestion**, select **Edit** beside the collector address and enter the collector's HTTPS address. In the cloud the page does not show the bearer token: use `OTEL_ENDPOINT_SECRET` from your secret store. Then follow [Connect Claude](connect-claude.md).
+4. **Connect Claude.** On **Admin → Ingestion**, select **Edit** beside the collector address and enter the collector's HTTPS address. In the cloud the page does not show the bearer token: use `OTEL_ENDPOINT_SECRET` from your secret store. Then follow [Connect Claude](connect-claude.md). For ChatGPT and Codex, follow [Connect ChatGPT and Codex](configure-command-centre.md#connect-chatgpt-and-codex) instead or as well.
 5. **Set up the rest** by following [Configure Command Centre](configure-command-centre.md): single sign-on, email, retention, alerts and each feature.
 
 ## Troubleshooting

@@ -1,6 +1,6 @@
 # Frontier Command Centre: Troubleshooting and FAQ
 
-Fixes for the problems people most often hit when installing, signing in, connecting Claude, running and updating Command Centre.
+Fixes for the problems people most often hit when installing, signing in, connecting Claude, connecting ChatGPT and Codex, running and updating Command Centre.
 
 The commands are for Docker Compose installations: run them from the `command-centre` folder. If your problem is not listed, ask in [Discussions](https://github.com/frontiercc/command-centre/discussions), or report a bug in [Issues](https://github.com/frontiercc/command-centre/issues).
 
@@ -53,6 +53,26 @@ sudo mkdir -p "/Library/Managed Preferences/$(whoami)" && sudo defaults write "/
 For many machines, deploy the same key with your device management tool.
 
 **No grading yet.** Claude Cowork work is graded every five minutes, Claude Code sessions within an hour of going idle. Grading needs the Claude API key.
+
+## Connecting ChatGPT and Codex
+
+The setup is in [Connect ChatGPT and Codex](configure-command-centre.md#connect-chatgpt-and-codex). The test button on **Admin → Access & Keys → OpenAI (ChatGPT and Codex)** reports most problems.
+
+**"Enter the ChatGPT workspace ID first".** The test needs the workspace ID as well as the key.
+
+**"Invalid key".** OpenAI did not accept the key. Copy it again from OpenAI's admin console.
+
+**"OpenAI did not find this workspace ID" or "this organisation ID".** Copy the ID again from OpenAI's admin console.
+
+**"Key is valid but cannot read …".** The key lacks the read permission for each log the message names: ChatGPT conversations, Codex logs, Codex turns or costs. Give the key those permissions in OpenAI's console, or create a key that has them, then test again.
+
+**The test passes but says spend is not checked.** No organisation ID is entered. Prompts and Codex spend will still arrive. ChatGPT spend needs the organisation ID.
+
+**The test passed but nothing arrives.** Select **Save settings** after the test: the test does not save. Then check **Admin → Ingestion → OpenAI export status**. "Key set, awaiting the first sync" clears within a few minutes. "The last sync reported errors" means a log could not be read: the **System health** card on **Admin → System** shows the OpenAI sync job and its error.
+
+**Only older activity has arrived.** The first sync reads the last 30 days oldest first, at most 300 files a run, so on a busy workspace the newest activity arrives last and can take some hours.
+
+**Some people's prompts are missing.** A record with no single plain email address is skipped, and so is anyone on the exclusion list on **Admin → Ingestion**.
 
 ## Settings
 

@@ -2,11 +2,11 @@
 
 Command Centre uses Anthropic's Claude models for some of its features, such as grading how deeply people delegate work, writing briefings and drafting skills. This document explains exactly what those features send to Claude, where the data goes, what comes back, how replies are checked and how you switch each feature off.
 
-It also covers the Claude Chat data Command Centre reads from Anthropic's Compliance API, the other services it can call, how people stay in control of AI output, and how Command Centre sits against the EU AI Act and ISO/IEC 42001.
+It also covers the Claude Chat data Command Centre reads from Anthropic's Compliance API, the ChatGPT and Codex data it reads from OpenAI's export, the other services it can call, how people stay in control of AI output, and how Command Centre sits against the EU AI Act and ISO/IEC 42001.
 
 It lists the sub-processors involved. Everything here applies however you run Command Centre, on your own server or on AWS or Azure.
 
-**Contents:** [Summary](#summary) · [Measured and AI-judged](#measured-and-ai-judged) · [The Claude API key and applicable terms](#the-claude-api-key-and-applicable-terms) · [Data residency and network path](#data-residency-and-network-path) · [Inventory of AI features](#inventory-of-ai-features) · [Feature detail](#feature-detail) · [The Compliance API pull](#the-compliance-api-pull) · [The Analytics and Admin API pulls](#the-analytics-and-admin-api-pulls) · [Prompt injection and output control](#prompt-injection-and-output-control) · [Human oversight](#human-oversight) · [Positioning against the EU AI Act and ISO/IEC 42001](#positioning-against-the-eu-ai-act-and-isoiec-42001) · [Running with AI features off](#running-with-ai-features-off) · [Sub-processors and external services](#sub-processors-and-external-services)
+**Contents:** [Summary](#summary) · [Measured and AI-judged](#measured-and-ai-judged) · [The Claude API key and applicable terms](#the-claude-api-key-and-applicable-terms) · [Data residency and network path](#data-residency-and-network-path) · [Inventory of AI features](#inventory-of-ai-features) · [Feature detail](#feature-detail) · [The Compliance API pull](#the-compliance-api-pull) · [The OpenAI export pull](#the-openai-export-pull) · [The Analytics and Admin API pulls](#the-analytics-and-admin-api-pulls) · [Prompt injection and output control](#prompt-injection-and-output-control) · [Human oversight](#human-oversight) · [Positioning against the EU AI Act and ISO/IEC 42001](#positioning-against-the-eu-ai-act-and-isoiec-42001) · [Running with AI features off](#running-with-ai-features-off) · [Sub-processors and external services](#sub-processors-and-external-services)
 
 ## Summary
 
@@ -18,12 +18,12 @@ Command Centre only sees prompts after they have reached Claude, so it cannot bl
 
 ## Measured and AI-judged
 
-**Measured** figures are counted from Claude Code, Claude Cowork and Claude Chat activity. **AI-judged** figures are Claude's assessment of that work. Anything not measured is shown as "not measured", never as zero. For example:
+**Measured** figures are counted from Claude Code, Claude Cowork and Claude Chat activity, and from ChatGPT and Codex activity when connected. **AI-judged** figures are Claude's assessment of that work. Anything not measured is shown as "not measured", never as zero. For example:
 
 | Measured from telemetry | Judged by AI |
 |---|---|
 | Prompts, sessions, active time, tokens, models used | How deeply work was delegated (Tiers 1 to 3), and the kind of work |
-| Spend, from Claude Code's token counts and Claude Cowork's reported cost | How long the work would take by hand (an estimate) |
+| Spend, from Claude Code's token counts and Claude Cowork's reported cost, and from ChatGPT's and Codex's token counts at OpenAI's published rates | How long the work would take by hand (an estimate) |
 | Lines of code, commits, pull requests, edits accepted | Which use case a session belongs to, and suggested new use cases |
 | Session Output Rate, chargeback and FinOps totals | Briefings, recommendations, the risk score and the written parts of reports |
 | Personal data and intent detection (pattern and phrase matching) | Whether a possible personal-data match is genuine, and how serious a risky intent is |
@@ -35,7 +35,7 @@ Some figures are worked out in code from AI judgements, such as the four delegat
 - **Numbers in briefings:** every number the AI writes must appear in the figures it was given. A sentence that fails is removed, and a briefing that cannot be repaired is not shown. The risk score is the one number the AI sets itself.
 - **Fixed answers:** grading, use case matching and suggestions must reply in a fixed format. Code rejects or sets aside anything outside it, such as a tier or label that does not exist.
 - **People decide:** suggested use cases, capabilities and skill drafts only count once a person accepts them.
-- **Monthly tier audit:** each month, an admin can grade 50 Claude Cowork prompts without seeing the AI's grade, and Command Centre reports how often they agree (Admin → Work Pulse → Audit).
+- **Monthly tier audit:** each month, an admin can grade 50 Work Pulse prompts without seeing the AI's grade, and Command Centre reports how often they agree (Admin → Work Pulse → Audit).
 - **Human-time spot checks:** each month, an admin can check 20 of the AI's by-hand estimates per product.
 
 A benchmark kit, so you can run Command Centre's grading against your own labelled examples and a model of your choice, is on the roadmap.
@@ -74,6 +74,7 @@ The application makes no call to Anthropic beyond those listed in this document 
 | `api.anthropic.com` | Model calls, model list, key tests, and the Compliance, Analytics and Admin API pulls | As described in this document |
 | Your Slack incoming-webhook URLs | Weekly Digest, high-priority alerts, Weekly Highlights | Described under Sub-processors |
 | Your SMTP relay | Weekly Digest email, password reset email | Described under Sub-processors |
+| `api.chatgpt.com`, and the short-lived download links it returns | Reading ChatGPT and Codex activity from OpenAI's export | To `api.chatgpt.com`: the OpenAI Admin API key, your workspace and organisation IDs, and how far the sync has read. The download links receive no key |
 | `api.github.com` | Developer Pulse GitHub overlay | Access token and repository names |
 | Your Amazon S3 archive bucket | Optional archive before retention deletes data | Expiring records, including stored prompts |
 | Your identity provider | Single sign-on (OpenID Connect) | Standard OIDC exchange |
@@ -155,11 +156,11 @@ Opening the Dashboard produces a short narrative, a risk score and up to six rec
 
 ### Intent severity assessment
 
-When a Claude Cowork, Claude Code or Claude Chat prompt matches one of the intent categories (for example bulk export of records or bypassing authentication), one call assesses how serious it is in context. The assessment's purpose is to judge the request itself, so it must see the prompt as written: it receives the full prompt as received from telemetry or the Compliance API, fenced as untrusted user text, together with the matched categories and phrases and your acceptable use policy. The reply's severity must be one of four levels; any other value becomes "medium". The severity is added to the message's flag reason, and the model's short reasoning and recommended action are stored on the alert. Without a key, the alert takes the category's default severity; if the call fails, the alert is raised at medium severity for manual review. Detection itself never depends on the model. Each built-in and custom intent category can be switched off individually on the Intent Detection page.
+When a Claude Cowork, Claude Code, Claude Chat, ChatGPT or Codex prompt matches one of the intent categories (for example bulk export of records or bypassing authentication), one call assesses how serious it is in context. The assessment's purpose is to judge the request itself, so it must see the prompt as written: it receives the full prompt as received from telemetry, the Compliance API or OpenAI's export, fenced as untrusted user text, together with the matched categories and phrases and your acceptable use policy. The reply's severity must be one of four levels; any other value becomes "medium". The severity is added to the message's flag reason, and the model's short reasoning and recommended action are stored on the alert. Without a key, the alert takes the category's default severity; if the call fails, the alert is raised at medium severity for manual review. Detection itself never depends on the model. Each built-in and custom intent category can be switched off individually on the Intent Detection page.
 
 ### Personal-data confirmation
 
-Seven personal-data patterns identify a value by its shape alone: UK National Insurance numbers, UK, US and Brazilian phone numbers, IBANs, IP addresses and US Social Security numbers. Before an alert is raised for one of these on a Claude Cowork or Claude Code prompt, one call asks whether the match is genuinely that identifier in context. The call must see the context to judge, so it carries the prompt as written, the pattern name and the masked value, with the reply constrained to a JSON schema of a verdict and a one-sentence reason. The call runs after the message is stored, never inside the ingest request, and only where the 24-hour per-person deduplication would otherwise raise an alert.
+Seven personal-data patterns identify a value by its shape alone: UK National Insurance numbers, UK, US and Brazilian phone numbers, IBANs, IP addresses and US Social Security numbers. Before an alert is raised for one of these on a Claude Cowork, Claude Code, ChatGPT or Codex prompt, one call asks whether the match is genuinely that identifier in context. The call must see the context to judge, so it carries the prompt as written, the pattern name and the masked value, with the reply constrained to a JSON schema of a verdict and a one-sentence reason. The call runs after the message is stored, never inside the ingest request, and only where the 24-hour per-person deduplication would otherwise raise an alert.
 
 Every failure path counts as "confirmed", so the check can reduce false alarms but cannot silence a real one by breaking. A dismissal suppresses the alert but leaves the message flagged, with "(dismissed)" recorded against the pattern in the Audit Log and the reason, masked, stored alongside. Retention's strip mode clears the reason with the content it describes.
 
@@ -175,13 +176,13 @@ On request by an administrator, manager or viewer, an analysis makes two calls: 
 
 ### Use case session judging
 
-Each finished Claude Cowork or Claude Code session (idle 30 minutes, within the last 13 weeks) belonging to a department with live use cases is judged to decide which, if any, of that department's use cases it is an instance of, and judged again when the session gains new activity or those use cases change. A call covers up to ten sessions and carries the department name; each use case's title, description and phrases under short labels (U1, U2); and, per session, its surface, prompt count, up to six cleaned prompts of 400 characters (the first two, middle two and last two), its skill and connector names and, where captured, up to three names of files uploaded, three names of files made and six connector actions. Assistant text, identities and session identifiers are not sent.
+Each finished Claude Cowork, ChatGPT, Claude Code or Codex session (idle 30 minutes, within the last 13 weeks) belonging to a department with live use cases is judged to decide which, if any, of that department's use cases it is an instance of, and judged again when the session gains new activity or those use cases change. A call covers up to ten sessions and carries the department name; each use case's title, description and phrases under short labels (U1, U2); and, per session, its surface, prompt count, up to six cleaned prompts of 400 characters (the first two, middle two and last two), its skill and connector names and, where captured, up to three names of files uploaded, three names of files made and six connector actions. Assistant text, identities and session identifiers are not sent.
 
 The reply is constrained to a JSON schema with extended thinking off (on models that cannot turn it off, such as the newest Opus, at low effort), and only labels from the supplied list are accepted, so the model cannot attribute a session to anything else. A short reason is stored after cleaning, up to 200 characters, and follows each surface's retention window. Matches feed the use case's weekly counts automatically. When the Use Cases content switch is off, no call is made and only sessions running a use case's own codified skill count.
 
 ### Process mining
 
-Every seven days, Command Centre reads each department's recent prompts to suggest specific, recurring processes. Each read sends up to 120 cleaned prompts of 600 characters, sampled across the window with a limit per person, and up to six reads per department per surface (Claude Cowork and Claude Code) depending on volume. A cross-department pass makes four further reads of up to 120 prompts, each labelled with its department name, never a person. Each session's first excerpt may carry the same file-name and connector-action clues as session judging. Previously proposed titles are included so that dismissed work is not proposed again.
+Every seven days, Command Centre reads each department's recent prompts to suggest specific, recurring processes. Each read sends up to 120 cleaned prompts of 600 characters, sampled across the window with a limit per person, and up to six reads per department per surface (Work: Claude Cowork and ChatGPT; Code: Claude Code and Codex) depending on volume. A cross-department pass makes four further reads of up to 120 prompts, each labelled with its department name, never a person. Each session's first excerpt may carry the same file-name and connector-action clues as session judging. Previously proposed titles are included so that dismissed work is not proposed again.
 
 Replies are schema-constrained with thinking off (on models that cannot turn it off, such as the newest Opus, at low effort). A proposal is discarded if its title, story or value statement contains any digit, if it cites an excerpt that does not exist, if the cited work does not span at least two days and two people (and, for the cross-department pass, two departments), or if its title is on the excluded list or describes an excluded kind of work. Suggested keywords that do not appear in the cited text are dropped. Survivors are masked again before storage as open suggestions, which a person must add or dismiss. Every count shown on a suggestion is computed in code from the sessions the suggestion cites. When the content switch is off, no call is made and existing department suggestions are hidden and kept.
 
@@ -197,7 +198,7 @@ On a use case's page, an administrator or manager can generate a short summary o
 
 ### Skill drafting
 
-From a confirmed use case, an administrator or manager can draft an Agent Skill. The call carries the use case's title, description and departments; the story, rhythm and delegation depth from its mined suggestion, where there is one; the skill and connector names observed in its sessions; the digit sequences that appear in the excerpts; and up to 60 cleaned excerpts of 600 characters (at most ten per person) from sessions already matched to the use case, each dated to the day, labelled by person as A, B, C and marked if it is a follow-up. Measured usage counts are not sent; the message states only how many excerpts it carries.
+From a confirmed use case, an administrator or manager can draft an Agent Skill. The call carries the use case's title, description and departments; the story, rhythm and delegation depth from its mined suggestion, where there is one; the skill and connector names observed in its sessions; the digit sequences that appear in the excerpts; and up to 60 cleaned excerpts of 600 characters (at most ten per person) from Work sessions already matched to the use case (so ChatGPT prompts can be among them, and Codex prompts cannot), each dated to the day, labelled by person as A, B, C and marked if it is a follow-up. Measured usage counts are not sent; the message states only how many excerpts it carries.
 
 The reply is constrained to a JSON schema with thinking off (on models that cannot turn it off, such as the newest Opus, at low effort). Before anything is stored, code checks that every required section is present, that the steps and quality rules cite real excerpts, that every number and unit appears in the excerpts, that every system the organisation is known to use that the draft names appears in the evidence, that no passage of twelve or more words copies a prompt, and that the text contains no email address, link, file path or maskable personal data. Up to two automatic repairs are attempted. Minor problems are passed to the owner as notes; serious ones discard the draft. The owner can review and edit the draft before downloading it. Drafting is unavailable when the content switch is off.
 
@@ -216,6 +217,43 @@ For Claude for Enterprise organisations, Command Centre reads Claude Chat activi
 What comes back is handled under one rule: store what a person sent, describe what Claude did, never store what Claude said. User prompts are stored as text, beside Claude Cowork prompts, with the names of any attached files, and go through the same personal-data and intent detection as other surfaces. Assistant replies are reduced to metadata: the model, the number of artifacts and generated files, and the names of any connectors it called. Their text is never written to the database. Claude Chat prompts are stored in full rather than truncated to the 4,000-character limit applied to telemetry. The organisation activity feed is a separate, optional sync, off by default, which stores audit-event metadata only.
 
 Within Command Centre, Claude Chat prompts are part of Work Pulse: the Cowork work classifier sorts each one into a tier and a kind of work, and a conversation with Tier 3 work can receive a session description. Both calls are described above and send the prompt masked. The intent severity assessment also sends prompt text, and a governance report can carry that assessment's reasoning, which may quote the prompt. Claude Chat prompts are not judged against use cases or mined for processes.
+
+## The OpenAI export pull
+
+If you connect ChatGPT and Codex, Command Centre reads their activity from OpenAI's Compliance Logs Platform with your OpenAI Admin API key. The pull involves no model call. Every request is an HTTPS GET to `api.chatgpt.com` carrying the key, your ChatGPT workspace ID (or, for costs, your OpenAI organisation ID), the log type and how far the sync has read. No prompt text or other content is sent to OpenAI. OpenAI answers a download with a short-lived link, which the Hub fetches over HTTPS without the key. The client makes no deletion call.
+
+The sync runs about every five minutes and reads four logs: ChatGPT conversation messages, Codex logs, Codex turns and, when an organisation ID is set, costs. Its first run reaches back 30 days, or less if the Cowork or Code retention window is shorter, and it never imports a record older than those windows.
+
+What it stores:
+
+- ChatGPT Chat and ChatGPT Work prompts, beside Claude Cowork prompts, and Codex prompts, beside Claude Code prompts: the first 4,000 characters and a 250-character preview, with the names of files attached in ChatGPT. They go through the same personal-data and intent detection as other prompts.
+- For each ChatGPT reply, its model and time. Never its text.
+- The names of the skills ChatGPT used and of the connectors called through Codex.
+- For each Codex turn, the model, token counts and OpenAI's own cost figures.
+- For each Codex tool call, the tool name, whether it failed and whether it was a `git commit`. The command is read only to spot a commit and is never stored.
+- OpenAI's hourly cost records: tokens and cost per person, model and product.
+
+Everything else in the export files is discarded once the file is read. A prompt with no single plain email address is skipped, and nothing is written for people on the exclusion list.
+
+### ChatGPT and Codex prompts in AI features
+
+ChatGPT prompts are part of Work Pulse and Codex sessions are part of Developer Pulse, so the features described above also send their prompt text to Anthropic.
+
+| Feature | ChatGPT | Codex | How to stop it |
+|---|---|---|---|
+| Cowork work classifier | Prompts, masked | No | Classify ChatGPT prompts off, or Work Pulse off |
+| Claude Code session classifier, and Code human time estimates | No | First prompt masked; later prompts when Code human time is on | Classify Codex sessions off |
+| Session descriptions | Prompts of conversations with Tier 3 work or a capability, masked | No | Session descriptions off |
+| Human time estimates (Work) | Prompts, masked | No | Human time off |
+| Use case session judging | Prompts, cleaned | Prompts, cleaned | Use Cases content off |
+| Process mining | Prompts, cleaned | Prompts, cleaned | Use Cases content off |
+| Skill drafting | Prompts, cleaned | No | Use Cases content off |
+| Weekly Highlights | Tier 3 prompts, masked | No | Highlights off |
+| Intent severity assessment | The matched prompt as written | The matched prompt as written | Remove the Claude API key |
+| Personal-data confirmation | The matched prompt as written | The matched prompt as written | Remove the Claude API key |
+| Governance reports | Alert evidence, up to 200 characters of a prompt | Alert evidence, up to 200 characters of a prompt | Do not generate |
+
+Switching off **Classify ChatGPT prompts** also keeps new ChatGPT work out of session descriptions, human time estimates and Highlights, because those use the classifier's tiers. It does not stop use case judging, process mining, skill drafting, the intent assessment or the personal-data check. To stop new ChatGPT and Codex prompts reaching Anthropic altogether, remove the OpenAI Admin API key: no new activity then arrives. Prompts already stored can still be read by the features in the table until retention removes them, unless you switch those features off.
 
 ## The Analytics and Admin API pulls
 
@@ -266,11 +304,12 @@ Every model call depends on the Claude API key. Without a key, no model call is 
 | Session descriptions off | No descriptions written; existing ones hidden |
 | Human time off (Cowork, Code) | No estimates |
 | Work Pulse off | No Cowork work classifier, session descriptions, Claude Cowork human time estimates or scheduled Work Pulse briefings |
-| Classify ChatGPT prompts off | No ChatGPT prompt sent to the Cowork work classifier |
-| Classify Codex sessions off | No Codex session sent to the Claude Code session classifier |
+| Classify ChatGPT prompts off | No ChatGPT prompt sent to the Cowork work classifier; new ChatGPT work gets no tier, so it is also left out of session descriptions, human time estimates and Highlights |
+| Classify Codex sessions off | No Codex session sent to the Claude Code session classifier or for Code human time estimates |
+| OpenAI Admin API key removed | No new ChatGPT or Codex activity arrives, so none reaches Anthropic. See [ChatGPT and Codex prompts in AI features](#chatgpt-and-codex-prompts-in-ai-features) for what stored prompts still feed |
 | Highlights off | No Highlights drafts |
 
-With no key, the following continue to work in full: telemetry capture and the Audit Log; personal-data detection and its alerts, without the confirmation step; intent detection, with alerts at each category's default severity; measured Claude Cowork and Claude Code figures (sessions, active time, commits, pull requests, lines, spend, session output); FinOps chargeback and Spend Review cost figures; the Skills and Connectors Board; the Weekly Digest; the Metrics Connector; use case tracking through codified skills; alerts to Slack; and retention, export and erasure.
+With no key, the following continue to work in full: telemetry capture, the OpenAI sync and the Audit Log; personal-data detection and its alerts, without the confirmation step; intent detection, with alerts at each category's default severity; measured Claude Cowork and Claude Code figures (sessions, active time, commits, pull requests, lines, spend, session output), and ChatGPT and Codex prompts, commits and spend; FinOps chargeback and Spend Review cost figures; the Skills and Connectors Board; the Weekly Digest; the Metrics Connector; use case tracking through codified skills; alerts to Slack; and retention, export and erasure.
 
 Everything in the inventory stops, including governance reports, which are model-written. Figures that depend on the AI-judged kind of work, such as Spend Review's comparison with colleagues on the same work, lose that breakdown.
 
@@ -284,6 +323,7 @@ Because Command Centre runs on infrastructure you control, under your keys, each
 | Anthropic (Compliance API) | Source of Claude Chat history | Inbound only: Claude Chat prompts and metadata; outbound key and cursors | Your organisation |
 | Anthropic (Analytics API, on the roadmap) | Source of daily per-person usage counts | Inbound only: each person's Anthropic user identifier, email address and daily activity counts; outbound key, date and cursors | Your organisation, optional |
 | Anthropic (Admin API, on the roadmap) | Source of the organisation cost report and members' spend limits | Inbound only: organisation cost by model and type; each member's name, email address, spend limit, spend so far and any pending request for more usage; outbound key and query parameters | Your organisation, optional |
+| OpenAI (Compliance Logs Platform) | Source of ChatGPT and Codex activity | Inbound only: each person's email address, prompts, names of attached files, reply models and times, skill and connector names, Codex turns and tool calls, and hourly cost; stored as described under [The OpenAI export pull](#the-openai-export-pull). Outbound: the key, workspace and organisation IDs and how far the sync has read | Your organisation, optional |
 | Your hosting provider, if any | Hosting, for example AWS or Azure | All Command Centre data at rest | Your organisation |
 | Slack | Weekly Digest, high-priority alerts, Highlights | Alert titles and explanations, which may name a person and, for intent alerts, can quote the prompt; administrator-edited Highlights text | Your organisation, optional |
 | Email (your SMTP relay) | Weekly Digest, password reset | Recipient addresses; digest content | Your organisation, optional |
