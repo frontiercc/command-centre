@@ -95,6 +95,9 @@ describe('runSystemHealthAlerts (postgres)', () => {
       run(`INSERT INTO cowork_messages (id, session_id, message_type, surface, occurred_at, ingested_at)
            VALUES ('${id}', 's-${id}', 'cowork_user_message', '${surface}', ${occurredAt}, ${ingestedAt})`);
     const silence = async () => (await alerts()).filter(a => a.rule === 'telemetry_silence');
+    const clearOpenAi = async () => {
+      for (const t of ['openai_replies', 'openai_costs', 'codex_turns', 'codex_actions']) await run(`DELETE FROM ${t}`);
+    };
 
     it('raises one alert per quiet surface, from when the hub last RECEIVED it, once per silence', async () => {
       await msg('c1', 'cowork', WED - 4 * 3600);   // Cowork quiet 4 working hours
@@ -112,6 +115,26 @@ describe('runSystemHealthAlerts (postgres)', () => {
       await run(`INSERT INTO code_otel_metrics (id, metric_name, occurred_at, ingested_at) VALUES ('m2', 'claude_code.lines_of_code.count', ${WED + 86000}, ${WED + 86000})`);
       expect(await runAt(WED + 86400)).toBe(1);
       expect(await silence()).toHaveLength(2);
+    });
+
+    it("watches OpenAI's export as one source, and its rows never keep a Claude feed alive", async () => {
+      await clearOpenAi();
+      await msg('k1', 'code', WED - 600);
+      await run(`INSERT INTO code_otel_metrics (id, metric_name, occurred_at, ingested_at) VALUES ('m1', 'claude_code.lines_of_code.count', ${WED - 600}, ${WED - 600})`);
+      // Cowork quiet 4 working hours; a ChatGPT prompt 10 minutes ago must not hide that.
+      await msg('c1', 'cowork', WED - 4 * 3600);
+      await run(`INSERT INTO cowork_messages (id, session_id, message_type, surface, source, occurred_at, ingested_at)
+                 VALUES ('g1', 'chatgpt:g1', 'cowork_user_message', 'cowork', 'chatgpt_chat', ${WED - 600}, ${WED - 600})`);
+      expect(await runAt(WED)).toBe(1);
+      expect((await silence()).map(a => a.subject)).toEqual(['cowork']);
+
+      // The export goes quiet: its newest row of any kind is 4 working hours old.
+      await run(`UPDATE cowork_messages SET ingested_at = ${WED - 5 * 3600} WHERE id = 'g1'`);
+      await run(`INSERT INTO codex_turns (id, user_id, session_id, started_at, ingested_at) VALUES ('t1', 'u1', 'codex:t1', ${WED - 4 * 3600}, ${WED - 4 * 3600})`);
+      expect(await runAt(WED + 60)).toBe(1);
+      const openai = (await silence()).filter(a => a.subject === 'openai_export');
+      expect(openai).toEqual([{ title: 'No ChatGPT and Codex export data for 4 working hours', severity: 'high', user_id: null, rule: 'telemetry_silence', subject: 'openai_export' }]);
+      await clearOpenAi();
     });
 
     it('follows the hub settings: 0 hours is off, and the time zone moves the working day', async () => {

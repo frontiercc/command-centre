@@ -246,7 +246,7 @@ The **authentication event log** records sign-ins and failures, lockouts, MFA fa
 
 The Hub and Collector write their logs to standard output and standard error; with Docker Compose, `docker compose logs` shows them. Keeping those logs, alerting on them and forwarding them to your monitoring or SIEM are yours to set up.
 
-Within the application, failures of scheduled jobs and ingest, rejected integration keys and unreadable secrets are recorded and shown on the System health page. Optional alerts cover job failures, unreadable secrets and telemetry silence (no Claude Cowork, Claude Code or Claude Code metrics data for three working hours by default). Any high or critical alert can be forwarded to a Slack channel you nominate within the hour.
+Within the application, failures of scheduled jobs and ingest, rejected integration keys and unreadable secrets are recorded and shown on the System health page. Optional alerts cover job failures, unreadable secrets and telemetry silence (no Claude Cowork, Claude Code, Claude Code metrics or, when connected, OpenAI export data for three working hours by default). Any high or critical alert can be forwarded to a Slack channel you nominate within the hour.
 
 ## Vulnerability management and secure development
 
