@@ -16,22 +16,6 @@ export const OPENAI_SOURCE_LABELS: Record<OpenAiSource, string> = {
   codex: 'Codex',
 };
 
-/**
- * The surface label the Audit Log shows for each source. The stored surface
- * stays 'cowork' or 'code' (that is what puts the prompts in Work Pulse and
- * Developer Pulse); only the label names the product.
- */
-export const OPENAI_SURFACE_LABELS: Record<OpenAiSource, string> = {
-  chatgpt_chat: 'chat',
-  chatgpt_work: 'work',
-  codex: 'codex',
-};
-
-/** The surface label for a row: its product for OpenAI rows, its stored surface otherwise. */
-export function surfaceLabel(surface: string, source: string | null | undefined): string {
-  return isOpenAiSource(source) ? OPENAI_SURFACE_LABELS[source] : surface;
-}
-
 /** `users.source` for a person first seen through the OpenAI sync. */
 export const OPENAI_USER_SOURCE = 'openai';
 

@@ -14,7 +14,10 @@ import { useCorePlatformGuard } from '@/components/shared/useCorePlatformGuard';
 import { PageBody, Panel, PanelFoot, Notice, Empty, Tag, Dot, T, B, SEVERITY_COLOR } from '@/components/precision/ui';
 import WhereMoneyWent, { SplitLine, spendMoney } from '@/components/finance/WhereMoneyWent';
 import { hasBreakdown, type SpendSplit } from '@/lib/finance/where-money-went';
-import { isOpenAiSource, OPENAI_SOURCE_LABELS, surfaceLabel } from '@/lib/openai/sources';
+import { isOpenAiSource, OPENAI_SOURCE_LABELS } from '@/lib/openai/sources';
+import { PRODUCTS, productLabel, productOf } from '@/lib/dashboard/vendor';
+import { useConnectedProducts } from '@/components/shared/VendorSwitch';
+import { isOpenAiOnly } from '@/lib/sources/connected-shared';
 
 interface AuditEvent {
   id: string;
@@ -356,7 +359,7 @@ function CoworkThread({ messages }: { messages: CoworkMessage[] }) {
 }
 
 function SourceCell({ event }: { event: AuditEvent }) {
-  if (isOpenAiSource(event._source)) return <>{OPENAI_SOURCE_LABELS[event._source]}</>;
+  if (isOpenAiSource(event._source)) return <>OpenAI export</>;
   if (event._source === 'otel') return <>OTel</>;
   if (event._source === 'local-agent') return <>Agent</>;
   return <>{event.surface === 'cowork_partial' ? 'OpenTelemetry' : 'Compliance API'}</>;
@@ -404,7 +407,12 @@ export default function AuditPage() {
   const [chatThreadLoading, setChatThreadLoading] = useState(false);
 
   // Filters
-  const [surface, setSurface] = useState('');
+  const [product, setProduct] = useState('');
+  const connected = useConnectedProducts();
+  const openaiOnly = isOpenAiOnly(connected);
+  const openaiConnected = !!connected?.openai;
+  // The connected vendors' products (Claude's alone until OpenAI is connected).
+  const productOptions = PRODUCTS.filter(p => (p.vendor === 'openai' ? openaiConnected : !openaiOnly));
   const [sourceFilter, setSourceFilter] = useState('');
   const [userFilter, setUserFilter] = useState('');
   const [flaggedOnly, setFlaggedOnly] = useState(false);
@@ -462,7 +470,7 @@ export default function AuditPage() {
     if (resetOffset) setOffset(0);
 
     const params = new URLSearchParams();
-    if (surface) params.set('surface', surface);
+    if (product) params.set('product', product);
     if (sourceFilter) params.set('source', sourceFilter);
     if (userFilter) params.set('userId', userFilter);
     if (departmentFilter) params.set('department', departmentFilter);
@@ -497,11 +505,11 @@ export default function AuditPage() {
       })
       .catch(console.error)
       .finally(() => setLoading(false));
-  }, [surface, sourceFilter, userFilter, departmentFilter, flaggedOnly, dateFrom, dateTo, searchDebounced, offset]);
+  }, [product, sourceFilter, userFilter, departmentFilter, flaggedOnly, dateFrom, dateTo, searchDebounced, offset]);
 
   // Refetch on filter changes only; fetchEvents also changes with offset, which must not refetch page one.
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  useEffect(() => { fetchEvents(true); }, [surface, sourceFilter, userFilter, departmentFilter, flaggedOnly, dateFrom, dateTo, searchDebounced]);
+  useEffect(() => { fetchEvents(true); }, [product, sourceFilter, userFilter, departmentFilter, flaggedOnly, dateFrom, dateTo, searchDebounced]);
 
   // When a cowork/code/chat event is selected, fetch the full conversation thread
   const handleEventClick = useCallback((event: AuditEvent) => {
@@ -567,7 +575,7 @@ export default function AuditPage() {
     try { hasSessionId = JSON.parse(selectedEvent.metadata)?.session_id || null; } catch { /* ignore */ }
   }
 
-  const filtersActive = Boolean(searchDebounced || surface || sourceFilter || userFilter || departmentFilter || flaggedOnly || dateFrom || dateTo);
+  const filtersActive = Boolean(searchDebounced || product || sourceFilter || userFilter || departmentFilter || flaggedOnly || dateFrom || dateTo);
 
   if (noAccess) return (
     <>
@@ -616,23 +624,16 @@ export default function AuditPage() {
             />
           </label>
 
-          <select value={surface} onChange={e => setSurface(e.target.value)} className={B.select} aria-label="Surface">
-            <option value="">All surfaces</option>
-            <option value="chat">Chat</option>
-            <option value="code">Code</option>
-            <option value="cowork">Cowork</option>
+          <select value={product} onChange={e => setProduct(e.target.value)} className={B.select} aria-label="Product">
+            <option value="">All products</option>
+            {productOptions.map(p => <option key={p.id} value={p.id}>{p.label}</option>)}
           </select>
 
           <select value={sourceFilter} onChange={e => setSourceFilter(e.target.value)} className={B.select} aria-label="Source">
             <option value="">All sources</option>
-            <option value="otel">OpenTelemetry</option>
-            <option value="compliance">Compliance API</option>
-            <option value="chatgpt_chat">ChatGPT Chat</option>
-            <option value="chatgpt_work">ChatGPT Work</option>
-            <option value="codex">Codex</option>
-            <option value="cowork">Cowork</option>
-            <option value="code">Code Sessions</option>
-            <option value="chat">Chat</option>
+            {!openaiOnly && <option value="otel">OpenTelemetry</option>}
+            {!openaiOnly && <option value="compliance">Compliance API</option>}
+            {openaiConnected && <option value="openai">OpenAI export</option>}
           </select>
 
           <select value={userFilter} onChange={e => setUserFilter(e.target.value)} className={`${B.select} max-w-[220px]`} aria-label="User">
@@ -707,7 +708,7 @@ export default function AuditPage() {
                       <th scope="col" className={T.th}>Time</th>
                       <th scope="col" className={T.th}>User</th>
                       <th scope="col" className={`${T.th} hidden md:table-cell`}>Department</th>
-                      <th scope="col" className={T.th}>Surface</th>
+                      <th scope="col" className={T.th}>Product</th>
                       <th scope="col" className={`${T.th} hidden md:table-cell`}>Source</th>
                       <th scope="col" className={T.th}>Event</th>
                       <th scope="col" className={`${T.th} hidden lg:table-cell`}>Preview</th>
@@ -737,7 +738,7 @@ export default function AuditPage() {
                           </td>
                           <td className={`${T.tdMute} hidden md:table-cell`}>{event.department ?? '—'}</td>
                           <td className={`${T.td} whitespace-nowrap`}>
-                            <Tag>{surfaceLabel(event.surface, event._source)}</Tag>
+                            <Tag>{productLabel(productOf(event.surface, event._source))}</Tag>
                             {event.surface === 'cowork_partial' && (
                               <span className="ml-1 text-[13px] text-[#8F8F8F]">Metadata only</span>
                             )}
@@ -813,8 +814,8 @@ export default function AuditPage() {
               <dl className="m-0 grid grid-cols-[96px_minmax(0,1fr)] sm:grid-cols-[96px_minmax(0,1fr)_80px_minmax(0,1fr)] gap-x-3 gap-y-1.5 text-[13px]">
                 <dt className="text-[#8F8F8F]">User</dt>
                 <dd className="m-0 font-medium text-[#0A0A0A] break-all">{selectedEvent.user_id}</dd>
-                <dt className="text-[#8F8F8F]">Surface</dt>
-                <dd className="m-0"><Tag>{surfaceLabel(selectedEvent.surface, selectedEvent._source)}</Tag></dd>
+                <dt className="text-[#8F8F8F]">Product</dt>
+                <dd className="m-0"><Tag>{productLabel(productOf(selectedEvent.surface, selectedEvent._source))}</Tag></dd>
                 <dt className="text-[#8F8F8F]">Time</dt>
                 <dd className="m-0 tabular-nums">{new Date(selectedEvent.occurred_at * 1000).toLocaleString('en-GB')}</dd>
                 <dt className="text-[#8F8F8F]">Event</dt>

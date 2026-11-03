@@ -68,6 +68,25 @@ export type ProductCounts = Record<ProductId, number>;
 
 export const PRODUCT_IDS = PRODUCTS.map((p) => p.id) as ProductId[];
 
+export function isProductId(v: string | null | undefined): v is ProductId {
+  return !!v && (PRODUCT_IDS as string[]).includes(v);
+}
+
+export function productLabel(id: ProductId): string {
+  return PRODUCTS.find((p) => p.id === id)!.label;
+}
+
+/**
+ * The product a row came from, from its surface and source: the same rule as
+ * productExpr in lib/dashboard/product-sql.ts.
+ */
+export function productOf(surface: string | null | undefined, source: string | null | undefined): ProductId {
+  if (source === 'chatgpt_chat' || source === 'chatgpt_work' || source === 'codex') return source;
+  if (surface === 'chat') return 'claude_chat';
+  if (surface === 'code') return 'claude_code';
+  return 'claude_cowork';
+}
+
 export function zeroCounts(): ProductCounts {
   return { claude_chat: 0, chatgpt_chat: 0, claude_cowork: 0, chatgpt_work: 0, claude_code: 0, codex: 0 };
 }

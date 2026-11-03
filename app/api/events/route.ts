@@ -21,6 +21,8 @@ import { lacksDepartment, noDepartmentResponse } from '@/lib/auth/content-access
 import { logAccess } from '@/lib/audit/log';
 import { getCodeModelRates, priceModelsJson, priceTokens } from '@/lib/pulse/code/rates';
 import { isOpenAiSource, OPENAI_SOURCES, type OpenAiSource } from '@/lib/openai/sources';
+import { isProductId, type ProductId } from '@/lib/dashboard/vendor';
+import { productClause, vendorClause } from '@/lib/dashboard/product-sql';
 import { chatgptSessionShares } from '@/lib/finance/spend-review-openai';
 
 // ─── Raw-execution facade (mirrors lib/db/queries.ts's rawAll) ────────────────
@@ -82,7 +84,9 @@ async function getCoworkEventsForAudit(filters: {
   limit?: number;
   offset?: number;
   surface?: string;
+  /** A stored source, or 'openai' for all three OpenAI sources. */
   source?: string;
+  product?: ProductId;
   search?: string;
 }): Promise<Array<{
   id: string;
@@ -111,7 +115,9 @@ async function getCoworkEventsForAudit(filters: {
     if (filters.surface) conditions.push(sql`cm.surface = ${filters.surface}`);
     // Claude Chat prompts (surface 'chat') are listed by getChatEventsForAudit.
     else conditions.push(sql`COALESCE(cm.surface, '') <> 'chat'`);
-    if (filters.source) conditions.push(sql`cm.source = ${filters.source}`);
+    if (filters.source === 'openai') conditions.push(sql.raw(vendorClause('openai', 'cm.')));
+    else if (filters.source) conditions.push(sql`cm.source = ${filters.source}`);
+    if (filters.product) conditions.push(sql.raw(productClause(filters.product, 'cm.')));
     if (filters.search) {
       // UUID-shaped = exact ID match, otherwise content/user search
       if (UUID_RE.test(filters.search)) {
@@ -357,8 +363,10 @@ async function getSkillConnectorEventsForAudit(filters: {
   flaggedOnly?: boolean;
   surface?: string;
   /** Filter on the rows' own `source` column — 'compliance' rows came from
-   *  the Compliance API chat sync, everything else from OTel. */
-  source?: 'compliance' | 'otel';
+   *  the Compliance API chat sync, 'openai' rows from the OpenAI export,
+   *  everything else from OTel. */
+  source?: 'compliance' | 'otel' | 'openai';
+  product?: ProductId;
 }): Promise<Array<{
   id: string;
   user_id: string;
@@ -390,6 +398,8 @@ async function getSkillConnectorEventsForAudit(filters: {
     if (filters.surface) skillConds.push(sql`csi.surface = ${filters.surface}`);
     if (filters.source === 'compliance') skillConds.push(sql`csi.source = 'compliance'`);
     if (filters.source === 'otel') skillConds.push(sql`COALESCE(csi.source, '') NOT IN ('compliance', ${sql.join(OPENAI_SOURCES.map(v => sql`${v}`), sql`, `)})`);
+    if (filters.source === 'openai') skillConds.push(sql.raw(vendorClause('openai', 'csi.')));
+    if (filters.product) skillConds.push(sql.raw(productClause(filters.product, 'csi.')));
     const skillWhere = skillConds.length ? sql`WHERE ${sql.join(skillConds, sql` AND `)}` : sql``;
 
     const skillRows = await rawAll<{
@@ -439,6 +449,8 @@ async function getSkillConnectorEventsForAudit(filters: {
     if (filters.surface) mcpConds.push(sql`cmi.surface = ${filters.surface}`);
     if (filters.source === 'compliance') mcpConds.push(sql`cmi.source = 'compliance'`);
     if (filters.source === 'otel') mcpConds.push(sql`COALESCE(cmi.source, '') NOT IN ('compliance', ${sql.join(OPENAI_SOURCES.map(v => sql`${v}`), sql`, `)})`);
+    if (filters.source === 'openai') mcpConds.push(sql.raw(vendorClause('openai', 'cmi.')));
+    if (filters.product) mcpConds.push(sql.raw(productClause(filters.product, 'cmi.')));
     const mcpWhere = sql`WHERE ${sql.join(mcpConds, sql` AND `)}`;
 
     const mcpRows = await rawAll<{
@@ -602,7 +614,7 @@ export async function GET(request: NextRequest) {
     return NextResponse.json(event);
   }
 
-  const source = params.get('source'); // 'compliance' | 'otel' | 'cowork' | undefined (all)
+  const source = params.get('source'); // 'otel' | 'compliance' | 'openai', or an older value below
   const surface = params.get('surface') || undefined;
   const userId = params.get('userId') || undefined;
   // Admins see all departments; a manager is locked to their own department
@@ -616,20 +628,23 @@ export async function GET(request: NextRequest) {
   const limit = parseInt(params.get('limit') || '100');
   const offset = parseInt(params.get('offset') || '0');
 
-  if (source === 'otel') {
-    // OpenTelemetry: all cowork_messages ingested via OTel + skill/connector invocations
-    const messages = await getCoworkEventsForAudit({ userId, department, flaggedOnly, dateFrom, dateTo, search, limit, offset, source: 'otel' });
-    const skillsConnectors = await getSkillConnectorEventsForAudit({ userId, department, flaggedOnly, dateFrom, dateTo, search, limit, source: 'otel' });
-    const merged = [...messages, ...skillsConnectors]
+  // The page's filters: a product (Claude Chat ... Codex) and how the rows
+  // arrived (OpenTelemetry, the Compliance API or the OpenAI export).
+  const productParam = params.get('product');
+  const product = isProductId(productParam) ? productParam : (isOpenAiSource(source) ? source : undefined);
+  const arrival = source === 'otel' || source === 'compliance' || source === 'openai' ? source : undefined;
+  if (product || arrival) {
+    const parts = [];
+    // Claude Chat prompts (surface 'chat') come from getChatEventsForAudit; none arrive through OpenTelemetry or OpenAI.
+    if (product !== 'claude_chat') parts.push(getCoworkEventsForAudit({ userId, department, flaggedOnly, dateFrom, dateTo, search, limit, offset, source: arrival, product }));
+    if ((!product || product === 'claude_chat') && (!arrival || arrival === 'compliance')) {
+      parts.push(getChatEventsForAudit({ userId, department, flaggedOnly, dateFrom, dateTo, search, limit, offset, source: arrival }));
+    }
+    parts.push(getSkillConnectorEventsForAudit({ userId, department, flaggedOnly, dateFrom, dateTo, search, limit, source: arrival, product }));
+    const merged = (await Promise.all(parts)).flat()
       .sort((a, b) => b.occurred_at - a.occurred_at)
       .slice(0, limit);
     return NextResponse.json(merged);
-  }
-
-  if (isOpenAiSource(source)) {
-    // OpenAI sync: ChatGPT Chat, ChatGPT Work or Codex prompts, by their own source stamp.
-    const messages = await getCoworkEventsForAudit({ userId, department, flaggedOnly, dateFrom, dateTo, search, limit, offset, source });
-    return NextResponse.json(messages);
   }
 
   if (source === 'agent') {
@@ -637,17 +652,6 @@ export async function GET(request: NextRequest) {
     const messages = await getCoworkEventsForAudit({ userId, department, flaggedOnly, dateFrom, dateTo, search, limit, offset, source: 'agent' });
     const chatEvents = await getChatEventsForAudit({ userId, department, flaggedOnly, dateFrom, dateTo, search, limit, offset, source: 'agent' });
     const merged = [...messages, ...chatEvents]
-      .sort((a, b) => b.occurred_at - a.occurred_at)
-      .slice(0, limit);
-    return NextResponse.json(merged);
-  }
-
-  if (source === 'compliance') {
-    // Compliance API: chat events synced server-side (agent_id NULL), plus
-    // the chat connector invocations the same sync writes (source='compliance').
-    const events = await getChatEventsForAudit({ userId, department, flaggedOnly, dateFrom, dateTo, search, limit, offset, source: 'compliance' });
-    const connectors = await getSkillConnectorEventsForAudit({ userId, department, flaggedOnly, dateFrom, dateTo, search, limit, source: 'compliance' });
-    const merged = [...events, ...connectors]
       .sort((a, b) => b.occurred_at - a.occurred_at)
       .slice(0, limit);
     return NextResponse.json(merged);

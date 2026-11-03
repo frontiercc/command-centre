@@ -5,7 +5,7 @@
 // (lib/dashboard/vendor.ts). Each takes an optional table alias prefix such as
 // 'cm.'. The strings hold only fixed source and surface names, never input.
 import { OPENAI_SOURCES } from '@/lib/openai/sources';
-import type { Vendor, WorkKind } from './vendor';
+import type { ProductId, Vendor, WorkKind } from './vendor';
 
 const OPENAI_LIST = OPENAI_SOURCES.map((s) => `'${s}'`).join(', ');
 
@@ -51,6 +51,18 @@ export function toolTagExpr(p = ''): string {
   return `CASE WHEN ${p}source = 'codex' THEN 'Codex'`
     + ` WHEN ${vendorClause('openai', p)} THEN 'ChatGPT'`
     + ` ELSE 'Claude' END`;
+}
+
+/**
+ * Rows of one product, for cowork_messages and the invocation tables (both
+ * carry surface and source). Matches productExpr row for row.
+ */
+export function productClause(product: ProductId, p = ''): string {
+  if (product === 'chatgpt_chat' || product === 'chatgpt_work' || product === 'codex') return `${p}source = '${product}'`;
+  const claude = vendorClause('claude', p);
+  if (product === 'claude_chat') return `(${p}surface = 'chat' AND ${claude})`;
+  if (product === 'claude_code') return `(${p}surface = 'code' AND ${claude})`;
+  return `(COALESCE(${p}surface, '') NOT IN ('chat', 'code') AND ${claude})`;
 }
 
 /** SQL expression naming a cowork_messages row's product (lib/dashboard/vendor.ts PRODUCTS). */
