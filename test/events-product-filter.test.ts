@@ -41,6 +41,8 @@ async function setupDb() {
   await db.insert(schema.coworkMcpInvocations).values([
     { id: 'mcp-claude', user_id: 'u1', session_id: 's-claude-cowork', mcp_server: 'salesforce', mcp_tool: 'soql', occurred_at: 210, source: 'otel', surface: 'cowork' },
     { id: 'mcp-chatgpt', user_id: 'u1', session_id: 's-chatgpt-work', mcp_server: 'notion', mcp_tool: 'search', occurred_at: 510, source: 'chatgpt_work', surface: 'cowork' },
+    // Stamped 'agent', the column default (the retired agent, older seed data): shown under All sources only.
+    { id: 'mcp-unstamped', user_id: 'u1', session_id: 's-claude-cowork', mcp_server: 'jira', mcp_tool: 'search', occurred_at: 220, source: 'agent', surface: 'cowork' },
   ]);
   return { cleanup };
 }
@@ -57,11 +59,20 @@ describe('GET /api/events product and arrival filters', () => {
     const { cleanup } = await setupDb();
     try {
       expect(await ids('/api/events?product=claude_chat')).toEqual(['claude-chat']);
-      expect(await ids('/api/events?product=claude_cowork')).toEqual(['claude-cowork', 'mcp-claude']);
+      expect(await ids('/api/events?product=claude_cowork')).toEqual(['claude-cowork', 'mcp-claude', 'mcp-unstamped']);
       expect(await ids('/api/events?product=claude_code')).toEqual(['claude-code']);
       expect(await ids('/api/events?product=chatgpt_chat')).toEqual(['chatgpt-chat']);
       expect(await ids('/api/events?product=chatgpt_work')).toEqual(['chatgpt-work', 'mcp-chatgpt']);
       expect(await ids('/api/events?product=codex')).toEqual(['codex']);
+    } finally {
+      await cleanup();
+    }
+  });
+
+  it('shows agent-stamped rows under All sources only', async () => {
+    const { cleanup } = await setupDb();
+    try {
+      expect(await ids('/api/events')).toContain('mcp-unstamped');
     } finally {
       await cleanup();
     }

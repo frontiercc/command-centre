@@ -20,7 +20,7 @@ import { getAdminSession, canAccessAuditLog } from '@/lib/auth/admin-auth';
 import { lacksDepartment, noDepartmentResponse } from '@/lib/auth/content-access';
 import { logAccess } from '@/lib/audit/log';
 import { getCodeModelRates, priceModelsJson, priceTokens } from '@/lib/pulse/code/rates';
-import { isOpenAiSource, OPENAI_SOURCES, type OpenAiSource } from '@/lib/openai/sources';
+import { isOpenAiSource, type OpenAiSource } from '@/lib/openai/sources';
 import { isProductId, type ProductId } from '@/lib/dashboard/vendor';
 import { productClause, vendorClause } from '@/lib/dashboard/product-sql';
 import { chatgptSessionShares } from '@/lib/finance/spend-review-openai';
@@ -397,7 +397,7 @@ async function getSkillConnectorEventsForAudit(filters: {
     if (filters.search) skillConds.push(sql`csi.skill_name ${likeKeyword()} ${`%${filters.search}%`}`);
     if (filters.surface) skillConds.push(sql`csi.surface = ${filters.surface}`);
     if (filters.source === 'compliance') skillConds.push(sql`csi.source = 'compliance'`);
-    if (filters.source === 'otel') skillConds.push(sql`COALESCE(csi.source, '') NOT IN ('compliance', ${sql.join(OPENAI_SOURCES.map(v => sql`${v}`), sql`, `)})`);
+    if (filters.source === 'otel') skillConds.push(sql`csi.source = 'otel'`);
     if (filters.source === 'openai') skillConds.push(sql.raw(vendorClause('openai', 'csi.')));
     if (filters.product) skillConds.push(sql.raw(productClause(filters.product, 'csi.')));
     const skillWhere = skillConds.length ? sql`WHERE ${sql.join(skillConds, sql` AND `)}` : sql``;
@@ -448,7 +448,7 @@ async function getSkillConnectorEventsForAudit(filters: {
     }
     if (filters.surface) mcpConds.push(sql`cmi.surface = ${filters.surface}`);
     if (filters.source === 'compliance') mcpConds.push(sql`cmi.source = 'compliance'`);
-    if (filters.source === 'otel') mcpConds.push(sql`COALESCE(cmi.source, '') NOT IN ('compliance', ${sql.join(OPENAI_SOURCES.map(v => sql`${v}`), sql`, `)})`);
+    if (filters.source === 'otel') mcpConds.push(sql`cmi.source = 'otel'`);
     if (filters.source === 'openai') mcpConds.push(sql.raw(vendorClause('openai', 'cmi.')));
     if (filters.product) mcpConds.push(sql.raw(productClause(filters.product, 'cmi.')));
     const mcpWhere = sql`WHERE ${sql.join(mcpConds, sql` AND `)}`;
