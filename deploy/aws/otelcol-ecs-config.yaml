@@ -40,6 +40,11 @@ receivers:
         endpoint: 0.0.0.0:4318
         auth:
           authenticator: bearertokenauth/receiver
+        # Claude in Office posts from the user's browser (pivot.claude.ai),
+        # so the receiver must answer the browser's cross-origin check.
+        cors:
+          allowed_origins: ["https://pivot.claude.ai"]
+          allowed_headers: ["Authorization", "Content-Type"]
 
 processors:
   batch:
@@ -49,6 +54,7 @@ processors:
 exporters:
   otlphttp:
     logs_endpoint: https://${HUB_HOST}/api/otel/ingest
+    traces_endpoint: https://${HUB_HOST}/api/otel/ingest
     metrics_endpoint: https://${HUB_HOST}/api/otel/ingest
     compression: none
     encoding: json
@@ -71,6 +77,11 @@ service:
   extensions: [bearertokenauth/receiver, bearertokenauth/exporter, file_storage, health_check]
   pipelines:
     logs:
+      receivers: [otlp]
+      processors: [batch]
+      exporters: [otlphttp]
+    # Claude in Office (Excel, Word, PowerPoint, Outlook) sends traces.
+    traces:
       receivers: [otlp]
       processors: [batch]
       exporters: [otlphttp]

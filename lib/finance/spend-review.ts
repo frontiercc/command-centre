@@ -27,7 +27,7 @@
  * at least MIN_PEER_USERS other people did the same kind of work, so no figure
  * can be traced to one colleague. Colleagues are never named.
  */
-import { and, eq, gte, inArray, lt, isNotNull, sql } from 'drizzle-orm';
+import { and, eq, gte, inArray, lt, isNotNull, isNull, sql } from 'drizzle-orm';
 import { getTypedClient } from '@/lib/db/client';
 import { schema } from '@/lib/db/schema';
 import { jsonToText } from '@/lib/db/json';
@@ -640,7 +640,10 @@ async function coworkSpendBySession(
 ): Promise<Map<string, SessionAcc>> {
   const cm = schema.coworkMessages;
   const select = { session_id: cm.session_id, user_id: cm.user_id, model: cm.model, cost_usd: cm.cost_usd, token_usage: cm.token_usage, agent_name: cm.agent_name, skill_name: cm.skill_name, query_source: cm.query_source };
-  const where = and(eq(cm.message_type, 'cowork_api_request'), gte(cm.occurred_at, start), lt(cm.occurred_at, end));
+  // Cowork only: Claude in Office (product set) has no cost and its own estimated
+  // line (lib/finance/office-spend.ts), so it never enters Cowork's kinds of work,
+  // colleague comparisons or advice.
+  const where = and(eq(cm.message_type, 'cowork_api_request'), isNull(cm.product), gte(cm.occurred_at, start), lt(cm.occurred_at, end));
   const rows = 'all' in filter
     ? await client.select(select).from(cm).where(where)
     : 'userId' in filter
@@ -1086,7 +1089,7 @@ async function buildPopulation(client: Client, rates: ModelRates, start: number,
       .selectDistinct({ session_id: cm.session_id })
       .from(pc)
       .innerJoin(cm, eq(cm.id, pc.cowork_message_id))
-      .where(and(inArray(pc.task_type, coworkKinds), gte(cm.occurred_at, start), lt(cm.occurred_at, end)));
+      .where(and(inArray(pc.task_type, coworkKinds), isNull(cm.product), gte(cm.occurred_at, start), lt(cm.occurred_at, end)));
     const wanted = new Set(coworkKinds);
     for (const part of chunks(cand.map(r => r.session_id))) {
       for (const [sid, kind] of await buildSessionTaskTypeMap(client, part)) if (wanted.has(kind)) sessionKind.set(sid, `cowork:${kind}`);

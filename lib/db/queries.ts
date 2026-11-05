@@ -608,13 +608,13 @@ export async function getCoworkSessionCountThisWeek(): Promise<number> {
   const weekAgo = Math.floor(Date.now() / 1000) - 7 * 24 * 60 * 60;
   const cm = schema.coworkMessages;
 
-  // Primary: count from cowork_messages (has actual session content). Table
-  // existence is guaranteed by the schema/migrations —
-  // the legacy "table may not exist" try/catch guard is no longer needed.
+  // Work sessions: Cowork and Claude in Office (both surface 'cowork'; Office
+  // rows carry `product`). Claude Code shares this table (surface 'code') and is
+  // counted on its own card, so it is left out here.
   const coworkRows = await db
     .select({ count: sql<number | string>`count(distinct ${cm.session_id})` })
     .from(cm)
-    .where(and(gte(cm.occurred_at, weekAgo), sql`${cm.session_id} != ''`));
+    .where(and(gte(cm.occurred_at, weekAgo), sql`${cm.session_id} != ''`, sql`COALESCE(${cm.surface}, 'cowork') = 'cowork'`));
   const coworkCount = Number(coworkRows[0]?.count ?? 0);
   if (coworkCount > 0) return coworkCount;
 

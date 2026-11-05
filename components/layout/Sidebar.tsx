@@ -206,7 +206,7 @@ export default function Sidebar({ theme = 'default' }: { theme?: Theme }) {
   const logout = async () => {
     clearNavCache();
     await fetch('/api/admin/logout', { method: 'POST' });
-    window.location.href = '/login';
+    window.location.href = '/admin/login';
   };
 
   if (theme === 'precision') {
@@ -481,7 +481,7 @@ export default function Sidebar({ theme = 'default' }: { theme?: Theme }) {
           onClick={async () => {
             clearNavCache();
             await fetch('/api/admin/logout', { method: 'POST' });
-            window.location.href = '/login';
+            window.location.href = '/admin/login';
           }}
           className="flex items-center gap-3 px-3 py-2.5 rounded-[12px] text-sm font-medium transition-colors hover:bg-sidebar-hover hover:text-white w-full mt-1"
         >

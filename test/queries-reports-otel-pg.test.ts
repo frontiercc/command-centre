@@ -188,6 +188,8 @@ async function runSpec(): Promise<void> {
     await (client as any).insert(schema.coworkMessages).values([
       { id: 'cm-1', session_id: 'sess-x', user_id: 'user-1', message_type: 'cowork_user_message', occurred_at: NOW - 10, ingested_at: NOW - 10 },
       { id: 'cm-2', session_id: 'sess-y', user_id: 'user-2', message_type: 'cowork_user_message', occurred_at: NOW - (2 * DAY), ingested_at: NOW - (2 * DAY) },
+      // A Claude Code session this week: not a work session (Code has its own card).
+      { id: 'cm-3', session_id: 'sess-z', user_id: 'user-2', message_type: 'code_user_message', surface: 'code', occurred_at: NOW - (3 * DAY), ingested_at: NOW - (3 * DAY) },
     ]);
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     await (client as any).insert(schema.chatMessages).values([
@@ -216,7 +218,8 @@ async function runSpec(): Promise<void> {
     // ── getCoworkSessionCountThisWeek: primary cowork_messages, fallback
     //    to otel_events when cowork has no recent sessions ───────────────
     // cm-1 (sess-x, -10s) is within the week; cm-2 (sess-y) is 2 days old but
-    // still within 7 days — both sess-x and sess-y count = 2.
+    // still within 7 days — both sess-x and sess-y count = 2; sess-z is
+    // Claude Code and is left out.
     const thisWeek = await getCoworkSessionCountThisWeek();
     expect(thisWeek).toBe(2);
     expect(typeof thisWeek).toBe('number');

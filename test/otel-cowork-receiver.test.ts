@@ -108,6 +108,27 @@ describe('processOtlpLogs', () => {
     expect(result.logsInserted).toBe(1);
   });
 
+  it('keeps where the session ran (cowork_surface on the record) on the user prompt', async () => {
+    await processOtlpLogs(
+      makePayload('claude_code.user_prompt', { prompt: '<REDACTED>', cowork_surface: 'Remote ' }));
+    const row = (await sql.get("SELECT session_location FROM cowork_messages WHERE prompt_id = 'prompt_001'")) as { session_location: string | null };
+    expect(row.session_location).toBe('remote');
+  });
+
+  it('reads cowork_surface from the resource when the record does not carry it', async () => {
+    const payload = makePayload('claude_code.user_prompt', { prompt: 'Hello' });
+    payload.resourceLogs[0].resource.attributes.push({ key: 'cowork_surface', value: { stringValue: 'local' } });
+    await processOtlpLogs(payload);
+    const row = (await sql.get("SELECT session_location FROM cowork_messages WHERE prompt_id = 'prompt_001'")) as { session_location: string | null };
+    expect(row.session_location).toBe('local');
+  });
+
+  it('leaves session_location NULL when the client sends no cowork_surface', async () => {
+    await processOtlpLogs(makePayload('claude_code.user_prompt', { prompt: 'Hello' }));
+    const row = (await sql.get("SELECT session_location FROM cowork_messages WHERE prompt_id = 'prompt_001'")) as { session_location: string | null };
+    expect(row.session_location).toBeNull();
+  });
+
   it('routes tool_result with mcp_server_scope to cowork_mcp_invocations', async () => {
     await processOtlpLogs(
       makePayload('claude_code.tool_result', {

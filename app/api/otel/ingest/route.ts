@@ -5,6 +5,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { logError } from '@/lib/api/errors';
 import { BodyTooLargeError, INGEST_BODY_LIMIT, INGEST_LOG_OVER, readJsonLimited } from '@/lib/api/body';
 import { processOtlpLogs } from '@/lib/otel/cowork-receiver';
+import { processOfficeSpans, OFFICE_SERVICE_NAME } from '@/lib/otel/office-receiver';
 import { processCodeOtlpLogs } from '@/lib/otel/code-receiver';
 import { processCodeOtlpMetrics } from '@/lib/otel/code-metrics-receiver';
 import { authenticateIngest } from '@/lib/auth/ingest-auth';
@@ -63,11 +64,11 @@ export async function POST(request: NextRequest) {
       console.warn(`[OTel Ingest] large request: ${bytes} bytes (collector=${auth.isCollector ?? false})`);
     }
 
-    // Logs and metrics only. Traces are not accepted: the collector forwards
-    // none, and a span carries tool inputs and file paths, which are never stored.
-    if (!payload.resourceLogs && !payload.resourceMetrics) {
+    // Logs, metrics, and traces from Claude in Office only. Any other trace is
+    // refused: a span carries tool inputs and file paths, which are never stored.
+    if (!payload.resourceLogs && !payload.resourceMetrics && !payload.resourceSpans) {
       return NextResponse.json(
-        { error: 'Missing resourceLogs or resourceMetrics' },
+        { error: 'Missing resourceLogs, resourceMetrics or resourceSpans' },
         { status: 400 }
       );
     }
@@ -135,7 +136,18 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ processed: 0, skipped: 0, errors: [`Metrics ignored for service.name: ${serviceName || '(empty)'}`] });
     }
 
-    return NextResponse.json({ error: 'Missing resourceLogs or resourceMetrics' }, { status: 400 });
+    // Traces: Claude in Office (service.name 'office-agent') only, per resource as
+    // above. Its receiver keeps the prompt, model, tokens and tool names, and
+    // never the tool input or output (document content). Other spans are ignored.
+    const spanEntries = (payload.resourceSpans ?? []) as ResourceBlock;
+    const office = spanEntries.filter(e => serviceNameOf(e) === OFFICE_SERVICE_NAME);
+    if (office.length) {
+      const result = await processOfficeSpans({ ...payload, resourceSpans: office });
+      await noteFirstTelemetry('cowork');
+      return NextResponse.json(result);
+    }
+    const spanService = spanEntries.length ? serviceNameOf(spanEntries[0]) : '';
+    return NextResponse.json({ processed: 0, skipped: 0, errors: [`Spans ignored for service.name: ${spanService || '(empty)'}`] });
   } catch (err) {
     const message = err instanceof Error ? err.message : String(err);
     logError('OTel Ingest', err);

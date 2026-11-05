@@ -40,6 +40,8 @@ const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/
 
 interface CoworkEventRow {
   id: string;
+  /** Claude in Office app (migration 0039); NULL = Cowork or Code. */
+  product?: string | null;
   session_id: string;
   user_id: string | null;
   message_type: string;
@@ -67,6 +69,9 @@ interface ChatEventRow {
   source: string;
 }
 
+/** App filter values the Audit Log accepts: Cowork alone, any Office app, or one Office app. */
+const AUDIT_APPS = new Set(['cowork', 'office', 'excel', 'word', 'powerpoint', 'outlook']);
+
 /**
  * Get cowork messages projected into the same shape as compliance events,
  * so the audit log can show them inline.
@@ -82,6 +87,8 @@ async function getCoworkEventsForAudit(filters: {
   surface?: string;
   source?: string;
   search?: string;
+  /** Work Pulse app: 'cowork' (Cowork only), 'office' (any Office app) or one Office app. */
+  app?: string;
 }): Promise<Array<{
   id: string;
   user_id: string;
@@ -108,6 +115,9 @@ async function getCoworkEventsForAudit(filters: {
     if (filters.dateTo) conditions.push(sql`cm.occurred_at <= ${filters.dateTo}`);
     if (filters.surface) conditions.push(sql`cm.surface = ${filters.surface}`);
     if (filters.source) conditions.push(sql`cm.source = ${filters.source}`);
+    if (filters.app === 'cowork') conditions.push(sql`cm.product IS NULL`);
+    else if (filters.app === 'office') conditions.push(sql`cm.product IS NOT NULL`);
+    else if (filters.app) conditions.push(sql`cm.product = ${filters.app}`);
     if (filters.search) {
       // UUID-shaped = exact ID match, otherwise content/user search
       if (UUID_RE.test(filters.search)) {
@@ -136,7 +146,7 @@ async function getCoworkEventsForAudit(filters: {
       code_input_tokens: number | null; code_output_tokens: number | null;
       code_tool_use_count: number | null; code_models_json: string | null; code_active_secs: number | null;
     }>(client, sql`
-       SELECT cm.id, cm.session_id, cm.user_id, cm.message_type, cm.role, cm.content_preview, cm.content_full, cm.flagged, cm.flag_reason, cm.pii_verdict_reason, cm.occurred_at, cm.ingested_at, cm.surface, cm.source, cm.prompt_id,
+       SELECT cm.id, cm.session_id, cm.user_id, cm.message_type, cm.role, cm.content_preview, cm.content_full, cm.flagged, cm.flag_reason, cm.pii_verdict_reason, cm.occurred_at, cm.ingested_at, cm.surface, cm.source, cm.prompt_id, cm.product,
               COALESCE(au.display_name, u.display_name) as user_display_name, COALESCE(au.department, u.department) as user_department,
               css.total_cost_usd, css.total_input_tokens, css.total_output_tokens, css.tool_call_count, css.unique_tools, css.models_used, css.duration_secs,
               cs.files_uploaded,
@@ -174,6 +184,7 @@ async function getCoworkEventsForAudit(filters: {
       // Normalise legacy misnamed events: cowork_user_message on code surface → code_user_message
       event_type: (r.surface === 'code' && r.message_type === 'cowork_user_message') ? 'code_user_message' : r.message_type,
       surface: r.surface || 'cowork',
+      product: r.product ?? null,
       content_preview: r.content_full || r.content_preview,
       metadata: JSON.stringify({ role: r.role, session_id: r.session_id }),
       flagged: r.flagged,
@@ -505,6 +516,15 @@ export async function GET(request: NextRequest) {
   const search = params.get('search') || undefined;
   const limit = parseInt(params.get('limit') || '100');
   const offset = parseInt(params.get('offset') || '0');
+
+  // App filter (Work Pulse): Cowork alone, Claude in Office, or one Office app.
+  // Prompts only; skill and connector events carry no app. Overrides surface and source.
+  const app = params.get('app') || undefined;
+  if (app) {
+    if (!AUDIT_APPS.has(app)) return NextResponse.json({ error: 'Unknown app' }, { status: 400 });
+    const messages = await getCoworkEventsForAudit({ userId, department, flaggedOnly, dateFrom, dateTo, search, limit, offset, surface: 'cowork', app });
+    return NextResponse.json(messages);
+  }
 
   if (source === 'otel') {
     // OpenTelemetry: all cowork_messages ingested via OTel + skill/connector invocations

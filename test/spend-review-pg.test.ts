@@ -114,8 +114,8 @@ describe('spend review (postgres)', () => {
       const threeCalls = { inputTokens: 3_000_000, outputTokens: 300_000, cacheReadTokens: 0, cacheCreationTokens: 0 };
       // Colleagues' Sonnet has only 6 sessions behind it, under the 20 a suggestion needs, so
       // no evidenced save: the advice is a labelled trial of the cheapest model instead.
-      const expectedSaving = priceTokens('claude-opus-4-6', threeCalls, DEFAULT_RATES)! - priceTokens('claude-haiku-4-5', threeCalls, DEFAULT_RATES)!;
-      expect(model).toMatchObject({ kind: 'model', direction: 'trial', fromModel: 'claude-opus-4-6', toModel: 'claude-haiku-4-5', metric: null });
+      const expectedSaving = priceTokens('claude-opus-4-6', threeCalls, DEFAULT_RATES)! - priceTokens('claude-haiku-5-5', threeCalls, DEFAULT_RATES)!;
+      expect(model).toMatchObject({ kind: 'model', direction: 'trial', fromModel: 'claude-opus-4-6', toModel: 'claude-haiku-5-5', metric: null });
       expect((model as { estSavingUsd: number }).estSavingUsd).toBeCloseTo(expectedSaving, 6);
       const fitRow = report.models.find(r => r.model === 'claude-sonnet-4-6')!;
       expect(fitRow.colleagues).toMatchObject({ people: 3, sessions: 6, typicalSessionUsd: 2, deepRate: 0 });

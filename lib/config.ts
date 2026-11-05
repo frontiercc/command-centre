@@ -101,6 +101,10 @@ export interface AppConfig {
   // (the only Work Pulse feature that sends prompt text to the model outside
   // the classifier). Default 'true'.
   pulseSessionDescriptionsEnabled: string;
+  // 'false' hides the Claude in Office panels (Work Pulse By product, FinOps
+  // Office estimate) on hubs that do not use Office. Screens only: Office
+  // activity is still stored if it arrives. Default 'true'.
+  claudeInOfficeShown: string;
   // Human time vs Claude time. 'true' turns on the by-hand
   // estimate for Tier 2/3 sessions and shows the cards. Default 'false'.
   humanTimeEnabled: string;
@@ -381,6 +385,7 @@ export const CONFIG_KEYS: Record<keyof AppConfig, string> = {
   pulseBriefingModel: 'pulse_briefing_model',
   pulseUserBriefingModel: 'pulse_user_briefing_model',
   pulseSessionDescriptionsEnabled: 'pulse_session_descriptions_enabled',
+  claudeInOfficeShown: 'claude_in_office_shown',
   humanTimeEnabled: 'human_time_enabled',
   humanTimeCodeEnabled: 'human_time_code_enabled',
   systemHealthAlertsEnabled: 'system_health_alerts_enabled',
@@ -756,6 +761,7 @@ export async function getAllConfig(): Promise<AppConfig> {
     // the admin page shows which model that currently is.
     pulseUserBriefingModel: resolve('pulseUserBriefingModel'),
     pulseSessionDescriptionsEnabled: resolve('pulseSessionDescriptionsEnabled', 'true'),
+    claudeInOfficeShown: resolve('claudeInOfficeShown', 'true'),
     humanTimeEnabled: resolve('humanTimeEnabled', 'false'),
     humanTimeCodeEnabled: resolve('humanTimeCodeEnabled'),
     systemHealthAlertsEnabled: resolve('systemHealthAlertsEnabled', 'false'),

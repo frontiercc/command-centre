@@ -6,7 +6,8 @@ import { getAllConfig } from '@/lib/config';
 import { getAdminSession, canAccessPulseAdmin } from '@/lib/auth/admin-auth';
 import { logAccess } from '@/lib/audit/log';
 import { buildChargeback, type ChargebackReport } from '@/lib/finance/chargeback';
-import { currentPeriod } from '@/lib/finance/period';
+import { currentPeriod, monthBounds } from '@/lib/finance/period';
+import { officeSpendByUser, summariseOfficeSpend } from '@/lib/finance/office-spend';
 import { buildFinopsProjection } from '@/lib/finance/finops-projection';
 import { buildInsightFacts, composeInsightNarrative, type InsightFacts } from '@/lib/finance/insights';
 import { getSeatsSummary } from '@/lib/finance/seats';
@@ -70,5 +71,17 @@ export async function GET(request: NextRequest) {
   // snapshots — computed here, not in lib/finance/chargeback.ts.
   const seats = await getSeatsSummary(nowS).catch(() => null);
 
-  return NextResponse.json({ ...current, projection, insight, seats });
+  // Claude in Office: an estimate from tokens (Office sends no cost), shown
+  // beside the surfaces and never part of grandTotalUsd, a cost centre, a
+  // closed-period snapshot or the CSV. Computed here, like seats. Additive,
+  // never-throwing; every app listed (at zero before Office activity arrives),
+  // so the panel always shows.
+  const { start, end } = monthBounds(period);
+  // Admin → Work Pulse "Show Claude in Office" off hides the panel.
+  const officeShown = (await getAllConfig()).claudeInOfficeShown !== 'false';
+  const office = officeShown
+    ? await officeSpendByUser(start, end).then(rows => summariseOfficeSpend(rows, { allApps: true })).catch(() => null)
+    : null;
+
+  return NextResponse.json({ ...current, projection, insight, seats, office });
 }

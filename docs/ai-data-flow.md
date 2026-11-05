@@ -18,12 +18,12 @@ Command Centre only sees prompts after they have reached Claude, so it cannot bl
 
 ## Measured and AI-judged
 
-**Measured** figures are counted from Claude Code, Claude Cowork and Claude Chat activity. **AI-judged** figures are Claude's assessment of that work. Anything not measured is shown as "not measured", never as zero. For example:
+**Measured** figures are counted from Claude Code, Claude Cowork, Claude in Office and Claude Chat activity. **AI-judged** figures are Claude's assessment of that work. Anything not measured is shown as "not measured", never as zero. For example:
 
 | Measured from telemetry | Judged by AI |
 |---|---|
 | Prompts, sessions, active time, tokens, models used | How deeply work was delegated (Tiers 1 to 3), and the kind of work |
-| Spend, from Claude Code's token counts and Claude Cowork's reported cost | How long the work would take by hand (an estimate) |
+| Spend, from Claude Code's token counts and Claude Cowork's reported cost (Claude in Office spend is an estimate from its token counts, shown separately) | How long the work would take by hand (an estimate) |
 | Lines of code, commits, pull requests, edits accepted | Which use case a session belongs to, and suggested new use cases |
 | Session Output Rate, chargeback and FinOps totals | Briefings, recommendations, the risk score and the written parts of reports |
 | Personal data and intent detection (pattern and phrase matching) | Whether a possible personal-data match is genuine, and how serious a risky intent is |
@@ -85,6 +85,8 @@ The application makes no call to Anthropic beyond those listed in this document 
 
 ## Inventory of AI features
 
+Claude in Office (Excel, Word, PowerPoint and Outlook) prompts are stored beside Claude Cowork prompts with the app recorded, so every feature below that reads Claude Cowork prompts reads Claude in Office prompts too, under the same switches. No feature sends Office document content: Command Centre never stores it.
+
 The table lists every model call in the application. Defaults are the values a fresh installation uses; most model settings are chosen in the admin pages from the list of models your key can reach. "Masked" and "cleaned" describe the text preparation set out after the table. "Always on" marks a call that is part of a core function rather than a separately switchable feature; every call stops when the API key is removed.
 
 | Feature | Trigger | Model setting (default) | Data sent | Switch off |
@@ -145,7 +147,7 @@ For each Tier 2 or 3 Claude Cowork session in the last 30 days that has measured
 
 ### Briefings
 
-Four briefings are written by a model: a personal weekly briefing for each person with Claude Cowork work classified in the past week (Sunday evening), a monthly executive briefing (first of the month), department briefings (on request by an administrator or manager) and a weekly Claude Code briefing. They receive figures computed in code: tier counts, kinds of work, measured deep-work facts, department names, spend and shipping figures, with every percentage and week-on-week change worked out before the call. Department and executive briefings never receive names; the personal briefing receives the person's display name and their own figures. No prompt text, AI summary or file name is included.
+Four briefings are written by a model: a personal weekly briefing for each person with Claude Cowork work classified in the past week (Sunday evening), a monthly executive briefing (first of the month), department briefings (on request by an administrator or manager) and a weekly Claude Code briefing. They receive figures computed in code: tier counts, kinds of work, measured deep-work facts, department names, spend and shipping figures, and, when Claude in Office was used, sessions and people per app for the executive and department briefings, with every percentage and week-on-week change worked out before the call. Department and executive briefings never receive names; the personal briefing receives the person's display name and their own figures. No prompt text, AI summary or file name is included.
 
 Every briefing is number-checked: each number in the reply must appear in the data sent (rounded forms allowed). A refused reply gets one retry naming the offending numbers. If the retry is also refused, sentences carrying unchecked numbers are removed provided at least half the text survives; failing that, the exchange is repeated once more from the start, and if it still fails nothing is stored and the previous briefing remains on screen. Briefings are stored in the Hub database. Scheduled briefings run only while Work Pulse (or, for the Claude Code briefing, Developer Pulse) is on; administrators and managers can also request a briefing.
 

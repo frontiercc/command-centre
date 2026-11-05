@@ -24,7 +24,7 @@
  * flag's estimated ceiling; a row with no parseable tokens still counts its
  * real cost_usd toward spend (see `parseCoworkTokenUsage`).
  */
-import { and, eq, gte, inArray, lt } from 'drizzle-orm';
+import { and, eq, gte, inArray, isNull, lt } from 'drizzle-orm';
 import { getCodeWorkTypeLabeller } from '@/lib/pulse/code/tier-config';
 import { getTypedClient } from '@/lib/db/client';
 import { schema } from '@/lib/db/schema';
@@ -781,6 +781,8 @@ async function buildCoworkModelEfficiency(period: string): Promise<ModelEfficien
     .from(cm)
     .where(and(
       eq(cm.message_type, 'cowork_api_request'),
+      // Cowork only: Claude in Office has no cost and is estimated separately.
+      isNull(cm.product),
       gte(cm.occurred_at, start),
       lt(cm.occurred_at, end),
     ))) as CoworkSpendRow[];

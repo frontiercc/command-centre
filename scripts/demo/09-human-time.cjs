@@ -48,7 +48,7 @@ const { Client } = require('pg');
 const CLEAN_ONLY = process.argv.includes('--clean') || process.env.SEED_CLEAN === '1';
 const MARKER = 'ff11-';
 const SEEDED_MARK = 99;
-const SEEDED_PREFIXES = ['ff-', 'ff2-', 'ff3-', 'ff4-', 'ff5-', 'ff6-', 'ff7-', 'ff8-', 'ff9-', 'seedme-'];
+const SEEDED_PREFIXES = ['ff-', 'ff2-', 'ff3-', 'ff4-', 'ff5-', 'ff6-', 'ff7-', 'ff8-', 'ff9-', 'ff14-', 'seedme-'];
 const WINDOW_DAYS = 60;
 
 // Chosen so the sample reads like real data: by-hand time a few times the

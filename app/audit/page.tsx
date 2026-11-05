@@ -4,6 +4,7 @@
 
 'use client';
 
+import { PRODUCT_LABEL, type WorkProduct } from '@/lib/pulse/cowork/products';
 import { useEffect, useState, useCallback, useMemo, type ReactNode } from 'react';
 import { useSearchParams } from 'next/navigation';
 import TopBar from '@/components/layout/TopBar';
@@ -17,6 +18,8 @@ import { hasBreakdown, type SpendSplit } from '@/lib/finance/where-money-went';
 
 interface AuditEvent {
   id: string;
+  /** Claude in Office app, when the prompt came from Excel, Word, PowerPoint or Outlook. */
+  product?: string | null;
   user_id: string;
   department?: string | null;
   event_type: string;
@@ -404,6 +407,7 @@ export default function AuditPage() {
   // Filters
   const [surface, setSurface] = useState('');
   const [sourceFilter, setSourceFilter] = useState('');
+  const [appFilter, setAppFilter] = useState('');
   const [userFilter, setUserFilter] = useState('');
   const [flaggedOnly, setFlaggedOnly] = useState(false);
   const [dateFrom, setDateFrom] = useState('');
@@ -462,6 +466,7 @@ export default function AuditPage() {
     const params = new URLSearchParams();
     if (surface) params.set('surface', surface);
     if (sourceFilter) params.set('source', sourceFilter);
+    if (appFilter) params.set('app', appFilter);
     if (userFilter) params.set('userId', userFilter);
     if (departmentFilter) params.set('department', departmentFilter);
     if (flaggedOnly) params.set('flagged', 'true');
@@ -495,11 +500,11 @@ export default function AuditPage() {
       })
       .catch(console.error)
       .finally(() => setLoading(false));
-  }, [surface, sourceFilter, userFilter, departmentFilter, flaggedOnly, dateFrom, dateTo, searchDebounced, offset]);
+  }, [surface, sourceFilter, appFilter, userFilter, departmentFilter, flaggedOnly, dateFrom, dateTo, searchDebounced, offset]);
 
   // Refetch on filter changes only; fetchEvents also changes with offset, which must not refetch page one.
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  useEffect(() => { fetchEvents(true); }, [surface, sourceFilter, userFilter, departmentFilter, flaggedOnly, dateFrom, dateTo, searchDebounced]);
+  useEffect(() => { fetchEvents(true); }, [surface, sourceFilter, appFilter, userFilter, departmentFilter, flaggedOnly, dateFrom, dateTo, searchDebounced]);
 
   // When a cowork/code/chat event is selected, fetch the full conversation thread
   const handleEventClick = useCallback((event: AuditEvent) => {
@@ -563,7 +568,7 @@ export default function AuditPage() {
     try { hasSessionId = JSON.parse(selectedEvent.metadata)?.session_id || null; } catch { /* ignore */ }
   }
 
-  const filtersActive = Boolean(searchDebounced || surface || sourceFilter || userFilter || departmentFilter || flaggedOnly || dateFrom || dateTo);
+  const filtersActive = Boolean(searchDebounced || surface || sourceFilter || appFilter || userFilter || departmentFilter || flaggedOnly || dateFrom || dateTo);
 
   if (noAccess) return (
     <>
@@ -592,6 +597,7 @@ export default function AuditPage() {
           <div className="flex flex-col gap-0.5 text-[13px]">
             <span><span className="font-semibold">Claude Code:</span> Prompts, models, cost and tool use.</span>
             <span><span className="font-semibold">Cowork:</span> Prompts, models, cost and tool use.</span>
+            <span><span className="font-semibold">Claude in Office:</span> Prompts, models and tool use. No cost, and never the document&apos;s content.</span>
             <span><span className="font-semibold">Chat:</span> Prompts, through the Compliance API (Enterprise plan).</span>
             <span>Claude&apos;s replies are never stored.</span>
           </div>
@@ -625,6 +631,16 @@ export default function AuditPage() {
             <option value="cowork">Cowork</option>
             <option value="code">Code Sessions</option>
             <option value="chat">Chat</option>
+          </select>
+
+          <select value={appFilter} onChange={e => setAppFilter(e.target.value)} className={B.select} aria-label="App">
+            <option value="">All apps</option>
+            <option value="cowork">Cowork</option>
+            <option value="office">Claude in Office</option>
+            <option value="excel">Excel</option>
+            <option value="word">Word</option>
+            <option value="powerpoint">PowerPoint</option>
+            <option value="outlook">Outlook</option>
           </select>
 
           <select value={userFilter} onChange={e => setUserFilter(e.target.value)} className={`${B.select} max-w-[220px]`} aria-label="User">
@@ -730,6 +746,9 @@ export default function AuditPage() {
                           <td className={`${T.tdMute} hidden md:table-cell`}>{event.department ?? '—'}</td>
                           <td className={`${T.td} whitespace-nowrap`}>
                             <Tag>{event.surface}</Tag>
+                            {event.product && event.product in PRODUCT_LABEL && (
+                              <span className="ml-1"><Tag>{PRODUCT_LABEL[event.product as WorkProduct]}</Tag></span>
+                            )}
                             {event.surface === 'cowork_partial' && (
                               <span className="ml-1 text-[13px] text-[#8F8F8F]">Metadata only</span>
                             )}

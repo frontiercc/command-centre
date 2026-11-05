@@ -15,6 +15,7 @@ import { PageBody, Toolbar, Panel, PanelFoot, Strip, Figure, T, B, Tag, Pill, No
 import { formatModelLabel } from '@/lib/pulse/code/model-label';
 import { displayDefinition } from '@/lib/pulse/code/work-type-labels';
 import WhereMoneyWent from '@/components/finance/WhereMoneyWent';
+import OfficeSpendPanel, { type OfficeSpendData } from '@/components/finance/OfficeSpendPanel';
 import { hasBreakdown, type SpendSplit } from '@/lib/finance/where-money-went';
 
 type Surface = 'code' | 'cowork';
@@ -127,6 +128,8 @@ interface Review {
   anthropic: { status: LimitsStatus; fetchedAt: number | null; matched: boolean; limit: LimitRow | null; pendingRequestAt: string | null };
   nearLimitShare: number;
   canSeePrompts: boolean;
+  /** Claude in Office, estimated from tokens, kept out of every figure above. null without Office activity. */
+  office?: OfficeSpendData | null;
 }
 
 const SURFACE_LABEL: Record<Surface, string> = { code: 'Code', cowork: 'Cowork' };
@@ -643,10 +646,13 @@ function SpendReviewContent() {
                 <Figure label="Sessions" value={String(data.totals.sessions)} />
               </Strip>
               <Muted>
-                Measured by Command Centre from telemetry, the same figures as FinOps. Chat isn&apos;t included.
+                Measured by Command Centre from telemetry, the same figures as FinOps. Chat isn&apos;t included{data.office ? ', and Claude in Office is shown below as a separate estimate' : ''}.
                 {data.unpricedModels.length > 0 && ` Not priced, so left out: ${data.unpricedModels.map(m => formatModelLabel(m).label).join(', ')}.`}
               </Muted>
             </div>
+
+            {/* Claude in Office: an estimate, never part of the Cowork review */}
+            <OfficeSpendPanel data={data.office} scope="person" />
 
             {data.isCurrentMonth && data.totals.sessions < EARLY_MONTH_SESSIONS && (
               <Notice
