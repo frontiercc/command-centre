@@ -213,7 +213,7 @@ The executive view opens with five headline figures: people working in Claude Co
 
 ### By product
 
-The By product panel, under the headline figures, compares Claude Cowork with Claude in Excel, Word, PowerPoint and Outlook over the last 30 days: app users, sessions, the share of work at Tier 2 or 3, the share of sessions that produced something, and spend. Claude Cowork's spend is the cost Claude reports; Claude in Office sends no cost, so its spend is priced from the model rates and marked as an estimate. The All products row adds every row up, and its spend is marked as an estimate once Office spend is part of it. Every app is listed from the start, at zero until its activity arrives. An administrator can hide the panel under **Admin → Work Pulse → Show Claude in Office**.
+The By product panel, under the headline figures, compares Claude Cowork with Claude in Excel, Word, PowerPoint and Outlook over the last 30 days: app users, sessions, the share of work at Tier 2 or 3, the share of sessions that produced something, and spend. Claude Cowork's spend is the cost Claude reports; Claude in Office sends no cost, so its spend is priced from the model rates and marked as an estimate. The All products row adds every row up, and its spend is marked as an estimate once Office spend is part of it. An app's shares show once it has five judged prompts or five sessions, so one prompt never reads as 0% or 100%. Every app is listed from the start, at zero until its activity arrives. An administrator can hide the panel under **Admin → Work Pulse → Show Claude in Office**.
 
 ### Work Mix and Session Output Rate
 
