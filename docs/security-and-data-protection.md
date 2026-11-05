@@ -119,7 +119,7 @@ The Hub container runs as a non-root user on a Node.js 22 Alpine image that carr
 
 | Credential | Used by | How it is held | Notes |
 |---|---|---|---|
-| Bearer token (`OTEL_ENDPOINT_SECRET`) | Claude clients sending to the collector | `.env` with Docker Compose, or your secret store; distributed through Claude managed settings (Claude Code) and the monitoring settings in Claude's Organization settings (Claude Cowork). With Docker Compose the Hub also holds a copy for display only, shown to administrators on Admin → Ingestion, and never accepts it as a credential; each read is recorded in the access audit log | Rotate by replacing it where it is held, running `docker compose up -d` (a plain restart keeps the old value), and updating both client settings |
+| Bearer token (`OTEL_ENDPOINT_SECRET`) | Claude clients sending to the collector | `.env` with Docker Compose, or your secret store; distributed through Claude managed settings (Claude Code) and the monitoring settings in Claude's Organization settings (Claude Cowork and Claude in Office). Claude in Office sends from each person's browser, so the token in its settings reaches every user's browser. With Docker Compose the Hub also holds a copy for display only, shown to administrators on Admin → Ingestion, and never accepts it as a credential; each read is recorded in the access audit log | Rotate by replacing it where it is held, running `docker compose up -d` (a plain restart keeps the old value), and updating both client settings |
 | Collector token (`CCC_COLLECTOR_TOKEN`) | Collector sending to the Hub | `.env` or your secret store, given to both services | Constant-time comparison; ingest fails closed in production when no credential is configured |
 | Metrics Connector tokens | BI tools and MCP clients | 256-bit random, stored as a SHA-256 hash, shown once | Organisation-level aggregates only, never per-person data or prompt text; revocable by an administrator |
 | Compliance Access Key | Hub pulling Claude.ai chats | Encrypted in the database | Created by you with read scopes only; Command Centre makes only read requests |
@@ -138,7 +138,7 @@ Command Centre processes personal data about your employees to measure how teams
 | Category | Examples | Default retention | Can it be switched off |
 |---|---|---|---|
 | People and accounts | Email, display name, department, role, Claude user identifier | Until erased | No |
-| Claude Cowork and Claude Code prompts | Text a person typed: first 4,000 characters plus a 250-character preview | 90 days per surface, then content removed | Claude Code only, in its telemetry settings |
+| Claude Cowork, Claude in Office and Claude Code prompts | Text a person typed: first 4,000 characters plus a 250-character preview | 90 days per surface (Claude in Office follows Claude Cowork), then content removed | Claude Code only, in its telemetry settings |
 | Claude Chat prompts (Enterprise plan) | Text typed in Claude.ai, in full | 90 days, then content removed | Yes, by not configuring the Compliance Access Key |
 | Claude Chat reply metadata | Model, counts of artifacts and generated files | 90 days, then deleted | Yes, with Claude Chat capture |
 | Activity metadata | Session timing, active time, model, tokens, cost, tool names and outcomes, connector and skill names, uploaded and produced file names | Message rows for the same period as prompts; Claude Cowork session summaries until erased | Claude Code tool detail depends on client settings |
@@ -154,12 +154,12 @@ Command Centre processes personal data about your employees to measure how teams
 
 Everything except the collector queue and archive copies is held in the PostgreSQL database.
 
-What Command Centre receives is decided by Claude's own telemetry settings: for Claude Code, the settings you distribute through Claude managed settings; for Claude Cowork, the monitoring settings in Claude's Organization settings. Claude Code sends prompt text only when prompt logging is enabled; without it the Hub receives a redaction marker, and the Audit Log, PII detection and the AI features that read prompts lose their input. With detailed tool telemetry enabled, Claude Code sends tool parameters that can include file content Claude writes and exact shell commands. Claude Cowork always includes prompt text and tool parameters in its telemetry. That data travels over TLS to your Collector, waits in its disk queue until delivered, and is read in memory by the Hub, which keeps from those logs and metrics only the tool, connector and skill names, whether each call succeeded and how long it took, whether a commit was made, and an output's file name, and discards the rest. If you prefer that Claude Code's tool parameters never leave the client, leave its detailed tool telemetry off; Command Centre then loses per-prompt commit counts and connector tool names for Claude Code.
+What Command Centre receives is decided by Claude's own telemetry settings: for Claude Code, the settings you distribute through Claude managed settings; for Claude Cowork and Claude in Office, the monitoring settings in Claude's Organization settings. Claude Code sends prompt text only when prompt logging is enabled; without it the Hub receives a redaction marker, and the Audit Log, PII detection and the AI features that read prompts lose their input. With detailed tool telemetry enabled, Claude Code sends tool parameters that can include file content Claude writes and exact shell commands. Claude Cowork always includes prompt text and tool parameters in its telemetry. That data travels over TLS to your Collector, waits in its disk queue until delivered, and is read in memory by the Hub, which keeps from those logs and metrics only the tool, connector and skill names, whether each call succeeded and how long it took, whether a commit was made, and an output's file name, and discards the rest. If you prefer that Claude Code's tool parameters never leave the client, leave its detailed tool telemetry off; Command Centre then loses per-prompt commit counts and connector tool names for Claude Code. Claude in Office sends traces that include each tool call's input and output, which hold document content, and the document's address: the Hub keeps the prompt, the model and tokens, the tool's name, outcome and duration, and the file name of a document Claude changed, and discards the rest.
 
 ### What Command Centre never stores
 
 - Claude's replies, from any surface. For Claude.ai chats only the model and counts of artifacts and generated files are kept.
-- The content of tool calls: file contents, shell commands, tool inputs and outputs. The Collector supplied with Command Centre forwards logs and metrics only, never traces. The Hub does not accept traces.
+- The content of tool calls: file contents, shell commands, tool inputs and outputs. The Collector supplied with Command Centre forwards traces only so that Claude in Office's activity arrives; the Hub accepts traces from Claude in Office alone, ignores any others, and never stores a tool's input or output or a document's address.
 - Commit identifiers, commit messages or code from GitHub.
 - Plain passwords, session tokens, reset tokens, setup tokens, recovery codes or Metrics Connector tokens; each is stored only as a one-way hash.
 - Secrets in plaintext.
@@ -212,7 +212,7 @@ A retention job runs daily in a single database transaction, so a run either com
 
 | Data | Default window |
 |---|---|
-| Claude Cowork prompts and activity messages | 90 days |
+| Claude Cowork and Claude in Office prompts and activity messages | 90 days |
 | Claude Code prompts, metadata and metrics | 90 days |
 | Claude.ai chat prompts and reply metadata | 90 days |
 | Raw telemetry events | 30 days |

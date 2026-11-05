@@ -87,7 +87,7 @@ If your Claude Code settings send a `department` attribute with telemetry, Comma
 
 ## Cost centres, licensed seats and seat price
 
-FinOps rolls up each person's measured AI spend on Claude Code and Claude Cowork by cost centre for a calendar month, and Spend Review shows, person by person, where the money goes and whether a cheaper route exists. FinOps is visible to administrators and managers only, because individual cost is close to salary information; Spend Review shows administrators and managers everyone's review and each person their own. Spend figures are measured from telemetry: Claude Code spend is priced from the model rates in Developer Pulse, and Claude Cowork spend is the cost each Claude Cowork request reports. Claude Chat cost is not part of the chargeback total.
+FinOps rolls up each person's measured AI spend on Claude Code and Claude Cowork by cost centre for a calendar month (Claude in Office spend is shown separately as an estimate, since Office sends no cost), and Spend Review shows, person by person, where the money goes and whether a cheaper route exists. FinOps is visible to administrators and managers only, because individual cost is close to salary information; Spend Review shows administrators and managers everyone's review and each person their own. Spend figures are measured from telemetry: Claude Code spend is priced from the model rates in Developer Pulse, and Claude Cowork spend is the cost each Claude Cowork request reports. Claude Chat cost is not part of the chargeback total.
 
 1. In **Admin → System → FinOps**, switch on **Enable FinOps (cost and chargeback)**. Switch on **Model efficiency (FinOps)** as well if you want the spend-by-activity and model view. Enter **Seat price (USD/month)** and save.
 2. In **Admin → System → General**, enter **Licensed seats** and save. FinOps uses seats and price to estimate the cost of unused seats; the estimate never enters the chargeback total.
@@ -138,9 +138,9 @@ Three further settings shape alerting. **Admin → Risk Scoring → Developer Pu
 
 ## Work Pulse
 
-Work Pulse shows the depth of work people hand to Claude in Claude Cowork: a judged tier for each prompt, whether that depth is growing and spreading by department, and what capability the organisation has built. The tiers are AI-judged and labelled as such; time and session counts are measured.
+Work Pulse shows the depth of work people hand to Claude in Claude Cowork and Claude in Office: a judged tier for each prompt, whether that depth is growing and spreading by department, and what capability the organisation has built. The tiers are AI-judged and labelled as such; time and session counts are measured.
 
-1. In **Admin → Work Pulse → Overview → Module settings**, confirm **Pulse enabled** is on, choose the **Classifier model**, **Organisation briefing model** and **Personal briefing model**, set **Human time vs Claude time · Cowork** and **Session descriptions** to your decision, and select **Save**.
+1. In **Admin → Work Pulse → Overview → Module settings**, confirm **Pulse enabled** is on, choose the **Classifier model**, **Organisation briefing model** and **Personal briefing model**, set **Human time vs Claude time · Cowork** and **Session descriptions** to your decision, switch off **Show Claude in Office** if your organisation does not use Claude in Excel, Word, PowerPoint or Outlook (it hides the Office panels only), and select **Save**.
 2. Review the rubric in **Admin → Work Pulse → Tier config**: the tier definitions, the task type taxonomy and the detection criteria. The page previews the exact instructions the classifier receives. Changes apply from the next classification onward and never rewrite history.
 3. Leave **Classifier health** open for the first day. Classifier health shows the queue awaiting classification and any failures, with a control to retry them.
 
