@@ -49,7 +49,7 @@ Work Pulse shows how deeply your people hand work to Claude, from routine tasks 
 
 Work Pulse also surfaces new kinds of work, standout individual contributions and outputs such as documents and files. Managers see where to coach; leaders see whether their investment is changing how work gets done. Every grade is labelled as an AI judgement, and an administrator can sample grades for human review.
 
-![Work Pulse: how deeply people hand work to Claude, and department process opportunities](images/work-pulse.png)
+![Work Pulse: how deeply people hand work to Claude, and how Claude Cowork compares with Claude in Excel, Word, PowerPoint and Outlook](images/work-pulse.png)
 
 ![Work Pulse: top skills and connectors, files produced, work mix and what the signals are telling you](images/work-pulse-signals.png)
 
@@ -97,7 +97,7 @@ The Skills and Connectors Board discovers capabilities already being used, inclu
 
 FinOps attributes AI spend to people, departments and cost centres, down to models, activities, prompts, skills and subagents. FinOps shows caching savings, unallocated costs and opportunities to use a more appropriate model or an existing skill or connector.
 
-![FinOps: spend by product, model efficiency by kind of work, cost drivers and the spend trend](images/finops.png)
+![FinOps: the Claude in Office estimate app by app, beside model efficiency by kind of work](images/finops.png)
 
 *Sample data from Acme Corp, a fictional company.*
 
@@ -121,7 +121,7 @@ Command Centre brings supported Claude activity into a searchable audit trail, w
 
 **Operational boundary:** Command Centre observes telemetry after prompts reach Claude, so Command Centre cannot block or change a prompt. Command Centre stores people's prompts, never Claude's replies.
 
-![The Audit Log: prompts from Claude Cowork, Claude Code and Claude Chat in one trail](images/audit-log.png)
+![The Audit Log filtered to Claude in Office, each prompt labelled with its app](images/audit-log.png)
 
 ![The Audit Log filtered to flagged prompts, with their severity](images/audit-log-flagged.png)
 
