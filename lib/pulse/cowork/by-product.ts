@@ -10,7 +10,8 @@
  * work headline, per product, plus an All products row that equals it:
  *
  *   people / sessions   measured, from each product's prompts
- *   meaningfulPct       AI-judged, share of classified prompts at Tier 2 or 3
+ *   meaningfulPct       AI-judged, share of classified prompts at Tier 2 or 3,
+ *                       held back below MIN_JUDGED_FOR_RATE judged prompts
  *   producedPct         measured, share of those sessions that produced
  *                       something (cowork_session_stats.produced_output), held back
  *                       below MIN_SESSIONS_FOR_RATE sessions like the
@@ -28,6 +29,9 @@ import { getTypedClient } from '@/lib/db/client';
 import { schema } from '@/lib/db/schema';
 import { officeSpendByUser, summariseOfficeSpend } from '@/lib/finance/office-spend';
 import { MIN_SESSIONS_FOR_RATE } from '@/lib/pulse/cowork/session-output-rate';
+
+/** Fewest judged prompts a product needs before its Meaningful work share shows. */
+export const MIN_JUDGED_FOR_RATE = 5;
 import { PRODUCT_ORDER, type WorkProduct } from '@/lib/pulse/cowork/products';
 
 /** Same window as the overview's "Meaningful work" headline, so the panel breaks that figure down. */
@@ -108,6 +112,9 @@ export async function buildByProduct(nowS = Math.floor(Date.now() / 1000)): Prom
 
   // Meaningful work: classified prompts at Tier 2 or 3, by when they were
   // classified, which is the overview headline's rule (app/api/pulse/cio).
+  // A product with fewer than MIN_JUDGED_FOR_RATE judged prompts stays blank,
+  // so one prompt never reads as 0% or 100%. All products has no floor: it
+  // equals the headline.
   const pc = schema.pulseClassifications;
   const classifiedInWindow = and(gte(pc.classified_at, since), eq(pc.classifier_status, 'classified'));
   const tiers = await client
@@ -123,7 +130,7 @@ export async function buildByProduct(nowS = Math.floor(Date.now() / 1000)): Prom
   for (const t of tiers) {
     const row = rows.get(asProduct(t.product) as WorkProduct);
     const total = Number(t.total);
-    if (row && total > 0) row.meaningfulPct = Math.round((Number(t.meaningful) / total) * 100);
+    if (row && total >= MIN_JUDGED_FOR_RATE) row.meaningfulPct = Math.round((Number(t.meaningful) / total) * 100);
   }
 
   // Produced something: of the sessions in the Sessions column (a prompt in the

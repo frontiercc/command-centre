@@ -78,8 +78,9 @@ async function runSpec(): Promise<void> {
     await sql.run(`INSERT INTO pulse_classifications (cowork_message_id, user_id, tier, task_type, classifier_confidence, classifier_model, classified_at) VALUES ('cw-m1', 'cw-user', 1, 'basic_drafting', 0.9, 'test', ?)`, [nowS]);
     const built = (await buildByProduct())!;
     rows = built.rows;
-    expect(rows.find(r => r.product === 'word')!.meaningfulPct).toBe(100);
-    expect(rows.find(r => r.product === 'cowork')!.meaningfulPct).toBe(0);
+    // One judged prompt each: too few, so blank rather than 100% or 0%.
+    expect(rows.find(r => r.product === 'word')!.meaningfulPct).toBeNull();
+    expect(rows.find(r => r.product === 'cowork')!.meaningfulPct).toBeNull();
     expect(rows.find(r => r.product === 'excel')!.meaningfulPct).toBeNull();
 
     // All products: people and sessions counted once; meaningful work equals the
@@ -115,6 +116,15 @@ async function runSpec(): Promise<void> {
     const withOutput = (await buildByProduct())!;
     expect(withOutput.rows.find(r => r.product === 'cowork')).toMatchObject({ sessions: 5, producedPct: 40 });
     expect(withOutput.total.producedPct).toBe(40);
+
+    // Five judged Cowork prompts (one Tier 1, four Tier 2): Cowork's share shows.
+    for (let i = 2; i <= 5; i++) {
+      await sql.run(`INSERT INTO pulse_classifications (cowork_message_id, user_id, tier, task_type, classifier_confidence, classifier_model, classified_at) VALUES (?, 'cw-user', 2, 'analysis', 0.9, 'test', ?)`, [`cw-p${i}`, nowS]);
+    }
+    const judged = (await buildByProduct())!;
+    expect(judged.rows.find(r => r.product === 'cowork')!.meaningfulPct).toBe(80);
+    expect(judged.rows.find(r => r.product === 'word')!.meaningfulPct).toBeNull();
+    expect(judged.total.meaningfulPct).toBe(83);
 
     // The briefings' "where the work happened" reads the same sessions, per department.
     const { readWorkByProduct, workByProductFacts } = await import('@/lib/pulse/briefings/work-by-product');
