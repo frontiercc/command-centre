@@ -597,6 +597,7 @@ export default function AuditPage() {
           <div className="flex flex-col gap-0.5 text-[13px]">
             <span><span className="font-semibold">Claude Code:</span> Prompts, models, cost and tool use.</span>
             <span><span className="font-semibold">Cowork:</span> Prompts, models, cost and tool use.</span>
+            <span><span className="font-semibold">Claude in Office:</span> Prompts, models and tool use. No cost, and never the document&apos;s content.</span>
             <span><span className="font-semibold">Chat:</span> Prompts, through the Compliance API (Enterprise plan).</span>
             <span>Claude&apos;s replies are never stored.</span>
           </div>
