@@ -13,6 +13,10 @@
 // the output rather than silently implying the figures match the report window.
 import { buildChargeback, type ChargebackReport, type SurfaceSpend } from '@/lib/finance/chargeback';
 import { buildModelEfficiency, type ModelEfficiencyReport } from '@/lib/finance/model-efficiency';
+import { officeSpendByUser, summariseOfficeSpend, type OfficeSpendSummary } from '@/lib/finance/office-spend';
+import { monthBounds } from '@/lib/finance/period';
+import { PRODUCT_LABEL } from '@/lib/pulse/cowork/products';
+import { getConfigValue } from '@/lib/config';
 
 /** `YYYY-MM` for the month containing an ISO date string. */
 export function monthOf(isoDate: string): string {
@@ -125,6 +129,30 @@ function dataQualityNotes(report: ChargebackReport, effs: ModelEfficiencyReport[
 }
 
 /**
+ * Claude in Office: an estimate on its own, never in the totals above (Office
+ * sends tokens but no cost; lib/finance/office-spend.ts prices them from the
+ * admin rates). Only apps with activity are listed; nothing when there is none.
+ */
+export function officeBlock(office: OfficeSpendSummary | null | undefined): string {
+  if (!office || !office.hasOffice) return '';
+  const rows = office.byProduct.filter(p => p.calls > 0).map(p => {
+    const t = p.tokens.inputTokens + p.tokens.outputTokens + p.tokens.cacheReadTokens + p.tokens.cacheCreationTokens;
+    return `| ${PRODUCT_LABEL[p.product]} | ${p.people} | ${tokens(p.calls)} | ${tokens(t)} | ${p.usd === null ? 'not priced' : `about ${usd(p.usd)}`} |`;
+  });
+  const unpriced = office.total.unpricedModels.length > 0
+    ? ` Not priced, so left out: ${office.total.unpricedModels.join(', ')}.`
+    : '';
+  return `### Claude in Office (estimate)
+
+Claude in Excel, Word, PowerPoint and Outlook send tokens but no cost, so this is the tokens priced from the model rates on Admin → Developer Pulse. It is an estimate, for visibility, not billing, and is not included in any total above.${unpriced}
+
+| App | People | Model calls | Tokens | Spend (estimate) |
+|---|---|---|---|---|
+${rows.join('\n')}
+`;
+}
+
+/**
  * Pure renderer — all formatting decisions live here so the section can be
  * tested against fixtures without touching a database.
  */
@@ -134,8 +162,10 @@ export function renderFinopsSection(
   coworkEff: ModelEfficiencyReport,
   periodStart: string,
   periodEnd: string,
+  office: OfficeSpendSummary | null = null,
 ): string {
   const period = monthOf(periodEnd);
+  const officeText = officeBlock(office);
 
   const scopeNote = periodMatchesMonth(periodStart, periodEnd)
     ? `Figures cover the calendar month **${period}**.`
@@ -158,7 +188,7 @@ ${surfaceLine('Code', s.code)}
 ${surfaceLine('Cowork', s.cowork)}
 | **Total** | **${usd(s.total.usd)}** | **${tokens(s.total.tokens.input + s.total.tokens.output + s.total.tokens.cacheWrite + s.total.tokens.cacheRead)}** |
 
-### Spend by cost centre
+${officeText ? `${officeText}\n` : ''}### Spend by cost centre
 
 ${costCentreTable(report)}
 
@@ -188,5 +218,16 @@ export async function buildFinopsSection(periodStart: string, periodEnd: string)
     buildModelEfficiency('code', period),
     buildModelEfficiency('cowork', period),
   ]);
-  return renderFinopsSection(report, codeEff, coworkEff, periodStart, periodEnd);
+  return renderFinopsSection(report, codeEff, coworkEff, periodStart, periodEnd, await reportOfficeSpend(period));
+}
+
+/** The month's Office estimate for a report, or null when hidden (Admin → Work Pulse) or failing. */
+export async function reportOfficeSpend(period: string): Promise<OfficeSpendSummary | null> {
+  try {
+    if ((await getConfigValue('claudeInOfficeShown')) === 'false') return null;
+    const { start, end } = monthBounds(period);
+    return summariseOfficeSpend(await officeSpendByUser(start, end));
+  } catch {
+    return null; // the Office line is extra; never break the section over it
+  }
 }

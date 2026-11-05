@@ -1,8 +1,8 @@
 # OpenTelemetry Collector configuration for Command Centre.
 #
-# Claude Code and Cowork send OTLP over HTTP to this collector, which batches
-# it and forwards logs and metrics to the Hub's ingest endpoint as JSON (the
-# Hub reads JSON only). It keeps a disk queue and, with no time limit, retries
+# Claude Code, Cowork and Claude in Office send OTLP over HTTP to this
+# collector, which batches it and forwards logs, metrics and traces to the
+# Hub's ingest endpoint as JSON (the Hub reads JSON only). It keeps a disk queue and, with no time limit, retries
 # batches that fail with a connection error or HTTP 429, 502, 503 or 504, so
 # telemetry survives a Hub restart. Other errors, such as HTTP 500, are not
 # retried.
@@ -33,6 +33,11 @@ receivers:
         endpoint: 0.0.0.0:4318
         auth:
           authenticator: bearertokenauth/receiver
+        # Claude in Office posts from the user's browser (pivot.claude.ai),
+        # so the receiver must answer the browser's cross-origin check.
+        cors:
+          allowed_origins: ["https://pivot.claude.ai"]
+          allowed_headers: ["Authorization", "Content-Type"]
 
 processors:
   batch:
@@ -43,6 +48,7 @@ exporters:
   otlp_http:
     logs_endpoint: ${env:HUB_URL}/api/otel/ingest
     metrics_endpoint: ${env:HUB_URL}/api/otel/ingest
+    traces_endpoint: ${env:HUB_URL}/api/otel/ingest
     compression: none
     encoding: json
     auth:
@@ -63,6 +69,11 @@ service:
       processors: [batch]
       exporters: [otlp_http]
     metrics:
+      receivers: [otlp]
+      processors: [batch]
+      exporters: [otlp_http]
+    # Claude in Office (Excel, Word, PowerPoint, Outlook) sends traces.
+    traces:
       receivers: [otlp]
       processors: [batch]
       exporters: [otlp_http]

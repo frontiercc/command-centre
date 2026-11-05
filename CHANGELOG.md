@@ -1,5 +1,23 @@
 # Changelog
 
+## 1.1.0 (unreleased)
+
+### Added
+
+- Claude in Excel, Word, PowerPoint and Outlook. Their activity is stored beside Claude Cowork on Work Pulse, marked with the app, from the add-in's OpenTelemetry traces. Command Centre keeps each prompt, the model and tokens, and the name and outcome of each tool call; it never keeps document content or the document's address, only the file name of a document Claude changed. Set it up under **Office agents → Monitoring** in Claude's Organization settings: see [Connect Claude](docs/connect-claude.md#claude-in-office).
+- A **By product** panel on the Work Pulse overview compares Cowork with each Office app: app users, sessions, meaningful work, produced something and spend, with an All products row that adds up.
+- Claude in Office spend on FinOps and Spend Review, as an estimate priced from the model rates (Office sends no cost). It is never added to Cowork's reported spend or any chargeback total.
+- The FinOps and Spend Review report sections include the Office estimate, and the executive and department briefings say how work splits between Cowork and the Office apps when Office was used.
+- **Show Claude in Office** under **Admin → Work Pulse** hides the Office panels on installations that do not use it.
+- Sample data includes Office activity.
+- Each Cowork prompt records where its session ran (on the person's computer or in Anthropic's cloud), so a redacted prompt can be told apart.
+
+### Changed
+
+- The dashboard's "Cowork sessions" card is now "Work sessions", covering Cowork and Claude in Office. It no longer counts Claude Code sessions, which have their own card, so it reads lower where Claude Code is used.
+- The bundled, AWS and Azure collector configurations accept Claude in Office's traces, sent from the person's browser.
+- When a session has ended, the next page or request takes you straight to sign-in, and back to the same page afterwards.
+
 ## 1.0.0 (2026-10-26)
 
 First public release of Frontier Command Centre.

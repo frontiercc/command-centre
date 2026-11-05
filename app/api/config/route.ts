@@ -145,6 +145,7 @@ export async function POST(request: NextRequest) {
     'pulseBriefingModel',
     'pulseUserBriefingModel',
     'pulseSessionDescriptionsEnabled',
+    'claudeInOfficeShown',
     'humanTimeEnabled',
     'humanTimeCodeEnabled',
     'systemHealthAlertsEnabled',

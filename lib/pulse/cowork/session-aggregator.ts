@@ -124,6 +124,9 @@ export async function aggregateCoworkSessionStats(sessionId?: string, limit = DE
           model: cm.model,
           occurred_at: cm.occurred_at,
           tool_success: cm.tool_success,
+          // Claude in Office marks a tool call that changed the document
+          // (lib/otel/office-receiver.ts). Not touched by retention.
+          changed_document: sql<string | null>`${cm.tool_parameters}->>'changed_document'`,
         })
         .from(cm)
         .where(and(
@@ -184,6 +187,9 @@ export async function aggregateCoworkSessionStats(sessionId?: string, limit = DE
           if (row.model) modelsUsedSet.add(row.model);
         } else if (row.message_type === 'cowork_tool_metadata') {
           toolCallCount++;
+          // An Office tool call that changed the document is a produced
+          // result (Word's proposed edits, PowerPoint and Excel writes).
+          if (Number(row.tool_success) === 1 && row.changed_document === 'true') producedOutput = true;
           if (row.content_preview) {
             uniqueToolsSet.add(row.content_preview);
             if (row.content_preview === STRIPPED_MARKER) {

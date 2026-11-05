@@ -293,10 +293,10 @@ Return a JSON object with exactly these fields:
 }
 
 COWORK TERMINOLOGY:
-- "coworkSessions" is the count of distinct Cowork work sessions this week (each session = one conversation context in Claude). Always refer to this as "sessions", never "events". Individual messages within sessions are not counted here.
-- The dashboard stat card shows this number as "Cowork Sessions". Use that same label when referencing it.
+- "coworkSessions" is the count of distinct work sessions this week in Cowork and Claude in Office (Excel, Word, PowerPoint, Outlook) together; Claude Code sessions are not in it (each session = one conversation context in Claude). Always refer to this as "sessions", never "events". Individual messages within sessions are not counted here.
+- The dashboard stat card shows this as "Work sessions". Use that same label when referencing it.
 
-WORK PULSE (CLAUDE COWORK) DATA UNDERSTANDING:
+WORK PULSE (CLAUDE COWORK AND CLAUDE IN OFFICE) DATA UNDERSTANDING:
 - Report Cowork by concrete activity first: coworkSessions (sessions run this week) and coworkPulse.capabilitiesConfirmedTotal (new processes Claude now handles end-to-end, confirmed by a human; this is Cowork's "shipping" signal).
 - coworkPulse.tierMixThisWeek is an AI-JUDGED read of the work's character: mostly routine admin tasks, meaningful multi-step / connector-assisted work, or high-stakes autonomous work. Use it only to describe in plain words how the character of work is shifting, always attributed ("work Claude judged to be…"). Never quote tier numbers, a score, or the phrase "DDS".
 

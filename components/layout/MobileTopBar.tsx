@@ -54,7 +54,7 @@ export default function MobileTopBar({ theme = 'default' }: { theme?: Theme }) {
             onClick={async () => {
               try { sessionStorage.removeItem('ccc-nav-cache'); } catch { /* storage unavailable */ }
               await fetch('/api/admin/logout', { method: 'POST' });
-              window.location.href = '/login';
+              window.location.href = '/admin/login';
             }}
             aria-label="Logout"
             className="p-1.5 text-gray-400 hover:text-white transition-colors"

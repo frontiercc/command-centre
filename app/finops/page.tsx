@@ -11,6 +11,7 @@ import FinopsCharts, { type SpendTrend } from '@/components/finance/FinopsCharts
 import Leaderboard, { type LeaderboardEntry } from '@/components/finance/Leaderboard';
 import InsightCard, { type InsightFacts } from '@/components/finance/InsightCard';
 import ModelEfficiencySection from '@/components/finance/ModelEfficiencySection';
+import OfficeSpendPanel, { type OfficeSpendData } from '@/components/finance/OfficeSpendPanel';
 import { PageBody, Toolbar, Panel, Tag, Pill, T, B, Notice, Empty, Bar, cx } from '@/components/precision/ui';
 
 interface CodeTokens {
@@ -69,6 +70,8 @@ interface ChargebackReport {
     monthlyPriceUsd: number | null;
     estUnusedUsd: number | null;
   } | null;
+  /** Claude in Office, estimated from tokens; never in the totals. null without Office activity. */
+  office?: OfficeSpendData | null;
 }
 
 const fmtUsd = (n: number) =>
@@ -441,6 +444,9 @@ export default function CostChargebackPage() {
 
             {/* By-surface strip */}
             {report.surfaces && <SurfaceTiles surfaces={report.surfaces} />}
+
+            {/* Claude in Office: an estimate beside the strip, never in its totals */}
+            <OfficeSpendPanel data={report.office} />
 
             {/* Model efficiency — activity × model drill-down, directly below the by-surface strip. Self-gated on financeModelEfficiencyEnabled (route 404s when off, section hides). */}
             <ModelEfficiencySection period={period} />

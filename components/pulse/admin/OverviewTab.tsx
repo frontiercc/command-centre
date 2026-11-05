@@ -17,6 +17,7 @@ interface ModuleConfig {
   /** '' = follow the Core AI model. */
   pulseUserBriefingModel: string;
   pulseSessionDescriptionsEnabled: string;
+  claudeInOfficeShown: string;
   humanTimeEnabled: string;
   coreAiModel: string;
 }
@@ -140,6 +141,12 @@ export default function OverviewTab({
           hint={<>One AI-written sentence on the frontier boxes saying what a piece of work was, written by the Core AI model from the session&apos;s scrubbed prompts. Admins and managers see everyone&apos;s; each person sees their own. Off stops new descriptions and hides existing ones.</>}
           checked={config.pulseSessionDescriptionsEnabled !== 'false'}
           onChange={on => onConfigChange({ pulseSessionDescriptionsEnabled: on ? 'true' : 'false' })}
+        />
+        <ToggleRow
+          label="Show Claude in Office"
+          hint={<>The By product panel on the Work Pulse overview and the Claude in Office (estimate) panel on FinOps, comparing Cowork with Claude in Excel, Word, PowerPoint and Outlook. Turn off if your organisation does not use Claude in Office. Off only hides the panels: any Office activity that arrives is still stored and counted.</>}
+          checked={config.claudeInOfficeShown !== 'false'}
+          onChange={on => onConfigChange({ claudeInOfficeShown: on ? 'true' : 'false' })}
         />
         <ToggleRow
           label="Human time vs Claude time · Cowork"

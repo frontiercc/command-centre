@@ -237,7 +237,7 @@ export default function DashboardPage() {
         </Strip>
         <Strip cols={3}>
           <StatCard
-            title="Cowork sessions"
+            title="Work sessions"
             value={stats.avgSessionsPerWeek.cowork}
             change="avg / week"
             subtitle={stats.coworkFlagged > 0 ? `${stats.coworkFlagged} flagged for PII` : 'no PII flags'}
@@ -257,7 +257,7 @@ export default function DashboardPage() {
             }
             pillTooltip={
               data.dataSourceStatus.otelCowork
-                ? 'Cowork data captured via OpenTelemetry integration.'
+                ? 'Cowork and Claude in Office sessions, captured via OpenTelemetry.'
                 : data.dataSourceStatus.coworkContent
                 ? 'User messages, MCP connector activity, and skill invocations captured from Claude Code sessions.'
                 : 'Cowork conversation content is not available. Tool calls and file access are captured via OpenTelemetry.'

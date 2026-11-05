@@ -10,7 +10,8 @@ import { getAllConfig } from '@/lib/config';
 import { getAdminSession, canAccessPulseAdmin } from '@/lib/auth/admin-auth';
 import { logAccess } from '@/lib/audit/log';
 import { errorResponse } from '@/lib/api/errors';
-import { currentPeriod } from '@/lib/finance/period';
+import { currentPeriod, monthBounds } from '@/lib/finance/period';
+import { officeSpendByUser, summariseOfficeSpend } from '@/lib/finance/office-spend';
 import { buildSpendReview } from '@/lib/finance/spend-review';
 import { canViewSpendReview } from '@/lib/finance/spend-review-access';
 import { cached, FRESH_MS, PAST_MONTH_FRESH_MS } from '@/lib/finance/spend-review-cache';
@@ -55,8 +56,13 @@ export async function GET(
     const email = review.email?.toLowerCase() ?? null;
     const member = email ? members.get(email) : undefined;
     const row = isCurrent ? primaryRow(member) : null;
+    // Claude in Office: this person's estimated Office spend, separate from the
+    // Cowork review above (it has no cost and is never compared or advised on).
+    const { start, end } = monthBounds(period);
+    const office = await officeSpendByUser(start, end, userId).then(summariseOfficeSpend).catch(() => null);
     return NextResponse.json({
       ...review,
+      office,
       isCurrentMonth: isCurrent,
       updatedAt: Math.floor(built.computedAt / 1000),
       anthropic: {

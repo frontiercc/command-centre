@@ -4,6 +4,7 @@
 
 'use client';
 
+import { PRODUCT_LABEL, type WorkProduct } from '@/lib/pulse/cowork/products';
 import { useEffect, useState, useCallback, useMemo, type ReactNode } from 'react';
 import { useSearchParams } from 'next/navigation';
 import TopBar from '@/components/layout/TopBar';
@@ -17,6 +18,8 @@ import { hasBreakdown, type SpendSplit } from '@/lib/finance/where-money-went';
 
 interface AuditEvent {
   id: string;
+  /** Claude in Office app, when the prompt came from Excel, Word, PowerPoint or Outlook. */
+  product?: string | null;
   user_id: string;
   department?: string | null;
   event_type: string;
@@ -730,6 +733,9 @@ export default function AuditPage() {
                           <td className={`${T.tdMute} hidden md:table-cell`}>{event.department ?? '—'}</td>
                           <td className={`${T.td} whitespace-nowrap`}>
                             <Tag>{event.surface}</Tag>
+                            {event.product && event.product in PRODUCT_LABEL && (
+                              <span className="ml-1"><Tag>{PRODUCT_LABEL[event.product as WorkProduct]}</Tag></span>
+                            )}
                             {event.surface === 'cowork_partial' && (
                               <span className="ml-1 text-[13px] text-[#8F8F8F]">Metadata only</span>
                             )}

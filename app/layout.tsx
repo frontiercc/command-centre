@@ -7,6 +7,7 @@ import { headers } from "next/headers";
 import "./globals.css";
 import "./precision.css";
 import Sidebar from "@/components/layout/Sidebar";
+import SessionWatch from "@/components/layout/SessionWatch";
 import { ToastProvider } from "@/components/shared/ToastProvider";
 import DbStatusBanner from "@/components/shared/DbStatusBanner";
 import MobileTopBar from "@/components/layout/MobileTopBar";
@@ -52,6 +53,7 @@ export default async function RootLayout({
       >
         <ThemeProvider theme={theme}>
           <DbStatusBanner />
+          <SessionWatch />
           <Sidebar theme={theme} />
           <MobileTopBar theme={theme} />
           <main className="ccc-main ml-0 lg:ml-64 min-h-screen pb-[calc(4rem+env(safe-area-inset-bottom))] lg:pb-0">

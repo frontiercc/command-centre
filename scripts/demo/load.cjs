@@ -43,6 +43,8 @@ const STEPS = [
   ['seedme-cwme-', '06-model-efficiency.cjs'],
   ['ff8-', '07-attribution.cjs'],
   ['ff10-', '08-session-stats.cjs'],
+  // Claude in Office runs before human time, which also gives its sessions Claude time.
+  ['ff14-', '09b-office.cjs'],
   ['ff11-', '09-human-time.cjs'],
   ['ff13-', '10-conversations.cjs'],
 ];

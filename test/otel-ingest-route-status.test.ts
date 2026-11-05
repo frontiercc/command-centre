@@ -73,9 +73,15 @@ describe('OTel ingest route status codes', () => {
     expect(failures).toHaveLength(0);
   });
 
-  it('traces are refused: a spans-only request answers 400', async () => {
+  it('traces other than Claude in Office are ignored, never stored', async () => {
     const res = await post(JSON.stringify({ resourceSpans: [{ resource: { attributes: [] }, scopeSpans: [] }] }));
+    expect(res.status).toBe(200);
+    expect(await res.json()).toEqual({ processed: 0, skipped: 0, errors: ['Spans ignored for service.name: (empty)'] });
+  });
+
+  it('a request with no logs, metrics or traces answers 400', async () => {
+    const res = await post(JSON.stringify({}));
     expect(res.status).toBe(400);
-    expect(await res.json()).toEqual({ error: 'Missing resourceLogs or resourceMetrics' });
+    expect(await res.json()).toEqual({ error: 'Missing resourceLogs, resourceMetrics or resourceSpans' });
   });
 });

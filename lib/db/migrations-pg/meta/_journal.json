@@ -267,6 +267,20 @@
       "when": 1790985600000,
       "tag": "0037_cowork_skill_name",
       "breakpoints": true
+    },
+    {
+      "idx": 38,
+      "version": "7",
+      "when": 1791072000000,
+      "tag": "0038_cowork_session_location",
+      "breakpoints": true
+    },
+    {
+      "idx": 39,
+      "version": "7",
+      "when": 1791158400000,
+      "tag": "0039_office_product",
+      "breakpoints": true
     }
   ]
 }

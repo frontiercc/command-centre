@@ -6,10 +6,7 @@
 import { Suspense, useEffect, useState } from 'react';
 import { useRouter, useSearchParams } from 'next/navigation';
 
-function getSafeRedirect(from: string | null): string {
-  if (!from || !from.startsWith('/admin') || from.includes('://')) return '/admin/overview';
-  return from;
-}
+import { getSafeRedirect, safeReturnPath, RETURN_TO_KEY } from '@/lib/auth/safe-redirect';
 
 const SSO_ERROR_MESSAGES: Record<string, string> = {
   email_unverified: 'Your identity provider did not verify this email address.',
@@ -61,6 +58,7 @@ function LoginForm() {
   const [ssoChecked, setSsoChecked] = useState(false);
   const [showPasswordForm, setShowPasswordForm] = useState(false);
 
+  const expired = searchParams.get('expired') === '1';
   const ssoError = searchParams.get('sso_error');
   const ssoErrorMessage = ssoError ? SSO_ERROR_MESSAGES[ssoError] : undefined;
 
@@ -242,6 +240,11 @@ function LoginForm() {
     <>
       {brand('Sign in to Command Centre')}
 
+      {/* Session ended (components/layout/SessionWatch.tsx sent them here) */}
+      {expired && !ssoErrorMessage && (
+        <div className="border border-[#EAEAEA] bg-[#FAFAFA] rounded-[10px] px-3 py-2 text-[14px] text-[#333333]">Your session has ended. Sign in again to carry on.</div>
+      )}
+
       {/* SSO refusal banner */}
       {ssoErrorMessage && (
         <div className="border border-[#F5D9A8] bg-[#FFFAF0] rounded-[10px] px-3 py-2 text-[14px] text-[#5C3A00]">{ssoErrorMessage}</div>
@@ -252,6 +255,11 @@ function LoginForm() {
         <div className="flex flex-col gap-4">
           <a
             href="/api/auth/sso/start"
+            onClick={() => {
+              // SSO always lands on the home page; SessionWatch finishes the trip back.
+              const back = safeReturnPath(from);
+              try { if (back) sessionStorage.setItem(RETURN_TO_KEY, back); else sessionStorage.removeItem(RETURN_TO_KEY); } catch { /* storage off */ }
+            }}
             className="w-full inline-flex items-center justify-center text-[14px] font-medium px-3.5 py-2.5 rounded-[10px] border border-[#DADADA] bg-white text-[#0A0A0A] hover:bg-[#FAFAFA]"
           >
             Sign in with {ssoLabel}

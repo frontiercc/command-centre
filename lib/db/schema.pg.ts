@@ -459,6 +459,15 @@ export const coworkMessages = pgTable('cowork_messages', {
     query_source: text(),
     // The skill running when a Cowork model call was made (OTel skill.name, migration 0037).
     skill_name: text(),
+    // Where the Cowork session ran, from OTel cowork_surface on the user prompt
+    // (`local` = the person's computer, `remote` = Anthropic's cloud). Web and
+    // mobile sessions never carry prompt text whatever the device policy says,
+    // so this tells a redacted prompt that needs a Desktop restart from one
+    // that cannot be fixed on the device (migration 0038). NULL = not recorded.
+    session_location: text(),
+    // Which Office app a row came from (migration 0039): NULL = Cowork,
+    // otherwise excel / word / powerpoint / outlook (Claude in Office).
+    product: text(),
 }, (t) => [
     foreignKey({ columns: [t.user_id], foreignColumns: [users.id], name: 'cowork_messages_user_id_fk' }),
     uniqueIndex('idx_cowork_messages_seq').on(t.seq),
@@ -578,6 +587,8 @@ export const coworkSessions = pgTable('cowork_sessions', {
     project_name: text(),
     source: text().notNull().default('agent'),
     files_uploaded: text(),
+    // Office app the session ran in (migration 0039); NULL = Cowork.
+    product: text(),
 }, (t) => [
     foreignKey({ columns: [t.user_id], foreignColumns: [users.id], name: 'cowork_sessions_user_id_fk' }),
     index('idx_cowork_sessions_project').on(t.project_name),
