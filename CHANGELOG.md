@@ -18,6 +18,12 @@
 - The bundled, AWS and Azure collector configurations accept Claude in Office's traces, sent from the person's browser.
 - When a session has ended, the next page or request takes you straight to sign-in, and back to the same page afterwards.
 
+### Upgrading
+
+- With Docker Compose, the usual update (`docker compose up -d --build`) rebuilds the collector with the new configuration. The database changes apply when the Hub starts.
+- If you run the collector yourself, on AWS, Azure or elsewhere, redeploy it from `deploy/aws/otelcol-ecs-config.yaml` or `deploy/azure/otelcol-azure-config.yaml`, or add the `cors` rule, `traces_endpoint` and `traces` pipeline to your own configuration. Without them Claude in Office's activity does not reach the Hub. A load balancer in front of the collector must pass the browser's `OPTIONS` requests through to it.
+- To start receiving Claude in Office, open **Office agents → Monitoring** in Claude's Organization settings and select **Copy settings from Cowork**.
+
 ## 1.0.0 (2026-10-26)
 
 First public release of Frontier Command Centre.

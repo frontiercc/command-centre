@@ -167,7 +167,7 @@ Run the commands below in PowerShell on Windows, or Terminal on macOS and Linux.
 
    If the log says a token was already printed, wait 10 minutes, run `docker compose restart hub`, then run the command again.
 
-5. **Load the sample data**: Acme Corp, with nine weeks of Claude Code, Claude Cowork and Claude Chat activity, graded work, use cases, alerts and spend. Loading takes about two minutes. Create your admin account in step 4 first: once the sample data is loaded, the setup page closes.
+5. **Load the sample data**: Acme Corp, with nine weeks of Claude Code, Claude Cowork, Claude in Office and Claude Chat activity, graded work, use cases, alerts and spend. Loading takes about two minutes. Create your admin account in step 4 first: once the sample data is loaded, the setup page closes.
 
    ```bash
    docker compose --profile demo run --rm demo-data
