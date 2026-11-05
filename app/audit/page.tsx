@@ -407,6 +407,7 @@ export default function AuditPage() {
   // Filters
   const [surface, setSurface] = useState('');
   const [sourceFilter, setSourceFilter] = useState('');
+  const [appFilter, setAppFilter] = useState('');
   const [userFilter, setUserFilter] = useState('');
   const [flaggedOnly, setFlaggedOnly] = useState(false);
   const [dateFrom, setDateFrom] = useState('');
@@ -465,6 +466,7 @@ export default function AuditPage() {
     const params = new URLSearchParams();
     if (surface) params.set('surface', surface);
     if (sourceFilter) params.set('source', sourceFilter);
+    if (appFilter) params.set('app', appFilter);
     if (userFilter) params.set('userId', userFilter);
     if (departmentFilter) params.set('department', departmentFilter);
     if (flaggedOnly) params.set('flagged', 'true');
@@ -498,11 +500,11 @@ export default function AuditPage() {
       })
       .catch(console.error)
       .finally(() => setLoading(false));
-  }, [surface, sourceFilter, userFilter, departmentFilter, flaggedOnly, dateFrom, dateTo, searchDebounced, offset]);
+  }, [surface, sourceFilter, appFilter, userFilter, departmentFilter, flaggedOnly, dateFrom, dateTo, searchDebounced, offset]);
 
   // Refetch on filter changes only; fetchEvents also changes with offset, which must not refetch page one.
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  useEffect(() => { fetchEvents(true); }, [surface, sourceFilter, userFilter, departmentFilter, flaggedOnly, dateFrom, dateTo, searchDebounced]);
+  useEffect(() => { fetchEvents(true); }, [surface, sourceFilter, appFilter, userFilter, departmentFilter, flaggedOnly, dateFrom, dateTo, searchDebounced]);
 
   // When a cowork/code/chat event is selected, fetch the full conversation thread
   const handleEventClick = useCallback((event: AuditEvent) => {
@@ -566,7 +568,7 @@ export default function AuditPage() {
     try { hasSessionId = JSON.parse(selectedEvent.metadata)?.session_id || null; } catch { /* ignore */ }
   }
 
-  const filtersActive = Boolean(searchDebounced || surface || sourceFilter || userFilter || departmentFilter || flaggedOnly || dateFrom || dateTo);
+  const filtersActive = Boolean(searchDebounced || surface || sourceFilter || appFilter || userFilter || departmentFilter || flaggedOnly || dateFrom || dateTo);
 
   if (noAccess) return (
     <>
@@ -628,6 +630,16 @@ export default function AuditPage() {
             <option value="cowork">Cowork</option>
             <option value="code">Code Sessions</option>
             <option value="chat">Chat</option>
+          </select>
+
+          <select value={appFilter} onChange={e => setAppFilter(e.target.value)} className={B.select} aria-label="App">
+            <option value="">All apps</option>
+            <option value="cowork">Cowork</option>
+            <option value="office">Claude in Office</option>
+            <option value="excel">Excel</option>
+            <option value="word">Word</option>
+            <option value="powerpoint">PowerPoint</option>
+            <option value="outlook">Outlook</option>
           </select>
 
           <select value={userFilter} onChange={e => setUserFilter(e.target.value)} className={`${B.select} max-w-[220px]`} aria-label="User">

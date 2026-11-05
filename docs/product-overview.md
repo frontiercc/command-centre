@@ -346,7 +346,7 @@ Alerts from detection, Developer Pulse, at-risk use cases and system health appe
 
 ### The Audit Log
 
-The Audit Log is where people's prompt text is browsed. The Audit Log lists each captured message with its source (OpenTelemetry or Compliance API), its flags, a conversation thread view and the reason for any dismissed match. The Audit Log is restricted to administrators, who see everyone, and managers, who see their own department (and no prompt text until a department is set for them). Reads of prompt text, here and on the few other pages that show prompts or short quotes from them, are recorded in an access audit log whose database triggers reject updates and deletes. Administrators review that log on its own page.
+The Audit Log is where people's prompt text is browsed. The Audit Log lists each captured message with its source (OpenTelemetry or Compliance API), its flags, a conversation thread view and the reason for any dismissed match. Claude in Office prompts are labelled with their app, and the app filter shows Cowork alone, all of Claude in Office, or one Office app. The Audit Log is restricted to administrators, who see everyone, and managers, who see their own department (and no prompt text until a department is set for them). Reads of prompt text, here and on the few other pages that show prompts or short quotes from them, are recorded in an access audit log whose database triggers reject updates and deletes. Administrators review that log on its own page.
 
 ### Retention and data-subject rights
 
