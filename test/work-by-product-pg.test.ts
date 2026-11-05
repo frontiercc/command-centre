@@ -49,26 +49,33 @@ async function runSpec(): Promise<void> {
 
     for (const line of capture()) expect((await processOfficeSpans(line)).errors).toEqual([]);
 
-    // Opus 5.5 has no rate yet: Office spend is not measured, and the model is named.
+    // Office spend is priced from the built-in Opus 5.5 rate, as an estimate.
     let rows = (await buildByProduct())!.rows;
     expect(rows.map(r => r.product)).toEqual(['cowork', 'excel', 'word', 'powerpoint', 'outlook']);
     expect(rows.find(r => r.product === 'outlook')).toMatchObject({ people: 0, sessions: 0, spendUsd: null });
     const cowork = rows.find(r => r.product === 'cowork')!;
     expect(cowork).toMatchObject({ people: 1, sessions: 1, spendUsd: 1.25, spendEstimated: false });
     const word = rows.find(r => r.product === 'word')!;
-    expect(word).toMatchObject({ people: 1, sessions: 1, spendUsd: null, spendEstimated: true });
-    expect(word.unpricedModels).toEqual(['claude-opus-5-5']);
+    expect(word).toMatchObject({ people: 1, sessions: 1, spendEstimated: true });
+    expect(word.spendUsd).toBeGreaterThan(0);
+    expect(word.unpricedModels).toEqual([]);
     // Too few sessions to give a rate, and nothing classified yet: blank, never 0.
     expect(word.producedPct).toBeNull();
     expect(word.meaningfulPct).toBeNull();
 
-    // With a rate saved, Office spend is priced as an estimate, separate from Cowork's.
-    await sql.run(`INSERT INTO config (key, value) VALUES ('code_model_rates', ?) ON CONFLICT (key) DO UPDATE SET value = excluded.value`,
-      [JSON.stringify({ 'claude-opus-5-5': { in: 5, out: 25, cacheWrite: 6.25, cacheRead: 0.5 } })]);
+    // A model with no rate is left out and named, never counted as $0.
+    const { DEFAULT_RATES } = await import('@/lib/pulse/code/rates');
+    const saved = DEFAULT_RATES['claude-opus-5-5'];
+    delete DEFAULT_RATES['claude-opus-5-5'];
+    try {
+      rows = (await buildByProduct())!.rows;
+      const unpriced = rows.find(r => r.product === 'word')!;
+      expect(unpriced.spendUsd).toBeNull();
+      expect(unpriced.unpricedModels).toEqual(['claude-opus-5-5']);
+    } finally {
+      DEFAULT_RATES['claude-opus-5-5'] = saved;
+    }
     rows = (await buildByProduct())!.rows;
-    const priced = rows.find(r => r.product === 'word')!;
-    expect(priced.unpricedModels).toEqual([]);
-    expect(priced.spendUsd).toBeGreaterThan(0);
     expect(rows.find(r => r.product === 'cowork')!.spendUsd).toBe(1.25);
 
     // Meaningful work reads the classifier's tiers per product.

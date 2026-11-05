@@ -27,7 +27,7 @@ export interface ModelRate {
   out: number;
   /** USD per million cache-write tokens (5-min TTL ≈ 1.25× input) */
   cacheWrite: number;
-  /** USD per million cache-read tokens (0.1x input; 0.025x on Fable 5.1 / Mythos 5.1) */
+  /** USD per million cache-read tokens (0.1x input; 0.05x on Opus 5.5 / Sonnet 5.5; 0.025x on Fable 5.1 / Mythos 5.1) */
   cacheRead: number;
 }
 
@@ -42,19 +42,38 @@ function rate(inRate: number, outRate: number, cacheReadMultiplier = 0.1): Model
   };
 }
 
-// Published Anthropic API pricing, $/MTok (input / output).
+// Published Anthropic API pricing, $/MTok (input / output), from
+// platform.claude.com/docs/en/about-claude/pricing (checked 2026-11-05).
+// Retired models stay because Bedrock and Google Cloud still serve some of them.
+// Claude Haiku 5.5 is priced at its rate for prompts up to 100,000 tokens; longer
+// prompts cost five times as much, so its spend is a low estimate for those.
 export const DEFAULT_RATES: ModelRates = {
   'claude-fable-5-1': rate(10, 50, 0.025),
+  'claude-mythos-5-1': rate(10, 50, 0.025),
   'claude-fable-5': rate(10, 50),
+  'claude-mythos-5': rate(10, 50),
+  'claude-opus-5-5': rate(4, 20, 0.05),
   'claude-opus-5': rate(5, 25),
   'claude-opus-4-8': rate(5, 25),
   'claude-opus-4-7': rate(5, 25),
   'claude-opus-4-6': rate(5, 25),
   'claude-opus-4-5': rate(5, 25),
+  'claude-opus-4-5-20251101': rate(5, 25),
+  'claude-opus-4-1': rate(15, 75),
+  'claude-opus-4-1-20250805': rate(15, 75),
+  'claude-opus-4': rate(15, 75),
+  'claude-opus-4-20250514': rate(15, 75),
+  'claude-sonnet-5-5': rate(2, 10, 0.05),
   'claude-sonnet-5': rate(2, 10),
   'claude-sonnet-4-6': rate(3, 15),
+  'claude-sonnet-4-5': rate(3, 15),
+  'claude-sonnet-4-5-20250929': rate(3, 15),
+  'claude-sonnet-4': rate(3, 15),
+  'claude-sonnet-4-20250514': rate(3, 15),
+  'claude-haiku-5-5': rate(0.1, 0.5),
   'claude-haiku-4-5': rate(1, 5),
   'claude-haiku-4-5-20251001': rate(1, 5),
+  'claude-3-5-haiku-20241022': rate(0.8, 4),
 };
 
 /**

@@ -69,19 +69,21 @@ async function runSpec(): Promise<void> {
     expect(after.coworkCostCoverage).toEqual({ withCost: 1, total: 1 });
     expect(after.grandTotalUsd).toBe(before.grandTotalUsd);
 
-    // 2. The Office estimate: tokens counted, unpriced model named, never $0.
+    // 2. The Office estimate: tokens counted and priced at the built-in Opus 5.5 rate.
     let office = summariseOfficeSpend(await officeSpendByUser(start, end))!;
     expect(office.byProduct.map(p => p.product)).toEqual(['excel', 'word', 'powerpoint']);
     expect(office.total.calls).toBe(14);
     expect(office.total.tokens.inputTokens).toBeGreaterThan(0);
-    expect(office.total.usd).toBeNull();
-    expect(office.total.unpricedModels).toEqual(['claude-opus-5-5']);
+    expect(office.total.unpricedModels).toEqual([]);
+    const atDefault = office.total.usd!;
+    expect(atDefault).toBeGreaterThan(0);
 
-    // With a rate, it is priced, and Work Pulse shows the very same figure.
+    // A rate saved on Admin → Developer Pulse wins (here, double every price), and
+    // Work Pulse shows the very same figure.
     await sql.run(`INSERT INTO config (key, value) VALUES ('code_model_rates', ?) ON CONFLICT (key) DO UPDATE SET value = excluded.value`,
-      [JSON.stringify({ 'claude-opus-5-5': { in: 5, out: 25, cacheWrite: 6.25, cacheRead: 0.5 } })]);
+      [JSON.stringify({ 'claude-opus-5-5': { in: 8, out: 40, cacheWrite: 10, cacheRead: 0.4 } })]);
     office = summariseOfficeSpend(await officeSpendByUser(start, end))!;
-    expect(office.total.usd).toBeGreaterThan(0);
+    expect(office.total.usd).toBeCloseTo(atDefault * 2, 6);
     const panel = (await buildByProduct(nowS))!;
     const pulseWord = panel.rows.find(r => r.product === 'word')!.spendUsd!;
     const finopsWord = office.byProduct.find(p => p.product === 'word')!.usd!;

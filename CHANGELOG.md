@@ -11,6 +11,7 @@
 - The Audit Log labels each Claude in Office prompt with its app, and a new app filter shows Cowork alone, all of Claude in Office, or one Office app.
 - **Show Claude in Office** under **Admin → Work Pulse** hides the Office panels on installations that do not use it.
 - Sample data includes Office activity.
+- Every published Claude model has a built-in price, including Opus 5.5, Sonnet 5.5 and Haiku 5.5, Mythos 5.1 and 5, Sonnet 4.5, and older models still served on Bedrock or Google Cloud. Prices saved on **Admin → Developer Pulse** still win. Spend on these models, left out as not priced before, now counts; Haiku 5.5 is priced at its rate for prompts up to 100,000 tokens.
 - Each Cowork prompt records where its session ran (on the person's computer or in Anthropic's cloud), so a redacted prompt can be told apart.
 
 ### Changed
