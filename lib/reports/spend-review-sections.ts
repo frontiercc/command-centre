@@ -14,7 +14,7 @@ import { buildSpendReviewIndex, buildSpendReview, priorPeriod, EFFICIENCY_MIN_SE
 import { getSpendLimits, indexByEmail, primaryRow, shareUsed, NEAR_LIMIT_SHARE, type SpendLimitsSnapshot } from '@/lib/anthropic/spend-limits';
 import { formatModelLabel } from '@/lib/pulse/code/model-label';
 import { monthOf, periodMatchesMonth, reportOfficeSpend } from '@/lib/reports/finops-sections';
-import { PRODUCT_LABEL } from '@/lib/pulse/cowork/products';
+import { productFullName } from '@/lib/pulse/cowork/products';
 import type { OfficeSpendSummary } from '@/lib/finance/office-spend';
 import { currentPeriod } from '@/lib/finance/period';
 import { gapPct } from '@/lib/finance/spend-review-format';
@@ -94,10 +94,10 @@ export interface SpendReviewSectionInput {
 export function officeSentence(office: OfficeSpendSummary | null | undefined): string | null {
   if (!office || !office.hasOffice) return null;
   const apps = office.byProduct.filter(p => p.calls > 0)
-    .map(p => `${PRODUCT_LABEL[p.product]} ${p.usd === null ? 'not priced' : `about ${usd(p.usd)}`}`);
+    .map(p => `${productFullName(p.product)} ${p.usd === null ? 'not priced' : `about ${usd(p.usd)}`}`);
   const total = office.total.usd === null ? 'not priced' : `about **${usd(office.total.usd)}**`;
   const unpriced = office.total.unpricedModels.length ? ` Not priced, so left out: ${office.total.unpricedModels.join(', ')}.` : '';
-  return `Claude in Office (an estimate from the model rates, not included above): ${total} across ${office.total.people} ${office.total.people === 1 ? 'person' : 'people'} (${apps.join(', ')}).${unpriced}`;
+  return `Claude in Office and Google (an estimate from the model rates, not included above): ${total} across ${office.total.people} ${office.total.people === 1 ? 'person' : 'people'} (${apps.join(', ')}).${unpriced}`;
 }
 
 /** Pure renderer: everything the section says comes from `input`. */

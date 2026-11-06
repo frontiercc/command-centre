@@ -466,7 +466,8 @@ export const coworkMessages = pgTable('cowork_messages', {
     // that cannot be fixed on the device (migration 0038). NULL = not recorded.
     session_location: text(),
     // Which Office app a row came from (migration 0039): NULL = Cowork,
-    // otherwise excel / word / powerpoint / outlook (Claude in Office).
+    // otherwise excel / word / powerpoint / outlook (Claude in Office) or
+    // sheets / docs / slides (Claude in Google).
     product: text(),
 }, (t) => [
     foreignKey({ columns: [t.user_id], foreignColumns: [users.id], name: 'cowork_messages_user_id_fk' }),

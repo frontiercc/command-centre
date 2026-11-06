@@ -20,6 +20,7 @@ import { getAdminSession, canAccessAuditLog } from '@/lib/auth/admin-auth';
 import { lacksDepartment, noDepartmentResponse } from '@/lib/auth/content-access';
 import { logAccess } from '@/lib/audit/log';
 import { getCodeModelRates, priceModelsJson } from '@/lib/pulse/code/rates';
+import { PRODUCT_ORDER, productsIn } from '@/lib/pulse/cowork/products';
 
 // ─── Raw-execution facade (mirrors lib/db/queries.ts's rawAll) ────────────────
 interface RawFacade {
@@ -69,8 +70,11 @@ interface ChatEventRow {
   source: string;
 }
 
-/** App filter values the Audit Log accepts: Cowork alone, any Office app, or one Office app. */
-const AUDIT_APPS = new Set(['cowork', 'office', 'excel', 'word', 'powerpoint', 'outlook']);
+/**
+ * App filter values the Audit Log accepts: Cowork alone, any Claude in Office
+ * app, any Claude in Google app, or one app.
+ */
+const AUDIT_APPS = new Set<string>(['cowork', 'office', 'google', ...PRODUCT_ORDER.filter(p => p !== 'cowork')]);
 
 /**
  * Get cowork messages projected into the same shape as compliance events,
@@ -87,7 +91,7 @@ async function getCoworkEventsForAudit(filters: {
   surface?: string;
   source?: string;
   search?: string;
-  /** Work Pulse app: 'cowork' (Cowork only), 'office' (any Office app) or one Office app. */
+  /** Work Pulse app: 'cowork' (Cowork only), 'office' / 'google' (any app in that group) or one app. */
   app?: string;
 }): Promise<Array<{
   id: string;
@@ -116,7 +120,10 @@ async function getCoworkEventsForAudit(filters: {
     if (filters.surface) conditions.push(sql`cm.surface = ${filters.surface}`);
     if (filters.source) conditions.push(sql`cm.source = ${filters.source}`);
     if (filters.app === 'cowork') conditions.push(sql`cm.product IS NULL`);
-    else if (filters.app === 'office') conditions.push(sql`cm.product IS NOT NULL`);
+    else if (filters.app === 'office' || filters.app === 'google') {
+      const apps = productsIn(filters.app);
+      conditions.push(sql`cm.product IN (${sql.join(apps.map(a => sql`${a}`), sql`, `)})`);
+    }
     else if (filters.app) conditions.push(sql`cm.product = ${filters.app}`);
     if (filters.search) {
       // UUID-shaped = exact ID match, otherwise content/user search
@@ -517,7 +524,7 @@ export async function GET(request: NextRequest) {
   const limit = parseInt(params.get('limit') || '100');
   const offset = parseInt(params.get('offset') || '0');
 
-  // App filter (Work Pulse): Cowork alone, Claude in Office, or one Office app.
+  // App filter (Work Pulse): Cowork alone, Claude in Office, Claude in Google, or one app.
   // Prompts only; skill and connector events carry no app. Overrides surface and source.
   const app = params.get('app') || undefined;
   if (app) {

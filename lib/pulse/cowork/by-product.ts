@@ -2,10 +2,12 @@
 // SPDX-License-Identifier: Apache-2.0
 
 /**
- * Work Pulse "By product" panel: Cowork beside each Claude in Office app.
+ * Work Pulse "By product" panel: Cowork beside each Claude in Office and
+ * Claude in Google app.
  *
- * Office rows live in cowork_messages beside Cowork, told apart by `product`
- * (NULL = Cowork; excel / word / powerpoint / outlook, migration 0039). This
+ * Office and Google rows live in cowork_messages beside Cowork, told apart by
+ * `product` (NULL = Cowork; excel / word / powerpoint / outlook, migration 0039;
+ * sheets / docs / slides). This
  * reads them over the last 30 days, the window of the overview's Meaningful
  * work headline, per product, plus an All products row that equals it:
  *
@@ -32,7 +34,7 @@ import { MIN_SESSIONS_FOR_RATE } from '@/lib/pulse/cowork/session-output-rate';
 
 /** Fewest judged prompts a product needs before its Meaningful work share shows. */
 export const MIN_JUDGED_FOR_RATE = 5;
-import { PRODUCT_ORDER, type WorkProduct } from '@/lib/pulse/cowork/products';
+import { PRODUCT_FAMILY, PRODUCT_ORDER, type WorkProduct } from '@/lib/pulse/cowork/products';
 
 /** Same window as the overview's "Meaningful work" headline, so the panel breaks that figure down. */
 export const BY_PRODUCT_WINDOW_DAYS = 30;
@@ -65,8 +67,10 @@ export interface ByProduct {
    * spend; it is an estimate whenever an Office estimate is part of it.
    */
   total: ProductRow;
-  /** False until any Office activity arrives; the panel then says how to set it up. */
+  /** False until any Office or Google activity arrives. */
   hasOffice: boolean;
+  /** Which groups had activity: the panel says how to set up a group with none. */
+  seen: { office: boolean; google: boolean };
 }
 
 export async function buildByProduct(nowS = Math.floor(Date.now() / 1000)): Promise<ByProduct | null> {
@@ -108,7 +112,12 @@ export async function buildByProduct(nowS = Math.floor(Date.now() / 1000)): Prom
       spendEstimated: p !== 'cowork', unpricedModels: [],
     });
   }
-  const hasOffice = [...rows.values()].some(r => r.product !== 'cowork' && r.sessions > 0);
+  const active = [...rows.values()].filter(r => r.sessions > 0);
+  const seen = {
+    office: active.some(r => PRODUCT_FAMILY[r.product as WorkProduct] === 'office'),
+    google: active.some(r => PRODUCT_FAMILY[r.product as WorkProduct] === 'google'),
+  };
+  const hasOffice = seen.office || seen.google;
 
   // Meaningful work: classified prompts at Tier 2 or 3, by when they were
   // classified, which is the overview headline's rule (app/api/pulse/cio).
@@ -213,5 +222,5 @@ export async function buildByProduct(nowS = Math.floor(Date.now() / 1000)): Prom
     unpricedModels: [],
   };
 
-  return { rows: PRODUCT_ORDER.map(p => rows.get(p)!), total, hasOffice };
+  return { rows: PRODUCT_ORDER.map(p => rows.get(p)!), total, hasOffice, seen };
 }

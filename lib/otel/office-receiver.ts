@@ -1,7 +1,8 @@
 // Copyright 2026 Lee James
 // SPDX-License-Identifier: Apache-2.0
 
-// OTLP traces ingest for Claude in Excel, Word, PowerPoint and Outlook (Office agents).
+// OTLP traces ingest for Claude in Excel, Word, PowerPoint and Outlook (Office
+// agents) and Claude in Google Sheets, Docs and Slides, which send the same spans.
 //
 // The Office add-in exports trace spans (service.name 'office-agent') from the
 // user's browser: one agent.query span per prompt, an agent.stream span per
@@ -65,18 +66,35 @@ interface OtlpTracesPayload {
   }>;
 }
 
-/** agent.surface → the app it means. */
-const PRODUCT_BY_SURFACE: Record<string, string> = {
+/** agent.surface → the Microsoft app it means. */
+const MICROSOFT_BY_SURFACE: Record<string, string> = {
   sheet: 'excel',
   doc: 'word',
   slide: 'powerpoint',
   mail: 'outlook',
 };
 
-/** The Office app a span came from, or null for a surface not yet known. */
-export function officeProduct(surface: string | undefined): string | null {
+/**
+ * agent.surface → the Google app it means. The Google Workspace add-on sends
+ * the same spans with agent.vendor 'g' (seen in a live capture, 2026-11-06:
+ * sheet, doc and slide).
+ */
+const GOOGLE_BY_SURFACE: Record<string, string> = {
+  sheet: 'sheets',
+  doc: 'docs',
+  slide: 'slides',
+};
+
+/**
+ * The app a span came from, or null for a surface not yet known. agent.vendor
+ * 'g' is Google; anything else (Microsoft sends 'm') is read as Office, which
+ * is how every span was read before Google arrived.
+ */
+export function officeProduct(surface: string | undefined, vendor?: string): string | null {
   if (!surface) return null;
-  return PRODUCT_BY_SURFACE[surface.trim().toLowerCase()] ?? null;
+  const key = surface.trim().toLowerCase();
+  if (vendor?.trim().toLowerCase() === 'g') return GOOGLE_BY_SURFACE[key] ?? null;
+  return MICROSOFT_BY_SURFACE[key] ?? null;
 }
 
 /**
@@ -236,7 +254,7 @@ export async function processOfficeSpans(payload: unknown): Promise<ProcessResul
 
     const sessionId = getAttr(attrs, 'session.id') ?? span.traceId ?? uuidv4();
     const promptId = span.traceId ?? null;
-    const product = officeProduct(getAttr(attrs, 'agent.surface'));
+    const product = officeProduct(getAttr(attrs, 'agent.surface'), getAttr(attrs, 'agent.vendor'));
     const occurredAt = toSeconds(span.startTimeUnixNano);
     const pending: Pending = { pii: null };
 

@@ -646,7 +646,7 @@ function SpendReviewContent() {
                 <Figure label="Sessions" value={String(data.totals.sessions)} />
               </Strip>
               <Muted>
-                Measured by Command Centre from telemetry, the same figures as FinOps. Chat isn&apos;t included{data.office ? ', and Claude in Office is shown below as a separate estimate' : ''}.
+                Measured by Command Centre from telemetry, the same figures as FinOps. Chat isn&apos;t included{data.office ? ', and Claude in Office and Google is shown below as a separate estimate' : ''}.
                 {data.unpricedModels.length > 0 && ` Not priced, so left out: ${data.unpricedModels.map(m => formatModelLabel(m).label).join(', ')}.`}
               </Muted>
             </div>

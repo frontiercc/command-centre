@@ -14,7 +14,7 @@ export interface DeptBriefingContext {
   confirmed_capabilities: number;
   /** Measured deep-work lines for the department — never names, summaries or file names. */
   deep_work: string[];
-  /** Measured sessions and people per product (Cowork, Claude in Office apps); empty when no Office activity. */
+  /** Measured sessions and people per product (Cowork, Claude in Office and Google apps); empty when neither was used. */
   work_by_product?: string[];
   concentration_risk_count: number;
 }
@@ -30,7 +30,7 @@ Return a JSON object with exactly these fields:
   "risk_note": string,
   "recommendation": string
 }
-paragraphs: 3 narrative paragraphs covering (1) overall activity and tier distribution, and, when the data says where the work happened, one sentence on how it splits between Cowork and the Claude in Office apps, (2) the deep work the team did (the kinds of Tier 3 work and new capabilities given below; never name people), (3) risks or areas for focus.
+paragraphs: 3 narrative paragraphs covering (1) overall activity and tier distribution, and, when the data says where the work happened, one sentence on how it splits between Cowork and the Claude in Office and Claude in Google apps, (2) the deep work the team did (the kinds of Tier 3 work and new capabilities given below; never name people), (3) risks or areas for focus.
 strength: one short sentence about the team's biggest strength this month.
 risk_note: one short sentence about the main risk or gap.
 recommendation: one actionable recommendation for the manager.`;

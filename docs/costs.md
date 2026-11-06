@@ -2,7 +2,7 @@
 
 **These figures are indicative only.** They are worked out from real installation activity and today's model prices. Your costs depend on how much your people use Claude, which features you switch on and which models you choose in Admin.
 
-This covers only Command Centre's own use of Claude, such as grading work, matching sessions to use cases and writing briefings. Your people's own Claude Code, Claude Cowork, Claude in Office and Claude Chat use is paid through your Claude plan, and hosting is separate.
+This covers only Command Centre's own use of Claude, such as grading work, matching sessions to use cases and writing briefings. Your people's own Claude Code, Claude Cowork, Claude in Office/Google and Claude Chat use is paid through your Claude plan, and hosting is separate.
 
 ## Claude API cost per month
 

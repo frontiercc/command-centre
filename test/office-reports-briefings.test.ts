@@ -17,15 +17,18 @@ const office: OfficeSpendSummary = {
     { product: 'excel', usd: 4.35, tokens: tok(1000), calls: 12, unpricedModels: [], people: 3 },
     { product: 'word', usd: null, tokens: tok(500), calls: 4, unpricedModels: ['claude-opus-5-5'], people: 1 },
     { product: 'powerpoint', usd: null, tokens: tok(0), calls: 0, unpricedModels: [], people: 0 },
+    { product: 'sheets', usd: 1.1, tokens: tok(200), calls: 2, unpricedModels: [], people: 1 },
   ],
-  total: { usd: 4.35, tokens: tok(1500), calls: 16, unpricedModels: ['claude-opus-5-5'], people: 3 },
+  total: { usd: 5.45, tokens: tok(1700), calls: 18, unpricedModels: ['claude-opus-5-5'], people: 4 },
   hasOffice: true,
+  seen: { office: true, google: true },
 };
 
 describe('FinOps report: Claude in Office block', () => {
   it('lists apps with activity as an estimate, names unpriced models, never $0', () => {
     const text = officeBlock(office);
-    expect(text).toContain('### Claude in Office (estimate)');
+    expect(text).toContain('### Claude in Office and Google (estimate)');
+    expect(text).toContain('| Google Sheets | 1 | 2 | 200 | about $1.10 |');
     expect(text).toContain('not included in any total above');
     expect(text).toContain('| Excel | 3 | 12 | 1,000 | about $4.35 |');
     expect(text).toContain('| Word | 1 | 4 | 500 | not priced |');
@@ -43,8 +46,8 @@ describe('Spend Review report: Claude in Office line', () => {
   it('gives the estimate and the people, kept apart from the totals', () => {
     const line = officeSentence(office)!;
     expect(line).toContain('not included above');
-    expect(line).toContain('about **$4.35** across 3 people');
-    expect(line).toContain('Excel about $4.35, Word not priced');
+    expect(line).toContain('about **$5.45** across 4 people');
+    expect(line).toContain('Excel about $4.35, Word not priced, Google Sheets about $1.10');
   });
   it('is absent without Office activity', () => {
     expect(officeSentence(null)).toBeNull();
@@ -56,11 +59,13 @@ describe('briefings: where the work happened', () => {
     const lines = workByProductLines([
       { product: 'cowork', sessions: 120, people: 30 },
       { product: 'excel', sessions: 8, people: 1 },
+      { product: 'docs', sessions: 3, people: 2 },
     ]);
     expect(lines).toEqual([
-      'Where the work happened, 2 products in total (measured sessions and people):',
+      'Where the work happened, 3 products in total (measured sessions and people):',
       'Cowork: 120 sessions by 30 people',
       'Claude in Excel: 8 sessions by 1 person',
+      'Claude in Google Docs: 3 sessions by 2 people',
     ]);
   });
   it('adds nothing when only Cowork was used', () => {

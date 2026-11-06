@@ -293,7 +293,7 @@ Return a JSON object with exactly these fields:
 }
 
 COWORK TERMINOLOGY:
-- "coworkSessions" is the count of distinct work sessions this week in Cowork and Claude in Office (Excel, Word, PowerPoint, Outlook) together; Claude Code sessions are not in it (each session = one conversation context in Claude). Always refer to this as "sessions", never "events". Individual messages within sessions are not counted here.
+- "coworkSessions" is the count of distinct work sessions this week in Cowork, Claude in Office (Excel, Word, PowerPoint, Outlook) and Claude in Google (Sheets, Docs, Slides) together; Claude Code sessions are not in it (each session = one conversation context in Claude). Always refer to this as "sessions", never "events". Individual messages within sessions are not counted here.
 - The dashboard stat card shows this as "Work sessions". Use that same label when referencing it.
 
 WORK PULSE (CLAUDE COWORK AND CLAUDE IN OFFICE) DATA UNDERSTANDING:

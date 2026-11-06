@@ -55,7 +55,8 @@ async function runSpec(): Promise<void> {
     // Before any Office activity, FinOps still lists every app, at zero.
     const none = summariseOfficeSpend(await officeSpendByUser(start, end), { allApps: true })!;
     expect(none.hasOffice).toBe(false);
-    expect(none.byProduct.map(p => p.product)).toEqual(['excel', 'word', 'powerpoint', 'outlook']);
+    expect(none.byProduct.map(p => p.product)).toEqual(['excel', 'word', 'powerpoint', 'outlook', 'sheets', 'docs', 'slides']);
+    expect(none.seen).toEqual({ office: false, google: false });
     for (const p of none.byProduct) expect(p).toMatchObject({ calls: 0, usd: null, people: 0 });
     expect(summariseOfficeSpend(await officeSpendByUser(start, end))).toBeNull();
 

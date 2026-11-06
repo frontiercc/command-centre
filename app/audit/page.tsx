@@ -4,7 +4,7 @@
 
 'use client';
 
-import { PRODUCT_LABEL, type WorkProduct } from '@/lib/pulse/cowork/products';
+import { PRODUCT_LABEL, productFullName, type WorkProduct } from '@/lib/pulse/cowork/products';
 import { useEffect, useState, useCallback, useMemo, type ReactNode } from 'react';
 import { useSearchParams } from 'next/navigation';
 import TopBar from '@/components/layout/TopBar';
@@ -18,7 +18,7 @@ import { hasBreakdown, type SpendSplit } from '@/lib/finance/where-money-went';
 
 interface AuditEvent {
   id: string;
-  /** Claude in Office app, when the prompt came from Excel, Word, PowerPoint or Outlook. */
+  /** The app, when the prompt came from Claude in Office or Claude in Google. */
   product?: string | null;
   user_id: string;
   department?: string | null;
@@ -597,7 +597,7 @@ export default function AuditPage() {
           <div className="flex flex-col gap-0.5 text-[13px]">
             <span><span className="font-semibold">Claude Code:</span> Prompts, models, cost and tool use.</span>
             <span><span className="font-semibold">Cowork:</span> Prompts, models, cost and tool use.</span>
-            <span><span className="font-semibold">Claude in Office:</span> Prompts, models and tool use. No cost, and never the document&apos;s content.</span>
+            <span><span className="font-semibold">Claude in Office and Claude in Google:</span> Prompts, models and tool use. No cost, and never the document&apos;s content.</span>
             <span><span className="font-semibold">Chat:</span> Prompts, through the Compliance API (Enterprise plan).</span>
             <span>Claude&apos;s replies are never stored.</span>
           </div>
@@ -641,6 +641,10 @@ export default function AuditPage() {
             <option value="word">Word</option>
             <option value="powerpoint">PowerPoint</option>
             <option value="outlook">Outlook</option>
+            <option value="google">Claude in Google</option>
+            <option value="sheets">Google Sheets</option>
+            <option value="docs">Google Docs</option>
+            <option value="slides">Google Slides</option>
           </select>
 
           <select value={userFilter} onChange={e => setUserFilter(e.target.value)} className={`${B.select} max-w-[220px]`} aria-label="User">
@@ -745,8 +749,8 @@ export default function AuditPage() {
                           </td>
                           <td className={`${T.tdMute} hidden md:table-cell`}>{event.department ?? '—'}</td>
                           <td className={`${T.td} whitespace-nowrap`}>
-                            {/* A Claude in Office prompt shows its app alone (Excel, Word...), not Cowork */}
-                            <Tag>{event.product && event.product in PRODUCT_LABEL ? PRODUCT_LABEL[event.product as WorkProduct] : event.surface}</Tag>
+                            {/* An Office or Google prompt shows its app (Excel, Google Sheets...), not Cowork */}
+                            <Tag>{event.product && event.product in PRODUCT_LABEL ? productFullName(event.product as WorkProduct) : event.surface}</Tag>
                             {event.surface === 'cowork_partial' && (
                               <span className="ml-1 text-[13px] text-[#8F8F8F]">Metadata only</span>
                             )}

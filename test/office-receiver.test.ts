@@ -12,6 +12,16 @@ describe('office receiver helpers', () => {
     expect(officeProduct('mail')).toBe('outlook');
     expect(officeProduct('something-new')).toBeNull();
     expect(officeProduct(undefined)).toBeNull();
+    // Microsoft says so explicitly too.
+    expect(officeProduct('doc', 'm')).toBe('word');
+  });
+
+  it('maps each Google surface to its app when agent.vendor is g', () => {
+    expect(officeProduct('sheet', 'g')).toBe('sheets');
+    expect(officeProduct('doc', 'g')).toBe('docs');
+    expect(officeProduct('slide', 'G ')).toBe('slides');
+    // Google has no mail add-in; an unknown Google surface is not guessed at.
+    expect(officeProduct('mail', 'g')).toBeNull();
   });
 
   it('counts writes and Word proposed edits as changing the document', () => {

@@ -15,7 +15,7 @@ import { buildChargeback, type ChargebackReport, type SurfaceSpend } from '@/lib
 import { buildModelEfficiency, type ModelEfficiencyReport } from '@/lib/finance/model-efficiency';
 import { officeSpendByUser, summariseOfficeSpend, type OfficeSpendSummary } from '@/lib/finance/office-spend';
 import { monthBounds } from '@/lib/finance/period';
-import { PRODUCT_LABEL } from '@/lib/pulse/cowork/products';
+import { productFullName } from '@/lib/pulse/cowork/products';
 import { getConfigValue } from '@/lib/config';
 
 /** `YYYY-MM` for the month containing an ISO date string. */
@@ -129,7 +129,7 @@ function dataQualityNotes(report: ChargebackReport, effs: ModelEfficiencyReport[
 }
 
 /**
- * Claude in Office: an estimate on its own, never in the totals above (Office
+ * Claude in Office and Google: an estimate on its own, never in the totals above (they
  * sends tokens but no cost; lib/finance/office-spend.ts prices them from the
  * admin rates). Only apps with activity are listed; nothing when there is none.
  */
@@ -137,14 +137,14 @@ export function officeBlock(office: OfficeSpendSummary | null | undefined): stri
   if (!office || !office.hasOffice) return '';
   const rows = office.byProduct.filter(p => p.calls > 0).map(p => {
     const t = p.tokens.inputTokens + p.tokens.outputTokens + p.tokens.cacheReadTokens + p.tokens.cacheCreationTokens;
-    return `| ${PRODUCT_LABEL[p.product]} | ${p.people} | ${tokens(p.calls)} | ${tokens(t)} | ${p.usd === null ? 'not priced' : `about ${usd(p.usd)}`} |`;
+    return `| ${productFullName(p.product)} | ${p.people} | ${tokens(p.calls)} | ${tokens(t)} | ${p.usd === null ? 'not priced' : `about ${usd(p.usd)}`} |`;
   });
   const unpriced = office.total.unpricedModels.length > 0
     ? ` Not priced, so left out: ${office.total.unpricedModels.join(', ')}.`
     : '';
-  return `### Claude in Office (estimate)
+  return `### Claude in Office and Google (estimate)
 
-Claude in Excel, Word, PowerPoint and Outlook send tokens but no cost, so this is the tokens priced from the model rates on Admin → Developer Pulse. It is an estimate, for visibility, not billing, and is not included in any total above.${unpriced}
+Claude in Excel, Word, PowerPoint, Outlook and Google Sheets, Docs and Slides send tokens but no cost, so this is the tokens priced from the model rates on Admin → Developer Pulse. It is an estimate, for visibility, not billing, and is not included in any total above.${unpriced}
 
 | App | People | Model calls | Tokens | Spend (estimate) |
 |---|---|---|---|---|
