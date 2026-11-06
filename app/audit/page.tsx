@@ -745,10 +745,8 @@ export default function AuditPage() {
                           </td>
                           <td className={`${T.tdMute} hidden md:table-cell`}>{event.department ?? '—'}</td>
                           <td className={`${T.td} whitespace-nowrap`}>
-                            <Tag>{event.surface}</Tag>
-                            {event.product && event.product in PRODUCT_LABEL && (
-                              <span className="ml-1"><Tag>{PRODUCT_LABEL[event.product as WorkProduct]}</Tag></span>
-                            )}
+                            {/* A Claude in Office prompt shows its app alone (Excel, Word...), not Cowork */}
+                            <Tag>{event.product && event.product in PRODUCT_LABEL ? PRODUCT_LABEL[event.product as WorkProduct] : event.surface}</Tag>
                             {event.surface === 'cowork_partial' && (
                               <span className="ml-1 text-[13px] text-[#8F8F8F]">Metadata only</span>
                             )}

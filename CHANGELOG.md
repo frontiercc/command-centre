@@ -1,5 +1,11 @@
 # Changelog
 
+## 1.1.1 (unreleased)
+
+### Fixed
+
+- The Audit Log's Surface column shows a Claude in Office prompt's app on its own (Excel, Word, PowerPoint or Outlook), not "Cowork" beside it.
+
 ## 1.1.0 (2026-11-05)
 
 ### Added
