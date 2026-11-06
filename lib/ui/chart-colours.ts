@@ -17,10 +17,12 @@ export const SURFACE_COLOR = {
 } as const;
 
 /**
- * Work Pulse products (Cowork and Claude in Office): one indigo family, chosen 2026-11-05.
- * Cowork keeps its surface indigo; each Office app is a shade of it, alternating light and
- * dark so neighbouring segments never blend, leaning purple so they stay clear of the
- * sky-blue tiers. Keys match cowork_messages.product (lib/pulse/cowork/products.ts).
+ * Work Pulse products (Cowork, Claude in Office, Claude in Google): one indigo family, chosen
+ * 2026-11-05. Cowork keeps its surface indigo; each Office app is a shade of it, alternating
+ * light and dark so neighbouring segments never blend, leaning purple so they stay clear of the
+ * sky-blue tiers. The Google apps (added 2026-11-06) are slate shades of the same family, greyer
+ * than the Office ones so the two groups read apart. Keys match cowork_messages.product
+ * (lib/pulse/cowork/products.ts).
  */
 export const WORK_PRODUCT_COLOR = {
   cowork: '#3F3D9E',
@@ -28,6 +30,9 @@ export const WORK_PRODUCT_COLOR = {
   word: '#241F66',
   powerpoint: '#6A5FCB',
   outlook: '#D2CAF2',
+  sheets: '#5C6B9E',
+  docs: '#2E3A66',
+  slides: '#A3AEDB',
 } as const;
 
 /** Text colour that reads on a full-strength surface fill. */

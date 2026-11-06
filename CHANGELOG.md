@@ -1,5 +1,20 @@
 # Changelog
 
+## 1.2.0 (2026-11-06)
+
+### Added
+
+- Claude in Google Sheets, Docs and Slides. The Claude add-on for Google Workspace reports through the same **Office agents → Monitoring** setting as Claude in Office, and Command Centre now shows its work as its own products. The Work Pulse **By product** panel groups the apps under Cowork, Claude in Office (Excel, Word, PowerPoint, Outlook) and Claude in Google (Sheets, Docs, Slides). The FinOps and Spend Review estimate panels, the Audit Log app filter and labels, the FinOps and Spend Review report sections and the executive and department briefings all name the Google apps. Google spend is an estimate priced from the model rates, like Office spend, and is never added to any total. Google sends no document name, so Google work lists no file names.
+- Sample data includes Google Sheets, Docs and Slides activity.
+
+### Fixed
+
+- Google Workspace work was filed under Microsoft Office: Google Sheets showed as Excel, Google Slides as PowerPoint and Google Docs as Word. Command Centre now reads which vendor sent each event. On upgrade, stored sessions that used Google Apps Script move to the Google apps; a Google Docs session with no Apps Script call cannot be told apart after the fact and stays under Word.
+
+### Changed
+
+- **Show Claude in Office** under **Admin → Work Pulse** is now **Show Claude in Office and Google**, and hides both groups.
+
 ## 1.1.1 (2026-11-06)
 
 ### Fixed

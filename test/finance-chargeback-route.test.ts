@@ -83,7 +83,7 @@ describe('GET /api/finance/chargeback, Claude in Office panel', () => {
     const { GET } = await import('../app/api/finance/chargeback/route');
     const body = await (await GET(makeRequest('/api/finance/chargeback?period=2026-03'))).json();
     expect(body.office.hasOffice).toBe(false);
-    expect(body.office.byProduct.map((p: { product: string }) => p.product)).toEqual(['excel', 'word', 'powerpoint', 'outlook']);
+    expect(body.office.byProduct.map((p: { product: string }) => p.product)).toEqual(['excel', 'word', 'powerpoint', 'outlook', 'sheets', 'docs', 'slides']);
   });
 
   it('leaves the panel out when Show Claude in Office is off', async () => {

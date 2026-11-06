@@ -32,6 +32,8 @@ describe('GET /api/events app filter', () => {
         prompt('cw', null, 400),
         prompt('xl', 'excel', 300),
         prompt('wd', 'word', 200),
+        prompt('gs', 'sheets', 150),
+        prompt('gd', 'docs', 120),
       ]);
       await db.insert(schema.coworkSkillInvocations).values([
         { id: 'skill-1', user_id: 'u1', session_id: 's-cw', skill_name: 'docx', occurred_at: 100, source: 'otel', surface: 'cowork' },
@@ -45,11 +47,14 @@ describe('GET /api/events app filter', () => {
       };
 
       expect(await ids('?app=cowork')).toEqual(['cw']);
+      // Claude in Office and Claude in Google are separate groups.
       expect(await ids('?app=office')).toEqual(['wd', 'xl']);
+      expect(await ids('?app=google')).toEqual(['gd', 'gs']);
       expect(await ids('?app=excel')).toEqual(['xl']);
+      expect(await ids('?app=docs')).toEqual(['gd']);
       expect(await ids('?app=outlook')).toEqual([]);
       // No app filter: every prompt plus the skill event, as before.
-      expect(await ids('?surface=cowork')).toEqual(['cw', 'skill-1', 'wd', 'xl']);
+      expect(await ids('?surface=cowork')).toEqual(['cw', 'gd', 'gs', 'skill-1', 'wd', 'xl']);
 
       const bad = await GET(new NextRequest('http://localhost/api/events?app=teams'));
       expect(bad.status).toBe(400);

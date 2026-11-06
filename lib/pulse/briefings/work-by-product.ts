@@ -3,7 +3,7 @@
 
 /**
  * Where the work happened, for the CIO and department briefings: sessions and
- * people per product (Cowork and each Claude in Office app) over the period.
+ * people per product (Cowork and each Claude in Office and Claude in Google app) over the period.
  * Measured, from the person's own prompts in cowork_messages (Office rows carry
  * `product`, NULL = Cowork), the same rule as the Work Pulse By product panel.
  *
@@ -15,7 +15,7 @@ import { and, eq, gte, inArray, lt, sql } from 'drizzle-orm';
 import { getTypedClient } from '@/lib/db/client';
 import { schema } from '@/lib/db/schema';
 import { getConfigValue } from '@/lib/config';
-import { PRODUCT_LABEL, PRODUCT_ORDER, type WorkProduct } from '@/lib/pulse/cowork/products';
+import { PRODUCT_ORDER, productFullName, type WorkProduct } from '@/lib/pulse/cowork/products';
 
 export interface ProductActivity { product: WorkProduct; sessions: number; people: number }
 
@@ -45,14 +45,14 @@ export async function readWorkByProduct(userIds: string[] | null, sinceS: number
     .map(p => ({ product: p, sessions: Number(byProduct.get(p)!.sessions), people: Number(byProduct.get(p)!.people) }));
 }
 
-/** Pure: the briefing lines, or none when no Office app was used. States the list's count. */
+/** Pure: the briefing lines, or none when no Office or Google app was used. States the list's count. */
 export function workByProductLines(activity: ProductActivity[]): string[] {
   const office = activity.filter(a => a.product !== 'cowork' && a.sessions > 0);
   if (office.length === 0) return [];
   const used = activity.filter(a => a.sessions > 0);
   return [
     `Where the work happened, ${used.length} products in total (measured sessions and people):`,
-    ...used.map(a => `${a.product === 'cowork' ? 'Cowork' : `Claude in ${PRODUCT_LABEL[a.product]}`}: ${a.sessions} sessions by ${a.people} ${a.people === 1 ? 'person' : 'people'}`),
+    ...used.map(a => `${a.product === 'cowork' ? 'Cowork' : `Claude in ${productFullName(a.product)}`}: ${a.sessions} sessions by ${a.people} ${a.people === 1 ? 'person' : 'people'}`),
   ];
 }
 

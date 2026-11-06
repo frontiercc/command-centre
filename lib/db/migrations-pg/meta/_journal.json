@@ -281,6 +281,13 @@
       "when": 1791158400000,
       "tag": "0039_office_product",
       "breakpoints": true
+    },
+    {
+      "idx": 40,
+      "version": "7",
+      "when": 1791244800000,
+      "tag": "0040_google_product",
+      "breakpoints": true
     }
   ]
 }

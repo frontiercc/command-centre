@@ -143,8 +143,8 @@ export default function OverviewTab({
           onChange={on => onConfigChange({ pulseSessionDescriptionsEnabled: on ? 'true' : 'false' })}
         />
         <ToggleRow
-          label="Show Claude in Office"
-          hint={<>The By product panel on the Work Pulse overview and the Claude in Office (estimate) panel on FinOps, comparing Cowork with Claude in Excel, Word, PowerPoint and Outlook. Turn off if your organisation does not use Claude in Office. Off only hides the panels: any Office activity that arrives is still stored and counted.</>}
+          label="Show Claude in Office and Google"
+          hint={<>The By product panel on the Work Pulse overview and the Claude in Office and Google (estimate) panel on FinOps, comparing Cowork with Claude in Excel, Word, PowerPoint, Outlook and Google Sheets, Docs and Slides. Turn off if your organisation uses neither. Off only hides the panels: any activity that arrives is still stored and counted.</>}
           checked={config.claudeInOfficeShown !== 'false'}
           onChange={on => onConfigChange({ claudeInOfficeShown: on ? 'true' : 'false' })}
         />

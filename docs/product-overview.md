@@ -45,11 +45,11 @@ Command Centre flags personal data, secrets, risky intent, anomalies, spend thre
 
 **Work Pulse**
 
-Work Pulse shows how deeply your people hand work to Claude, from routine tasks to multi-step work and whole processes. Work Pulse grades Claude Cowork and Claude in Office activity against three tiers you can edit, follows each person's progress, compares departments, and shows whether deeper capability is spreading or sitting with a few people.
+Work Pulse shows how deeply your people hand work to Claude, from routine tasks to multi-step work and whole processes. Work Pulse grades Claude Cowork and Claude in Office/Google activity against three tiers you can edit, follows each person's progress, compares departments, and shows whether deeper capability is spreading or sitting with a few people.
 
 Work Pulse also surfaces new kinds of work, standout individual contributions and outputs such as documents and files. Managers see where to coach; leaders see whether their investment is changing how work gets done. Every grade is labelled as an AI judgement, and an administrator can sample grades for human review.
 
-![Work Pulse: how deeply people hand work to Claude, and how Claude Cowork compares with Claude in Excel, Word, PowerPoint and Outlook](images/work-pulse.png)
+![Work Pulse: how deeply people hand work to Claude, and how Claude Cowork compares with Claude in Office and Claude in Google, app by app](images/work-pulse.png)
 
 ![Work Pulse: top skills and connectors, files produced, work mix and what the signals are telling you](images/work-pulse-signals.png)
 
@@ -97,7 +97,7 @@ The Skills and Connectors Board discovers capabilities already being used, inclu
 
 FinOps attributes AI spend to people, departments and cost centres, down to models, activities, prompts, skills and subagents. FinOps shows caching savings, unallocated costs and opportunities to use a more appropriate model or an existing skill or connector.
 
-![FinOps: the Claude in Office estimate app by app, beside model efficiency by kind of work](images/finops.png)
+![FinOps: the Claude in Office and Google estimate app by app, beside model efficiency by kind of work](images/finops.png)
 
 *Sample data from Acme Corp, a fictional company.*
 
@@ -121,7 +121,7 @@ Command Centre brings supported Claude activity into a searchable audit trail, w
 
 **Operational boundary:** Command Centre observes telemetry after prompts reach Claude, so Command Centre cannot block or change a prompt. Command Centre stores people's prompts, never Claude's replies.
 
-![The Audit Log filtered to Claude in Office, each prompt labelled with its app](images/audit-log.png)
+![The Audit Log filtered to Claude in Google, each prompt labelled with its app](images/audit-log.png)
 
 ![The Audit Log filtered to flagged prompts, with their severity](images/audit-log-flagged.png)
 
@@ -155,10 +155,10 @@ A count of licences and active people does not show whether the work has changed
 |---|---|---|
 | Claude Code | Claude working in a terminal or IDE, including Claude Code inside Claude Desktop | OpenTelemetry logs and metrics, pushed from each client |
 | Claude Cowork | Claude Desktop's agent mode, working across files, connectors and skills | OpenTelemetry logs, pushed from each client |
-| Claude in Office | Claude in Excel, Word, PowerPoint and Outlook | OpenTelemetry traces, pushed from each person's browser |
+| Claude in Office/Google | Claude in Excel, Word, PowerPoint, Outlook and Google Sheets, Docs and Slides | OpenTelemetry traces, pushed from each person's browser |
 | Claude Chat | Conversations in the Claude apps | Anthropic Compliance API, pulled by Command Centre (Claude for Enterprise) |
 
-Claude Code, Claude Cowork and Claude in Office, given the collector's address and bearer token through their telemetry settings, push OpenTelemetry records to an OpenTelemetry Collector you run, which batches them and forwards them to the Command Centre Hub. Nothing is installed on user machines beyond Claude's own apps. For Claude Chat, the Hub calls Anthropic's Compliance API on a schedule with your organisation's Compliance Access Key and reads conversations incrementally. The Hub and the collector run as containers, with PostgreSQL holding the stored data; the collector keeps telemetry awaiting delivery in a disk queue, and an optional archive writes records due for removal to an Amazon S3 bucket you name. With Docker Compose, the collector reaches the Hub over the private Docker network; before connecting other people's machines, serve the collector and the Hub over HTTPS through a reverse proxy or load balancer you add. [Running in Azure or AWS](running-in-azure-or-aws.md) shows one way to run it in the cloud.
+Claude Code, Claude Cowork and Claude in Office/Google, given the collector's address and bearer token through their telemetry settings, push OpenTelemetry records to an OpenTelemetry Collector you run, which batches them and forwards them to the Command Centre Hub. Nothing is installed on user machines beyond Claude's own apps. For Claude Chat, the Hub calls Anthropic's Compliance API on a schedule with your organisation's Compliance Access Key and reads conversations incrementally. The Hub and the collector run as containers, with PostgreSQL holding the stored data; the collector keeps telemetry awaiting delivery in a disk queue, and an optional archive writes records due for removal to an Amazon S3 bucket you name. With Docker Compose, the collector reaches the Hub over the private Docker network; before connecting other people's machines, serve the collector and the Hub over HTTPS through a reverse proxy or load balancer you add. [Running in Azure or AWS](running-in-azure-or-aws.md) shows one way to run it in the cloud.
 
 ![High-level data flow](diagrams/High-level%20data%20flow.png)
 
@@ -168,7 +168,7 @@ Claude Code, Claude Cowork and Claude in Office, given the collector's address a
 
 ### Depth of delegation
 
-The foundation is a three-tier grading of delegated work. A Claude model grades every Claude Cowork and Claude in Office prompt against a written rubric, and a separate classifier grades every finished Claude Code session against its own rubric. Administrators can edit both rubrics, including tier names, descriptions and the list of kinds of work; edits apply to work graded afterwards.
+The foundation is a three-tier grading of delegated work. A Claude model grades every Claude Cowork and Claude in Office/Google prompt against a written rubric, and a separate classifier grades every finished Claude Code session against its own rubric. Administrators can edit both rubrics, including tier names, descriptions and the list of kinds of work; edits apply to work graded afterwards.
 
 | Tier | Claude Cowork default | Claude Code default |
 |---|---|---|
@@ -207,13 +207,13 @@ The dashboard is the landing page for administrators, managers and viewers. The 
 
 ## Work Pulse
 
-Work Pulse is the productivity view of Claude Cowork and Claude in Office work, with an executive view, a department view, a list of people, a personal view ("My Pulse") and a view of skills and connectors in use.
+Work Pulse is the productivity view of Claude Cowork and Claude in Office/Google work, with an executive view, a department view, a list of people, a personal view ("My Pulse") and a view of skills and connectors in use.
 
-The executive view opens with five headline figures: people working in Claude Cowork or Claude in Office each week, the share of work at Tier 2 or 3, output against baseline, delegation depth, and concentration (the share of the last 14 days' Tier 3 work carried by the three people who did the most of it). Beneath them sit the four signals, a department table and a "what to act on next" panel listing suggested department processes and coaching opportunities and, for administrators and managers when Model Efficiency is on, kinds of work where a cheaper model merits review.
+The executive view opens with five headline figures: people working in Claude Cowork or Claude in Office/Google each week, the share of work at Tier 2 or 3, output against baseline, delegation depth, and concentration (the share of the last 14 days' Tier 3 work carried by the three people who did the most of it). Beneath them sit the four signals, a department table and a "what to act on next" panel listing suggested department processes and coaching opportunities and, for administrators and managers when Model Efficiency is on, kinds of work where a cheaper model merits review.
 
 ### By product
 
-The By product panel, under the headline figures, compares Claude Cowork with Claude in Excel, Word, PowerPoint and Outlook over the last 30 days: app users, sessions, the share of work at Tier 2 or 3, the share of sessions that produced something, and spend. Claude Cowork's spend is the cost Claude reports; Claude in Office sends no cost, so its spend is priced from the model rates and marked as an estimate. The All products row adds every row up, and its spend is marked as an estimate once Office spend is part of it. An app's shares show once it has five judged prompts or five sessions, so one prompt never reads as 0% or 100%. Every app is listed from the start, at zero until its activity arrives. An administrator can hide the panel under **Admin → Work Pulse → Show Claude in Office**.
+The By product panel, under the headline figures, compares Claude Cowork with Claude in Excel, Word, PowerPoint, Outlook and Google Sheets, Docs and Slides over the last 30 days: app users, sessions, the share of work at Tier 2 or 3, the share of sessions that produced something, and spend. Claude Cowork's spend is the cost Claude reports; Claude in Office/Google sends no cost, so its spend is priced from the model rates and marked as an estimate. The All products row adds every row up, and its spend is marked as an estimate once Office spend is part of it. An app's shares show once it has five judged prompts or five sessions, so one prompt never reads as 0% or 100%. Every app is listed from the start, at zero until its activity arrives. An administrator can hide the panel under **Admin → Work Pulse → Show Claude in Office/Google**.
 
 ### Work Mix and Session Output Rate
 
@@ -237,7 +237,7 @@ For Tier 2 and Tier 3 sessions, Command Centre sets an AI estimate of how long t
 
 ### Briefings
 
-Each person has a weekly briefing on their own work, administrators and managers can generate a briefing for each department on its page, and the executive view carries a monthly organisation briefing. All are written by Claude from figures computed in code and pass the number check; organisation-level briefings are written from figures that carry no names. When Claude in Office was used in the period, the executive and department briefings also say how the work split between Claude Cowork and the Office apps.
+Each person has a weekly briefing on their own work, administrators and managers can generate a briefing for each department on its page, and the executive view carries a monthly organisation briefing. All are written by Claude from figures computed in code and pass the number check; organisation-level briefings are written from figures that carry no names. When Claude in Office/Google was used in the period, the executive and department briefings also say how the work split between Claude Cowork and the Office apps.
 
 ## Developer Pulse
 
@@ -313,7 +313,7 @@ Each entry shows usage, the number of people using it, its trend, whether people
 
 ## FinOps
 
-FinOps is available to administrators and managers. FinOps ships switched off, as does its Model Efficiency view; an administrator turns both on under **Admin → System**. FinOps attributes Claude Code and Claude Cowork spend to people and rolls it up by cost centre for each calendar month. Claude in Office spend is shown beside it in its own panel, app by app, as an estimate priced from the model rates, because Claude in Office sends no cost; it is never part of the chargeback total, a closed month's snapshot or the CSV export. Developer Pulse carries its own Claude Code spend figures, and its department view lists each member's spend for the last seven days to the roles that can open that department.
+FinOps is available to administrators and managers. FinOps ships switched off, as does its Model Efficiency view; an administrator turns both on under **Admin → System**. FinOps attributes Claude Code and Claude Cowork spend to people and rolls it up by cost centre for each calendar month. Claude in Office/Google spend is shown beside it in its own panel, app by app, as an estimate priced from the model rates, because Claude in Office/Google sends no cost; it is never part of the chargeback total, a closed month's snapshot or the CSV export. Developer Pulse carries its own Claude Code spend figures, and its department view lists each member's spend for the last seven days to the roles that can open that department.
 
 ### Chargeback and period close
 
@@ -325,7 +325,7 @@ An administrator can close a month, which stores an immutable snapshot; every la
 
 ### Spend Review
 
-Spend Review shows, for one person and one month, what the spend went on, whether it produced anything and whether a better route exists. For each kind of work it shows spend, sessions, typical session cost and model split. Where at least three colleagues and five sessions of the same kind of work exist in the last 90 days, it compares the person with them without naming anyone and suggests routes: a skill or connector colleagues commonly use, a cheaper model colleagues use with comparable outcomes, a stronger model where their outcomes are clearly better, or a change of approach where long conversations spend heavily on re-reading context. Spend Review also identifies scheduled tasks running repeatedly on the most expensive class of model, and shows a person's Claude in Office spend as a separate estimate. Savings are estimates based on list prices. An index lists everyone's spend and suggested routes. Administrators and managers can open any review; each person can open their own.
+Spend Review shows, for one person and one month, what the spend went on, whether it produced anything and whether a better route exists. For each kind of work it shows spend, sessions, typical session cost and model split. Where at least three colleagues and five sessions of the same kind of work exist in the last 90 days, it compares the person with them without naming anyone and suggests routes: a skill or connector colleagues commonly use, a cheaper model colleagues use with comparable outcomes, a stronger model where their outcomes are clearly better, or a change of approach where long conversations spend heavily on re-reading context. Spend Review also identifies scheduled tasks running repeatedly on the most expensive class of model, and shows a person's Claude in Office/Google spend as a separate estimate. Savings are estimates based on list prices. An index lists everyone's spend and suggested routes. Administrators and managers can open any review; each person can open their own.
 
 ## Governance and risk
 
@@ -346,7 +346,7 @@ Alerts from detection, Developer Pulse, at-risk use cases and system health appe
 
 ### The Audit Log
 
-The Audit Log is where people's prompt text is browsed. The Audit Log lists each captured message with its source (OpenTelemetry or Compliance API), its flags, a conversation thread view and the reason for any dismissed match. Claude in Office prompts are labelled with their app, and the app filter shows Cowork alone, all of Claude in Office, or one Office app. The Audit Log is restricted to administrators, who see everyone, and managers, who see their own department (and no prompt text until a department is set for them). Reads of prompt text, here and on the few other pages that show prompts or short quotes from them, are recorded in an access audit log whose database triggers reject updates and deletes. Administrators review that log on its own page.
+The Audit Log is where people's prompt text is browsed. The Audit Log lists each captured message with its source (OpenTelemetry or Compliance API), its flags, a conversation thread view and the reason for any dismissed match. Claude in Office/Google prompts are labelled with their app, and the app filter shows Cowork alone, all of Claude in Office, all of Claude in Google, or one app. The Audit Log is restricted to administrators, who see everyone, and managers, who see their own department (and no prompt text until a department is set for them). Reads of prompt text, here and on the few other pages that show prompts or short quotes from them, are recorded in an access audit log whose database triggers reject updates and deletes. Administrators review that log on its own page.
 
 ### Retention and data-subject rights
 
@@ -354,7 +354,7 @@ Each surface has its own retention window under one organisation-wide mode that 
 
 ## Reporting and outputs
 
-**Reports.** Administrators, managers and viewers can generate reports for any period from a choice of sections. Compliance sections cover GDPR, LGPD, the EU AI Act, ISO/IEC 27001, ISO/IEC 42001 and open compliance gaps, combining evidence from live data with declarations administrators complete. Analytics sections cover Work Pulse, Developer Pulse, the Board, use cases, human time against Claude time and, for administrators and managers only, chargeback and Spend Review, each with the Claude in Office spend estimate on its own line. The compliance and analytics sections are built in code from live data and passed to Claude with an instruction to include them exactly as provided, without restating or recalculating any figure; Claude writes the remaining sections, such as the executive summary, usage, alerts and recommendations. The reports evidence alignment with these frameworks and do not certify compliance.
+**Reports.** Administrators, managers and viewers can generate reports for any period from a choice of sections. Compliance sections cover GDPR, LGPD, the EU AI Act, ISO/IEC 27001, ISO/IEC 42001 and open compliance gaps, combining evidence from live data with declarations administrators complete. Analytics sections cover Work Pulse, Developer Pulse, the Board, use cases, human time against Claude time and, for administrators and managers only, chargeback and Spend Review, each with the Claude in Office/Google spend estimate on its own line. The compliance and analytics sections are built in code from live data and passed to Claude with an instruction to include them exactly as provided, without restating or recalculating any figure; Claude writes the remaining sections, such as the executive summary, usage, alerts and recommendations. The reports evidence alignment with these frameworks and do not certify compliance.
 
 **Weekly Digest.** Every Monday Command Centre can send a digest of the last completed week by email and Slack, built from stored weekly figures with no model involved, including use cases needing attention and coaching counts by department.
 
@@ -398,7 +398,7 @@ Administrators reach these from **Admin** in the sidebar.
 | ***Setting up*** | | |
 | **Overview** | Shows the health of the installation at a glance: people, database size, open alerts, recent events, archive status and compliance progress, so administrators can spot problems early. | |
 | **Access & Keys** | Holds the Claude API key and the other keys, and controls who can sign in: accounts, roles, departments, single sign-on, two-factor authentication and active sessions, so each person sees only what their role allows. | [Roles](security-and-data-protection.md#roles) · [Sign-in methods](security-and-data-protection.md#sign-in-methods) |
-| **Ingestion** | Connects Claude Code, Claude Cowork and Claude in Office to Command Centre, with the collector address, bearer token and settings ready to copy, and confirms that activity is arriving. People can also be excluded from monitoring here. | [Connect Claude](connect-claude.md) · [Troubleshooting](troubleshooting.md#connecting-claude) |
+| **Ingestion** | Connects Claude Code, Claude Cowork and Claude in Office/Google to Command Centre, with the collector address, bearer token and settings ready to copy, and confirms that activity is arriving. People can also be excluded from monitoring here. | [Connect Claude](connect-claude.md) · [Troubleshooting](troubleshooting.md#connecting-claude) |
 | **User Insights** | Lists everyone whose Claude activity has been seen, with how active they are, and lets administrators deactivate people who should no longer be monitored. | [How accounts come to exist](security-and-data-protection.md#how-accounts-come-to-exist) |
 | **System** | Sets the Core AI model, switches on FinOps, Weekly Digest and Weekly Highlights, issues read-only Metrics Connector tokens for BI tools, and shows whether every scheduled job and the database are healthy. | [Reporting and outputs](#reporting-and-outputs) |
 | ***Risk and oversight*** | | |
@@ -419,6 +419,6 @@ Administrators reach these from **Admin** in the sidebar.
 ## What Command Centre does not do
 
 - **Command Centre does not sit between people and Claude.** Telemetry arrives after a prompt has reached the model, so Command Centre can flag, alert and restrict access to what it stores, but cannot block, alter or delay a prompt.
-- **Command Centre does not store Claude's replies.** For Claude Code, Claude Cowork and Claude in Office, Command Centre stores people's prompts (up to 4,000 characters each) and metadata about Claude's activity: model, tokens, cost, tool names and outcomes, and, for Claude Cowork and Claude in Office, the file name of an output or document Claude wrote or changed. Command Centre never stores the text of Claude's answers or the contents of files. For Claude Chat it stores prompts and, for replies, only the model and counts of artifacts and generated files.
+- **Command Centre does not store Claude's replies.** For Claude Code, Claude Cowork and Claude in Office/Google, Command Centre stores people's prompts (up to 4,000 characters each) and metadata about Claude's activity: model, tokens, cost, tool names and outcomes, and, for Claude Cowork and Claude in Office, the file name of an output or document Claude wrote or changed (Claude in Google sends no file name). Command Centre never stores the text of Claude's answers or the contents of files. For Claude Chat it stores prompts and, for replies, only the model and counts of artifacts and generated files.
 
 Several features send prompt text to Anthropic's Claude API using your Claude API key, among them the classifiers, use case judging and suggestions, skill drafting, session descriptions, human-time estimates, personal-data confirmation and intent assessment. The [AI Data Flow and Sub-processors](ai-data-flow.md) document lists each feature and what it sends.

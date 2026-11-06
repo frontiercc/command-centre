@@ -143,8 +143,41 @@ async function runSpec(): Promise<void> {
   }
 }
 
+/**
+ * The Google Workspace add-on sends the same spans with agent.vendor 'g'
+ * (live capture, 2026-11-06: sheet, doc and slide). Replaying the capture as
+ * Google must file every row under the Google app, never the Microsoft one.
+ */
+async function runGoogleSpec(): Promise<void> {
+  const { createTestDbClient } = await import('./helpers/db');
+  const { client, cleanup } = await createTestDbClient('postgres');
+  try {
+    const { schema } = await import('@/lib/db/schema');
+    const { processOfficeSpans } = await import('@/lib/otel/office-receiver');
+    const { isNotNull } = await import('drizzle-orm');
+    const db = client as any; // eslint-disable-line @typescript-eslint/no-explicit-any
+    const asGoogle = JSON.parse(JSON.stringify(CAPTURE));
+    for (const l of asGoogle) for (const rs of l.resourceSpans) for (const ss of rs.scopeSpans) for (const sp of ss.spans) {
+      for (const a of sp.attributes ?? []) if (a.key === 'agent.vendor') a.value = { stringValue: 'g' };
+    }
+    for (const line of asGoogle) expect((await processOfficeSpans(line)).errors).toEqual([]);
+
+    const rows = await db.select().from(schema.coworkMessages).where(isNotNull(schema.coworkMessages.product));
+    expect(rows.length).toBeGreaterThan(0);
+    expect([...new Set(rows.map((r: { product: string }) => r.product))].sort()).toEqual(['docs', 'sheets', 'slides']);
+    const sessions = await db.select().from(schema.coworkSessions).where(isNotNull(schema.coworkSessions.product));
+    expect(sessions.map((s: { product: string }) => s.product).sort()).toEqual(['docs', 'sheets', 'slides']);
+  } finally {
+    await cleanup();
+  }
+}
+
 describe('office receiver (postgres)', () => {
   it('stores a real Word, Excel and PowerPoint capture beside Cowork without document content or cost', async () => {
     await runSpec();
+  }, 180_000);
+
+  it('files Google Workspace spans under Sheets, Docs and Slides', async () => {
+    await runGoogleSpec();
   }, 180_000);
 });
