@@ -72,6 +72,8 @@ export default function ByProductPanel({ data }: { data: ByProductData | null | 
   }
   const has = (p: PanelProduct) => rows.some(r => r.product === p);
   const hasOfficeRows = rows.some(r => r.product !== 'all' && groupOf(r.product) !== null);
+  // Products with no "produced something" measure, named for the rows shown.
+  const noProduced = [has('claude_chat') && 'Claude Chat', has('chatgpt') && 'ChatGPT'].filter((n): n is string => !!n);
   const subtitle = [
     has('claude_chat') && 'Claude Chat',
     has('cowork') && 'Cowork',
@@ -175,7 +177,8 @@ export default function ByProductPanel({ data }: { data: ByProductData | null | 
       <PanelFoot>
         {hasOfficeRows && 'Office and Google send tokens but no cost, so their spend is priced from the model rates on Admin → Developer Pulse. '}
         {has('chatgpt') && 'ChatGPT spend is its tokens priced at OpenAI’s published rates, the same figure as FinOps. '}
-        {(has('claude_chat') || has('chatgpt')) && 'Only Claude Cowork, Office and Google record whether a session produced something, and Claude Chat records no spend. '}
+        {noProduced.length > 0 && `${noProduced.join(' and ')} ${noProduced.length > 1 ? 'do' : 'does'} not record whether a session produced something. `}
+        {has('claude_chat') && 'Claude Chat records no spend. '}
         App users counts a person once for each product they used, so the column adds
         up. Meaningful work for All products is the figure at the top of the
         page. A blank means too little to measure.

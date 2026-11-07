@@ -156,10 +156,10 @@ export default function CollectorConnection({ address: initialAddress, token }: 
         <code className="mx-1 font-mono">Authorization=Bearer</code>followed by the bearer token.
       </p>
 
-      <p className="mt-3 mb-1.5 text-[13px] font-medium text-[#0A0A0A]">Claude in Office</p>
+      <p className="mt-3 mb-1.5 text-[13px] font-medium text-[#0A0A0A]">Claude in Office/Google</p>
       <p className="m-0 text-[13px] text-[#4D4D4D]">
-        For Claude in Excel, Word, PowerPoint and Outlook, open Office agents → Monitoring in the same Organization settings,
-        select Copy settings from Cowork and save.
+        For Claude in Excel, Word, PowerPoint and Outlook, and in Google Sheets, Docs and Slides, open Office agents → Monitoring
+        in the same Organization settings, select Copy settings from Cowork and save. One setting covers both.
       </p>
     </div>
   );
