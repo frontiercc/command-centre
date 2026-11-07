@@ -366,8 +366,10 @@ export default function CioPulsePage() {
     return `Claude ${c === null ? 'n/a' : fmt(c)} · ChatGPT ${o === null ? 'n/a' : fmt(o)}`;
   };
   const spend = workSpendFigure(vendor, data.coworkCostUsd, data.chatgptCostUsd, data.chatgptUnpricedModels?.length ?? 0);
-  const usingLabel = vendor === 'claude' ? 'Using Claude for work weekly'
-    : vendor === 'openai' ? 'Using ChatGPT for work weekly'
+  // The vendor the figures cover: the route reads Claude's alone while ChatGPT is hidden on the OpenAI panel.
+  const shownVendor = data.vendor ?? vendor;
+  const usingLabel = shownVendor === 'claude' ? 'Using Claude for work weekly'
+    : shownVendor === 'openai' ? 'Using ChatGPT for work weekly'
       : 'Using AI for work weekly';
   const briefingText = data.briefing
     ? [data.briefing.body, data.briefing.suggestion ? `\nRecommendation: ${data.briefing.suggestion}` : ''].join('')
@@ -385,7 +387,7 @@ export default function CioPulsePage() {
         </Toolbar>
         {vendor !== 'all' && !openaiOnly && (
           <p className="m-0 -mt-2 text-[13px] text-[#8F8F8F]">
-            Showing {WORK_PULSE_VENDOR_LABELS[vendor]} only{vendor === 'openai' ? ': ChatGPT Chat and ChatGPT Work' : ': Claude Cowork and Claude Chat'}.
+            Showing {WORK_PULSE_VENDOR_LABELS[vendor]} only{vendor === 'openai' ? ': ChatGPT Chat and ChatGPT Work' : ': Claude Chat, Claude Cowork and Claude in Office/Google'}.
           </p>
         )}
 

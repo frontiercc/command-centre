@@ -185,7 +185,7 @@ export default function DeptPickerPage() {
         </Toolbar>
         {vendor !== 'all' && !openaiOnly && (
           <p className="m-0 -mt-2 text-[13px] text-[#8F8F8F]">
-            Showing {WORK_PULSE_VENDOR_LABELS[vendor]} only{vendor === 'openai' ? ': ChatGPT Chat and ChatGPT Work' : ': Claude Cowork and Claude Chat'}.
+            Showing {WORK_PULSE_VENDOR_LABELS[vendor]} only{vendor === 'openai' ? ': ChatGPT Chat and ChatGPT Work' : ': Claude Chat, Claude Cowork and Claude in Office/Google'}.
           </p>
         )}
 

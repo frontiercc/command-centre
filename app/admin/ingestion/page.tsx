@@ -210,7 +210,7 @@ export default function IngestionPage() {
                 ChatGPT Chat and ChatGPT Work prompts join Work Pulse, Codex prompts join Developer Pulse, and their spend joins FinOps,
                 a few hours behind. It needs ChatGPT Enterprise or Edu, and three things from OpenAI&apos;s admin console:
               </p>
-              <ol className="mt-2 mb-0 pl-5 text-[13px] text-[#4D4D4D] flex flex-col gap-1">
+              <ol className="mt-2 mb-0 pl-5 list-decimal text-[13px] text-[#4D4D4D] flex flex-col gap-1">
                 <li><span className="font-medium text-[#0A0A0A]">An OpenAI Admin API key</span>, created by a ChatGPT workspace owner under Credentials → Admin keys, with read access to conversation messages, Codex logs, Codex turns and costs.</li>
                 <li><span className="font-medium text-[#0A0A0A]">The ChatGPT workspace ID</span>, shown in the workspace settings.</li>
                 <li><span className="font-medium text-[#0A0A0A]">The OpenAI organisation ID</span> (org-…), which ChatGPT spend needs. Codex spend needs only the workspace ID.</li>
