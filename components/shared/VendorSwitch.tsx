@@ -10,7 +10,7 @@
 import { useEffect, useState } from 'react';
 import { Segmented } from '@/components/precision/ui';
 import { VENDORS, VENDOR_LABELS, parseVendor, type Vendor, type VendorSplit } from '@/lib/dashboard/vendor';
-import { isOpenAiOnly, type ConnectedProducts } from '@/lib/sources/connected-shared';
+import { isOpenAiOnly, openAiConnected, type ConnectedProducts } from '@/lib/sources/connected-shared';
 import { fetchConfigOnce } from '@/lib/client/config-once';
 
 const VENDOR_KEY = 'ccc-dashboard-vendor';
@@ -54,12 +54,15 @@ export function useVendor(): [Vendor, (v: Vendor) => void] {
   const [vendor, setVendorState] = useState<Vendor>(() => {
     try { return typeof window === 'undefined' ? 'all' : parseVendor(window.localStorage.getItem(VENDOR_KEY)); } catch { return 'all'; }
   });
-  const openaiOnly = useOpenAiOnly();
+  const connected = useConnectedProducts();
+  const openaiOnly = isOpenAiOnly(connected);
+  // ChatGPT and Codex hidden (the OpenAI panel): a remembered vendor view gives way to All, which the server reads as Claude.
+  const openaiHidden = !!connected && openAiConnected(connected) && !connected.openai;
   const setVendor = (v: Vendor) => {
     setVendorState(v);
     try { window.localStorage.setItem(VENDOR_KEY, v); } catch { /* not remembered */ }
   };
-  return [openaiOnly ? 'openai' : vendor, setVendor];
+  return [openaiOnly ? 'openai' : openaiHidden ? 'all' : vendor, setVendor];
 }
 
 /** Shown once both vendors have data, or while a vendor view is still chosen. */

@@ -22,7 +22,8 @@ interface RawFacade {
 }
 
 /** Products per entry name, from skill uses (skills) and connector calls (connectors). */
-export async function entryProducts(entries: Array<{ name: string; type: string }>): Promise<Map<string, BoardProduct[]>> {
+/** `openaiShown` false (ChatGPT and Codex hidden) keeps the Claude tag only. */
+export async function entryProducts(entries: Array<{ name: string; type: string }>, openaiShown = true): Promise<Map<string, BoardProduct[]>> {
   const out = new Map<string, BoardProduct[]>();
   const skills = [...new Set(entries.filter(e => e.type !== 'connector').map(e => e.name))];
   const connectors = [...new Set(entries.filter(e => e.type === 'connector').map(e => e.name))];
@@ -34,7 +35,7 @@ export async function entryProducts(entries: Array<{ name: string; type: string 
       set.add(productOf(r.source));
       seen.set(r.name, set);
     }
-    for (const [name, set] of seen) out.set(name, ORDER.filter(p => set.has(p)));
+    for (const [name, set] of seen) out.set(name, ORDER.filter(p => set.has(p) && (openaiShown || p === 'Claude')));
   };
   const list = (names: string[]) => sql.join(names.map(n => sql`${n}`), sql`, `);
   if (skills.length) {

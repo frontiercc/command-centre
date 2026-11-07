@@ -10,7 +10,7 @@ import LoadingSpinner from '@/components/shared/LoadingSpinner';
 import { useToast } from '@/components/shared/ToastProvider';
 import SecretRemoveButton from '@/components/admin/SecretRemoveButton';
 import { useConnectedProducts } from '@/components/shared/VendorSwitch';
-import { isOpenAiOnly } from '@/lib/sources/connected-shared';
+import { isOpenAiOnly, openAiConnected } from '@/lib/sources/connected-shared';
 import { PageBody, Panel, Notice, SubHead, Dot, SEVERITY_COLOR, B, cx } from '@/components/precision/ui';
 
 
@@ -64,7 +64,7 @@ export default function AdminRiskPage() {
   // Threshold state
   const [tokenMultiplier, setTokenMultiplier] = useState('3');
   const connectedProducts = useConnectedProducts();
-  const openaiConnected = !!connectedProducts?.openai;
+  const openaiConnected = openAiConnected(connectedProducts);
   const openaiOnly = isOpenAiOnly(connectedProducts);
   const [fileAccessLimit, setFileAccessLimit] = useState('50');
   const [inactivityDays, setInactivityDays] = useState('14');

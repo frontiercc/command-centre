@@ -10,6 +10,7 @@
 // aggregate is Number()-coerced (bigint/numeric come back as
 // STRINGS on Postgres).
 import { NextRequest, NextResponse } from 'next/server';
+import { visibleVendor, visibleOpenAi } from '@/lib/sources/openai-visibility';
 import { and, desc, eq, gte, isNotNull, lt, sql } from 'drizzle-orm';
 import { getAdminSession, canAccessOrgOverview } from '@/lib/auth/admin-auth';
 import { promptTextVisibleFor, logPromptRead } from '@/lib/auth/content-access';
@@ -25,7 +26,7 @@ import {
 } from '@/lib/pulse/delegation';
 import { buildActNext, buildDeptProcessBoxes, type ActNextRow } from '@/lib/pulse/act-next';
 import type { DeptProcessBox } from '@/lib/usecases/suggestion-store';
-import { parseVendor, type Vendor } from '@/lib/dashboard/vendor';
+import { type Vendor } from '@/lib/dashboard/vendor';
 import { hasOpenAiData } from '@/lib/dashboard/queries';
 import { vendorClause } from '@/lib/dashboard/product-sql';
 import { messageVendor } from '@/lib/pulse/vendor-filter';
@@ -66,8 +67,8 @@ export async function GET(request: NextRequest) {
   // The Claude / OpenAI switch. 'all' reads every product, as before; a vendor
   // narrows classifications by their prompt's source and reads the aggregator's
   // per-vendor figures (pulse_metrics_vendor).
-  const vendor = parseVendor(request.nextUrl.searchParams.get('vendor'));
-  const openaiPresent = await hasOpenAiData();
+  const vendor = await visibleVendor(request.nextUrl.searchParams.get('vendor'));
+  const openaiPresent = await visibleOpenAi(hasOpenAiData());
 
   // Same columns in both tables, so a vendor view reads pulse_metrics_vendor
   // through pulse_metrics' column set, narrowed to that vendor.

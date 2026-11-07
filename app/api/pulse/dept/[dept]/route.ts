@@ -15,13 +15,13 @@
 // getCoworkFrictionIndex's COUNT(*) FILTER (WHERE ...) idiom (native on
 // Postgres).
 import { NextRequest, NextResponse } from 'next/server';
+import { visibleVendor, visibleOpenAi } from '@/lib/sources/openai-visibility';
 import { and, desc, eq, gte, inArray, lt, lte, notInArray, sql } from 'drizzle-orm';
 import { getAdminSession, isDeptScoped, canAccessCoworkPulse, canAccessPulseAdmin } from '@/lib/auth/admin-auth';
 import { buildFrontierView, resolveViewerUserId } from '@/lib/pulse/frontier-view';
 import { getTypedClient } from '@/lib/db/client';
 import { schema } from '@/lib/db/schema';
 import { getDocSessions } from '@/lib/pulse/cowork/doc-sessions';
-import { parseVendor } from '@/lib/dashboard/vendor';
 import { hasOpenAiData } from '@/lib/dashboard/queries';
 import { messageVendor, skillVendor, connectorVendor } from '@/lib/pulse/vendor-filter';
 import { getCoworkCostUsd } from '@/lib/pulse/aggregator';
@@ -78,7 +78,7 @@ export async function GET(
   const u = schema.users;
   // The Claude / OpenAI switch: a vendor view narrows classifications, skills
   // and connectors by source and reads the aggregator's per-vendor figures.
-  const vendor = parseVendor(request.nextUrl.searchParams.get('vendor'));
+  const vendor = await visibleVendor(request.nextUrl.searchParams.get('vendor'));
   const pmv = schema.pulseMetricsVendor;
   const pm = vendor === 'all' ? schema.pulseMetrics : pmv as unknown as typeof schema.pulseMetrics;
   const pmOnly = vendor === 'all' ? sql`TRUE` : eq(pmv.vendor, vendor);
@@ -381,7 +381,7 @@ export async function GET(
   // OTel cowork enrichments — sum cost and aggregate friction across dept members
   const sevenDaysAgoOtel = now - 7 * 24 * 3600;
   let deptCoworkCostUsd = 0;
-  const openaiPresent = await hasOpenAiData();
+  const openaiPresent = await visibleOpenAi(hasOpenAiData());
   let deptFailedTools = 0;
   let deptTotalTools = 0;
   for (const memberId of memberIds) {

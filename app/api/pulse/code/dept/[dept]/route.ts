@@ -5,12 +5,12 @@
 // standard pattern: getTypedClient() + schema.<table>.
 // `code_metrics.spend_usd` is numeric on pg, so it is coerced.
 import { NextRequest, NextResponse } from 'next/server';
+import { visibleVendor, visibleOpenAi } from '@/lib/sources/openai-visibility';
 import { and, desc, eq, gte, inArray } from 'drizzle-orm';
 import { getAdminSession, isDeptScoped, canAccessCodePulse } from '@/lib/auth/admin-auth';
 import { getTypedClient } from '@/lib/db/client';
 import { schema } from '@/lib/db/schema';
 import { getCodeDeptMembers } from '@/lib/pulse/code/dept';
-import { parseVendor } from '@/lib/dashboard/vendor';
 import { hasCodexData, readCodeMetrics, pickCodeMetricsSource, codeSessionVendor } from '@/lib/pulse/code/vendor-view';
 import { readHumanTime } from '@/lib/pulse/human-time-summary';
 
@@ -55,8 +55,8 @@ export async function GET(
   const sixWeeksAgo = now - 42 * 24 * 3600;
 
   // Developer Pulse's All / Claude / Codex switch.
-  const vendor = parseVendor(request.nextUrl.searchParams.get('vendor'));
-  const codexPresent = await hasCodexData();
+  const vendor = await visibleVendor(request.nextUrl.searchParams.get('vendor'));
+  const codexPresent = await visibleOpenAi(hasCodexData());
 
   // Latest department-scope rollup — the aggregator writes dept rollups as
   // scope_type='function' (not 'dept'), matching the Cowork dept route.

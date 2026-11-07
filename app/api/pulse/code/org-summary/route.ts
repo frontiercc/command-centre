@@ -11,6 +11,7 @@
 import { getCodeWorkTypeDefinitions } from '@/lib/pulse/code/tier-config';
 import { codeWorkTypeLabel, codeWorkTypeDefinition } from '@/lib/pulse/code/work-type-labels';
 import { NextRequest, NextResponse } from 'next/server';
+import { visibleVendor, visibleOpenAi } from '@/lib/sources/openai-visibility';
 import { and, desc, eq, gte, inArray, isNotNull, lte, ne, notInArray, or, sql } from 'drizzle-orm';
 import { getAdminSession, canAccessOrgOverview } from '@/lib/auth/admin-auth';
 import { getTypedClient } from '@/lib/db/client';
@@ -23,7 +24,6 @@ import { getWeeklySeries, getWeeklyDelta } from '@/lib/pulse/trends';
 import { projectMonthEndSpend, type SpendProjection } from '@/lib/pulse/code/projection';
 import { buildDailyWindow, buildShippingSeries, buildRepoCards, countReposActive7d, type GhDailyRow, type ShippingDay, type RepoShippingCard } from '@/lib/pulse/code/shipping-alignment';
 import { readHumanTime } from '@/lib/pulse/human-time-summary';
-import { parseVendor } from '@/lib/dashboard/vendor';
 import { hasCodexData, readCodeMetrics, trendVendor, codeSessionVendor } from '@/lib/pulse/code/vendor-view';
 import { codexSpend } from '@/lib/openai/spend';
 
@@ -46,8 +46,8 @@ export async function GET(request: NextRequest) {
   // Developer Pulse's All / Claude / Codex switch. Claude Code's own
   // telemetry (model calls, engaged time, lines, edits, languages) has no
   // Codex counterpart, so those lists read Claude Code in every view but Codex.
-  const vendor = parseVendor(request.nextUrl.searchParams.get('vendor'));
-  const codexPresent = await hasCodexData();
+  const vendor = await visibleVendor(request.nextUrl.searchParams.get('vendor'));
+  const codexPresent = await visibleOpenAi(hasCodexData());
   const tv = trendVendor(vendor, codexPresent);
   const withClaude = vendor !== 'openai';
   const withCodex = vendor !== 'claude' && codexPresent;

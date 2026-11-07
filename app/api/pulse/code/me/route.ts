@@ -8,6 +8,7 @@
 // per-session "source" column (clearer than the builder's subquery syntax
 // here). Every SUM/COUNT aggregate is Number()-coerced (Postgres returns bigint and numeric as strings).
 import { NextRequest, NextResponse } from 'next/server';
+import { visibleVendor, visibleOpenAi } from '@/lib/sources/openai-visibility';
 import { and, desc, eq, gte, inArray, sql } from 'drizzle-orm';
 import { getAdminSession, isDeptScoped, canAccessCodePulse } from '@/lib/auth/admin-auth';
 import { getTypedClient } from '@/lib/db/client';
@@ -17,7 +18,6 @@ import { getWeeklySeries, getWeeklyDelta } from '@/lib/pulse/trends';
 import { readHumanTime } from '@/lib/pulse/human-time-summary';
 import { getAllConfig } from '@/lib/config';
 import { canViewSpendReview } from '@/lib/finance/spend-review-access';
-import { parseVendor } from '@/lib/dashboard/vendor';
 import { hasCodexData, readCodeMetrics, trendVendor, codeSessionVendor } from '@/lib/pulse/code/vendor-view';
 
 export const dynamic = 'force-dynamic';
@@ -85,8 +85,8 @@ export async function GET(request: NextRequest) {
   const thirtyDaysAgo = now - 30 * 24 * 3600;
 
   // Developer Pulse's All / Claude / Codex switch.
-  const vendor = parseVendor(request.nextUrl.searchParams.get('vendor'));
-  const codexPresent = await hasCodexData();
+  const vendor = await visibleVendor(request.nextUrl.searchParams.get('vendor'));
+  const codexPresent = await visibleOpenAi(hasCodexData());
   const tv = trendVendor(vendor, codexPresent);
   const withClaude = vendor !== 'openai';
   const withCodex = vendor !== 'claude' && codexPresent;

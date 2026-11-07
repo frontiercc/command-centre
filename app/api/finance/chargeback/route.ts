@@ -2,6 +2,7 @@
 // SPDX-License-Identifier: Apache-2.0
 
 import { NextRequest, NextResponse } from 'next/server';
+import { openaiShown } from '@/lib/sources/openai-visibility';
 import { getAllConfig } from '@/lib/config';
 import { getAdminSession, canAccessPulseAdmin } from '@/lib/auth/admin-auth';
 import { logAccess } from '@/lib/audit/log';
@@ -72,7 +73,7 @@ export async function GET(request: NextRequest) {
   const seats = await getSeatsSummary(nowS).catch(() => null);
   // The ChatGPT licence: OpenAI charges it per seat, apart from usage, so it
   // sits beside the usage figures and is never added to grandTotalUsd.
-  const chatgptSeats = await getChatgptSeatsSummary(nowS).catch(() => null);
+  const chatgptSeats = (await openaiShown()) ? await getChatgptSeatsSummary(nowS).catch(() => null) : null;
 
   // Claude in Office: an estimate from tokens (Office sends no cost), shown
   // beside the surfaces and never part of grandTotalUsd, a cost centre, a

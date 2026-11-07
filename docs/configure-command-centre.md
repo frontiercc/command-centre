@@ -62,6 +62,11 @@ People are matched to Command Centre accounts by email, as for Claude. A record 
 
 With ChatGPT and Codex connected, Command Centre's AI features also send their prompts to Anthropic. [ChatGPT and Codex prompts in AI features](ai-data-flow.md#chatgpt-and-codex-prompts-in-ai-features) lists which features do, and how to stop each.
 
+Two switches on the same panel change what happens without removing the key. Select **Save settings** after changing either.
+
+- **Pause sync** stops collecting ChatGPT and Codex activity. The key stays saved and everything already collected stays on screen. Switching it back on carries on from where the sync stopped, so nothing is missed, as long as OpenAI still holds the files (it keeps them for a limited time: check its documentation). While paused, the panel says so above the last sync time.
+- **Show ChatGPT and Codex** decides whether ChatGPT and Codex appear on the dashboard, Work Pulse, Developer Pulse, FinOps, Spend Review, the S&C Board, use cases, reports and briefings. Switched off, those screens show Claude only, and their All figures cover Claude alone. Collection carries on, so switching it back on shows everything with no gap. The Audit Log always lists ChatGPT and Codex prompts, because it is the compliance record. A FinOps period closed while they were shown keeps its figures.
+
 To disconnect, select **Remove** beside the key. This also resets the sync position, so a key added later starts again from up to 30 days back. Prompts already stored stay until retention removes them. If the key was set in the `OPENAI_ADMIN_API_KEY` environment variable, Remove does not clear it: delete the variable and restart the Hub.
 
 **Check:** **Test** reports success. Within a few minutes a **Last sync** line appears under the fields, showing the files read and the ChatGPT Chat, ChatGPT Work and Codex prompts found, with an error count when a run had errors. **Admin → Ingestion → OpenAI export status** reads "Syncing, ChatGPT and Codex records arriving". ChatGPT and Codex prompts then appear in the Audit Log, each marked with its product.

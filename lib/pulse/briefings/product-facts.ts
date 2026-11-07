@@ -7,6 +7,7 @@
 // Empty when no ChatGPT prompt was classified in the window, so a Claude-only
 // hub's briefings are unchanged.
 import { and, eq, gte, inArray, lt, sql } from 'drizzle-orm';
+import { openaiShown } from '@/lib/sources/openai-visibility';
 import { getTypedClient } from '@/lib/db/client';
 import { schema } from '@/lib/db/schema';
 import { productExpr, vendorExpr } from '@/lib/dashboard/product-sql';
@@ -22,6 +23,8 @@ export async function buildProductFacts(opts: {
 }): Promise<string[]> {
   const { periodStart, periodEnd, userIds } = opts;
   if (userIds && userIds.length === 0) return [];
+  // Hidden on the OpenAI panel: the briefings read as Claude-only.
+  if (!(await openaiShown())) return [];
   const client = await getTypedClient();
   const pc = schema.pulseClassifications;
   const cm = schema.coworkMessages;

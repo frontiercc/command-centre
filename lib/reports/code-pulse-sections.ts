@@ -17,6 +17,7 @@
 // labelled as judged in the output — the dashboards carry that distinction in
 // colour, and prose has to carry it in words.
 import { getCodeWorkTypeLabeller } from '@/lib/pulse/code/tier-config';
+import { visibleOpenAi } from '@/lib/sources/openai-visibility';
 import { and, desc, eq, sql } from 'drizzle-orm';
 import { getTypedClient } from '@/lib/db/client';
 import { schema } from '@/lib/db/schema';
@@ -181,7 +182,7 @@ ${judged}`;
 }
 
 export async function buildCodePulseSection(): Promise<string> {
-  const codexPresent = await hasCodexData();
+  const codexPresent = await visibleOpenAi(hasCodexData());
   if (!codexPresent) return renderCodePulseSection(await factsFor('all', false));
   return renderCodePulseSection(await factsFor('claude', true), await factsFor('openai', true));
 }

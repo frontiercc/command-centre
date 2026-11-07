@@ -488,6 +488,8 @@ export async function generateGovernanceReport(
   const productFigures = await getProductFigures(periodStartS, periodEndS);
   const fig = (id: string) => productFigures.find(p => p.id === id);
   const openaiPresent = productFigures.some(p => p.vendor === 'openai');
+  // ChatGPT and Codex hidden (the OpenAI panel): the report reads as Claude-only.
+  const openaiVisible = await (await import('@/lib/sources/openai-visibility')).openaiShown();
   const claudeOnly = sql.raw(vendorClause('claude'));
   const { getConfigValue } = await import('@/lib/config');
   const openaiLastSyncAt = parseInt(await getConfigValue('openaiLastSyncAt') || '0', 10) || 0;
@@ -671,7 +673,7 @@ ${chatFlagged + (gptChat?.flaggedInPeriod ?? 0) > 0 ? `**Action required:** ${ch
 |--------|--------|----------|
 | OTLP push (OpenTelemetry) | ${otelPath ? 'Active' : 'Not detected'} | The primary path for Claude Cowork and Claude Code: user prompts as text, plus tool, session and model metadata. Assistant responses are not stored. |
 | Compliance API | ${chatSources.includes('compliance') ? 'Active' : dataSources.complianceApi ? 'Configured' : 'Not configured'} | Claude Chat prompts as text, assistant replies as metadata only, plus the org-wide activity feed. Requires a Claude Enterprise plan. |
-| Analytics API | ${dataSources.analyticsApi ? 'Configured' : 'Not configured'} | Org-wide per-user engagement snapshots (Enterprise only). |${dataSources.openai || openaiPresent ? `
+| Analytics API | ${dataSources.analyticsApi ? 'Configured' : 'Not configured'} | Org-wide per-user engagement snapshots (Enterprise only). |${(dataSources.openai && openaiVisible) || openaiPresent ? `
 | OpenAI compliance export | ${openaiSyncErrors > 0 ? 'Configured, last sync had errors' : openaiPresent ? 'Active' : 'Configured, no data yet'}${openaiLastSyncAt ? ` (last sync ${new Date(openaiLastSyncAt * 1000).toISOString().slice(0, 10)})` : ''} | ChatGPT Chat, ChatGPT Work and Codex prompts as text; replies as model and time only; hourly costs and Codex turns. Requires ChatGPT Enterprise or Edu. |` : ''}`;
 
   // Build compliance sections (deterministic, code-generated). buildGdprSection

@@ -23,6 +23,7 @@
  * lexicographic comparison.
  */
 import { getCodeWorkTypeLabeller } from '@/lib/pulse/code/tier-config';
+import { visibleOpenAi } from '@/lib/sources/openai-visibility';
 import { getOrgBriefingModel } from '@/lib/anthropic/model';
 import { createAnthropicClient } from '@/lib/anthropic/client';
 import { and, desc, eq, sql } from 'drizzle-orm';
@@ -207,7 +208,7 @@ export async function generateCodeBriefing(): Promise<CodeBriefingRow> {
   const apiKey = await getConfigValue('anthropicAiApiKey');
   if (!apiKey) throw new Error('No AI API key configured');
 
-  const codexPresent = await hasCodexData();
+  const codexPresent = await visibleOpenAi(hasCodexData());
   const summary = await buildDataSummary(codexPresent);
   if (!summary) throw new Error('No Developer Pulse metrics yet. The briefing needs at least one aggregation cycle');
 

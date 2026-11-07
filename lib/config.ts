@@ -327,6 +327,8 @@ export interface AppConfig {
   openaiOrganizationId: string;          // OpenAI organisation ID (costs)
   openaiSyncIntervalMinutes: string;     // default '5'
   openaiBackfillDays: string;            // default '30' (OpenAI keeps files 30 days)
+  openaiSyncPaused: string;              // 'true' pauses the sync, key and data kept; default 'false'
+  openaiShown: string;                   // 'false' hides ChatGPT and Codex from the analytics screens; default 'true'
   openaiSyncCursors: string;             // job-written (JSON: event type → last file end_time)
   openaiLastSyncAt: string;              // job-written (epoch seconds)
   openaiLastSyncStats: string;           // job-written (JSON)
@@ -555,6 +557,8 @@ export const CONFIG_KEYS: Record<keyof AppConfig, string> = {
   openaiOrganizationId: 'openai_organization_id',
   openaiSyncIntervalMinutes: 'openai_sync_interval_minutes',
   openaiBackfillDays: 'openai_backfill_days',
+  openaiSyncPaused: 'openai_sync_paused',
+  openaiShown: 'openai_shown',
   openaiSyncCursors: 'openai_sync_cursors',
   openaiLastSyncAt: 'openai_last_sync_at',
   openaiLastSyncStats: 'openai_last_sync_stats',
@@ -961,6 +965,8 @@ export async function getAllConfig(): Promise<AppConfig> {
     openaiOrganizationId: resolve('openaiOrganizationId'),
     openaiSyncIntervalMinutes: resolve('openaiSyncIntervalMinutes', '5'),
     openaiBackfillDays: resolve('openaiBackfillDays', '30'),
+    openaiSyncPaused: resolve('openaiSyncPaused', 'false'),
+    openaiShown: resolve('openaiShown', 'true'),
     openaiSyncCursors: resolve('openaiSyncCursors'),
     openaiLastSyncAt: resolve('openaiLastSyncAt'),
     openaiLastSyncStats: resolve('openaiLastSyncStats'),

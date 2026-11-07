@@ -16,6 +16,7 @@
  * `grandTotalUsd === Σ costCentres.totalUsd + unallocated.totalUsd` (±0.005).
  */
 import { sql } from 'drizzle-orm';
+import { openaiShown } from '@/lib/sources/openai-visibility';
 import { getTypedClient } from '@/lib/db/client';
 import { jsonToText } from '@/lib/db/json';
 import { monthBounds, isCurrentMonth } from '@/lib/finance/period';
@@ -328,7 +329,8 @@ export async function buildChargeback(period: string, nowS: number = Math.floor(
     sql`SELECT 1 AS x WHERE EXISTS (SELECT 1 FROM openai_costs WHERE product = 'chatgpt')
                         OR EXISTS (SELECT 1 FROM codex_turns)`
   );
-  const hasOpenAi = openaiSeen.length > 0;
+  // Hidden on the OpenAI panel: FinOps reads as Claude-only (a closed period keeps its snapshot).
+  const hasOpenAi = openaiSeen.length > 0 && await openaiShown();
   const openaiUnpriced = new Set<string>();
   let chatgptSurfaceUsd: number | null = null;
   let codexSurfaceUsd = 0;

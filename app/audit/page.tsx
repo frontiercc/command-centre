@@ -21,7 +21,7 @@ import { hasBreakdown, type SpendSplit } from '@/lib/finance/where-money-went';
 import { isOpenAiSource, OPENAI_SOURCE_LABELS } from '@/lib/openai/sources';
 import { productLabel, productOf } from '@/lib/dashboard/vendor';
 import { useConnectedProducts } from '@/components/shared/VendorSwitch';
-import { isOpenAiOnly } from '@/lib/sources/connected-shared';
+import { isOpenAiOnly, openAiConnected } from '@/lib/sources/connected-shared';
 
 interface AuditEvent {
   id: string;
@@ -415,8 +415,9 @@ export default function AuditPage() {
   // Filters
   const [product, setProduct] = useState('');
   const connected = useConnectedProducts();
-  const openaiOnly = isOpenAiOnly(connected);
-  const openaiConnected = !!connected?.openai;
+  const openaiOnly = isOpenAiOnly(connected && { claude: connected.claude, openai: openAiConnected(connected) });
+  // The Audit Log is the compliance record: it lists ChatGPT and Codex even while hidden elsewhere.
+  const openaiConnected = openAiConnected(connected);
   const [sourceFilter, setSourceFilter] = useState('');
   const [userFilter, setUserFilter] = useState('');
   const [flaggedOnly, setFlaggedOnly] = useState(false);

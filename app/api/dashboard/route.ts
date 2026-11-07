@@ -2,6 +2,7 @@
 // SPDX-License-Identifier: Apache-2.0
 
 import { NextRequest, NextResponse } from 'next/server';
+import { visibleVendor, visibleOpenAi } from '@/lib/sources/openai-visibility';
 import { errorResponse } from '@/lib/api/errors';
 import {
   getActiveUsersThisWeek,
@@ -20,7 +21,7 @@ import {
 import { isOtelConfigured, getDataSourceStatus, getConfigValue } from '@/lib/config';
 import { getAdminSession, canAccessCorePlatform } from '@/lib/auth/admin-auth';
 import { logAccess } from '@/lib/audit/log';
-import { parseVendor, productsShown } from '@/lib/dashboard/vendor';
+import { productsShown } from '@/lib/dashboard/vendor';
 import {
   hasOpenAiData,
   getActiveUsersByVendor,
@@ -48,10 +49,10 @@ export async function GET(request: NextRequest) {
     // The vendor switch: 'all' keeps every reader as it was; 'claude' or
     // 'openai' narrows the people, the three boxes and the charts. Events
     // ingested and open alerts always cover every product.
-    const vendor = parseVendor(request.nextUrl.searchParams.get('vendor'));
+    const vendor = await visibleVendor(request.nextUrl.searchParams.get('vendor'));
     const nowS = Math.floor(Date.now() / 1000);
     const weekAgo = nowS - 7 * 24 * 60 * 60;
-    const openaiPresent = await hasOpenAiData();
+    const openaiPresent = await visibleOpenAi(hasOpenAiData());
     // The products the charts show: the chosen vendor's, or all six in the All view.
     const shown = productsShown(vendor, openaiPresent);
     const licensedSeatsRaw = parseInt(await getConfigValue('licensedSeats'), 10);

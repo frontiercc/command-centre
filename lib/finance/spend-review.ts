@@ -28,6 +28,7 @@
  * can be traced to one colleague. Colleagues are never named.
  */
 import { and, eq, gte, inArray, lt, isNotNull, isNull, sql } from 'drizzle-orm';
+import { openaiShown } from '@/lib/sources/openai-visibility';
 import { getTypedClient } from '@/lib/db/client';
 import { schema } from '@/lib/db/schema';
 import { jsonToText } from '@/lib/db/json';
@@ -697,6 +698,8 @@ async function coworkSpendBySession(
 async function chatgptSpendBySession(
   client: Client, rates: ModelRates, start: number, end: number, filter: OpenAiFilter, unpriced?: Set<string>,
 ): Promise<{ accs: Map<string, SessionAcc>; unmatchedByUser: Map<string, number> }> {
+  // Hidden on the OpenAI panel: Spend Review reads as Claude-only.
+  if (!(await openaiShown())) return { accs: new Map(), unmatchedByUser: new Map() };
   const shared = await chatgptSessionShares(client, rates, start, end, filter);
   const accs = new Map<string, SessionAcc>();
   for (const [sid, e] of shared.bySession) {
@@ -718,6 +721,7 @@ async function chatgptSpendBySession(
 async function codexSpendBySession(
   client: Client, rates: ModelRates, start: number, end: number, filter: OpenAiFilter, unpriced?: Set<string>,
 ): Promise<Map<string, SessionAcc>> {
+  if (!(await openaiShown())) return new Map();
   const { bySession, unpricedModels } = await codexSessionTurns(client, rates, start, end, filter);
   const accs = new Map<string, SessionAcc>();
   for (const [sid, e] of bySession) {
@@ -737,6 +741,7 @@ async function codexSpendBySession(
 
 /** True once the OpenAI export has sent a ChatGPT cost record or a Codex turn. */
 async function openaiSpendSeen(client: Client): Promise<boolean> {
+  if (!(await openaiShown())) return false;
   const oc = schema.openaiCosts;
   const ct = schema.codexTurns;
   const a = await client.select({ id: oc.id }).from(oc).where(eq(oc.product, 'chatgpt')).limit(1);

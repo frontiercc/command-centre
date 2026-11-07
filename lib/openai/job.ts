@@ -3,7 +3,8 @@
 
 // OpenAI sync job: interval-gated wrapper over runOpenAiSync, with the
 // last-sync time and figures the admin page shows. Does nothing, and writes
-// nothing, until an admin key and a workspace ID are saved.
+// nothing, until an admin key and a workspace ID are saved, or while an admin
+// has paused it (openaiSyncPaused).
 import { getConfigValue, setConfigValue } from '@/lib/config';
 import { runOpenAiSync, type OpenAiSyncStats, type RunOptions } from './sync';
 import { rollupChatgptSessionTime } from '@/lib/pulse/chatgpt-session-time';
@@ -15,6 +16,9 @@ export async function runOpenAiSyncJob(opts?: { force?: boolean } & RunOptions):
   const apiKey = await getConfigValue('openaiAdminApiKey');
   const workspaceId = (await getConfigValue('openaiWorkspaceId')).trim();
   if (!apiKey || !workspaceId) return { skipped: true, stats: null };
+  // Paused on the OpenAI panel: no runs, the key and everything collected kept.
+  // Resuming carries on from the saved cursors, so nothing is missed.
+  if ((await getConfigValue('openaiSyncPaused')) === 'true') return { skipped: true, stats: null };
 
   const intervalRaw = parseInt(await getConfigValue('openaiSyncIntervalMinutes') || '', 10);
   const intervalMin = Number.isFinite(intervalRaw) && intervalRaw > 0 ? intervalRaw : DEFAULT_SYNC_INTERVAL_MINUTES;

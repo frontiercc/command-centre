@@ -12,10 +12,10 @@
 // it as a STRING from node-postgres, so it is coerced too (mirrors lib/pulse/
 // trends.ts's rawAll reads).
 import { NextRequest, NextResponse } from 'next/server';
+import { visibleVendor, visibleOpenAi } from '@/lib/sources/openai-visibility';
 import { sql } from 'drizzle-orm';
 import { getAdminSession, canAccessCodePulse, isDeptScoped } from '@/lib/auth/admin-auth';
 import { getTypedClient } from '@/lib/db/client';
-import { parseVendor } from '@/lib/dashboard/vendor';
 import { hasCodexData, pickCodeMetricsSource } from '@/lib/pulse/code/vendor-view';
 
 export const dynamic = 'force-dynamic';
@@ -66,8 +66,8 @@ export async function GET(request: NextRequest) {
   const client = await getTypedClient();
 
   // Developer Pulse's All / Claude / Codex switch.
-  const vendor = parseVendor(request.nextUrl.searchParams.get('vendor'));
-  const codexPresent = await hasCodexData();
+  const vendor = await visibleVendor(request.nextUrl.searchParams.get('vendor'));
+  const codexPresent = await visibleOpenAi(hasCodexData());
 
   // Latest function-scope code_metrics row per department + member counts
   const { table, only } = await pickCodeMetricsSource(vendor, codexPresent);

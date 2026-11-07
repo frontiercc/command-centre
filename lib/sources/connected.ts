@@ -12,9 +12,10 @@ import { getTypedClient } from '@/lib/db/client';
 import { getConfigValue } from '@/lib/config';
 import { vendorClause } from '@/lib/dashboard/product-sql';
 import type { ConnectedProducts } from './connected-shared';
+import { openaiShown } from './openai-visibility';
 
 export type { ConnectedProducts } from './connected-shared';
-export { isOpenAiOnly } from './connected-shared';
+export { isOpenAiOnly, openAiConnected } from './connected-shared';
 
 interface RawFacade {
   execute: (q: unknown) => Promise<{ rows: unknown[] }>;
@@ -26,7 +27,8 @@ export async function getConnectedProducts(): Promise<ConnectedProducts> {
   const keys = await Promise.all([...CLAUDE_KEYS, 'openaiAdminApiKey' as const].map((k) => getConfigValue(k)));
   const claudeKey = keys.slice(0, CLAUDE_KEYS.length).some((v) => !!v);
   const openaiKey = !!keys[CLAUDE_KEYS.length];
-  if (claudeKey && openaiKey) return { claude: true, openai: true };
+  const shown = await openaiShown();
+  if (claudeKey && openaiKey) return { claude: true, openai: shown, openaiConnected: true };
 
   const client = (await getTypedClient()) as unknown as RawFacade;
   const exists = async (q: unknown): Promise<boolean> => {
@@ -43,5 +45,5 @@ export async function getConnectedProducts(): Promise<ConnectedProducts> {
     claudeKey ? true : exists(sql`SELECT 1 FROM code_otel_metrics LIMIT 1`),
     openaiKey ? true : exists(sql`SELECT 1 FROM cowork_messages WHERE ${sql.raw(vendorClause('openai'))} LIMIT 1`),
   ]);
-  return { claude: claudeRows || chatRows || metricRows, openai: openaiRows };
+  return { claude: claudeRows || chatRows || metricRows, openai: openaiRows && shown, openaiConnected: openaiRows };
 }

@@ -2,6 +2,7 @@
 // SPDX-License-Identifier: Apache-2.0
 
 import { getCodeWorkTypeLabeller } from '@/lib/pulse/code/tier-config';
+import { visibleOpenAi } from '@/lib/sources/openai-visibility';
 import { NextRequest, NextResponse } from 'next/server';
 import { errorResponse, logError } from '@/lib/api/errors';
 import { aiFailureOptions, createGroundedJson, pctChange, pctOf, type GroundedShape } from '@/lib/anthropic/grounded-json';
@@ -81,7 +82,7 @@ export async function GET(request: NextRequest) {
     getOpenAlertsBySeverity(),
     getRecentAlerts(10),
     getSessionsThisWeekByProduct(),
-    hasOpenAiData(),
+    visibleOpenAi(hasOpenAiData()),
     getActiveUsersByVendor(),
     getTierMixThisWeekByVendor(),
   ]);

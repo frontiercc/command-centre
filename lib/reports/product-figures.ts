@@ -8,6 +8,7 @@
 // the dashboard name each row the same way. Prompts only: the person's
 // messages, not tool or model-call rows.
 import { sql } from 'drizzle-orm';
+import { openaiShown } from '@/lib/sources/openai-visibility';
 import { getTypedClient } from '@/lib/db/client';
 import { productExpr } from '@/lib/dashboard/product-sql';
 import { PRODUCTS, type ProductId } from '@/lib/dashboard/vendor';
@@ -52,7 +53,9 @@ export async function getProductFigures(periodStartS: number, periodEndS: number
      WHERE message_type IN ('cowork_user_message', 'code_user_message')
      GROUP BY 1`);
   const byId = new Map(res.rows.map(r => [String(r.product), r]));
-  return PRODUCTS.flatMap(p => {
+  // Hidden on the OpenAI panel: reports read as Claude-only.
+  const shown = await openaiShown();
+  return PRODUCTS.filter(p => shown || p.vendor !== 'openai').flatMap(p => {
     const r = byId.get(p.id);
     if (!r) return [];
     return [{

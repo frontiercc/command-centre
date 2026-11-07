@@ -10,11 +10,11 @@
 // row-value `(a, b) IN (SELECT a, MAX(b) ... GROUP BY a)` natively.
 // AVG(...) results are Number()-coerced (numeric/double precision aggregates can come back as STRINGS on Postgres).
 import { NextRequest, NextResponse } from 'next/server';
+import { visibleVendor } from '@/lib/sources/openai-visibility';
 import { sql } from 'drizzle-orm';
 import { getAdminSession, canAccessCoworkPulse } from '@/lib/auth/admin-auth';
 import { getTypedClient } from '@/lib/db/client';
 
-import { parseVendor } from '@/lib/dashboard/vendor';
 
 export const dynamic = 'force-dynamic';
 
@@ -44,7 +44,7 @@ export async function GET(request: NextRequest) {
 
   const client = await getTypedClient();
   // The Claude / OpenAI switch: a vendor view reads the aggregator's per-vendor figures.
-  const vendor = parseVendor(request.nextUrl.searchParams.get('vendor'));
+  const vendor = await visibleVendor(request.nextUrl.searchParams.get('vendor'));
   const metrics = vendor === 'all' ? sql`pulse_metrics` : sql`pulse_metrics_vendor`;
   const only = vendor === 'all' ? sql`` : sql`AND vendor = ${vendor}`;
 

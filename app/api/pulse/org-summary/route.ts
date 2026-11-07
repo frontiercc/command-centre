@@ -9,6 +9,7 @@
 // back as STRINGS on Postgres). otel_events.tool_input is jsonb on Postgres —
 // its `decision` field is read with `->>'decision'`.
 import { NextRequest, NextResponse } from 'next/server';
+import { visibleVendor } from '@/lib/sources/openai-visibility';
 import { and, desc, eq, gte, isNotNull, sql } from 'drizzle-orm';
 import { getAdminSession, canAccessOrgOverview } from '@/lib/auth/admin-auth';
 import { getTypedClient } from '@/lib/db/client';
@@ -18,7 +19,6 @@ import { buildByProduct } from '@/lib/pulse/cowork/by-product';
 import { getConnectedProducts, isOpenAiOnly } from '@/lib/sources/connected';
 import { getConfigValue } from '@/lib/config';
 import { readHumanTime } from '@/lib/pulse/human-time-summary';
-import { parseVendor } from '@/lib/dashboard/vendor';
 import { vendorClause, vendorExpr, toolTagExpr } from '@/lib/dashboard/product-sql';
 import { messageVendor } from '@/lib/pulse/vendor-filter';
 import { getDocSessions } from '@/lib/pulse/cowork/doc-sessions';
@@ -48,7 +48,7 @@ export async function GET(request: NextRequest) {
   const client = await getTypedClient();
   // The vendor switch narrows every figure here: the four signals read the
   // aggregator's per-vendor figures (pulse_metrics_vendor) in a vendor view.
-  const vendor = parseVendor(request.nextUrl.searchParams.get('vendor'));
+  const vendor = await visibleVendor(request.nextUrl.searchParams.get('vendor'));
   const pm = schema.pulseMetrics;
   const pmv = schema.pulseMetricsVendor;
   const mt = vendor === 'all' ? pm : pmv as unknown as typeof pm;

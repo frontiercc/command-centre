@@ -10,7 +10,7 @@ import LoadingSpinner from '@/components/shared/LoadingSpinner';
 import { useToast } from '@/components/shared/ToastProvider';
 import { PageBody, Panel, Strip, Figure, Pill, Dot, SEVERITY_COLOR, Notice, Empty, Muted, SubHead, T, B, cx } from '@/components/precision/ui';
 import { useConnectedProducts } from '@/components/shared/VendorSwitch';
-import { isOpenAiOnly } from '@/lib/sources/connected-shared';
+import { isOpenAiOnly, openAiConnected } from '@/lib/sources/connected-shared';
 import { PRODUCTS, type ProductCounts } from '@/lib/dashboard/vendor';
 
 /** Adoption health as a status pill (active / shallow / inactive). */
@@ -374,7 +374,7 @@ export default function UserDetailPage() {
           const days = user.product_days ?? [];
           // A connected vendor's products, plus any product this person has events for.
           const columns = PRODUCTS.filter(p =>
-            (p.vendor === 'openai' ? !!connected?.openai : !openaiOnly)
+            (p.vendor === 'openai' ? openAiConnected(connected) : !openaiOnly)
             || days.some(d => d.counts[p.id] > 0));
           return (
             <Panel title="30-day activity" subtitle={days.length > 0 ? 'Latest 14 days' : undefined} flush>

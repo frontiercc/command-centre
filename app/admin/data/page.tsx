@@ -12,7 +12,7 @@ import LoadingSpinner from '@/components/shared/LoadingSpinner';
 import { useToast } from '@/components/shared/ToastProvider';
 import SecretRemoveButton from '@/components/admin/SecretRemoveButton';
 import { useConnectedProducts } from '@/components/shared/VendorSwitch';
-import { isOpenAiOnly } from '@/lib/sources/connected-shared';
+import { isOpenAiOnly, openAiConnected } from '@/lib/sources/connected-shared';
 import { PRODUCTS } from '@/lib/dashboard/vendor';
 
 export default function AdminDataPage() {
@@ -22,7 +22,7 @@ export default function AdminDataPage() {
   const [exportProduct, setExportProduct] = useState('all');
   const connected = useConnectedProducts();
   const openaiOnly = isOpenAiOnly(connected);
-  const openaiConnected = !!connected?.openai;
+  const openaiConnected = openAiConnected(connected);
   // The connected vendors' products (Claude's alone until OpenAI is connected).
   const exportProducts = PRODUCTS.filter(p => (p.vendor === 'openai' ? openaiConnected : !openaiOnly));
   const [exporting, setExporting] = useState(false);

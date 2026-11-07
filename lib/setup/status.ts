@@ -15,7 +15,7 @@ import { and, ne, isNotNull, like, sql } from 'drizzle-orm';
 import { getTypedClient } from '@/lib/db/client';
 import { schema } from '@/lib/db/schema';
 import { getConfigValue } from '@/lib/config';
-import { getConnectedProducts, isOpenAiOnly } from '@/lib/sources/connected';
+import { getConnectedProducts, isOpenAiOnly, openAiConnected } from '@/lib/sources/connected';
 
 /** The sample organisation's people (scripts/demo/acme-people.json). */
 export const SAMPLE_EMAIL_PATTERN = '%@acmecorp.example';
@@ -108,7 +108,8 @@ export async function getSetupStatus(): Promise<SetupStatus> {
     markedDone,
     sampleData: { available: process.env.CCC_SAMPLE_DATA === '1', loaded: sampleLoaded },
   };
-  const openaiOnly = isOpenAiOnly(connected);
+  // Setup follows what is connected, whether or not ChatGPT and Codex are shown.
+  const openaiOnly = isOpenAiOnly({ claude: connected.claude, openai: openAiConnected(connected) });
   const required = openaiOnly
     ? [status.apiKey, status.openaiAt !== null || marked('openai'), status.rubricReviewed, departmentsSet]
     : [status.apiKey, status.claudeCodeAt !== null || marked('claude-code'), status.coworkAt !== null || marked('cowork'), status.rubricReviewed, departmentsSet];

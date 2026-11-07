@@ -10,6 +10,7 @@
 // raw-SQL COUNT/SUM aggregate is Number()-coerced (bigint/numeric
 // come back as STRINGS on Postgres).
 import { NextRequest, NextResponse } from 'next/server';
+import { visibleVendor, visibleOpenAi } from '@/lib/sources/openai-visibility';
 import { and, asc, desc, eq, gte, isNotNull, lte, ne, sql } from 'drizzle-orm';
 import { getAdminSession, isDeptScoped, canAccessCoworkPulse, canAccessPulseAdmin } from '@/lib/auth/admin-auth';
 import { buildFrontierView, resolveViewerUserId } from '@/lib/pulse/frontier-view';
@@ -17,7 +18,6 @@ import { promptTextVisibleFor, logPromptRead } from '@/lib/auth/content-access';
 import { getTypedClient } from '@/lib/db/client';
 import { schema } from '@/lib/db/schema';
 import { getCoworkCostUsd, getCoworkFrictionIndex } from '@/lib/pulse/aggregator';
-import { parseVendor } from '@/lib/dashboard/vendor';
 import { hasOpenAiData } from '@/lib/dashboard/queries';
 import { vendorClause } from '@/lib/dashboard/product-sql';
 import { messageVendor } from '@/lib/pulse/vendor-filter';
@@ -119,7 +119,7 @@ export async function GET(request: NextRequest) {
 
   // The Claude / OpenAI switch: a vendor view reads the aggregator's per-vendor
   // figures and narrows classifications, skills and connectors by source.
-  const vendor = parseVendor(request.nextUrl.searchParams.get('vendor'));
+  const vendor = await visibleVendor(request.nextUrl.searchParams.get('vendor'));
   const pmv = schema.pulseMetricsVendor;
   const pm = vendor === 'all' ? schema.pulseMetrics : pmv as unknown as typeof schema.pulseMetrics;
   const pmOnly = vendor === 'all' ? sql`TRUE` : eq(pmv.vendor, vendor);
@@ -410,7 +410,7 @@ export async function GET(request: NextRequest) {
   // OTel cowork enrichments — 7-day window
   const sevenDaysAgoOtel = now - 7 * 24 * 3600;
   const coworkCostUsd = await getCoworkCostUsd(userId, sevenDaysAgoOtel, now);
-  const openaiPresent = await hasOpenAiData();
+  const openaiPresent = await visibleOpenAi(hasOpenAiData());
   const chatgpt = vendor === 'claude' || !openaiPresent ? undefined : await chatgptSpend({ since: sevenDaysAgoOtel, userIds: [userId] });
   const coworkFrictionIndex = await getCoworkFrictionIndex(userId, sevenDaysAgoOtel, now);
 

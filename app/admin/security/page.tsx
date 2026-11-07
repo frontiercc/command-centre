@@ -11,6 +11,7 @@ import { useToast } from '@/components/shared/ToastProvider';
 import SecretRemoveButton from '@/components/admin/SecretRemoveButton';
 import { MIN_PASSWORD_LENGTH, PASSWORD_TOO_SHORT } from '@/lib/auth/password-policy';
 import { PageBody, Panel, Pill, Tag, Muted, T, B, cx } from '@/components/precision/ui';
+import { ToggleRow } from '@/components/admin/precision-admin';
 
 type TestStatus = 'idle' | 'testing' | 'success' | 'error';
 
@@ -102,6 +103,9 @@ export default function SecurityPage() {
   const [openaiOrganizationId, setOpenaiOrganizationId] = useState('');
   const [openaiLastSyncAt, setOpenaiLastSyncAt] = useState('');
   const [openaiLastSyncStats, setOpenaiLastSyncStats] = useState('');
+  // Pause the sync (key and data kept) and show or hide ChatGPT and Codex on the analytics screens.
+  const [openaiSyncPaused, setOpenaiSyncPaused] = useState(false);
+  const [openaiShown, setOpenaiShown] = useState(true);
   const [openaiTestStatus, setOpenaiTestStatus] = useState<TestStatus>('idle');
   const [openaiTestMessage, setOpenaiTestMessage] = useState('');
   const [openaiTestOk, setOpenaiTestOk] = useState(false);
@@ -218,6 +222,8 @@ export default function SecurityPage() {
         setOpenaiOrganizationId(String(data.openaiOrganizationId || ''));
         setOpenaiLastSyncAt(String(data.openaiLastSyncAt || ''));
         setOpenaiLastSyncStats(String(data.openaiLastSyncStats || ''));
+        setOpenaiSyncPaused(String(data.openaiSyncPaused ?? 'false') === 'true');
+        setOpenaiShown(String(data.openaiShown ?? 'true') !== 'false');
         trackLoadedSecrets(loadedSecretsRef, data);
         setOtelEndpointSecret(String(data.otelEndpointSecret || ''));
         setSmtpHost(String(data.smtpHost || ''));
@@ -284,6 +290,8 @@ export default function SecurityPage() {
           openaiAdminApiKey,
           openaiWorkspaceId,
           openaiOrganizationId,
+          openaiSyncPaused: openaiSyncPaused ? 'true' : 'false',
+          openaiShown: openaiShown ? 'true' : 'false',
         }),
       });
       if (res.ok) {
@@ -1550,9 +1558,27 @@ export default function SecurityPage() {
                 placeholder="org-…, needed for ChatGPT spend"
               />
             </FormField>
+            <div className="-mx-4 border-y border-[#F2F2F2]">
+              <ToggleRow
+                first
+                label="Pause sync"
+                hint={<>Stops collecting ChatGPT and Codex activity without removing the key. Everything already collected stays on screen, and switching it back on carries on from where it stopped, missing nothing that OpenAI still keeps. Removing the key stops the sync for good.</>}
+                checked={openaiSyncPaused}
+                onChange={setOpenaiSyncPaused}
+              />
+              <ToggleRow
+                label="Show ChatGPT and Codex"
+                hint={<>Shows ChatGPT and Codex on the dashboard, Work Pulse, Developer Pulse, FinOps, Spend Review, the S&amp;C Board, use cases, reports and briefings. Off makes those screens show Claude only; collection carries on, so switching it back on shows everything with no gap. The Audit Log always lists ChatGPT and Codex prompts.</>}
+                checked={openaiShown}
+                onChange={setOpenaiShown}
+              />
+            </div>
+            {openaiSyncPaused && openaiAdminApiKey && (
+              <p className="m-0 text-[13px] text-[#666666]">Sync paused. Nothing new is collected until it is switched back on and saved.</p>
+            )}
             {openaiLastSyncAt && (
               <p className="m-0 text-[13px] text-[#666666] tabular-nums">
-                Last sync: {new Date(parseInt(openaiLastSyncAt, 10) * 1000).toLocaleString('en-GB')}
+                {openaiSyncPaused ? 'Last sync before pausing: ' : 'Last sync: '}{new Date(parseInt(openaiLastSyncAt, 10) * 1000).toLocaleString('en-GB')}
                 {(() => {
                   try {
                     const s = JSON.parse(openaiLastSyncStats || '{}');
