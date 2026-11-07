@@ -36,7 +36,7 @@ const msg = (id: string, surface: string, source: string | null) =>
 describe('getConnectedProducts', () => {
   it('a fresh install has nothing connected, and reads as Claude', async () => {
     const c = await getConnectedProducts();
-    expect(c).toEqual({ claude: false, openai: false });
+    expect(c).toEqual({ claude: false, openai: false, openaiConnected: false });
     expect(isOpenAiOnly(c)).toBe(false);
   });
 
@@ -44,19 +44,19 @@ describe('getConnectedProducts', () => {
     await setConfigValue('anthropicAiApiKey', 'sk-ant-test');
     await setConfigValue('openaiAdminApiKey', 'sk-admin-test');
     const c = await getConnectedProducts();
-    expect(c).toEqual({ claude: false, openai: true });
+    expect(c).toEqual({ claude: false, openai: true, openaiConnected: true });
     expect(isOpenAiOnly(c)).toBe(true);
   });
 
   it('ChatGPT or Codex data alone is OpenAI only', async () => {
     await msg('o1', 'code', 'codex');
-    expect(await getConnectedProducts()).toEqual({ claude: false, openai: true });
+    expect(await getConnectedProducts()).toEqual({ claude: false, openai: true, openaiConnected: true });
   });
 
   it('Claude data, Claude metrics or a Claude key connect Claude', async () => {
     await msg('o1', 'cowork', 'chatgpt_work');
     await msg('c1', 'cowork', 'otel');
-    expect(await getConnectedProducts()).toEqual({ claude: true, openai: true });
+    expect(await getConnectedProducts()).toEqual({ claude: true, openai: true, openaiConnected: true });
 
     await sql.exec(`DELETE FROM cowork_messages;`);
     await msg('o1', 'cowork', 'chatgpt_chat');
@@ -66,6 +66,6 @@ describe('getConnectedProducts', () => {
     await sql.exec(`DELETE FROM code_otel_metrics;`);
     expect((await getConnectedProducts()).claude).toBe(false);
     await setConfigValue('complianceAccessKey', 'sk-ant-api01-test');
-    expect(await getConnectedProducts()).toEqual({ claude: true, openai: true });
+    expect(await getConnectedProducts()).toEqual({ claude: true, openai: true, openaiConnected: true });
   });
 });
