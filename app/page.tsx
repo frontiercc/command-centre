@@ -271,11 +271,6 @@ export default function DashboardPage() {
             value={stats.avgSessionsPerWeek.chat}
             change="avg / week"
             subtitle={flaggedLine(stats.chatFlagged)}
-            pill="Prompts only"
-            pillVariant="blue"
-            pillTooltip={data.openaiPresent
-              ? 'Claude Chat prompts from the Compliance API and ChatGPT Chat prompts from OpenAI’s export. User input only. Replies are not stored.'
-              : 'Claude Chat prompts from the Compliance API. User input only. Replies are not stored.'}
             action={split ? formatSplit(data.products.sessions.chat) : undefined}
           />
           <StatCard
@@ -283,28 +278,6 @@ export default function DashboardPage() {
             value={stats.avgSessionsPerWeek.cowork}
             change="avg / week"
             subtitle={flaggedLine(stats.coworkFlagged)}
-            pill={
-              data.dataSourceStatus.otelCowork
-                ? 'Prompts, skills + connectors'
-                : data.dataSourceStatus.coworkContent
-                ? 'Messages + tools'
-                : undefined
-            }
-            pillVariant={
-              data.dataSourceStatus.otelCowork
-                ? 'blue'
-                : data.dataSourceStatus.coworkContent
-                ? 'green'
-                : undefined
-            }
-            pillTooltip={
-              (data.dataSourceStatus.otelCowork
-                ? 'Cowork, Claude in Office and Claude in Google sessions, captured via OpenTelemetry.'
-                : data.dataSourceStatus.coworkContent
-                ? 'User messages, MCP connector activity, and skill invocations captured from Claude Cowork sessions.'
-                : 'Cowork conversation content is not available. Tool calls and file access are captured via OpenTelemetry.')
-              + (data.openaiPresent ? ' ChatGPT Work prompts come from OpenAI’s export.' : '')
-            }
             action={
               split ? formatSplit(data.products.sessions.work)
                 : !data.dataSourceStatus.otelCowork && vendor !== 'openai' ? (
@@ -317,10 +290,6 @@ export default function DashboardPage() {
             value={stats.avgSessionsPerWeek.code}
             change="avg / week"
             subtitle={flaggedLine(stats.codeFlagged)}
-            pill="Prompts, skills + connectors"
-            pillVariant="purple"
-            pillTooltip={'User prompts, MCP connector activity, and skill invocations from Claude Code project sessions.'
-              + (data.openaiPresent ? ' Codex prompts and connector calls come from OpenAI’s export.' : '')}
             action={split ? formatSplit(data.products.sessions.code) : undefined}
           />
         </Strip>

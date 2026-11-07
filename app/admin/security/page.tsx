@@ -106,6 +106,8 @@ export default function SecurityPage() {
   // Pause the sync (key and data kept) and show or hide ChatGPT and Codex on the analytics screens.
   const [openaiSyncPaused, setOpenaiSyncPaused] = useState(false);
   const [openaiShown, setOpenaiShown] = useState(true);
+  // A saved key comes back masked; a typed, unsaved key is plain.
+  const openaiKeySaved = openaiAdminApiKey.includes('••••••••');
   const [openaiTestStatus, setOpenaiTestStatus] = useState<TestStatus>('idle');
   const [openaiTestMessage, setOpenaiTestMessage] = useState('');
   const [openaiTestOk, setOpenaiTestOk] = useState(false);
@@ -1559,6 +1561,8 @@ export default function SecurityPage() {
               />
             </FormField>
             <div className="-mx-4 border-y border-[#F2F2F2]">
+              {/* Pause sync only once a key is saved: before then there is no sync to pause. */}
+              {openaiKeySaved && (
               <ToggleRow
                 first
                 label="Pause sync"
@@ -1566,14 +1570,16 @@ export default function SecurityPage() {
                 checked={openaiSyncPaused}
                 onChange={setOpenaiSyncPaused}
               />
+              )}
               <ToggleRow
+                first={!openaiKeySaved}
                 label="Show ChatGPT and Codex"
                 hint={<>Shows ChatGPT and Codex on the dashboard, Work Pulse, Developer Pulse, FinOps, Spend Review, the S&amp;C Board, use cases, reports and briefings. Off makes those screens show Claude only; collection carries on, so switching it back on shows everything with no gap. The Audit Log always lists ChatGPT and Codex prompts.</>}
                 checked={openaiShown}
                 onChange={setOpenaiShown}
               />
             </div>
-            {openaiSyncPaused && openaiAdminApiKey && (
+            {openaiSyncPaused && openaiKeySaved && (
               <p className="m-0 text-[13px] text-[#666666]">Sync paused. Nothing new is collected until it is switched back on and saved.</p>
             )}
             {openaiLastSyncAt && (
