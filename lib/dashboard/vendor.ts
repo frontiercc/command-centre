@@ -100,6 +100,16 @@ export function productsShown(vendor: Vendor, openaiPresent: boolean): Product[]
   return PRODUCTS.filter((p) => p.vendor === vendor);
 }
 
+/**
+ * The dashboard's name for each product. Claude Cowork's figures include
+ * Claude in Office and Google (stored beside Cowork), so while those are shown
+ * (Admin → Work Pulse) the dashboard calls it "Claude Cowork and apps".
+ * Everywhere else, such as an Audit Log row, it stays "Claude Cowork".
+ */
+export function dashboardProducts<P extends Product>(products: readonly P[], officeShown: boolean): P[] {
+  return products.map(p => (p.id === 'claude_cowork' && officeShown ? { ...p, label: 'Claude Cowork and apps' } : p));
+}
+
 /** The sum of the given products' counts. */
 export function sumShown(counts: ProductCounts, shown: readonly Product[]): number {
   return shown.reduce((n, p) => n + counts[p.id], 0);

@@ -64,6 +64,8 @@ describe('GET /api/events product and arrival filters', () => {
       expect(await ids('/api/events?product=chatgpt_chat')).toEqual(['chatgpt-chat']);
       expect(await ids('/api/events?product=chatgpt_work')).toEqual(['chatgpt-work', 'mcp-chatgpt']);
       expect(await ids('/api/events?product=codex')).toEqual(['codex']);
+      // The Product list's "Cowork" (?app=cowork) is Claude's Cowork alone, never ChatGPT Work.
+      expect(await ids('/api/events?app=cowork')).toEqual(['claude-cowork']);
     } finally {
       await cleanup();
     }

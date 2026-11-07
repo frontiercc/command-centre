@@ -16,7 +16,7 @@ import { DataSourceIndicator } from '@/components/dashboard/DataSourceIndicator'
 import Link from 'next/link';
 import { PageBody, Toolbar, Strip, Panel, Tag, Notice, B } from '@/components/precision/ui';
 import { useVendor, VendorSwitch, formatSplit } from '@/components/shared/VendorSwitch';
-import { PRODUCTS, type Vendor, type VendorSplit, type ProductCounts, type ProductId } from '@/lib/dashboard/vendor';
+import { PRODUCTS, dashboardProducts, type Vendor, type VendorSplit, type ProductCounts, type ProductId } from '@/lib/dashboard/vendor';
 import PulseBand from '@/components/pulse/PulseBand';
 import CodePulseBand from '@/components/pulse/code/CodePulseBand';
 import { useCorePlatformGuard } from '@/components/shared/useCorePlatformGuard';
@@ -64,6 +64,8 @@ interface DashboardData {
   }>;
   /** Product ids the charts show, in display order. */
   productsShown: ProductId[];
+  /** Claude in Office and Google shown: Claude Cowork reads "Claude Cowork and apps". */
+  officeShown?: boolean;
   securityMetrics: {
     openAlerts: number;
     resolvedThisWeek: number;
@@ -188,7 +190,7 @@ export default function DashboardPage() {
   // The switch shows once OpenAI data exists (or while a narrowed view is chosen).
   const split = vendor === 'all' && data.openaiPresent;
   // The products the charts show, in display order.
-  const shownProducts = PRODUCTS.filter(p => data.productsShown.includes(p.id));
+  const shownProducts = dashboardProducts(PRODUCTS.filter(p => data.productsShown.includes(p.id)), data.officeShown !== false);
   const allProducts = vendor === 'all' ? '' : ' · all products';
   const seats = data.licensedSeats;
   const activeSub = seats == null
@@ -339,7 +341,7 @@ export default function DashboardPage() {
               <AdoptionChart data={data.adoptionTrend} products={shownProducts} />
             )}
           </div>
-          <StickinessCard vendor={vendor} openaiPresent={data.openaiPresent} />
+          <StickinessCard vendor={vendor} openaiPresent={data.openaiPresent} officeShown={data.officeShown !== false} />
         </div>
 
         {/* Department adoption (2/3) + top users this week (1/3) */}

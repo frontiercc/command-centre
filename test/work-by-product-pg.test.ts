@@ -37,7 +37,7 @@ async function runSpec(): Promise<void> {
     const empty = (await buildByProduct())!;
     expect(empty.hasOffice).toBe(false);
     expect(empty.seen).toEqual({ office: false, google: false });
-    expect(empty.rows.map(r => r.product)).toEqual(['cowork', 'excel', 'word', 'powerpoint', 'outlook', 'sheets', 'docs', 'slides']);
+    expect(empty.rows.map(r => r.product)).toEqual(['claude_chat', 'cowork', 'excel', 'word', 'powerpoint', 'outlook', 'sheets', 'docs', 'slides']);
     for (const r of empty.rows) expect(r).toMatchObject({ people: 0, sessions: 0, meaningfulPct: null, producedPct: null, spendUsd: null });
 
     // A Cowork user with a reported cost, two days ago.
@@ -54,7 +54,7 @@ async function runSpec(): Promise<void> {
     const afterOffice = (await buildByProduct())!;
     expect(afterOffice.seen).toEqual({ office: true, google: false });
     let rows = afterOffice.rows;
-    expect(rows.map(r => r.product)).toEqual(['cowork', 'excel', 'word', 'powerpoint', 'outlook', 'sheets', 'docs', 'slides']);
+    expect(rows.map(r => r.product)).toEqual(['claude_chat', 'cowork', 'excel', 'word', 'powerpoint', 'outlook', 'sheets', 'docs', 'slides']);
     expect(rows.find(r => r.product === 'outlook')).toMatchObject({ people: 0, sessions: 0, spendUsd: null });
     const cowork = rows.find(r => r.product === 'cowork')!;
     expect(cowork).toMatchObject({ people: 1, sessions: 1, spendUsd: 1.25, spendEstimated: false });

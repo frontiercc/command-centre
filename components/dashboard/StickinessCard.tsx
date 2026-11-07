@@ -6,7 +6,7 @@
 import { useEffect, useState } from 'react';
 import { Panel, PanelFoot, BarRow, Tag } from '@/components/precision/ui';
 import { PRODUCT_COLOR } from '@/lib/ui/chart-colours';
-import { productsShown, type ProductId, type Vendor } from '@/lib/dashboard/vendor';
+import { dashboardProducts, productsShown, type ProductId, type Vendor } from '@/lib/dashboard/vendor';
 
 interface SurfaceStickiness {
   avgDau: number;
@@ -24,7 +24,7 @@ interface StickinessData {
 }
 
 /** One row per product shown: the chosen vendor's three, or all six. */
-export default function StickinessCard({ vendor = 'all', openaiPresent = false }: { vendor?: Vendor; openaiPresent?: boolean }) {
+export default function StickinessCard({ vendor = 'all', openaiPresent = false, officeShown = true }: { vendor?: Vendor; openaiPresent?: boolean; officeShown?: boolean }) {
   const [data, setData] = useState<StickinessData | null>(null);
   const [loading, setLoading] = useState(true);
 
@@ -52,7 +52,7 @@ export default function StickinessCard({ vendor = 'all', openaiPresent = false }
         Daily active share of each product&apos;s monthly actives
       </p>
       <div className="flex-1 py-1">
-        {productsShown(vendor, openaiPresent).map(({ id: key, label }) => {
+        {dashboardProducts(productsShown(vendor, openaiPresent), officeShown).map(({ id: key, label }) => {
           const surface = data.products[key];
           const pct = surface.stickiness !== null ? Math.round(surface.stickiness * 100) : null;
           return (

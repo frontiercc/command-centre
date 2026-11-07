@@ -15,6 +15,7 @@ import { getTypedClient } from '@/lib/db/client';
 import { schema } from '@/lib/db/schema';
 import { buildSessionOutputRate } from '@/lib/pulse/cowork/session-output-rate';
 import { buildByProduct } from '@/lib/pulse/cowork/by-product';
+import { getConnectedProducts, isOpenAiOnly } from '@/lib/sources/connected';
 import { getConfigValue } from '@/lib/config';
 import { readHumanTime } from '@/lib/pulse/human-time-summary';
 import { parseVendor } from '@/lib/dashboard/vendor';
@@ -263,12 +264,19 @@ export async function GET(request: NextRequest) {
     console.error('[org-summary] session output rate failed', e);
   }
 
-  // By product (Cowork beside Claude in Office). Additive; only a failure
-  // hides the panel. Office rows read 0 until Office activity arrives.
+  // By product (Claude Chat, Cowork, the Office and Google apps, ChatGPT),
+  // following the vendor switch. Additive; only a failure hides the panel.
+  // Office and Google rows read 0 until their activity arrives, and Admin →
+  // Work Pulse "Show Claude in Office and Google" off leaves them out.
   let byProduct = null;
   try {
-    // Admin → Work Pulse "Show Claude in Office" off hides the panel.
-    if ((await getConfigValue('claudeInOfficeShown')) !== 'false') byProduct = await buildByProduct();
+    const connected = await getConnectedProducts();
+    byProduct = await buildByProduct(now, {
+      vendor,
+      officeShown: (await getConfigValue('claudeInOfficeShown')) !== 'false',
+      chatgpt: connected.openai,
+      claude: !isOpenAiOnly(connected),
+    });
   } catch (e) {
     console.error('[org-summary] by-product failed', e);
   }

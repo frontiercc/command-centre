@@ -122,6 +122,8 @@ export async function GET(request: NextRequest) {
       openaiPresent,
       // Product ids the charts show, in display order.
       productsShown: shown.map(p => p.id),
+      // Claude in Office and Google shown (Admin → Work Pulse): Claude Cowork is then "Claude Cowork and apps".
+      officeShown: (await getConfigValue('claudeInOfficeShown')) !== 'false',
       // Each box's Claude and OpenAI figures, for the line under it in the All view.
       products: { sessions: sessionsByProduct, flagged: flaggedByProduct, activeUsers: activeByVendor },
       adoptionTrend,

@@ -51,6 +51,19 @@ export const WORK_PRODUCT_COLOR = {
   slides: '#A3AEDB',
 } as const;
 
+/**
+ * Rows of the Work Pulse By product panel: the Work Pulse products above, plus
+ * Claude Chat (its surface rose) and ChatGPT (ChatGPT Chat's burnt orange, the
+ * product's own hue on the dashboard). Checked with the dataviz validator in
+ * panel order: every neighbour stays apart in normal vision and for protan,
+ * deutan and tritan readers.
+ */
+export const BY_PRODUCT_ROW_COLOR = {
+  claude_chat: SURFACE_COLOR.chat,
+  ...WORK_PRODUCT_COLOR,
+  chatgpt: PRODUCT_COLOR.chatgpt_chat,
+} as const;
+
 /** Text colour that reads on a full-strength surface fill. */
 export const SURFACE_INK = {
   cowork: '#FFFFFF',
