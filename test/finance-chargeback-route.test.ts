@@ -5,7 +5,7 @@ import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { NextRequest } from 'next/server';
 import type { ChargebackReport } from '@/lib/finance/chargeback';
 
-const cfg = { chargebackEnabled: true };
+const cfg: { chargebackEnabled: boolean; claudeInOfficeShown?: string } = { chargebackEnabled: true };
 let sessionResult: { authenticated: boolean; userId?: string; email?: string; role?: string };
 
 vi.mock('@/lib/config', () => ({
@@ -53,6 +53,12 @@ vi.mock('@/lib/finance/chargeback', () => ({
   buildChargeback: buildChargebackMock,
 }));
 
+const officeSpendMock = vi.fn(async () => []);
+vi.mock('@/lib/finance/office-spend', async (orig) => {
+  const actual = await orig<typeof import('@/lib/finance/office-spend')>();
+  return { ...actual, officeSpendByUser: officeSpendMock };
+});
+
 const logAccessMock = vi.fn();
 vi.mock('@/lib/audit/log', () => ({
   logAccess: logAccessMock,
@@ -65,9 +71,28 @@ function makeRequest(url: string): NextRequest {
 beforeEach(() => {
   vi.resetModules();
   cfg.chargebackEnabled = true;
+  delete cfg.claudeInOfficeShown;
+  officeSpendMock.mockClear();
   sessionResult = { authenticated: true, userId: 'a1', email: 'm@x.test', role: 'manager' };
   buildChargebackMock.mockClear();
   logAccessMock.mockClear();
+});
+
+describe('GET /api/finance/chargeback, Claude in Office panel', () => {
+  it('lists every Office app at zero before any Office activity', async () => {
+    const { GET } = await import('../app/api/finance/chargeback/route');
+    const body = await (await GET(makeRequest('/api/finance/chargeback?period=2026-03'))).json();
+    expect(body.office.hasOffice).toBe(false);
+    expect(body.office.byProduct.map((p: { product: string }) => p.product)).toEqual(['excel', 'word', 'powerpoint', 'outlook', 'sheets', 'docs', 'slides']);
+  });
+
+  it('leaves the panel out when Show Claude in Office is off', async () => {
+    cfg.claudeInOfficeShown = 'false';
+    const { GET } = await import('../app/api/finance/chargeback/route');
+    const body = await (await GET(makeRequest('/api/finance/chargeback?period=2026-03'))).json();
+    expect(body.office).toBeNull();
+    expect(officeSpendMock).not.toHaveBeenCalled();
+  });
 });
 
 describe('GET /api/finance/chargeback', () => {

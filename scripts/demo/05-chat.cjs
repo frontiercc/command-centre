@@ -12,7 +12,7 @@
 // Real chat capture is via the Compliance API (source='compliance'), never
 // OTel — matches the capture-path rule the rest of this codebase follows.
 // Claude Chat prompts are stored as cowork_messages rows with surface 'chat',
-// one cowork_sessions row per conversation (migration 0038), the same shape
+// one cowork_sessions row per conversation (migration 0041), the same shape
 // lib/compliance/chat-sync.ts writes.
 //
 // Marker `ff7-`. Re-running clears + reinserts its own rows first.

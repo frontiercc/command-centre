@@ -13,7 +13,9 @@
 import { buildSpendReviewIndex, buildSpendReview, priorPeriod, EFFICIENCY_MIN_SESSIONS, type SpendReviewIndex, type SpendReview, type ReviewRoute, type EfficiencyEntry } from '@/lib/finance/spend-review';
 import { getSpendLimits, indexByEmail, primaryRow, shareUsed, NEAR_LIMIT_SHARE, type SpendLimitsSnapshot } from '@/lib/anthropic/spend-limits';
 import { formatModelLabel } from '@/lib/pulse/code/model-label';
-import { monthOf, periodMatchesMonth } from '@/lib/reports/finops-sections';
+import { monthOf, periodMatchesMonth, reportOfficeSpend } from '@/lib/reports/finops-sections';
+import { productFullName } from '@/lib/pulse/cowork/products';
+import type { OfficeSpendSummary } from '@/lib/finance/office-spend';
 import { currentPeriod } from '@/lib/finance/period';
 import { gapPct, surfaceName } from '@/lib/finance/spend-review-format';
 
@@ -84,6 +86,18 @@ export interface SpendReviewSectionInput {
   pace?: number;
   /** The efficiency board shown, and its month: last month's while this month has nobody ranked yet. */
   board?: { rows: EfficiencyEntry[]; period: string };
+  /** Claude in Office this month: an estimate, never in the totals. Null when none or hidden. */
+  office?: OfficeSpendSummary | null;
+}
+
+/** One line on Claude in Office: priced from the model rates, kept out of every total. */
+export function officeSentence(office: OfficeSpendSummary | null | undefined): string | null {
+  if (!office || !office.hasOffice) return null;
+  const apps = office.byProduct.filter(p => p.calls > 0)
+    .map(p => `${productFullName(p.product)} ${p.usd === null ? 'not priced' : `about ${usd(p.usd)}`}`);
+  const total = office.total.usd === null ? 'not priced' : `about **${usd(office.total.usd)}**`;
+  const unpriced = office.total.unpricedModels.length ? ` Not priced, so left out: ${office.total.unpricedModels.join(', ')}.` : '';
+  return `Claude in Office and Google (an estimate from the model rates, not included above): ${total} across ${office.total.people} ${office.total.people === 1 ? 'person' : 'people'} (${apps.join(', ')}).${unpriced}`;
 }
 
 /** Pure renderer: everything the section says comes from `input`. */
@@ -101,8 +115,10 @@ export function renderSpendReviewSection(input: SpendReviewSectionInput): string
     ? `Figures cover ${monthName(period)}. ${sources} Kind of work is AI-judged; savings are estimates at list price.`
     : `Spend Review works by calendar month, so these figures cover ${monthName(period)}, the month containing the report's end date, not the full report window. ${sources} Kind of work is AI-judged; savings are estimates at list price.`);
 
+  const officeLine = officeSentence(input.office);
   if (index.people.length === 0) {
     out.push('No measured spend in this month.');
+    if (officeLine) out.push(`- ${officeLine}`);
     return out.join('\n\n');
   }
 
@@ -112,6 +128,7 @@ export function renderSpendReviewSection(input: SpendReviewSectionInput): string
     s.halfSpendPeople !== null ? `${s.halfSpendPeople} ${s.halfSpendPeople === 1 ? 'person accounts' : 'people account'} for half of it.` : null,
     s.topWork.length ? `Biggest kinds of work: ${s.topWork.map(w => `${w.label} (${surfaceName(w.surface, index.openai)}, ${pct(w.share)})`).join(', ')}.` : null,
     s.orgRereadShare !== null ? `${pct(s.orgRereadShare)} of the month's cost is Claude re-reading earlier conversation on every message.` : null,
+    officeLine,
   ].filter(Boolean) as string[];
   out.push(bullets.map(b => `- ${b}`).join('\n'));
 
@@ -190,5 +207,6 @@ export async function buildSpendReviewSection(periodStart: string, periodEnd: st
     const priorIndex = await buildSpendReviewIndex(prior);
     if (priorIndex.efficiency.length) board = { rows: priorIndex.efficiency, period: prior };
   }
-  return renderSpendReviewSection({ period, periodStart, periodEnd, index, reviews, limits, pace: isCurrent ? monthElapsed(period, nowMs) : 1, board });
+  const office = await reportOfficeSpend(period);
+  return renderSpendReviewSection({ period, periodStart, periodEnd, index, reviews, limits, pace: isCurrent ? monthElapsed(period, nowMs) : 1, board, office });
 }

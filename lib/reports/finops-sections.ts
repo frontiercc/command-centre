@@ -13,6 +13,10 @@
 // the output rather than silently implying the figures match the report window.
 import { buildChargeback, type ChargebackReport, type SurfaceSpend } from '@/lib/finance/chargeback';
 import { buildModelEfficiency, type ModelEfficiencyReport } from '@/lib/finance/model-efficiency';
+import { officeSpendByUser, summariseOfficeSpend, type OfficeSpendSummary } from '@/lib/finance/office-spend';
+import { monthBounds } from '@/lib/finance/period';
+import { productFullName } from '@/lib/pulse/cowork/products';
+import { getConfigValue } from '@/lib/config';
 
 /** `YYYY-MM` for the month containing an ISO date string. */
 export function monthOf(isoDate: string): string {
@@ -145,6 +149,30 @@ function dataQualityNotes(report: ChargebackReport, effs: ModelEfficiencyReport[
 }
 
 /**
+ * Claude in Office and Google: an estimate on its own, never in the totals above (they
+ * sends tokens but no cost; lib/finance/office-spend.ts prices them from the
+ * admin rates). Only apps with activity are listed; nothing when there is none.
+ */
+export function officeBlock(office: OfficeSpendSummary | null | undefined): string {
+  if (!office || !office.hasOffice) return '';
+  const rows = office.byProduct.filter(p => p.calls > 0).map(p => {
+    const t = p.tokens.inputTokens + p.tokens.outputTokens + p.tokens.cacheReadTokens + p.tokens.cacheCreationTokens;
+    return `| ${productFullName(p.product)} | ${p.people} | ${tokens(p.calls)} | ${tokens(t)} | ${p.usd === null ? 'not priced' : `about ${usd(p.usd)}`} |`;
+  });
+  const unpriced = office.total.unpricedModels.length > 0
+    ? ` Not priced, so left out: ${office.total.unpricedModels.join(', ')}.`
+    : '';
+  return `### Claude in Office and Google (estimate)
+
+Claude in Excel, Word, PowerPoint, Outlook and Google Sheets, Docs and Slides send tokens but no cost, so this is the tokens priced from the model rates on Admin → Developer Pulse. It is an estimate, for visibility, not billing, and is not included in any total above.${unpriced}
+
+| App | People | Model calls | Tokens | Spend (estimate) |
+|---|---|---|---|---|
+${rows.join('\n')}
+`;
+}
+
+/**
  * Pure renderer — all formatting decisions live here so the section can be
  * tested against fixtures without touching a database.
  */
@@ -155,8 +183,10 @@ export function renderFinopsSection(
   periodStart: string,
   periodEnd: string,
   openaiEff: { chatgpt: ModelEfficiencyReport; codex: ModelEfficiencyReport } | null = null,
+  office: OfficeSpendSummary | null = null,
 ): string {
   const period = monthOf(periodEnd);
+  const officeText = officeBlock(office);
 
   const scopeNote = periodMatchesMonth(periodStart, periodEnd)
     ? `Figures cover the calendar month **${period}**.`
@@ -179,7 +209,7 @@ ${s.chatgpt && s.codex
     : [surfaceLine('Chat', s.chat), surfaceLine('Code', s.code), surfaceLine('Cowork', s.cowork)].join('\n')}
 | **Total** | **${usd(s.total.usd)}** | **${tokens(s.total.tokens.input + s.total.tokens.output + s.total.tokens.cacheWrite + s.total.tokens.cacheRead)}** |
 
-### Spend by cost centre
+${officeText ? `${officeText}\n` : ''}### Spend by cost centre
 
 ${costCentreTable(report)}
 
@@ -216,5 +246,16 @@ export async function buildFinopsSection(periodStart: string, periodEnd: string)
   const openaiEff = report.vendors
     ? { chatgpt: await buildModelEfficiency('chatgpt', period), codex: await buildModelEfficiency('codex', period) }
     : null;
-  return renderFinopsSection(report, codeEff, coworkEff, periodStart, periodEnd, openaiEff);
+  return renderFinopsSection(report, codeEff, coworkEff, periodStart, periodEnd, openaiEff, await reportOfficeSpend(period));
+}
+
+/** The month's Office estimate for a report, or null when hidden (Admin → Work Pulse) or failing. */
+export async function reportOfficeSpend(period: string): Promise<OfficeSpendSummary | null> {
+  try {
+    if ((await getConfigValue('claudeInOfficeShown')) === 'false') return null;
+    const { start, end } = monthBounds(period);
+    return summariseOfficeSpend(await officeSpendByUser(start, end));
+  } catch {
+    return null; // the Office line is extra; never break the section over it
+  }
 }

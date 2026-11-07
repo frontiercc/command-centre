@@ -179,7 +179,7 @@ export const chargebackPeriods = pgTable('chargeback_periods', {
 });
 
 // Claude Chat prompts live in cowork_messages with surface 'chat'
-// (migration 0038 moved them there and dropped chat_messages).
+// (migration 0041 moved them there and dropped chat_messages).
 
 export const codeAssistantMeta = pgTable('code_assistant_meta', {
     id: text().primaryKey(),
@@ -213,7 +213,7 @@ export const codeAssistantMeta = pgTable('code_assistant_meta', {
     index('idx_cam_agent_name').on(t.agent_name, t.occurred_at).where(sql`agent_name IS NOT NULL`),
 ]);
 
-// ChatGPT and Codex spend from the OpenAI export (migration 0040), kept apart
+// ChatGPT and Codex spend from the OpenAI export (migration 0043), kept apart
 // from Claude's spend so no page shows it under a Claude label.
 
 /** One OpenAI COSTS record: a person's cost for one model, product and app in one UTC hour. */
@@ -251,7 +251,7 @@ export const openaiReplies = pgTable('openai_replies', {
     index('idx_openai_replies_session').on(t.session_id),
 ]);
 
-/** Working time and by-hand estimates for a ChatGPT conversation (migration 0043). */
+/** Working time and by-hand estimates for a ChatGPT conversation (migration 0046). */
 export const chatgptSessionTime = pgTable('chatgpt_session_time', {
     session_id: text().primaryKey(),
     user_id: text().notNull(),
@@ -269,7 +269,7 @@ export const chatgptSessionTime = pgTable('chatgpt_session_time', {
     index('idx_chatgpt_session_time_first').on(t.first_at),
 ]);
 
-/** One Codex tool call: failed or not, and whether it was a commit. No command text (migration 0041). */
+/** One Codex tool call: failed or not, and whether it was a commit. No command text (migration 0044). */
 export const codexActions = pgTable('codex_actions', {
     id: text().primaryKey(),
     user_id: text().notNull(),
@@ -354,7 +354,7 @@ export const codeMetrics = pgTable('code_metrics', {
 
 /**
  * Developer Pulse figures for one product view at a time ('all', 'claude',
- * 'openai'), beside code_metrics, which is unchanged (migration 0042). Same
+ * 'openai'), beside code_metrics, which is unchanged (migration 0045). Same
  * columns and meaning as code_metrics; written only once Codex data exists.
  */
 export const codeMetricsVendor = pgTable('code_metrics_vendor', {
@@ -566,6 +566,16 @@ export const coworkMessages = pgTable('cowork_messages', {
     query_source: text(),
     // The skill running when a Cowork model call was made (OTel skill.name, migration 0037).
     skill_name: text(),
+    // Where the Cowork session ran, from OTel cowork_surface on the user prompt
+    // (`local` = the person's computer, `remote` = Anthropic's cloud). Web and
+    // mobile sessions never carry prompt text whatever the device policy says,
+    // so this tells a redacted prompt that needs a Desktop restart from one
+    // that cannot be fixed on the device (migration 0038). NULL = not recorded.
+    session_location: text(),
+    // Which Office app a row came from (migration 0039): NULL = Cowork,
+    // otherwise excel / word / powerpoint / outlook (Claude in Office) or
+    // sheets / docs / slides (Claude in Google).
+    product: text(),
 }, (t) => [
     foreignKey({ columns: [t.user_id], foreignColumns: [users.id], name: 'cowork_messages_user_id_fk' }),
     uniqueIndex('idx_cowork_messages_seq').on(t.seq),
@@ -685,6 +695,8 @@ export const coworkSessions = pgTable('cowork_sessions', {
     project_name: text(),
     source: text().notNull().default('agent'),
     files_uploaded: text(),
+    // Office app the session ran in (migration 0039); NULL = Cowork.
+    product: text(),
 }, (t) => [
     foreignKey({ columns: [t.user_id], foreignColumns: [users.id], name: 'cowork_sessions_user_id_fk' }),
     index('idx_cowork_sessions_project').on(t.project_name),
@@ -942,7 +954,7 @@ export const pulseMetrics = pgTable('pulse_metrics', {
 ]);
 
 // Work Pulse figures for one vendor ('claude' or 'openai'), beside the
-// all-products figures in pulse_metrics (migration 0039).
+// all-products figures in pulse_metrics (migration 0042).
 export const pulseMetricsVendor = pgTable('pulse_metrics_vendor', {
     id: integer().generatedByDefaultAsIdentity().primaryKey(),
     vendor: text().notNull(),

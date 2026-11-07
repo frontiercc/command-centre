@@ -24,6 +24,7 @@ import { isOpenAiSource, type OpenAiSource } from '@/lib/openai/sources';
 import { isProductId, type ProductId } from '@/lib/dashboard/vendor';
 import { productClause, vendorClause } from '@/lib/dashboard/product-sql';
 import { chatgptSessionShares } from '@/lib/finance/spend-review-openai';
+import { PRODUCT_ORDER, productsIn } from '@/lib/pulse/cowork/products';
 
 // ─── Raw-execution facade (mirrors lib/db/queries.ts's rawAll) ────────────────
 interface RawFacade {
@@ -44,6 +45,8 @@ const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/
 
 interface CoworkEventRow {
   id: string;
+  /** Claude in Office app (migration 0039); NULL = Cowork or Code. */
+  product?: string | null;
   session_id: string;
   user_id: string | null;
   message_type: string;
@@ -72,6 +75,12 @@ interface ChatEventRow {
 }
 
 /**
+ * App filter values the Audit Log accepts: Cowork alone, any Claude in Office
+ * app, any Claude in Google app, or one app.
+ */
+const AUDIT_APPS = new Set<string>(['cowork', 'office', 'google', ...PRODUCT_ORDER.filter(p => p !== 'cowork')]);
+
+/**
  * Get cowork messages projected into the same shape as compliance events,
  * so the audit log can show them inline.
  */
@@ -88,6 +97,8 @@ async function getCoworkEventsForAudit(filters: {
   source?: string;
   product?: ProductId;
   search?: string;
+  /** Work Pulse app: 'cowork' (Cowork only), 'office' / 'google' (any app in that group) or one app. */
+  app?: string;
 }): Promise<Array<{
   id: string;
   user_id: string;
@@ -118,6 +129,14 @@ async function getCoworkEventsForAudit(filters: {
     if (filters.source === 'openai') conditions.push(sql.raw(vendorClause('openai', 'cm.')));
     else if (filters.source) conditions.push(sql`cm.source = ${filters.source}`);
     if (filters.product) conditions.push(sql.raw(productClause(filters.product, 'cm.')));
+    // App (Work Pulse): Cowork alone (Claude's, never ChatGPT Work), all of
+    // Claude in Office, all of Claude in Google, or one app.
+    if (filters.app === 'cowork') conditions.push(sql.raw(`cm.product IS NULL AND ${vendorClause('claude', 'cm.')}`));
+    else if (filters.app === 'office' || filters.app === 'google') {
+      const apps = productsIn(filters.app);
+      conditions.push(sql`cm.product IN (${sql.join(apps.map(a => sql`${a}`), sql`, `)})`);
+    }
+    else if (filters.app) conditions.push(sql`cm.product = ${filters.app}`);
     if (filters.search) {
       // UUID-shaped = exact ID match, otherwise content/user search
       if (UUID_RE.test(filters.search)) {
@@ -146,7 +165,7 @@ async function getCoworkEventsForAudit(filters: {
       code_input_tokens: number | null; code_output_tokens: number | null;
       code_tool_use_count: number | null; code_models_json: string | null; code_active_secs: number | null;
     }>(client, sql`
-       SELECT cm.id, cm.session_id, cm.user_id, cm.message_type, cm.role, cm.content_preview, cm.content_full, cm.flagged, cm.flag_reason, cm.pii_verdict_reason, cm.occurred_at, cm.ingested_at, cm.surface, cm.source, cm.prompt_id,
+       SELECT cm.id, cm.session_id, cm.user_id, cm.message_type, cm.role, cm.content_preview, cm.content_full, cm.flagged, cm.flag_reason, cm.pii_verdict_reason, cm.occurred_at, cm.ingested_at, cm.surface, cm.source, cm.prompt_id, cm.product,
               COALESCE(au.display_name, u.display_name) as user_display_name, COALESCE(au.department, u.department) as user_department,
               css.total_cost_usd, css.total_input_tokens, css.total_output_tokens, css.tool_call_count, css.unique_tools, css.models_used, css.duration_secs,
               cs.files_uploaded,
@@ -252,6 +271,7 @@ async function getCoworkEventsForAudit(filters: {
       // Normalise legacy misnamed events: cowork_user_message on code surface → code_user_message
       event_type: (r.surface === 'code' && r.message_type === 'cowork_user_message') ? 'code_user_message' : r.message_type,
       surface: r.surface || 'cowork',
+      product: r.product ?? null,
       content_preview: r.content_full || r.content_preview,
       metadata: JSON.stringify({ role: r.role, session_id: r.session_id }),
       flagged: r.flagged,
@@ -633,6 +653,15 @@ export async function GET(request: NextRequest) {
   const productParam = params.get('product');
   const product = isProductId(productParam) ? productParam : (isOpenAiSource(source) ? source : undefined);
   const arrival = source === 'otel' || source === 'compliance' || source === 'openai' ? source : undefined;
+  // The app within Claude Cowork and apps: Cowork alone, Claude in Office,
+  // Claude in Google, or one app. Prompts only: skill and connector events
+  // carry no app.
+  const app = params.get('app') || undefined;
+  if (app && !AUDIT_APPS.has(app)) return NextResponse.json({ error: 'Unknown app' }, { status: 400 });
+  if (app) {
+    const messages = await getCoworkEventsForAudit({ userId, department, flaggedOnly, dateFrom, dateTo, search, limit, offset, surface: 'cowork', source: arrival, product, app });
+    return NextResponse.json(messages);
+  }
   if (product || arrival) {
     const parts = [];
     // Claude Chat prompts (surface 'chat') come from getChatEventsForAudit; none arrive through OpenTelemetry or OpenAI.

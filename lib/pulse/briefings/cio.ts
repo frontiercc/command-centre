@@ -10,6 +10,7 @@ import { getTypedClient } from '@/lib/db/client';
 import { schema } from '@/lib/db/schema';
 import { buildProductFacts } from '@/lib/pulse/briefings/product-facts';
 import { buildDeepWorkSummary, deepWorkLines } from '@/lib/pulse/briefings/deep-work-facts';
+import { workByProductFacts } from '@/lib/pulse/briefings/work-by-product';
 import { getAllConfig, getConfigValue } from '@/lib/config';
 import { listOpenDeptBoxes } from '@/lib/usecases/suggestion-store';
 import {
@@ -186,6 +187,7 @@ export async function generateCioBriefing(
     confirmed_capability_creation_count: capCount,
     concentration_risk_count: tier3UserCounts.length,
     deep_work: deepWork,
+    work_by_product: await workByProductFacts(null, periodStart, periodEnd),
     teams_with_ors_below_threshold: lowOrsTeams.map(r => r.scope_id),
     departments_with_ors_count: scoredDepts.length,
     dept_process_opportunities: deptProcessOpportunities,

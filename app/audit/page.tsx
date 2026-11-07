@@ -4,6 +4,10 @@
 
 'use client';
 
+import { FAMILY_LABEL, FAMILY_ORDER, PRODUCT_LABEL, PRODUCT_ORDER, productFullName, productsIn, type WorkProduct } from '@/lib/pulse/cowork/products';
+
+/** Product-list values that are Work Pulse apps (sent as ?app=): Cowork alone, a group, or one app. */
+const AUDIT_APP_VALUES = new Set<string>(['office', 'google', ...PRODUCT_ORDER]);
 import { useEffect, useState, useCallback, useMemo, type ReactNode } from 'react';
 import { useSearchParams } from 'next/navigation';
 import TopBar from '@/components/layout/TopBar';
@@ -15,12 +19,14 @@ import { PageBody, Panel, PanelFoot, Notice, Empty, Tag, Dot, T, B, SEVERITY_COL
 import WhereMoneyWent, { SplitLine, spendMoney } from '@/components/finance/WhereMoneyWent';
 import { hasBreakdown, type SpendSplit } from '@/lib/finance/where-money-went';
 import { isOpenAiSource, OPENAI_SOURCE_LABELS } from '@/lib/openai/sources';
-import { PRODUCTS, productLabel, productOf } from '@/lib/dashboard/vendor';
+import { productLabel, productOf } from '@/lib/dashboard/vendor';
 import { useConnectedProducts } from '@/components/shared/VendorSwitch';
 import { isOpenAiOnly } from '@/lib/sources/connected-shared';
 
 interface AuditEvent {
   id: string;
+  /** The app, when the prompt came from Claude in Office or Claude in Google. */
+  product?: string | null;
   user_id: string;
   department?: string | null;
   event_type: string;
@@ -411,8 +417,6 @@ export default function AuditPage() {
   const connected = useConnectedProducts();
   const openaiOnly = isOpenAiOnly(connected);
   const openaiConnected = !!connected?.openai;
-  // The connected vendors' products (Claude's alone until OpenAI is connected).
-  const productOptions = PRODUCTS.filter(p => (p.vendor === 'openai' ? openaiConnected : !openaiOnly));
   const [sourceFilter, setSourceFilter] = useState('');
   const [userFilter, setUserFilter] = useState('');
   const [flaggedOnly, setFlaggedOnly] = useState(false);
@@ -470,7 +474,9 @@ export default function AuditPage() {
     if (resetOffset) setOffset(0);
 
     const params = new URLSearchParams();
-    if (product) params.set('product', product);
+    // One Product list: a Work Pulse app choice (Cowork alone, Claude in Office,
+    // Claude in Google, or one app) goes as ?app=, every other product as ?product=.
+    if (product) params.set(AUDIT_APP_VALUES.has(product) ? 'app' : 'product', product);
     if (sourceFilter) params.set('source', sourceFilter);
     if (userFilter) params.set('userId', userFilter);
     if (departmentFilter) params.set('department', departmentFilter);
@@ -604,6 +610,7 @@ export default function AuditPage() {
           <div className="flex flex-col gap-0.5 text-[13px]">
             <span><span className="font-semibold">Claude Code:</span> Prompts, models, cost and tool use.</span>
             <span><span className="font-semibold">Cowork:</span> Prompts, models, cost and tool use.</span>
+            <span><span className="font-semibold">Claude in Office and Claude in Google:</span> Prompts, models and tool use. No cost, and never the document&apos;s content.</span>
             <span><span className="font-semibold">Chat:</span> Prompts, through the Compliance API (Enterprise plan).</span>
             <span><span className="font-semibold">ChatGPT and Codex:</span> Prompts, through OpenAI&apos;s compliance export (ChatGPT Enterprise or Edu).</span>
             <span>Replies from Claude, ChatGPT and Codex are never stored.</span>
@@ -626,7 +633,24 @@ export default function AuditPage() {
 
           <select value={product} onChange={e => setProduct(e.target.value)} className={B.select} aria-label="Product">
             <option value="">All products</option>
-            {productOptions.map(p => <option key={p.id} value={p.id}>{p.label}</option>)}
+            {!openaiOnly && (
+              <optgroup label="Claude">
+                <option value="claude_chat">Claude Chat</option>
+                <option value="cowork">Cowork</option>
+                {FAMILY_ORDER.filter(f => f !== 'cowork').map(f => [
+                  <option key={f} value={f}>{FAMILY_LABEL[f]} (all apps)</option>,
+                  ...productsIn(f).map(p => <option key={p} value={p}>{'  '}{productFullName(p)}</option>),
+                ])}
+                <option value="claude_code">Claude Code</option>
+              </optgroup>
+            )}
+            {openaiConnected && (
+              <optgroup label="OpenAI">
+                <option value="chatgpt_chat">ChatGPT Chat</option>
+                <option value="chatgpt_work">ChatGPT Work</option>
+                <option value="codex">Codex</option>
+              </optgroup>
+            )}
           </select>
 
           <select value={sourceFilter} onChange={e => setSourceFilter(e.target.value)} className={B.select} aria-label="Source">
@@ -738,7 +762,8 @@ export default function AuditPage() {
                           </td>
                           <td className={`${T.tdMute} hidden md:table-cell`}>{event.department ?? '—'}</td>
                           <td className={`${T.td} whitespace-nowrap`}>
-                            <Tag>{productLabel(productOf(event.surface, event._source))}</Tag>
+                            {/* An Office or Google prompt shows its app (Excel, Google Sheets...), not Cowork */}
+                            <Tag>{event.product && event.product in PRODUCT_LABEL ? productFullName(event.product as WorkProduct) : productLabel(productOf(event.surface, event._source))}</Tag>
                             {event.surface === 'cowork_partial' && (
                               <span className="ml-1 text-[13px] text-[#8F8F8F]">Metadata only</span>
                             )}
@@ -815,7 +840,7 @@ export default function AuditPage() {
                 <dt className="text-[#8F8F8F]">User</dt>
                 <dd className="m-0 font-medium text-[#0A0A0A] break-all">{selectedEvent.user_id}</dd>
                 <dt className="text-[#8F8F8F]">Product</dt>
-                <dd className="m-0"><Tag>{productLabel(productOf(selectedEvent.surface, selectedEvent._source))}</Tag></dd>
+                <dd className="m-0"><Tag>{selectedEvent.product && selectedEvent.product in PRODUCT_LABEL ? productFullName(selectedEvent.product as WorkProduct) : productLabel(productOf(selectedEvent.surface, selectedEvent._source))}</Tag></dd>
                 <dt className="text-[#8F8F8F]">Time</dt>
                 <dd className="m-0 tabular-nums">{new Date(selectedEvent.occurred_at * 1000).toLocaleString('en-GB')}</dd>
                 <dt className="text-[#8F8F8F]">Event</dt>

@@ -1,7 +1,7 @@
 // Copyright 2026 Lee James
 // SPDX-License-Identifier: Apache-2.0
 
-// ChatGPT and Codex spend, read from the OpenAI tables (migration 0040). Kept
+// ChatGPT and Codex spend, read from the OpenAI tables (migration 0043). Kept
 // apart from Claude's spend: a page shows these figures only beside a Claude
 // figure, each under its own label.
 //

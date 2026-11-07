@@ -297,7 +297,7 @@ export default function DashboardPage() {
             }
             pillTooltip={
               (data.dataSourceStatus.otelCowork
-                ? 'Claude Cowork data captured via OpenTelemetry integration.'
+                ? 'Cowork, Claude in Office and Claude in Google sessions, captured via OpenTelemetry.'
                 : data.dataSourceStatus.coworkContent
                 ? 'User messages, MCP connector activity, and skill invocations captured from Claude Cowork sessions.'
                 : 'Cowork conversation content is not available. Tool calls and file access are captured via OpenTelemetry.')

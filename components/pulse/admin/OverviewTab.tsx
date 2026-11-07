@@ -18,6 +18,7 @@ interface ModuleConfig {
   pulseUserBriefingModel: string;
   pulseSessionDescriptionsEnabled: string;
   pulseClassifyChatgpt: string;
+  claudeInOfficeShown: string;
   humanTimeEnabled: string;
   coreAiModel: string;
 }
@@ -147,6 +148,12 @@ export default function OverviewTab({
           hint={<>The classifier judges ChatGPT Chat and ChatGPT Work prompts from OpenAI&apos;s export the same way as Claude prompts, using the Anthropic API key and the classifier model below, so Work Pulse can show how deeply people hand work to ChatGPT. Off stops new ChatGPT prompts being judged; those already judged stay. Applies once ChatGPT prompts arrive.</>}
           checked={config.pulseClassifyChatgpt !== 'false'}
           onChange={on => onConfigChange({ pulseClassifyChatgpt: on ? 'true' : 'false' })}
+        />
+        <ToggleRow
+          label="Show Claude in Office and Google"
+          hint={<>The By product panel on the Work Pulse overview and the Claude in Office and Google (estimate) panel on FinOps, comparing Cowork with Claude in Excel, Word, PowerPoint, Outlook and Google Sheets, Docs and Slides. Turn off if your organisation uses neither. Off only hides the panels: any activity that arrives is still stored and counted.</>}
+          checked={config.claudeInOfficeShown !== 'false'}
+          onChange={on => onConfigChange({ claudeInOfficeShown: on ? 'true' : 'false' })}
         />
         <ToggleRow
           label="Human time vs AI time"

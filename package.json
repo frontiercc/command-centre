@@ -1,6 +1,6 @@
 {
   "name": "command-centre",
-  "version": "1.0.0",
+  "version": "1.2.0",
   "description": "Measures whether teams using Claude are becoming more productive, from the telemetry Claude already sends.",
   "license": "Apache-2.0",
   "author": "Lee James",

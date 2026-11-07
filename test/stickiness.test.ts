@@ -51,7 +51,7 @@ async function insertCoworkMessage(opts: {
   ]);
 }
 
-// A Claude Chat prompt: a cowork_messages row with surface 'chat' (migration 0038).
+// A Claude Chat prompt: a cowork_messages row with surface 'chat' (migration 0041).
 async function insertChatMessage(opts: { id: string; userId: string; occurredAt: number }) {
   await sql.run(`
     INSERT INTO cowork_messages (id, session_id, user_id, message_type, surface, source, content_preview, content_full, occurred_at)

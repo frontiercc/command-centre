@@ -16,6 +16,8 @@ export interface CioBriefingContext {
   concentration_risk_count: number;   // users who are sole runner of 3+ T3 workflows
   /** Measured organisation-wide deep-work lines — never names, summaries or file names. */
   deep_work: string[];
+  /** Measured sessions and people per product (Cowork, Claude in Office and Google apps); empty when neither was used. */
+  work_by_product?: string[];
   teams_with_ors_below_threshold: string[];   // department names with ORS < 0.7
   departments_with_ors_count: number;         // departments with any resilience score in the period
   // Open department process opportunities awaiting review on the Use Cases
@@ -38,7 +40,7 @@ OUTPUT FORMAT (respond with a JSON object only):
   "recommendation": "one directly actionable recommendation"
 }
 
-PARAGRAPH 1: The headline adoption picture. Active users, tier distribution, and what it means for the organisation's AI maturity.
+PARAGRAPH 1: The headline adoption picture. Active users, tier distribution, and what it means for the organisation's AI maturity. If the data says where the work happened, add one sentence on how the work splits between Cowork, the Claude in Office apps (Excel, Word, PowerPoint, Outlook) and the Claude in Google apps (Sheets, Docs, Slides), using those counts.
 PARAGRAPH 2: The depth and resilience story. Where delegation depth is going. Capability creation events. Concentration risk if present.
 PARAGRAPH 3: What needs attention this month. Name specific teams or patterns. Be direct about gaps. If the data lists open department process opportunities, weave in at most one sentence saying how many are open and where they concentrate, and that they await review on the Use Cases register. The counts and department names are measured; never invent titles or describe their contents.
 NAMED RISK: The single most material risk. Specific, not generic.
@@ -74,7 +76,10 @@ Total classified events: ${ctx.total_classified_events}
 Tier 1 (single-step): ${ctx.tier_1_pct}%
 Tier 2 (multi-step, moderate): ${ctx.tier_2_pct}%
 Tier 3 (autonomous, high consequence): ${ctx.tier_3_pct}%
-
+${ctx.work_by_product?.length ? `
+WHERE THE WORK HAPPENED
+${ctx.work_by_product.join('\n')}
+` : ''}
 DEPTH AND CAPABILITY
 Average Delegation Depth Score: ${ctx.avg_dds !== null ? ctx.avg_dds.toFixed(2) : 'no data'}
 Average Output Throughput Index: ${ctx.avg_oti !== null ? `${ctx.avg_oti.toFixed(2)}x` : 'no data'}

@@ -466,7 +466,7 @@ export async function runRetentionCleanup(): Promise<CleanupResult> {
       await tx.delete(schema.coworkMcpInvocations).where(and(eq(schema.coworkMcpInvocations.surface, 'chat'), lt(schema.coworkMcpInvocations.occurred_at, chatCutoff)))
     );
 
-    // ── OpenAI spend (migration 0040; metadata-only -> delete in BOTH
+    // ── OpenAI spend (migration 0043; metadata-only -> delete in BOTH
     // modes). Codex on the Code window, ChatGPT on the Cowork window, as
     // their prompts are. ─────────────────────────────────────────────────
     codeAffected += rowsAffected(
@@ -513,7 +513,7 @@ export async function runRetentionCleanup(): Promise<CleanupResult> {
     const codeMetricsFutureDeleted = rowsAffected(
       await tx.delete(schema.codeMetrics).where(gt(schema.codeMetrics.computed_at, nowSeconds))
     );
-    // Per-product twin (migration 0042): the same three cuts.
+    // Per-product twin (migration 0045): the same three cuts.
     const cmv = schema.codeMetricsVendor;
     codeMetricsAffected += rowsAffected(await tx.delete(cmv).where(and(eq(cmv.granularity, 'rolling'), lt(cmv.computed_at, rollingCutoff))));
     codeMetricsAffected += rowsAffected(await tx.delete(cmv).where(and(eq(cmv.granularity, 'week'), lt(cmv.computed_at, weeklyCutoff))));

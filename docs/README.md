@@ -15,7 +15,7 @@ New here? Start with the [README](../README.md): try Frontier Command Centre wit
 
 | I want to | Read |
 |---|---|
-| Connect Claude Code, Claude Cowork and Claude Chat | [Connect Claude](connect-claude.md) |
+| Connect Claude Code, Claude Cowork, Claude in Office/Google and Claude Chat | [Connect Claude](connect-claude.md) |
 | Connect ChatGPT and Codex | [Connect ChatGPT and Codex](configure-command-centre.md#connect-chatgpt-and-codex) |
 
 ## Run it

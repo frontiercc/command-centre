@@ -1,7 +1,7 @@
 // Copyright 2026 Lee James
 // SPDX-License-Identifier: Apache-2.0
 
-// Migration 0038: every Claude Chat prompt moves from chat_messages into
+// Migration 0041: every Claude Chat prompt moves from chat_messages into
 // cowork_messages (surface 'chat') with its text, flags, person, times and
 // source; each conversation gets one cowork_sessions row; chat_messages goes.
 import { describe, it, expect, beforeAll, afterAll } from 'vitest';
@@ -22,9 +22,9 @@ beforeAll(async () => {
 });
 afterAll(async () => cleanup());
 
-describe('migration 0038: Claude Chat prompts move in with Cowork', () => {
+describe('migration 0041: Claude Chat prompts move in with Cowork', () => {
   it('moves every prompt, keeps its details, and drops chat_messages', async () => {
-    // chat_messages as it stood before 0038 (the migrated test database no longer has it).
+    // chat_messages as it stood before 0041 (the migrated test database no longer has it).
     await sql.exec(`CREATE TABLE chat_messages (
       id text PRIMARY KEY, conversation_id text, user_id text REFERENCES users(id),
       prompt_text text NOT NULL, prompt_length integer NOT NULL,
@@ -51,7 +51,7 @@ describe('migration 0038: Claude Chat prompts move in with Cowork', () => {
         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`, [id, conv, user, text, text.length, flagged, reason, at, ingested, agent, source]);
     }
 
-    const file = path.join(process.cwd(), 'lib/db/migrations-pg/0038_claude_chat_with_cowork.sql');
+    const file = path.join(process.cwd(), 'lib/db/migrations-pg/0041_claude_chat_with_cowork.sql');
     await sql.exec(readFileSync(file, 'utf8'));
 
     const moved = await sql.all<{

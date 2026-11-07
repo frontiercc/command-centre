@@ -75,7 +75,7 @@ beforeAll(async () => {
   });
 
   // A Claude Chat prompt: a cowork_messages row with surface 'chat' plus its
-  // conversation's cowork_sessions row (the shape migration 0038 writes).
+  // conversation's cowork_sessions row (the shape migration 0041 writes).
   await client.insert(schema.coworkMessages).values({
     id: 'chatmsg1', session_id: 'chatconv1', user_id: 'u1', message_type: 'cowork_user_message', surface: 'chat',
     source: 'compliance', content_preview: 'hi there', content_full: 'hi there', occurred_at: NOW - DAY,

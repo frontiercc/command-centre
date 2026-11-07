@@ -193,6 +193,8 @@ async function runSpec(): Promise<void> {
       { id: 'chm-1', session_id: 'chatconv-1', user_id: 'user-1', message_type: 'cowork_user_message', surface: 'chat', source: 'compliance', content_full: 'hi', content_preview: 'hi', occurred_at: NOW - 10, ingested_at: NOW - 10 },
       // An older Claude Chat prompt, outside the 24 hours.
       { id: 'chm-2', session_id: 'chatconv-2', user_id: 'user-2', message_type: 'cowork_user_message', surface: 'chat', source: 'compliance', content_full: 'old', content_preview: 'old', occurred_at: NOW - (2 * DAY), ingested_at: NOW - (2 * DAY) },
+      // A Claude Code session this week: not a work session (Code has its own card).
+      { id: 'cm-3', session_id: 'sess-z', user_id: 'user-2', message_type: 'code_user_message', surface: 'code', occurred_at: NOW - (3 * DAY), ingested_at: NOW - (3 * DAY) },
     ]);
     // The compliance_events fixture insert above did NOT set ingested_at
     // explicitly — it falls back to the column default (extract(epoch from
@@ -219,7 +221,8 @@ async function runSpec(): Promise<void> {
     //    to otel_events when cowork has no recent sessions ───────────────
     // cm-1 (sess-x, -10s) is within the week; cm-2 (sess-y) is 2 days old but
     // still within 7 days — both sess-x and sess-y count. Claude Chat
-    // conversations (chatconv-1/2, surface 'chat') are left out: 2.
+    // conversations (chatconv-1/2, surface 'chat') and the Claude Code
+    // session (sess-z) are left out: 2.
     const thisWeek = await getCoworkSessionCountThisWeek();
     expect(thisWeek).toBe(2);
     expect(typeof thisWeek).toBe('number');

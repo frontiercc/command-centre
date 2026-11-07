@@ -105,6 +105,10 @@ export interface AppConfig {
   // export), which it otherwise does on the Anthropic key like any prompt.
   // Default 'true'.
   pulseClassifyChatgpt: string;
+  // 'false' hides the Claude in Office panels (Work Pulse By product, FinOps
+  // Office estimate) on hubs that do not use Office. Screens only: Office
+  // activity is still stored if it arrives. Default 'true'.
+  claudeInOfficeShown: string;
   // Human time vs Claude time. 'true' turns on the by-hand
   // estimate for Tier 2/3 sessions and shows the cards. Default 'false'.
   humanTimeEnabled: string;
@@ -408,6 +412,7 @@ export const CONFIG_KEYS: Record<keyof AppConfig, string> = {
   pulseUserBriefingModel: 'pulse_user_briefing_model',
   pulseSessionDescriptionsEnabled: 'pulse_session_descriptions_enabled',
   pulseClassifyChatgpt: 'pulse_classify_chatgpt',
+  claudeInOfficeShown: 'claude_in_office_shown',
   humanTimeEnabled: 'human_time_enabled',
   humanTimeCodeEnabled: 'human_time_code_enabled',
   codeClassifyCodex: 'code_classify_codex',
@@ -801,6 +806,7 @@ export async function getAllConfig(): Promise<AppConfig> {
     pulseUserBriefingModel: resolve('pulseUserBriefingModel'),
     pulseSessionDescriptionsEnabled: resolve('pulseSessionDescriptionsEnabled', 'true'),
     pulseClassifyChatgpt: resolve('pulseClassifyChatgpt', 'true'),
+    claudeInOfficeShown: resolve('claudeInOfficeShown', 'true'),
     humanTimeEnabled: resolve('humanTimeEnabled', 'false'),
     humanTimeCodeEnabled: resolve('humanTimeCodeEnabled'),
     codeClassifyCodex: resolve('codeClassifyCodex', 'true'),

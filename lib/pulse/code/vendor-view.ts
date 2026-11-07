@@ -5,7 +5,7 @@
 // only OpenAI product in Developer Pulse, so its pages name it.
 //
 // Once Codex data exists, Developer Pulse reads code_metrics_vendor ('all',
-// 'claude' or 'openai' rows, migration 0042); before then, and for any reader
+// 'claude' or 'openai' rows, migration 0045); before then, and for any reader
 // outside Developer Pulse, code_metrics is read as it always was. Until the
 // hourly aggregator first fills a view's per-product rows, the All and Claude
 // views read code_metrics, so the page never empties in between (before Codex

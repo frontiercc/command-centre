@@ -74,7 +74,7 @@ async function runSpec(): Promise<void> {
     await db.insert(schema.coworkSkillInvocations).values({ id: 'sk1', user_id: 'u1', session_id: 's1', skill_name: 'test-skill', occurred_at: NOW });
     await db.insert(schema.coworkMcpInvocations).values({ id: 'mc1', user_id: 'u1', session_id: 's1', mcp_server: 'slack', mcp_tool: 'send', occurred_at: NOW });
     await db.insert(schema.codeAssistantMeta).values({ id: 'ca1', user_id: 'u1', session_id: 's1', occurred_at: NOW });
-    // A Claude Chat prompt: a cowork_messages row with surface 'chat' (migration 0038).
+    // A Claude Chat prompt: a cowork_messages row with surface 'chat' (migration 0041).
     await db.insert(schema.coworkMessages).values({
       id: 'ch1', session_id: 'conv1', user_id: 'u1', message_type: 'cowork_user_message',
       surface: 'chat', source: 'compliance', content_preview: 'hi', content_full: 'hi', occurred_at: NOW,

@@ -11,7 +11,7 @@
 //
 // Claude Chat prompts live in cowork_messages (surface 'chat',
 // message_type 'cowork_user_message', session_id = the conversation id) since
-// migration 0038 dropped chat_messages; the Chat helpers read them back from
+// migration 0041 dropped chat_messages; the Chat helpers read them back from
 // there, and the Cowork-only readers must leave them out.
 //
 // The central assertions this file proves:

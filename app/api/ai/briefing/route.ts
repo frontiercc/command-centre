@@ -304,7 +304,7 @@ Return a JSON object with exactly these fields:
 }
 
 PRODUCTS AND SESSIONS:
-- "sessionsThisWeek" counts distinct sessions this week for each product, grouped as Chat (claudeChat = Claude Chat, chatgptChat = ChatGPT Chat), Work (claudeCowork = Claude Cowork, chatgptWork = ChatGPT Work) and Code (claudeCode = Claude Code, codex = Codex). Always call them "sessions" (or "conversations" for Chat), never "events".
+- "sessionsThisWeek" counts distinct sessions this week for each product, grouped as Chat (claudeChat = Claude Chat, chatgptChat = ChatGPT Chat), Work (claudeCowork = Claude Cowork, Claude in Office and Claude in Google together, chatgptWork = ChatGPT Work) and Code (claudeCode = Claude Code, codex = Codex). Always call them "sessions" (or "conversations" for Chat), never "events".
 - Name each product by its own name. NEVER describe ChatGPT or Codex activity as Cowork or Claude Code, and never add products together into one figure. A product that is absent from the data is not connected: do not mention it.
 - "activeUsersByVendor" (when present) is the number of people active this week with Claude and with OpenAI's products; one person can be in both, so never add them. activeThisWeek is the total across every product.
 

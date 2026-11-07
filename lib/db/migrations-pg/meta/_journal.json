@@ -272,42 +272,63 @@
       "idx": 38,
       "version": "7",
       "when": 1791072000000,
-      "tag": "0038_claude_chat_with_cowork",
+      "tag": "0038_cowork_session_location",
       "breakpoints": true
     },
     {
       "idx": 39,
       "version": "7",
       "when": 1791158400000,
-      "tag": "0039_pulse_metrics_vendor",
+      "tag": "0039_office_product",
       "breakpoints": true
     },
     {
       "idx": 40,
       "version": "7",
       "when": 1791244800000,
-      "tag": "0040_openai_spend",
+      "tag": "0040_google_product",
       "breakpoints": true
     },
     {
       "idx": 41,
       "version": "7",
       "when": 1791331200000,
-      "tag": "0041_codex_actions",
+      "tag": "0041_claude_chat_with_cowork",
       "breakpoints": true
     },
     {
       "idx": 42,
       "version": "7",
       "when": 1791417600000,
-      "tag": "0042_code_metrics_vendor",
+      "tag": "0042_pulse_metrics_vendor",
       "breakpoints": true
     },
     {
       "idx": 43,
       "version": "7",
       "when": 1791504000000,
-      "tag": "0043_chatgpt_session_time",
+      "tag": "0043_openai_spend",
+      "breakpoints": true
+    },
+    {
+      "idx": 44,
+      "version": "7",
+      "when": 1791590400000,
+      "tag": "0044_codex_actions",
+      "breakpoints": true
+    },
+    {
+      "idx": 45,
+      "version": "7",
+      "when": 1791676800000,
+      "tag": "0045_code_metrics_vendor",
+      "breakpoints": true
+    },
+    {
+      "idx": 46,
+      "version": "7",
+      "when": 1791763200000,
+      "tag": "0046_chatgpt_session_time",
       "breakpoints": true
     }
   ]

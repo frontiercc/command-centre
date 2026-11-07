@@ -3,6 +3,7 @@
 
 'use client';
 
+import ByProductPanel, { type ByProductData } from '@/components/pulse/ByProductPanel';
 import { useEffect, useState } from 'react';
 import TopBar from '@/components/layout/TopBar';
 import LoadingSpinner from '@/components/shared/LoadingSpinner';
@@ -47,6 +48,7 @@ interface OrgSummarySlice {
   docSessions?: { sessions_with_uploads: number; total_uploads: number };
   workMix?: WorkMixItem[];
   sessionOutput?: SessionOutputReport | null;
+  byProduct?: ByProductData | null;
   humanTime?: HumanTimeSummary | null;
 }
 
@@ -326,7 +328,7 @@ export default function CioPulsePage() {
       .catch(() => {});
     fetch(`/api/pulse/org-summary?vendor=${vendor}`)
       .then(r => r.ok ? r.json() : null)
-      .then(d => { if (d) setOrgSummary({ topSkills: d.topSkills ?? [], topConnectors: d.topConnectors ?? [], topNativeTools: d.topNativeTools ?? [], docSessions: d.docSessions, workMix: d.workMix ?? [], sessionOutput: d.sessionOutput ?? null, humanTime: d.humanTime ?? null }); })
+      .then(d => { if (d) setOrgSummary({ topSkills: d.topSkills ?? [], topConnectors: d.topConnectors ?? [], topNativeTools: d.topNativeTools ?? [], docSessions: d.docSessions, workMix: d.workMix ?? [], sessionOutput: d.sessionOutput ?? null, byProduct: d.byProduct ?? null, humanTime: d.humanTime ?? null }); })
       .catch(() => {});
   }, [refreshKey, vendor]);
 
@@ -401,7 +403,7 @@ export default function CioPulsePage() {
             label="Meaningful work"
             value={h.meaningfulWorkPct !== null ? `${h.meaningfulWorkPct}%` : '—'}
             tone="judged"
-            sub={<>of work at Tier 2 or 3{hs && <><br />{splitLine(f => f.meaningfulWorkPct, v => `${v}%`)}</>}</>}
+            sub={<>of work at Tier 2 or 3, 30 days{hs && <><br />{splitLine(f => f.meaningfulWorkPct, v => `${v}%`)}</>}</>}
             delta={herodelta(h.meaningfulWorkPct, h.priorMeaningfulWorkPct, '%')}
             deltaTone={heroTone(h.meaningfulWorkPct, h.priorMeaningfulWorkPct)}
           />
@@ -427,6 +429,9 @@ export default function CioPulsePage() {
             sub="of Tier 3 work on 3 people"
           />
         </Strip>
+
+        {/* Cowork beside each Claude in Office app; always shown, Office rows read 0 until activity arrives */}
+        <ByProductPanel data={orgSummary?.byProduct} />
 
         <WeeklyVolumeCard data={data.weeklyVolume} />
 

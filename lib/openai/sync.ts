@@ -22,7 +22,7 @@
 // receivers check Claude prompts, and alert once, on the first insert.
 //
 // Spend is kept apart from Claude's spend, so no page shows it under a Claude
-// label (migration 0040):
+// label (migration 0043):
 //   COSTS (organisation route)            → openai_costs, one row per person,
 //     model, product and app per hour
 //   ChatGPT assistant messages             → openai_replies, model and time

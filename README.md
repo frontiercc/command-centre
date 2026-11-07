@@ -7,7 +7,7 @@
 
 **Understand, measure and manage how AI is transforming your organisation.**
 
-Works with Claude Code, Claude Cowork and Claude Chat, and with ChatGPT and Codex.
+Works with Claude Code, Claude Cowork, Claude in Office/Google and Claude Chat, and with ChatGPT and Codex.
 
 [![CI](https://github.com/frontiercc/command-centre/actions/workflows/ci.yml/badge.svg?branch=main)](https://github.com/frontiercc/command-centre/actions/workflows/ci.yml) [![CodeQL](https://github.com/frontiercc/command-centre/actions/workflows/codeql.yml/badge.svg?branch=main)](https://github.com/frontiercc/command-centre/actions/workflows/codeql.yml) [![OpenSSF Scorecard](https://api.scorecard.dev/projects/github.com/frontiercc/command-centre/badge)](https://scorecard.dev/viewer/?uri=github.com/frontiercc/command-centre) [![OpenSSF Best Practices](https://www.bestpractices.dev/projects/15963/badge)](https://www.bestpractices.dev/projects/15963) [![Licence: Apache 2.0](https://img.shields.io/badge/licence-Apache%202.0-blue)](LICENSE)
 
@@ -58,7 +58,7 @@ It also works with ChatGPT Enterprise and Edu, through OpenAI's export:
 | **Dashboard** | Brings together the week's AI activity, productivity, spending and governance risks into an executive briefing, with an organisation-wide risk score and recommendations on where to focus attention. | [Product overview](docs/product-overview.md#the-dashboard) |
 | **Alerts** | Identifies personal data, exposed secrets and potentially risky intent in prompts, with supporting evidence to help security teams investigate and prioritise concerns. | [Product overview](docs/product-overview.md#alerts) · [Detection](docs/security-and-data-protection.md#pii-and-secret-detection) |
 | ***Productivity*** | | |
-| **Work Pulse** | Measures how deeply employees delegate work to Claude Cowork, from individual tasks to substantial processes. Compares adoption and delegation patterns across people and departments to identify progress and coaching opportunities. | [Product overview](docs/product-overview.md#work-pulse) · [Measured and AI-judged](docs/ai-data-flow.md#measured-and-ai-judged) |
+| **Work Pulse** | Measures how deeply employees delegate work to Claude Cowork and Claude in Excel, Word, PowerPoint, Outlook and Google Sheets, Docs and Slides, from individual tasks to substantial processes. Compares adoption and delegation patterns across people and departments to identify progress and coaching opportunities. | [Product overview](docs/product-overview.md#work-pulse) · [Measured and AI-judged](docs/ai-data-flow.md#measured-and-ai-judged) |
 | **Developer Pulse** | Shows how engineers use Claude Code, the work being produced and its associated costs, helping engineering leaders understand delivery activity, productivity and where AI is contributing to development. | [Product overview](docs/product-overview.md#developer-pulse) |
 | **Use Cases** | Discovers recurring business processes emerging from everyday Claude activity, identifies opportunities to share successful approaches and helps turn repeated work into reusable skills that can be adopted across teams. | [Product overview](docs/product-overview.md#use-cases) |
 | **S&C Board** | Provides an organisation-wide view of the skills and connectors employees are using, who owns them and where they are being adopted, helping teams manage and share reusable AI capabilities. | [Product overview](docs/product-overview.md#skills-and-connectors-board) |
@@ -175,7 +175,7 @@ Run the commands below in PowerShell on Windows, or Terminal on macOS and Linux.
 
    If the log says a token was already printed, wait 10 minutes, run `docker compose restart hub`, then run the command again.
 
-5. **Load the sample data**: Acme Corp, with nine weeks of Claude Code, Claude Cowork, Claude Chat, ChatGPT and Codex activity, graded work, use cases, alerts and spend. Loading takes about two minutes. Create your admin account in step 4 first: once the sample data is loaded, the setup page closes.
+5. **Load the sample data**: Acme Corp, with nine weeks of Claude Code, Claude Cowork, Claude in Office/Google, Claude Chat, ChatGPT and Codex activity, graded work, use cases, alerts and spend. Loading takes about two minutes. Create your admin account in step 4 first: once the sample data is loaded, the setup page closes.
 
    ```bash
    docker compose --profile demo run --rm demo-data
@@ -228,7 +228,7 @@ The first command deletes everything Command Centre stored, including the sample
 
 ## 2. Connect Claude for Teams
 
-This deployment runs Command Centre within your organisation and connects Claude Code and Claude Cowork activity, giving you visibility into how employees use Claude, the work they delegate and the value being created across teams.
+This deployment runs Command Centre within your organisation and connects Claude Code, Claude Cowork and Claude in Office/Google activity, giving you visibility into how employees use Claude, the work they delegate and the value being created across teams.
 
 ### Before you begin
 
@@ -237,7 +237,7 @@ You need:
 - **A Linux server** accessible to the employees and devices sending telemetry, with Git, Docker Engine and the Docker Compose plugin, at least 8 GB of memory, and 5 GB of free disk space plus capacity for your data. For a cloud deployment, see [Running in Azure or AWS](docs/running-in-azure-or-aws.md) instead of steps 1 to 5 below.
 - **Two HTTPS addresses** pointing to the deployment: one for employees to access Command Centre, such as `command-centre.your-company.com`, and another for collecting Claude activity through OpenTelemetry, such as `otel.your-company.com`. Both require valid TLS certificates.
 - **A Claude API key**, created within a workspace in the [Claude Console](https://platform.claude.com/settings/keys), for AI-powered analysis, assessments, briefings and reports. Telemetry collection can operate without this key.
-- **A Claude organisation Owner or Primary Owner** with permission to configure organisation-wide Claude Code and Claude Cowork telemetry settings.
+- **A Claude organisation Owner or Primary Owner** with permission to configure organisation-wide Claude Code, Claude Cowork and Claude in Office/Google telemetry settings.
 
 ### Steps
 
@@ -311,11 +311,13 @@ Run these commands on the server.
 
    Claude Cowork picks these up when a new session starts. Then, in **Organization settings**, switch off **Cowork in the cloud** (under Claude Cowork) and **Chat and Cowork unified** (under Capabilities): sessions run in the cloud don't currently send their activity reliably. [Connect Claude](docs/connect-claude.md#claude-cowork) explains why.
 
+   If your organisation uses Claude in Excel, Word, PowerPoint, Outlook or Google Sheets, Docs or Slides, open **Organization settings → Office agents → Monitoring**, select **Copy settings from Cowork** and save. See [Connect Claude](docs/connect-claude.md#claude-in-office).
+
 The settings in steps 7 and 8 send people's prompts, which the Audit Log, personal-data alerts and grading need. Agree this with whoever looks after data protection first. [Connect Claude](docs/connect-claude.md) explains every setting and the other ways to roll them out.
 
 ### You have finished when
 
-A prompt sent from Claude Code or Claude Cowork appears in the **Audit Log** within a minute or two. Claude Cowork work is graded within five minutes, and Claude Code sessions within an hour of going idle. Work Pulse and Developer Pulse then fill in.
+A prompt sent from Claude Code, Claude Cowork or Claude in Office/Google appears in the **Audit Log** within a minute or two. Claude Cowork work is graded within five minutes, and Claude Code sessions within an hour of going idle. Work Pulse and Developer Pulse then fill in.
 
 If nothing arrives, see [Troubleshooting and FAQ](docs/troubleshooting.md#connecting-claude).
 
@@ -364,7 +366,7 @@ The **Last sync** line under the fields shows ChatGPT and Codex prompts, and the
 
 **Does my data leave my network?** No. It runs on infrastructure you control and sends nothing back. See [Your data stays with you](#your-data-stays-with-you).
 
-**Which Claude plans does it work with?** Claude Code and Claude Cowork on Claude for Teams and Claude for Enterprise. Claude Chat on Claude for Enterprise, through Anthropic's Compliance API.
+**Which Claude plans does it work with?** Claude Code, Claude Cowork and Claude in Office/Google on Claude for Teams and Claude for Enterprise. Claude Chat on Claude for Enterprise, through Anthropic's Compliance API.
 
 **Does it work with ChatGPT and Codex?** Yes, on ChatGPT Enterprise and Edu, through OpenAI's export. See [4. Connect ChatGPT and Codex](#4-connect-chatgpt-and-codex).
 

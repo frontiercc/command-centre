@@ -1,6 +1,6 @@
 # Frontier Command Centre: Connect Claude
 
-How to send Claude Code and Claude Cowork telemetry to Command Centre, for any installation: Docker on one machine, or a deployment on AWS or Azure. Claude Chat needs no client settings: on Claude for Enterprise, Command Centre reads its conversations from Anthropic's Compliance API, using the Compliance Access Key entered under **Admin → Access & Keys**. To connect ChatGPT and Codex, see [Connect ChatGPT and Codex](configure-command-centre.md#connect-chatgpt-and-codex).
+How to send Claude Code, Claude Cowork and Claude in Office/Google telemetry to Command Centre, for any installation: Docker on one machine, or a deployment on AWS or Azure. Claude Chat needs no client settings: on Claude for Enterprise, Command Centre reads its conversations from Anthropic's Compliance API, using the Compliance Access Key entered under **Admin → Access & Keys**. To connect ChatGPT and Codex, see [Connect ChatGPT and Codex](configure-command-centre.md#connect-chatgpt-and-codex).
 
 **The quickest way:** open **Admin → Ingestion** in Command Centre. The page's **Connect Claude** panel shows the collector address and, with Docker, the bearer token, and copies the Claude Code settings for you, filled in. The rest of this guide explains each setting and the other ways to distribute them.
 
@@ -93,6 +93,24 @@ Claude Cowork loads these settings when a session starts, so sessions already op
 On Anthropic's standard deployment of Claude desktop, Claude Cowork events carry prompt text and tool details unless the device setting `otlpContentCapture` says otherwise. Command Centre needs both, so if your device management sets that key, include `userPrompts` and `toolDetails` in it. If Claude Cowork prompts show as `<REDACTED>`, see [Troubleshooting and FAQ](troubleshooting.md#connecting-claude). Events that carry prompt text also carry Claude's reply text; Command Centre discards reply events at ingest and stores none of their text. Claude Cowork events are told apart from Claude Code events by the service name each client reports, and both travel through the same collector.
 
 **Check:** **Admin → Ingestion → Collector status** reads "Collector active, OTel events flowing", with the time of the last event.
+
+## Claude in Office
+
+Claude in Excel, Word, PowerPoint, Outlook and Google Sheets, Docs and Slides is configured once, for the whole organisation, in Claude's Organization settings, under **Office agents → Monitoring**. Fill in the same three fields as for Claude Cowork (**Copy settings from Cowork** fills them in) and save.
+
+Claude in Google Sheets, Docs and Slides needs no setting of its own: the Claude add-on for Google Workspace reports through the same **Office agents → Monitoring** setting. Command Centre tells the two apart from the vendor each event carries and shows them as Claude in Office and Claude in Google. Google sends no document name, so Google work lists no file names.
+
+| Field | Value |
+|---|---|
+| **OTLP endpoint** | `https://otel.your-company.com` |
+| **OTLP protocol** | `http/json` |
+| **OTLP headers** | `Authorization=Bearer <your bearer token>` |
+
+Claude in Office/Google sends its activity from each person's browser, so the collector must accept requests from `https://pivot.claude.ai`. The bundled collector and the AWS and Azure collector configurations already do. A managed OTLP endpoint that does not answer the browser's cross-origin check will not work directly. The bearer token in the headers field reaches every user's browser.
+
+Command Centre stores each prompt, the model and tokens of each model call, and the name and outcome of each tool call, beside Claude Cowork on Work Pulse, marked with the app it came from. It never stores the tool input or output, which hold document content, or the document's address: only the file name, on calls that changed the document. Claude in Office/Google sends no cost, so its spend is priced from the model rates on **Admin → Developer Pulse** and shown as an estimate, never added to any Cowork total. To hide the Office panels on an installation that does not use Claude in Office/Google, switch off **Show Claude in Office/Google** under **Admin → Work Pulse**.
+
+**Check:** open a document, ask Claude something in the add-in, and within a few minutes the **By product** panel on the Work Pulse overview shows the app.
 
 ## Claude Chat
 

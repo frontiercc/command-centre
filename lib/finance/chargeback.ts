@@ -276,7 +276,7 @@ export async function buildChargeback(period: string, nowS: number = Math.floor(
     db,
     sql`SELECT user_id, COALESCE(SUM(cost_usd), 0) AS c
        FROM cowork_messages
-       WHERE message_type = 'cowork_api_request' AND occurred_at >= ${start} AND occurred_at < ${end}
+       WHERE message_type = 'cowork_api_request' AND product IS NULL AND occurred_at >= ${start} AND occurred_at < ${end}
        GROUP BY user_id`
   );
 
@@ -287,6 +287,10 @@ export async function buildChargeback(period: string, nowS: number = Math.floor(
     coworkSurfaceUsd += c;
   }
 
+  // Cowork queries here exclude Claude in Office rows (product IS NOT NULL):
+  // Office sends no cost, so it would add tokens without spend to the Cowork
+  // tile and look like uncosted Cowork requests. Office spend is a separate
+  // estimate (lib/finance/office-spend.ts), never part of these totals.
   // --- Cowork surface tokens (parsed from token_usage JSON, malformed/null skipped) ---
   // token_usage is `jsonb` (codec returns a parsed object) — jsonToText()
   // normalises it back to a JSON string for JSON.parse() below.
@@ -294,7 +298,7 @@ export async function buildChargeback(period: string, nowS: number = Math.floor(
     db,
     sql`SELECT token_usage
        FROM cowork_messages
-       WHERE message_type = 'cowork_api_request' AND occurred_at >= ${start} AND occurred_at < ${end}`
+       WHERE message_type = 'cowork_api_request' AND product IS NULL AND occurred_at >= ${start} AND occurred_at < ${end}`
   );
 
   for (const row of coworkTokenRows) {
@@ -382,7 +386,7 @@ export async function buildChargeback(period: string, nowS: number = Math.floor(
     sql`SELECT COUNT(*) AS total,
               SUM(CASE WHEN cost_usd IS NOT NULL THEN 1 ELSE 0 END) AS with_cost
        FROM cowork_messages
-       WHERE message_type = 'cowork_api_request' AND occurred_at >= ${start} AND occurred_at < ${end}`
+       WHERE message_type = 'cowork_api_request' AND product IS NULL AND occurred_at >= ${start} AND occurred_at < ${end}`
   );
   const coverageRow = coverageRows[0];
   const coworkCostCoverage = {

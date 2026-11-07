@@ -14,6 +14,8 @@ import { getAdminSession, canAccessOrgOverview } from '@/lib/auth/admin-auth';
 import { getTypedClient } from '@/lib/db/client';
 import { schema } from '@/lib/db/schema';
 import { buildSessionOutputRate } from '@/lib/pulse/cowork/session-output-rate';
+import { buildByProduct } from '@/lib/pulse/cowork/by-product';
+import { getConfigValue } from '@/lib/config';
 import { readHumanTime } from '@/lib/pulse/human-time-summary';
 import { parseVendor } from '@/lib/dashboard/vendor';
 import { vendorClause, vendorExpr, toolTagExpr } from '@/lib/dashboard/product-sql';
@@ -261,6 +263,16 @@ export async function GET(request: NextRequest) {
     console.error('[org-summary] session output rate failed', e);
   }
 
+  // By product (Cowork beside Claude in Office). Additive; only a failure
+  // hides the panel. Office rows read 0 until Office activity arrives.
+  let byProduct = null;
+  try {
+    // Admin → Work Pulse "Show Claude in Office" off hides the panel.
+    if ((await getConfigValue('claudeInOfficeShown')) !== 'false') byProduct = await buildByProduct();
+  } catch (e) {
+    console.error('[org-summary] by-product failed', e);
+  }
+
   // Human time vs Claude time — org totals; null when off.
   const humanTime = await readHumanTime('cowork', undefined, vendor);
 
@@ -284,6 +296,7 @@ export async function GET(request: NextRequest) {
     permissionDecisions,
     workMix,
     sessionOutput,
+    byProduct,
     humanTime,
   });
 }

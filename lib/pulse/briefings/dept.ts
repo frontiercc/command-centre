@@ -10,6 +10,7 @@ import { getTypedClient } from '@/lib/db/client';
 import { schema } from '@/lib/db/schema';
 import { buildProductFacts } from '@/lib/pulse/briefings/product-facts';
 import { buildDeepWorkSummary, deepWorkLines } from '@/lib/pulse/briefings/deep-work-facts';
+import { workByProductFacts } from '@/lib/pulse/briefings/work-by-product';
 import { getConfigValue } from '@/lib/config';
 import {
   DEPT_BRIEFING_SYSTEM,
@@ -139,6 +140,7 @@ export async function generateDeptBriefing(
     avg_oti: otiValue !== null ? Math.round(otiValue * 100) / 100 : null,
     confirmed_capabilities: capCount,
     deep_work: deepWork,
+    work_by_product: await workByProductFacts(memberIds, periodStart, periodEnd),
     concentration_risk_count: concentrationCount,
     products: await buildProductFacts({ periodStart, periodEnd, userIds: memberIds }),
   };

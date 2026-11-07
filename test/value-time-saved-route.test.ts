@@ -66,7 +66,7 @@ async function seedCoworkMessage(sessionId: string, occurredAt: number) {
 }
 
 // A Claude Chat prompt: a cowork_messages row with surface 'chat', whose
-// session_id is the conversation id (migration 0038).
+// session_id is the conversation id (migration 0041).
 async function seedChatMessage(conversationId: string, occurredAt: number) {
   await sql.run(`INSERT INTO cowork_messages (id, user_id, session_id, message_type, surface, source, content_preview, content_full, occurred_at, ingested_at)
      VALUES (?, 'user-1', ?, 'cowork_user_message', 'chat', 'compliance', 'hi', 'hi', ?, ?)`, [`chm-${conversationId}-${Math.random().toString(36).slice(2)}`, conversationId, occurredAt, NOW]);

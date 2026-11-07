@@ -2,7 +2,7 @@
 
 **These figures are indicative only.** They are worked out from real installation activity and today's model prices. Your costs depend on how much your people use Claude, which features you switch on and which models you choose in Admin.
 
-This covers only Command Centre's own use of Claude, such as grading work, matching sessions to use cases and writing briefings. Your people's own Claude Code, Claude Cowork and Claude Chat use is paid through your Claude plan, their ChatGPT and Codex use through your OpenAI plan, and hosting is separate. With ChatGPT and Codex connected, Command Centre grades and reads their prompts too, which adds to its Claude API cost in the same way as more Claude activity.
+This covers only Command Centre's own use of Claude, such as grading work, matching sessions to use cases and writing briefings. Your people's own Claude Code, Claude Cowork, Claude in Office/Google and Claude Chat use is paid through your Claude plan, their ChatGPT and Codex use through your OpenAI plan, and hosting is separate. With ChatGPT and Codex connected, Command Centre grades and reads their prompts too, which adds to its Claude API cost in the same way as more Claude activity.
 
 ## Claude API cost per month
 

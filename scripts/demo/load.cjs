@@ -45,6 +45,8 @@ const STEPS = [
   ['seedme-cwme-', '06-model-efficiency.cjs'],
   ['ff8-', '07-attribution.cjs'],
   ['ff10-', '08-session-stats.cjs'],
+  // Claude in Office runs before human time, which also gives its sessions Claude time.
+  ['ff14-', '09b-office.cjs'],
   ['ff11-', '09-human-time.cjs'],
   ['ff13-', '10-conversations.cjs'],
 ];
@@ -98,7 +100,7 @@ const run = (cmd, args) => execFileSync(cmd, args, { stdio: 'inherit', env: proc
   // can be missing (telemetry from before they existed, or a Compliance key
   // since removed), so any Cowork, Claude Code or Chat message whose id does
   // not carry a sample prefix also counts as real. All three live in
-  // cowork_messages (Claude Chat as surface 'chat' since migration 0038).
+  // cowork_messages (Claude Chat as surface 'chat' since migration 0041).
   // The OpenAI sync records its first real prompt (setup_first_openai_at); the
   // sample's ChatGPT and Codex rows go through the sync's code but never set
   // it, so OpenAI rows count as real only once that record exists.

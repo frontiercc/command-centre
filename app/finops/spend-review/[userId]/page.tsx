@@ -16,6 +16,7 @@ import { PageBody, Toolbar, Panel, PanelFoot, Strip, Figure, T, B, Tag, Pill, No
 import { formatModelLabel } from '@/lib/pulse/code/model-label';
 import { displayDefinition } from '@/lib/pulse/code/work-type-labels';
 import WhereMoneyWent from '@/components/finance/WhereMoneyWent';
+import OfficeSpendPanel, { type OfficeSpendData } from '@/components/finance/OfficeSpendPanel';
 import { hasBreakdown, type SpendSplit } from '@/lib/finance/where-money-went';
 
 type Surface = SpendReviewSurface;
@@ -131,6 +132,8 @@ interface Review {
   anthropic: { status: LimitsStatus; fetchedAt: number | null; matched: boolean; limit: LimitRow | null; pendingRequestAt: string | null };
   nearLimitShare: number;
   canSeePrompts: boolean;
+  /** Claude in Office, estimated from tokens, kept out of every figure above. null without Office activity. */
+  office?: OfficeSpendData | null;
 }
 
 /** With OpenAI connected, products are named "Claude Code", "ChatGPT" and so on. */
@@ -669,9 +672,13 @@ function SpendReviewContent() {
                   : <>Measured by Command Centre from telemetry, the same figures as FinOps. Chat isn&apos;t included.</>}
                 {hasChatgpt && ' ChatGPT spend per conversation is an estimate: OpenAI reports cost per hour, so each hour\'s cost is shared evenly across the replies in that hour.'}
                 {unmatched >= 0.005 && ` ${money(unmatched)} of ChatGPT spend came in hours with no reply on record, so it is in the total but in no conversation.`}
+                {data.office && ' Claude in Office and Google is shown below as a separate estimate.'}
                 {data.unpricedModels.length > 0 && ` Not priced, so left out: ${data.unpricedModels.map(m => formatModelLabel(m).label).join(', ')}.`}
               </Muted>
             </div>
+
+            {/* Claude in Office: an estimate, never part of the Cowork review */}
+            <OfficeSpendPanel data={data.office} scope="person" />
 
             {data.isCurrentMonth && data.totals.sessions < EARLY_MONTH_SESSIONS && (
               <Notice

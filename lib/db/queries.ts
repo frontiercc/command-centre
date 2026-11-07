@@ -602,7 +602,7 @@ export async function getCoworkSessionCount(): Promise<number> {
 /**
  * Leaves out Claude Chat prompts (surface 'chat'), so figures that counted
  * Cowork and Code rows before Claude Chat moved into cowork_messages
- * (migration 0038) keep their meaning.
+ * (migration 0041) keep their meaning.
  */
 function excludeClaudeChat(cm: typeof schema.coworkMessages) {
   return or(isNull(cm.surface), sql`${cm.surface} <> 'chat'`);
@@ -613,13 +613,13 @@ export async function getCoworkSessionCountThisWeek(): Promise<number> {
   const weekAgo = Math.floor(Date.now() / 1000) - 7 * 24 * 60 * 60;
   const cm = schema.coworkMessages;
 
-  // Primary: count from cowork_messages (has actual session content). Table
-  // existence is guaranteed by the schema/migrations —
-  // the legacy "table may not exist" try/catch guard is no longer needed.
+  // Work sessions: Cowork and Claude in Office (both surface 'cowork'; Office
+  // rows carry `product`). Claude Code shares this table (surface 'code') and is
+  // counted on its own card, so it is left out here.
   const coworkRows = await db
     .select({ count: sql<number | string>`count(distinct ${cm.session_id})` })
     .from(cm)
-    .where(and(gte(cm.occurred_at, weekAgo), sql`${cm.session_id} != ''`, excludeClaudeChat(cm)));
+    .where(and(gte(cm.occurred_at, weekAgo), sql`${cm.session_id} != ''`, sql`COALESCE(${cm.surface}, 'cowork') = 'cowork'`));
   const coworkCount = Number(coworkRows[0]?.count ?? 0);
   if (coworkCount > 0) return coworkCount;
 
@@ -1905,7 +1905,7 @@ export async function deleteUserData(userId: string): Promise<{
       async (h) => { await h.delete(schema.codeSessionClassifications).where(eq(schema.codeSessionClassifications.user_id, userId)); },
       async (h) => { await h.delete(schema.codeSessionStats).where(eq(schema.codeSessionStats.user_id, userId)); },
       async (h) => { await h.delete(schema.codeAssistantMeta).where(eq(schema.codeAssistantMeta.user_id, userId)); },
-      // OpenAI spend (migration 0040): hourly costs, ChatGPT reply times, Codex turns.
+      // OpenAI spend (migration 0043): hourly costs, ChatGPT reply times, Codex turns.
       async (h) => { await h.delete(schema.openaiCosts).where(eq(schema.openaiCosts.user_id, userId)); },
       async (h) => { await h.delete(schema.openaiReplies).where(eq(schema.openaiReplies.user_id, userId)); },
       async (h) => { await h.delete(schema.codexTurns).where(eq(schema.codexTurns.user_id, userId)); },

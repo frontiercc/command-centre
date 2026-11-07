@@ -36,6 +36,8 @@ On Windows, use `curl.exe` and `-o NUL`. `200` means the token is right, `401` m
 
 **Some Claude Cowork sessions are missing.** Sessions run on Anthropic's cloud don't currently send their activity reliably. In Organization settings, switch off **Cowork in the cloud** (under Claude Cowork) and **Chat and Cowork unified** (under Capabilities).
 
+**Claude in Office/Google activity doesn't arrive.** Check that **Office agents → Monitoring** in Claude's Organization settings has the collector's address, `http/json` and the bearer token. The add-in sends from the person's browser, so the collector must be reachable from their computer over HTTPS and must accept requests from `https://pivot.claude.ai`: the collector configurations supplied with Command Centre do, but a reverse proxy or load balancer in front of it must pass the browser's cross-origin check (an `OPTIONS` request) through to the collector rather than answer or block it. Then ask Claude something in Excel, Word or PowerPoint and check the **By product** panel on the Work Pulse overview a few minutes later.
+
 **Claude Cowork prompts show as `<REDACTED>`.** Set `otlpContentCapture` on the machine, then quit and reopen Claude Desktop.
 
 Windows (PowerShell as administrator):
