@@ -112,6 +112,9 @@ export async function GET(request: NextRequest) {
       people: Number(openaiRecordRows[0]?.people ?? 0),
       newToday: Number(openaiNewTodayRows[0]?.c ?? 0),
       intervalMinutes: Number.isFinite(openaiInterval) && openaiInterval > 0 ? openaiInterval : 5,
+      // The OpenAI panel's switches (Access & Keys): sync paused, and shown on the analytics screens.
+      paused: (await getConfigValue('openaiSyncPaused')) === 'true',
+      shown: (await getConfigValue('openaiShown')) !== 'false',
     },
   });
 }

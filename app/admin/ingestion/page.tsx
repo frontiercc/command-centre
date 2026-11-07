@@ -27,6 +27,10 @@ interface OtelStatus {
     people: number;
     newToday: number;
     intervalMinutes: number;
+    /** Pause sync is on (Access & Keys). */
+    paused?: boolean;
+    /** Show ChatGPT and Codex is on (Access & Keys). */
+    shown?: boolean;
   };
 }
 
@@ -89,6 +93,7 @@ export default function IngestionPage() {
   const openaiStatus = (() => {
     const o = otelStatus?.openai;
     if (!o || !o.keySet) return { tone: 'off' as const, text: 'Not connected' };
+    if (o.paused) return { tone: 'amber' as const, text: 'Sync paused: nothing new is collected until it is switched back on' };
     if (!o.lastSyncAt) return { tone: 'amber' as const, text: 'Key set, awaiting the first sync' };
     if (o.lastSync && o.lastSync.errors > 0) return { tone: 'red' as const, text: 'The last sync reported errors' };
     // A sync is late after three missed runs.
@@ -199,34 +204,48 @@ export default function IngestionPage() {
               </div>
             </Panel>
 
-            {/* OpenAI export status: ChatGPT and Codex */}
-            <Panel title="OpenAI export status" subtitle="ChatGPT and Codex">
-              <div className="flex items-start gap-3">
-                <span
-                  className="mt-1 h-2.5 w-2.5 rounded-full flex-shrink-0"
-                  style={{ background: openaiStatus.tone === 'green' ? C.good : openaiStatus.tone === 'amber' ? C.medium : openaiStatus.tone === 'red' ? C.high : C.input }}
-                />
-                <div className="min-w-0">
-                  <p className={cx('m-0 text-[14px] font-semibold',
-                    openaiStatus.tone === 'green' ? 'text-[#1A7F37]' :
-                    openaiStatus.tone === 'amber' ? 'text-[#B54708]' :
-                    openaiStatus.tone === 'red' ? 'text-[#B42318]' : 'text-[#333333]')}>
-                    {openaiStatus.text}
-                  </p>
-                  {otelStatus?.openai.keySet ? (
-                    <p className="m-0 mt-0.5 text-[13px] text-[#8F8F8F] tabular-nums">
-                      {otelStatus.openai.people} {otelStatus.openai.people === 1 ? 'person' : 'people'} seen &middot; {otelStatus.openai.newToday} new today
-                      {otelStatus.openai.lastSyncAt ? ` · Last sync ${new Date(otelStatus.openai.lastSyncAt * 1000).toLocaleString('en-GB')}` : ''}
-                      {otelStatus.openai.lastSync ? ` · ${otelStatus.openai.lastSync.prompts} new prompt${otelStatus.openai.lastSync.prompts === 1 ? '' : 's'} in it` : ''}
-                      {otelStatus.openai.lastSync && otelStatus.openai.lastSync.excluded > 0 ? `, ${otelStatus.openai.lastSync.excluded} excluded` : ''}
-                      {otelStatus.openai.lastRecordAt ? ` · Latest record ${new Date(otelStatus.openai.lastRecordAt * 1000).toLocaleString('en-GB')}` : ''}
+            {/* Connect ChatGPT and Codex: what OpenAI's export needs, where to enter it, then its status */}
+            <Panel title="Connect ChatGPT and Codex" subtitle="OpenAI's export, read with an admin key. Nothing is set on people's computers.">
+              <p className="m-0 text-[13px] text-[#4D4D4D]">
+                ChatGPT Chat and ChatGPT Work prompts join Work Pulse, Codex prompts join Developer Pulse, and their spend joins FinOps,
+                a few hours behind. It needs ChatGPT Enterprise or Edu, and three things from OpenAI&apos;s admin console:
+              </p>
+              <ol className="mt-2 mb-0 pl-5 text-[13px] text-[#4D4D4D] flex flex-col gap-1">
+                <li><span className="font-medium text-[#0A0A0A]">An OpenAI Admin API key</span>, created by a ChatGPT workspace owner under Credentials → Admin keys, with read access to conversation messages, Codex logs, Codex turns and costs.</li>
+                <li><span className="font-medium text-[#0A0A0A]">The ChatGPT workspace ID</span>, shown in the workspace settings.</li>
+                <li><span className="font-medium text-[#0A0A0A]">The OpenAI organisation ID</span> (org-…), which ChatGPT spend needs. Codex spend needs only the workspace ID.</li>
+              </ol>
+              <div className="mt-3">
+                <Link href="/admin/security" className={B.secondary}>Enter them in Access &amp; Keys</Link>
+              </div>
+              <div className="mt-4 pt-3 border-t border-[#F2F2F2]">
+                <div className="flex items-start gap-3">
+                  <span
+                    className="mt-1 h-2.5 w-2.5 rounded-full flex-shrink-0"
+                    style={{ background: openaiStatus.tone === 'green' ? C.good : openaiStatus.tone === 'amber' ? C.medium : openaiStatus.tone === 'red' ? C.high : C.input }}
+                  />
+                  <div className="min-w-0">
+                    <p className={cx('m-0 text-[14px] font-semibold',
+                      openaiStatus.tone === 'green' ? 'text-[#1A7F37]' :
+                      openaiStatus.tone === 'amber' ? 'text-[#B54708]' :
+                      openaiStatus.tone === 'red' ? 'text-[#B42318]' : 'text-[#333333]')}>
+                      {openaiStatus.text}
                     </p>
-                  ) : null}
-                  <p className="m-0 mt-1 text-[13px] text-[#666666]">
-                    OpenAI&apos;s export brings ChatGPT prompts into Work Pulse and Codex prompts into Developer Pulse, a few hours behind.
-                    No collector is involved. The admin key and workspace are set under{' '}
-                    <Link href="/admin/security" className="text-[#245BF3] hover:underline">Access &amp; Keys</Link>.
-                  </p>
+                    {otelStatus?.openai.keySet ? (
+                      <p className="m-0 mt-0.5 text-[13px] text-[#8F8F8F] tabular-nums">
+                        {otelStatus.openai.people} {otelStatus.openai.people === 1 ? 'person' : 'people'} seen &middot; {otelStatus.openai.newToday} new today
+                        {otelStatus.openai.lastSyncAt ? ` · Last sync ${new Date(otelStatus.openai.lastSyncAt * 1000).toLocaleString('en-GB')}` : ''}
+                        {otelStatus.openai.lastSync ? ` · ${otelStatus.openai.lastSync.prompts} new prompt${otelStatus.openai.lastSync.prompts === 1 ? '' : 's'} in it` : ''}
+                        {otelStatus.openai.lastSync && otelStatus.openai.lastSync.excluded > 0 ? `, ${otelStatus.openai.lastSync.excluded} excluded` : ''}
+                        {otelStatus.openai.lastRecordAt ? ` · Latest record ${new Date(otelStatus.openai.lastRecordAt * 1000).toLocaleString('en-GB')}` : ''}
+                      </p>
+                    ) : null}
+                    {otelStatus?.openai.keySet && otelStatus.openai.shown === false && (
+                      <p className="m-0 mt-1 text-[13px] text-[#666666]">
+                        Hidden from the analytics screens: Show ChatGPT and Codex is off on Access &amp; Keys. Collection carries on, and the Audit Log lists every prompt.
+                      </p>
+                    )}
+                  </div>
                 </div>
               </div>
             </Panel>
