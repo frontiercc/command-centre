@@ -1,5 +1,33 @@
 # Changelog
 
+## 1.3.0 (2026-11-08)
+
+### Added
+
+- ChatGPT and Codex beside Claude. Command Centre reads OpenAI's Compliance Logs Platform export (ChatGPT Enterprise) with an OpenAI Admin API key: ChatGPT Chat and Work prompts, Codex prompts, turns and tool calls, and OpenAI's hourly cost records. Enter the key under **Admin → Access & Keys → OpenAI (ChatGPT and Codex)**: see [Connect ChatGPT and Codex](docs/configure-command-centre.md#connect-chatgpt-and-codex). The sync does nothing until a key and workspace ID are saved, and an admin can pause it or hide ChatGPT and Codex from the analytics pages.
+- An All / Claude / OpenAI switch on the dashboard, Work Pulse and Developer Pulse. Work Pulse grades ChatGPT prompts against the same tiers as Cowork, Developer Pulse shows Claude Code and Codex side by side, and each view keeps its own weekly history.
+- ChatGPT and Codex spend on FinOps and Spend Review, priced from tokens at OpenAI's published USD rates and kept apart from Claude's, with a Claude / OpenAI split. Model advice never suggests a model from the other vendor. A ChatGPT seat price can be set for licence costs.
+- ChatGPT and Codex across the rest of Command Centre: personal data and risky-intent alerts on their prompts, the Audit Log (with spend for each prompt), Use Cases, the Skills and Connectors Board, human time, reports, briefings and telemetry-silence alerts.
+- Sample data includes thirteen weeks of ChatGPT and Codex activity.
+- A stand-in for OpenAI's export (`scripts/openai-mock`) for building and testing the sync without a ChatGPT Enterprise workspace.
+
+### Changed
+
+- Claude Chat prompts are stored beside Cowork prompts, so Work Pulse grades them into tiers like other work. With grading on, their text is sent to the classifier model, as Cowork prompts are.
+- The department table on the Work Pulse overview shows each department's resilience score, which was always blank, and marks only a concentrated score (below 0.35) as a risk.
+
+### Fixed
+
+- Developer Pulse no longer shows "n/a" under a figure for a product a person has not used.
+- "Last active" on the department page shows when the person last worked, not when their work was graded.
+- Viewers no longer see the Users page in the menu, which they cannot open.
+
+### Upgrading
+
+- The database changes apply when the Hub starts. Claude Chat prompts move from their own table into the Cowork table in one step; if the move fails, nothing changes.
+- To connect ChatGPT and Codex, create an OpenAI Admin API key with read access to conversation messages, Codex logs, Codex turns and costs, and enter it with the workspace and organisation IDs under **Admin → Access & Keys**. The first sync reaches back 30 days and reads at most 300 files a run, so on a busy workspace it spreads over several runs.
+- Some details of OpenAI's export are not yet confirmed against a live workspace: the exact model names, and how ChatGPT Work is marked in the Codex logs. A model Command Centre has no price for is named as not priced, never counted as $0, and an admin can add its price under **Admin → Developer Pulse**.
+
 ## 1.2.0 (2026-11-06)
 
 ### Added
