@@ -58,7 +58,7 @@ const MAX_OUTPUTS_PER_SESSION = 5;
 const CHUNK = 1000;
 
 type Client = Awaited<ReturnType<typeof getTypedClient>>;
-/** Claude Code, Claude Cowork, and, with the OpenAI export connected, ChatGPT and Codex. */
+/** Claude Code, Claude Cowork, and, with OpenAI's Compliance API connected, ChatGPT and Codex. */
 export type ReviewSurface = 'code' | 'cowork' | 'chatgpt' | 'codex';
 /** Codex is judged on Claude Code's kinds of work, ChatGPT on Cowork's. */
 const codeLike = (s: ReviewSurface) => s === 'code' || s === 'codex';
@@ -157,7 +157,7 @@ export interface SpendReview {
    * reply to share it across, so the total still equals FinOps's.
    */
   totals: { totalUsd: number; codeUsd: number; coworkUsd: number; chatgptUsd: number; codexUsd: number; chatgptUnmatchedUsd: number; sessions: number };
-  /** The OpenAI export has sent ChatGPT cost records or Codex turns. */
+  /** The OpenAI Compliance API has sent ChatGPT cost records or Codex turns. */
   openai: boolean;
   unpricedModels: string[];
   work: WorkRow[];
@@ -739,7 +739,7 @@ async function codexSpendBySession(
   return accs;
 }
 
-/** True once the OpenAI export has sent a ChatGPT cost record or a Codex turn. */
+/** True once OpenAI's Compliance API has sent a ChatGPT cost record or a Codex turn. */
 async function openaiSpendSeen(client: Client): Promise<boolean> {
   if (!(await openaiShown())) return false;
   const oc = schema.openaiCosts;
@@ -1374,7 +1374,7 @@ export interface SpendReviewPerson {
   department: string | null;
   codeUsd: number;
   coworkUsd: number;
-  /** ChatGPT and Codex, present when the OpenAI export is connected. */
+  /** ChatGPT and Codex, present when OpenAI's Compliance API is connected. */
   chatgptUsd?: number;
   codexUsd?: number;
   totalUsd: number;
@@ -1438,7 +1438,7 @@ export function efficiencyRatio(kinds: Array<{ spend: number; personMedian: numb
 
 export interface SpendReviewIndex {
   period: string;
-  /** The OpenAI export has sent ChatGPT or Codex spend (FinOps's Claude / OpenAI split exists). */
+  /** The OpenAI Compliance API has sent ChatGPT or Codex spend (FinOps's Claude / OpenAI split exists). */
   openai: boolean;
   people: SpendReviewPerson[];
   /** Most efficient this month: lowest cost against colleagues for the same work, with results beside it. */

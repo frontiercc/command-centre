@@ -16,7 +16,7 @@
 // Postgres).
 import { NextRequest, NextResponse } from 'next/server';
 import { visibleVendor, visibleOpenAi } from '@/lib/sources/openai-visibility';
-import { and, desc, eq, gte, inArray, lt, lte, notInArray, sql } from 'drizzle-orm';
+import { and, desc, eq, gte, inArray, isNotNull, lt, lte, notInArray, sql } from 'drizzle-orm';
 import { getAdminSession, isDeptScoped, canAccessCoworkPulse, canAccessPulseAdmin } from '@/lib/auth/admin-auth';
 import { buildFrontierView, resolveViewerUserId } from '@/lib/pulse/frontier-view';
 import { getTypedClient } from '@/lib/db/client';
@@ -181,7 +181,18 @@ export async function GET(
     .where(and(pmOnly, eq(pm.scope_type, 'function'), eq(pm.scope_id, dept), eq(pm.granularity, 'rolling')))
     .orderBy(desc(pm.computed_at))
     .limit(1);
-  const metrics = metricsRows[0];
+  // Resilience is written by the hourly run; the daily run writes the same
+  // department row without it. Take resilience from the latest row that has
+  // it, so the All view never falls back to "Pending data" after the daily run.
+  const orsRows = metricsRows[0] && metricsRows[0].ors === null
+    ? await client
+      .select({ ors: pm.ors, ors_breadth: pm.ors_breadth, ors_overlap: pm.ors_overlap, ors_propagation: pm.ors_propagation })
+      .from(pm)
+      .where(and(pmOnly, eq(pm.scope_type, 'function'), eq(pm.scope_id, dept), eq(pm.granularity, 'rolling'), isNotNull(pm.ors)))
+      .orderBy(desc(pm.computed_at))
+      .limit(1)
+    : [];
+  const metrics = metricsRows[0] && orsRows[0] ? { ...metricsRows[0], ...orsRows[0] } : metricsRows[0];
 
   // Prior period dept metrics: row closest to 7 days ago for meaningful week-over-week delta
   const sevenDaysAgo = now - 7 * 24 * 3600;

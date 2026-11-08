@@ -150,8 +150,8 @@ export async function getSystemHealth(nowS: number = Math.floor(Date.now() / 100
   const chatgptLast = await maxOccurredFor(['chatgpt_chat', 'chatgpt_work']);
   const codexLast = await maxOccurredFor(['codex']);
   if ((await getConfigValue('openaiAdminApiKey')) || chatgptLast !== null || codexLast !== null) {
-    surfaces.push({ key: 'chatgpt', label: 'ChatGPT (OpenAI export)', lastEventAt: chatgptLast });
-    surfaces.push({ key: 'codex', label: 'Codex (OpenAI export)', lastEventAt: codexLast });
+    surfaces.push({ key: 'chatgpt', label: 'ChatGPT (OpenAI Compliance API)', lastEventAt: chatgptLast });
+    surfaces.push({ key: 'codex', label: 'Codex (OpenAI Compliance API)', lastEventAt: codexLast });
   }
 
   // ── Ingest failures ───────────────────────────────────────────────

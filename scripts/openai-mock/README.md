@@ -1,6 +1,6 @@
-# Mock OpenAI export
+# Mock OpenAI Compliance API
 
-Sample ChatGPT and Codex activity, served by a stand-in for OpenAI's Compliance Logs Platform on localhost. It is for building and testing the ChatGPT and Codex sync without a ChatGPT Enterprise workspace. ChatGPT Business has no access to this export, so it cannot be used for testing either.
+Sample ChatGPT and Codex activity, served by a stand-in for OpenAI's Compliance API on localhost. It is for building and testing the ChatGPT and Codex sync without a ChatGPT Enterprise workspace. ChatGPT Business has no access to this export, so it cannot be used for testing either.
 
 ```bash
 node scripts/openai-mock/server.mjs

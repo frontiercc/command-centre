@@ -5,7 +5,7 @@
 
 // Capture-path indicator for the dashboard header: OTLP push is the path for
 // Cowork and Code, Chat comes from the Compliance API on an Enterprise plan,
-// and ChatGPT and Codex from OpenAI's export once its key is saved. With only
+// and ChatGPT and Codex from OpenAI's Compliance API once its key is saved. With only
 // OpenAI connected the Claude paths are not shown.
 
 import { useOpenAiOnly } from '@/components/shared/VendorSwitch';

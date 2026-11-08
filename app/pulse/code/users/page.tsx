@@ -72,15 +72,21 @@ function CodeUsersContent() {
   const [usersLoading, setUsersLoading] = useState(true);
   const [data, setData] = useState<UserData | null>(null);
   const [dataLoading, setDataLoading] = useState(false);
-  const [vendor, setVendor] = useVendor();
+  const [vendor, setVendor, vendorReady] = useVendor();
   const [codexPresent, setCodexPresent] = useState(false);
   const openaiOnly = useOpenAiOnly();
   const codexView = codexPresent || openaiOnly;
 
   const selectedUserId = searchParams.get('userId') ?? '';
+  // What the switch's view covers, for the empty states.
+  const viewLabel = vendor === 'openai' ? 'Codex' : codexView && vendor === 'all' ? 'coding' : 'Claude Code';
+  // A person missing from the picker has no activity in this view; their
+  // page is not shown, so no figure from another view stands under the name.
+  const notInView = !usersLoading && selectedUserId !== '' && !users.some(u => u.user_id === selectedUserId);
 
   // Load the user list for the dropdown
   useEffect(() => {
+    if (!vendorReady) return; // the saved view is read after the page loads
     fetch(`/api/pulse/code/users?vendor=${vendor}`)
       .then(r => r.json())
       .then(d => {
@@ -98,9 +104,10 @@ function CodeUsersContent() {
       })
       .catch(() => {})
       .finally(() => setUsersLoading(false));
-  }, [vendor]); // eslint-disable-line react-hooks/exhaustive-deps
+  }, [vendor, vendorReady]); // eslint-disable-line react-hooks/exhaustive-deps
 
   const loadUser = useCallback((userId: string) => {
+    if (!vendorReady) return; // the saved view is read after the page loads
     if (!userId) return;
     setDataLoading(true);
     fetch(`/api/pulse/code/me?userId=${encodeURIComponent(userId)}&vendor=${vendor}`)
@@ -108,7 +115,7 @@ function CodeUsersContent() {
       .then(setData)
       .catch(() => {})
       .finally(() => setDataLoading(false));
-  }, [vendor]);
+  }, [vendor, vendorReady]);
 
   useEffect(() => {
     if (selectedUserId) loadUser(selectedUserId);
@@ -143,7 +150,8 @@ function CodeUsersContent() {
                   onChange={e => handleSelect(e.target.value)}
                   className={cx(B.select, 'min-w-[240px] text-[14px]')}
                 >
-                  {users.length === 0 && <option value="">No users with Code activity</option>}
+                  {users.length === 0 && !notInView && <option value="">No users with {viewLabel} activity</option>}
+                  {notInView && <option value={selectedUserId}>{data?.displayName ?? 'This person'} · no {viewLabel} activity</option>}
                   {users.map(u => (
                     <option key={u.user_id} value={u.user_id}>
                       {u.display_name ?? u.email}{u.department ? ` · ${u.department}` : ''}
@@ -164,7 +172,13 @@ function CodeUsersContent() {
 
         {dataLoading && <LoadingSpinner />}
 
-        {!dataLoading && data && (
+        {!dataLoading && notInView && (
+          <Empty title={`No ${viewLabel} activity for this person`}>
+            {users.length > 0 ? 'Choose someone from the list, or switch view.' : 'Switch view to see other activity.'}
+          </Empty>
+        )}
+
+        {!dataLoading && !notInView && data && (
           !data.userId ? (
             <Empty title={openaiOnly ? 'No Codex activity for this user yet' : codexPresent ? 'No coding activity for this user yet' : 'No Claude Code activity for this user yet'}>
               Activity appears after the next hourly aggregation.

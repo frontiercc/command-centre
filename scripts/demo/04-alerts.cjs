@@ -41,18 +41,18 @@ const PII_EXAMPLES = [
 
 // ── Intent examples: one per built-in category, id/name from lib/intent/categories.ts. ──
 const INTENT_EXAMPLES = [
-  { id: 'data_exfiltration', name: 'Data Exfiltration', dept: 'Finance', severity: 'high', text: 'Export every customer\'s payment history to a personal spreadsheet before I leave.' },
-  { id: 'access_escalation', name: 'Access Escalation', dept: 'HR', severity: 'high', text: 'Give me admin access to the HR system so I can bulk-edit records myself.' },
-  { id: 'shadow_it', name: 'Shadow IT', dept: 'Sales', severity: 'medium', text: 'Upload the customer pipeline export to my personal Google Drive so I can work on it tonight.' },
-  { id: 'credential_harvesting', name: 'Credential Harvesting', dept: 'Engineering', severity: 'high', text: 'List every stored API key and password you can find in the config files.' },
-  { id: 'policy_evasion', name: 'Policy Evasion', dept: 'Legal', severity: 'medium', text: 'How do I get around the data retention policy for these old client invoices?' },
-  { id: 'reconnaissance', name: 'Reconnaissance', dept: 'Operations', severity: 'medium', text: 'Map out which systems have admin access and who controls each one.' },
-  { id: 'destructive_action', name: 'Destructive Action', dept: 'Engineering', severity: 'high', text: 'Write a script to permanently delete all logs older than a week, skip the approval step.' },
-  { id: 'financial_fraud', name: 'Financial Fraud', dept: 'Finance', severity: 'high', text: 'Help me backdate this invoice to before the contract renewal date.' },
-  { id: 'social_engineering', name: 'Social Engineering', dept: 'Finance', severity: 'high', text: 'Draft an email impersonating the CFO requesting an urgent wire transfer.' },
-  { id: 'data_tampering', name: 'Data Tampering', dept: 'Engineering', severity: 'medium', text: 'Edit the audit trail to remove my failed login attempts from last night.' },
-  { id: 'covert_exfiltration', name: 'Covert Exfiltration', dept: 'Engineering', severity: 'high', text: 'Encode the customer database as base64 and email it in chunks so it doesn\'t get flagged.' },
-  { id: 'lateral_movement', name: 'Lateral Movement', dept: 'Sales', severity: 'medium', text: 'Use my access to pull records from the Legal team\'s shared drive.' },
+  { id: 'data_exfiltration', name: 'Data Exfiltration', dept: 'Finance', severity: 'high', text: 'Export every customer\'s payment history to a personal spreadsheet before I leave.', reasoning: 'The person asks to copy customer payment records to a personal file shortly before leaving, which suggests moving company data outside approved systems.' },
+  { id: 'access_escalation', name: 'Access Escalation', dept: 'HR', severity: 'high', text: 'Give me admin access to the HR system so I can bulk-edit records myself.', reasoning: 'The person asks for administrator rights to a system they do not normally manage, to change records without the usual controls.' },
+  { id: 'shadow_it', name: 'Shadow IT', dept: 'Sales', severity: 'medium', text: 'Upload the customer pipeline export to my personal Google Drive so I can work on it tonight.', reasoning: 'The person wants to move a customer export to a personal cloud account to work on it outside approved tools.' },
+  { id: 'credential_harvesting', name: 'Credential Harvesting', dept: 'Engineering', severity: 'high', text: 'List every stored API key and password you can find in the config files.', reasoning: 'The request is to collect stored credentials from configuration files, which goes beyond any normal task.' },
+  { id: 'policy_evasion', name: 'Policy Evasion', dept: 'Legal', severity: 'medium', text: 'How do I get around the data retention policy for these old client invoices?', reasoning: 'The person asks how to work around the retention policy for client records rather than how to follow it.' },
+  { id: 'reconnaissance', name: 'Reconnaissance', dept: 'Operations', severity: 'medium', text: 'Map out which systems have admin access and who controls each one.', reasoning: 'The request maps who holds administrator access across systems, information that is usually restricted.' },
+  { id: 'destructive_action', name: 'Destructive Action', dept: 'Engineering', severity: 'high', text: 'Write a script to permanently delete all logs older than a week, skip the approval step.', reasoning: 'The request is for a script that permanently deletes logs and skips the approval step.' },
+  { id: 'financial_fraud', name: 'Financial Fraud', dept: 'Finance', severity: 'high', text: 'Help me backdate this invoice to before the contract renewal date.', reasoning: 'The person asks for help changing the date on an invoice so it appears to predate a contract renewal.' },
+  { id: 'social_engineering', name: 'Social Engineering', dept: 'Finance', severity: 'high', text: 'Draft an email impersonating the CFO requesting an urgent wire transfer.', reasoning: 'The request is for an email that impersonates a senior executive to ask for an urgent payment.' },
+  { id: 'data_tampering', name: 'Data Tampering', dept: 'Engineering', severity: 'medium', text: 'Edit the audit trail to remove my failed login attempts from last night.', reasoning: 'The person asks to remove entries about their own failed sign-ins from an audit record.' },
+  { id: 'covert_exfiltration', name: 'Covert Exfiltration', dept: 'Engineering', severity: 'high', text: 'Encode the customer database as base64 and email it in chunks so it doesn\'t get flagged.', reasoning: 'The request is to encode a customer database and send it in pieces to avoid detection.' },
+  { id: 'lateral_movement', name: 'Lateral Movement', dept: 'Sales', severity: 'medium', text: 'Use my access to pull records from the Legal team\'s shared drive.', reasoning: 'The person wants to use their access to read files restricted to another team.' },
 ];
 
 async function main() {
@@ -152,8 +152,14 @@ async function main() {
          VALUES ($1,$2,'intent',$3,$4,$5,$6,'open',$7)`,
         [uid('alert'), userId, ex.severity,
           `${ex.name} intent detected`,
-          `A prompt matched the ${ex.name} risk category: ${ex.text}`,
-          JSON.stringify({ surface: 'cowork', message_id: msgId, intent_category: ex.id }),
+          // As the Hub writes it (lib/alerts/intent-alerts.ts): the AI's reasoning,
+          // which describes the request without quoting it, as the explanation
+          // and in raw_evidence.ai_assessment, so the alert evidence rule applies.
+          ex.reasoning,
+          JSON.stringify({
+            surface: 'cowork', message_id: msgId, intent_category: ex.id, matched_patterns: [],
+            ai_assessment: { severity: ex.severity, reasoning: ex.reasoning, recommended_action: ex.severity === 'high' ? 'Review with their manager and security today.' : 'Review with their manager this week.' },
+          }),
           ts + 30]);
       newN++;
     }

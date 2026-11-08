@@ -36,6 +36,8 @@ export interface SessionOutputReport {
   rate: number | null;
   weeks: SessionOutputWeek[];
   byTaskType?: SessionOutputByTaskType[];
+  /** True once ChatGPT is connected: the figure covers Claude sessions only. */
+  claudeOnly?: boolean;
 }
 
 function pct(rate: number | null): string {
@@ -60,8 +62,11 @@ export default function SessionOutputCard({ report }: { report: SessionOutputRep
       <div className="px-4 pt-3 pb-2">
         <p className="m-0 text-[24px] leading-7 font-semibold tabular-nums text-[#05073F]">{pct(report.rate)}</p>
         <p className="m-0 mt-1 text-[13px] text-[#8F8F8F] tabular-nums">
-          {report.produced.toLocaleString()} of {report.sessions.toLocaleString()} sessions, 13 weeks
+          {report.produced.toLocaleString()} of {report.sessions.toLocaleString()} {report.claudeOnly ? 'Claude sessions' : 'sessions'}, 13 weeks
         </p>
+        {report.claudeOnly && (
+          <p className="m-0 mt-1 text-[13px] text-[#8F8F8F]">ChatGPT does not record whether a session produced something.</p>
+        )}
       </div>
       {byTaskType.length > 0 && (
         <div className="border-t border-[#F2F2F2]">

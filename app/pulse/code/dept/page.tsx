@@ -11,7 +11,7 @@ import CodeStatStrip, { type CodeMetricsRow } from '@/components/pulse/code/Code
 import CodeUserTable, { type CodeUserRow } from '@/components/pulse/code/CodeUserTable';
 import JourneyGrid from '@/components/pulse/JourneyGrid';
 import HumanTimeCard, { type HumanTimeSummary } from '@/components/pulse/HumanTimeCard';
-import { PageBody, Toolbar, Panel, Tag, Notice, B, cx } from '@/components/precision/ui';
+import { PageBody, Toolbar, Panel, Tag, Notice, Empty, B, cx } from '@/components/precision/ui';
 import { useVendor, useOpenAiOnly, VendorSwitch } from '@/components/shared/VendorSwitch';
 import { DEVELOPER_PULSE_VENDOR_LABELS } from '@/lib/dashboard/vendor';
 
@@ -40,15 +40,21 @@ function DeptContent() {
   const [detail, setDetail] = useState<DeptDetail | null>(null);
   const [detailLoading, setDetailLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const [vendor, setVendor] = useVendor();
+  const [vendor, setVendor, vendorReady] = useVendor();
   const [codexPresent, setCodexPresent] = useState(false);
   const openaiOnly = useOpenAiOnly();
   const codexView = codexPresent || openaiOnly;
 
   const selectedDept = searchParams.get('dept') ?? '';
+  // What the switch's view covers, for the empty states.
+  const viewLabel = vendor === 'openai' ? 'Codex' : codexView && vendor === 'all' ? 'coding' : 'Claude Code';
+  // A department missing from the picker has no activity in this view; its
+  // page is not shown, so no figure from another view stands under the name.
+  const notInView = !deptsLoading && selectedDept !== '' && !depts.some(d => d.department === selectedDept);
 
   // Load the department list for the dropdown
   useEffect(() => {
+    if (!vendorReady) return; // the saved view is read after the page loads
     fetch(`/api/pulse/code/depts?vendor=${vendor}`)
       .then(async r => {
         const d = await r.json().catch(() => ({}));
@@ -67,9 +73,10 @@ function DeptContent() {
       })
       .catch(e => setError(e.message))
       .finally(() => setDeptsLoading(false));
-  }, [vendor]); // eslint-disable-line react-hooks/exhaustive-deps
+  }, [vendor, vendorReady]); // eslint-disable-line react-hooks/exhaustive-deps
 
   const loadDept = useCallback((dept: string) => {
+    if (!vendorReady) return; // the saved view is read after the page loads
     if (!dept) return;
     setDetailLoading(true);
     // A refusal (no department assigned, or another department) shows the
@@ -84,7 +91,7 @@ function DeptContent() {
       .then(d => { setError(null); setDetail(d); })
       .catch(e => { setDetail(null); setError(e.message); })
       .finally(() => setDetailLoading(false));
-  }, [vendor]);
+  }, [vendor, vendorReady]);
 
   useEffect(() => {
     if (selectedDept) loadDept(selectedDept);
@@ -115,7 +122,8 @@ function DeptContent() {
                 onChange={e => handleSelect(e.target.value)}
                 className={cx(B.select, 'min-w-[240px] text-[14px]')}
               >
-                {depts.length === 0 && <option value="">No departments with Code activity</option>}
+                {depts.length === 0 && !notInView && <option value="">No departments with {viewLabel} activity</option>}
+                {notInView && <option value={selectedDept}>{selectedDept} · no {viewLabel} activity</option>}
                 {depts.map(d => (
                   <option key={d.department} value={d.department}>
                     {d.department} · {d.member_count} {d.member_count === 1 ? 'person' : 'people'}
@@ -131,7 +139,13 @@ function DeptContent() {
         {error && <Notice tone="error">{error}</Notice>}
         {detailLoading && <LoadingSpinner />}
 
-        {!detailLoading && detail && (
+        {!detailLoading && notInView && (
+          <Empty title={`No ${viewLabel} activity in ${selectedDept}`}>
+            {depts.length > 0 ? 'Choose a department from the list, or switch view.' : 'Switch view to see other activity.'}
+          </Empty>
+        )}
+
+        {!detailLoading && !notInView && detail && (
           <>
             <CodeStatStrip metrics={detail.metrics} githubRepos={detail.githubRepos} view={codexView ? vendor : 'claude'} split={detail.metricsSplit} />
 

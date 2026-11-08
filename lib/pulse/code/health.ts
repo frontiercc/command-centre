@@ -86,7 +86,7 @@ export async function getCodePulseHealth(): Promise<CodeHealth> {
     }
   }
 
-  // Codex turns (OpenAI export), priced from the same rate table.
+  // Codex turns (OpenAI Compliance API), priced from the same rate table.
   const ct = schema.codexTurns;
   const codexRows = await client
     .select({

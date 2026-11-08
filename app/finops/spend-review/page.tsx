@@ -25,7 +25,7 @@ interface Person {
   department: string | null;
   codeUsd: number;
   coworkUsd: number;
-  /** Present when the OpenAI export is connected. */
+  /** Present when OpenAI's Compliance API is connected. */
   chatgptUsd?: number;
   codexUsd?: number;
   totalUsd: number;
@@ -113,7 +113,7 @@ function EfficiencyBoard({ rows, period, boardPeriod }: { rows: EfficiencyEntry[
 interface IndexData {
   period: string;
   isCurrentMonth: boolean;
-  /** ChatGPT and Codex spend is included (the OpenAI export is connected). */
+  /** ChatGPT and Codex spend is included (OpenAI's Compliance API is connected). */
   openai?: boolean;
   efficiency?: EfficiencyEntry[];
   /** The month the efficiency board covers: last month while this month is too new. */
@@ -496,9 +496,9 @@ function SpendReviewIndex() {
                 </div>
                 <p className="m-0 leading-5">
                   {openaiOnly
-                    ? <>ChatGPT and Codex spend from OpenAI&apos;s export, priced at OpenAI&apos;s USD token rates: the same figures as FinOps. ChatGPT spend per conversation is an estimate, since OpenAI reports cost per hour.</>
+                    ? <>ChatGPT and Codex spend from OpenAI&apos;s Compliance API, priced at OpenAI&apos;s USD token rates: the same figures as FinOps. ChatGPT spend per conversation is an estimate, since OpenAI reports cost per hour.</>
                     : data.openai
-                    ? <>Measured by Command Centre: Claude Code and Cowork spend from telemetry, and ChatGPT and Codex spend from OpenAI&apos;s export priced at OpenAI&apos;s USD token rates, the same figures as FinOps. Claude Chat isn&apos;t included.</>
+                    ? <>Measured by Command Centre: Claude Code and Cowork spend from telemetry, and ChatGPT and Codex spend from OpenAI&apos;s Compliance API priced at OpenAI&apos;s USD token rates, the same figures as FinOps. Claude Chat isn&apos;t included.</>
                     : <>Measured by Command Centre: Code and Cowork spend from telemetry, the same figures as FinOps. Chat isn&apos;t included.</>}
                   {data.isCurrentMonth && ' The change compares this month so far with last month scaled to the same point in the month.'}
                   {' '}Kind of work is AI-judged. The bar under each amount splits it {data.openai ? 'by product' : 'into Cowork and Code'}, coloured as in the key above.

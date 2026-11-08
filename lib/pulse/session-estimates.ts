@@ -17,7 +17,7 @@
 //   - a model-call ERROR counts nothing: the run stops and reports it.
 // Off unless humanTimeEnabled='true'.
 //
-// ChatGPT conversations (OpenAI export) are estimated the same way, after
+// ChatGPT conversations (OpenAI Compliance API) are estimated the same way, after
 // Claude Cowork's sessions in the same run, into chatgpt_session_time: their
 // working time is measured from prompt and reply times
 // (lib/pulse/chatgpt-session-time.ts). The export names no output files.

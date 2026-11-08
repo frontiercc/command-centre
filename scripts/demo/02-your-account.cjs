@@ -147,7 +147,7 @@ async function main() {
       // 100% for every department).
       await c.query(
         `INSERT INTO users (id, email, display_name, department, source, first_seen_at, last_seen_at)
-         VALUES ($1,$2,$3,$4,'agent',$5,$5)
+         VALUES ($1,$2,$3,$4,'otel',$5,$5)
          ON CONFLICT (id) DO UPDATE SET department = COALESCE(users.department, EXCLUDED.department)`,
         [userId, admin.email, displayName, dept, now - N_COMPLETED_WEEKS * WEEK]);
       await c.query(

@@ -50,7 +50,7 @@ export async function GET(request: NextRequest) {
     .where(and(eq(u.source, 'otel'), gte(u.first_seen_at, today)));
   const newUsersToday = Number(newUsersTodayRows[0]?.c ?? 0);
 
-  // People first seen through either capture path: Claude's telemetry or OpenAI's export.
+  // People first seen through either capture path: Claude's telemetry or OpenAI's Compliance API.
   const recentOtelUsers = await client
     .select({
       id: u.id,
@@ -65,7 +65,7 @@ export async function GET(request: NextRequest) {
     .orderBy(desc(u.last_seen_at))
     .limit(10);
 
-  // OpenAI's export (ChatGPT and Codex): the key and workspace live on
+  // OpenAI's Compliance API (ChatGPT and Codex): the key and workspace live on
   // Admin → Security; this is how the sync is doing.
   const openaiKeySet = !!(await getConfigValue('openaiAdminApiKey')) && !!(await getConfigValue('openaiWorkspaceId')).trim();
   const openaiLastSyncRaw = parseInt(await getConfigValue('openaiLastSyncAt') || '', 10);

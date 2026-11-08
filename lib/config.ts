@@ -115,7 +115,7 @@ export interface AppConfig {
   // Code's own human-time switch (Admin → Developer Pulse). '' = follow humanTimeEnabled.
   humanTimeCodeEnabled: string;
   // 'false' stops the Developer Pulse session classifier judging Codex sessions
-  // (OpenAI export), which it otherwise does like Claude Code sessions. Default 'true'.
+  // (OpenAI Compliance API), which it otherwise does like Claude Code sessions. Default 'true'.
   codeClassifyCodex: string;
   // 'true' raises an alert (and so a Slack message, if Slack alerts are on) for
   // system health problems, once per failure. Off by default: System health on
@@ -325,7 +325,7 @@ export interface AppConfig {
   complianceActivityExcludedTypes: string;     // default '["compliance_api_accessed"]' — JSON array of activity `type` values skipped at ingest
   complianceLastSyncAt: string;          // job-written (epoch seconds)
   complianceLastSyncStats: string;       // job-written (JSON)
-  // OpenAI export sync (ChatGPT and Codex), dormant until a key and workspace are saved
+  // OpenAI Compliance API sync (ChatGPT and Codex), dormant until a key and workspace are saved
   openaiAdminApiKey: string;             // OpenAI Admin API key, SENSITIVE
   openaiWorkspaceId: string;             // ChatGPT workspace ID
   openaiOrganizationId: string;          // OpenAI organisation ID (costs)

@@ -27,7 +27,7 @@ interface ChargebackUser {
   displayName: string;
   codeUsd: number;
   coworkUsd: number;
-  /** ChatGPT and Codex, present when the OpenAI export is connected. */
+  /** ChatGPT and Codex, present when OpenAI's Compliance API is connected. */
   chatgptUsd?: number;
   codexUsd?: number;
   totalUsd: number;
@@ -74,7 +74,7 @@ interface ChargebackReport {
     monthlyPriceUsd: number | null;
     estUnusedUsd: number | null;
   } | null;
-  /** Claude / OpenAI split; present when the OpenAI export has sent data. */
+  /** Claude / OpenAI split; present when OpenAI's Compliance API has sent data. */
   vendors?: { claudeUsd: number; openaiUsd: number };
   openaiUnpricedModels?: string[];
   /** The ChatGPT licence: seats x monthly price, charged apart from usage. null when no seat count is set. */

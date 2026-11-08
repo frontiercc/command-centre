@@ -19,6 +19,7 @@ import { readHumanTime } from '@/lib/pulse/human-time-summary';
 import { getAllConfig } from '@/lib/config';
 import { canViewSpendReview } from '@/lib/finance/spend-review-access';
 import { hasCodexData, readCodeMetrics, trendVendor, codeSessionVendor } from '@/lib/pulse/code/vendor-view';
+import { codexActionCounts } from '@/lib/pulse/code/aggregator';
 
 export const dynamic = 'force-dynamic';
 
@@ -207,12 +208,18 @@ export async function GET(request: NextRequest) {
     }
   }
 
+  // Codex sessions' actions come from codex_actions (code_session_stats carries none for them).
+  const codexActions = codexIds.length > 0 ? await codexActionCounts(client, codexIds) : new Map<string, { tools: number }>();
+
   const sessions = rawSessions.map(s => {
     const codex = codexBySession.get(s.session_id);
-    if (codex) {
+    if (codex || s.session_id.startsWith('codex:')) {
       const rest: Record<string, unknown> = { ...s };
       delete rest.models_json;
-      return { ...rest, input_tokens: codex.input + codex.cached, output_tokens: codex.output, cache_read_tokens: codex.cached, spend_usd: codex.spend };
+      const actions = codexActions.get(s.session_id)?.tools ?? 0;
+      return codex
+        ? { ...rest, tool_use_count: actions, input_tokens: codex.input + codex.cached, output_tokens: codex.output, cache_read_tokens: codex.cached, spend_usd: codex.spend }
+        : { ...rest, tool_use_count: actions, spend_usd: null };
     }
     let spendUsd: number | null = null;
     if (s.models_json) {

@@ -109,7 +109,7 @@ export function renderSpendReviewSection(input: SpendReviewSectionInput): string
   const out: string[] = [];
   out.push(`### Spend Review: ${monthName(period)}`);
   const sources = index.openai
-    ? "Measured by Command Centre from Claude Code and Cowork telemetry, plus ChatGPT and Codex from OpenAI's export priced at OpenAI's USD token rates (Claude Chat is not included; ChatGPT spend per conversation is an estimate, since OpenAI reports cost per hour)."
+    ? "Measured by Command Centre from Claude Code and Cowork telemetry, plus ChatGPT and Codex from OpenAI's Compliance API priced at OpenAI's USD token rates (Claude Chat is not included; ChatGPT spend per conversation is an estimate, since OpenAI reports cost per hour)."
     : 'Measured by Command Centre from Code and Cowork telemetry (Chat is not included).';
   out.push(periodMatchesMonth(input.periodStart, input.periodEnd)
     ? `Figures cover ${monthName(period)}. ${sources} Kind of work is AI-judged; savings are estimates at list price.`

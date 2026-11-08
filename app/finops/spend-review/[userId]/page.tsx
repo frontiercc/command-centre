@@ -120,7 +120,7 @@ interface Review {
   updatedAt?: number;
   /** chatgptUsd includes chatgptUnmatchedUsd. The OpenAI fields are absent on a hub without them. */
   totals: { totalUsd: number; codeUsd: number; coworkUsd: number; chatgptUsd?: number; codexUsd?: number; chatgptUnmatchedUsd?: number; sessions: number };
-  /** ChatGPT or Codex spend has arrived from OpenAI's export. */
+  /** ChatGPT or Codex spend has arrived from OpenAI's Compliance API. */
   openai?: boolean;
   unpricedModels: string[];
   work: WorkRow[];
@@ -666,9 +666,9 @@ function SpendReviewContent() {
               </Strip>
               <Muted>
                 {openaiOnly
-                  ? <>ChatGPT and Codex spend from OpenAI&apos;s export, priced at OpenAI&apos;s USD token rates: the same figures as FinOps.</>
+                  ? <>ChatGPT and Codex spend from OpenAI&apos;s Compliance API, priced at OpenAI&apos;s USD token rates: the same figures as FinOps.</>
                   : openai
-                  ? <>Measured by Command Centre: Claude from telemetry, ChatGPT and Codex from OpenAI&apos;s export priced at OpenAI&apos;s USD token rates, the same figures as FinOps. Claude Chat isn&apos;t included.</>
+                  ? <>Measured by Command Centre: Claude from telemetry, ChatGPT and Codex from OpenAI&apos;s Compliance API priced at OpenAI&apos;s USD token rates, the same figures as FinOps. Claude Chat isn&apos;t included.</>
                   : <>Measured by Command Centre from telemetry, the same figures as FinOps. Chat isn&apos;t included.</>}
                 {hasChatgpt && ' ChatGPT spend per conversation is an estimate: OpenAI reports cost per hour, so each hour\'s cost is shared evenly across the replies in that hour.'}
                 {unmatched >= 0.005 && ` ${money(unmatched)} of ChatGPT spend came in hours with no reply on record, so it is in the total but in no conversation.`}

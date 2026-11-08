@@ -16,6 +16,16 @@ export function vendorClause(vendor: Vendor, p = ''): string {
   return 'TRUE';
 }
 
+/**
+ * Skill and connector rows for Work Pulse's switch (All / Claude / ChatGPT):
+ * its OpenAI view is ChatGPT alone, so Codex tools are left out of it, as
+ * Developer Pulse shows them. The other views are vendorClause's.
+ */
+export function workPulseToolClause(vendor: Vendor, p = ''): string {
+  if (vendor === 'openai') return `${p}source IN ('chatgpt_chat', 'chatgpt_work')`;
+  return vendorClause(vendor, p);
+}
+
 /** cowork_messages rows of one kind of work. */
 export function kindClause(kind: WorkKind, p = ''): string {
   if (kind === 'chat') return `(${p}surface = 'chat' OR ${p}source = 'chatgpt_chat')`;

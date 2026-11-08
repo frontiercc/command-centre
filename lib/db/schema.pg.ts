@@ -213,7 +213,7 @@ export const codeAssistantMeta = pgTable('code_assistant_meta', {
     index('idx_cam_agent_name').on(t.agent_name, t.occurred_at).where(sql`agent_name IS NOT NULL`),
 ]);
 
-// ChatGPT and Codex spend from the OpenAI export (migration 0043), kept apart
+// ChatGPT and Codex spend from OpenAI's Compliance API (migration 0043), kept apart
 // from Claude's spend so no page shows it under a Claude label.
 
 /** One OpenAI COSTS record: a person's cost for one model, product and app in one UTC hour. */

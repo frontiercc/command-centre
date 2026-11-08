@@ -89,7 +89,7 @@ export default function IngestionPage() {
     return ageMs < 10 * 60 * 1000 ? 'green' : 'amber';
   })();
 
-  // OpenAI export status: not connected is a choice, not a fault.
+  // OpenAI Compliance API status: not connected is a choice, not a fault.
   const openaiStatus = (() => {
     const o = otelStatus?.openai;
     if (!o || !o.keySet) return { tone: 'off' as const, text: 'Not connected' };
@@ -157,7 +157,7 @@ export default function IngestionPage() {
 
   return (
     <>
-      <TopBar title="Ingestion" subtitle="Claude through OpenTelemetry and Anthropic's APIs, ChatGPT and Codex through OpenAI's export" />
+      <TopBar title="Ingestion" subtitle="Claude through OpenTelemetry and Anthropic's APIs, ChatGPT and Codex through OpenAI's Compliance API" />
       <PageBody className="max-w-[1000px]">
 
         {pageLoading && <LoadingSpinner />}
@@ -204,8 +204,8 @@ export default function IngestionPage() {
               </div>
             </Panel>
 
-            {/* Connect ChatGPT and Codex: what OpenAI's export needs, where to enter it, then its status */}
-            <Panel title="Connect ChatGPT and Codex" subtitle="OpenAI's export, read with an admin key. Nothing is set on people's computers.">
+            {/* Connect ChatGPT and Codex: what OpenAI's Compliance API needs, where to enter it, then its status */}
+            <Panel title="Connect ChatGPT and Codex" subtitle="OpenAI's Compliance API, read with an admin key. Nothing is set on people's computers.">
               <p className="m-0 text-[13px] text-[#4D4D4D]">
                 ChatGPT Chat and ChatGPT Work prompts join Work Pulse, Codex prompts join Developer Pulse, and their spend joins FinOps,
                 a few hours behind. It needs ChatGPT Enterprise or Edu, and three things from OpenAI&apos;s admin console:
@@ -253,7 +253,7 @@ export default function IngestionPage() {
             <IdentityConflictsCard />
 
             {/* Recent users, from either capture path */}
-            <Panel title="Recent users" subtitle="First seen through Claude's telemetry or OpenAI's export" flush>
+            <Panel title="Recent users" subtitle="First seen through Claude's telemetry or OpenAI's Compliance API" flush>
               {(otelStatus?.recentOtelUsers ?? []).length === 0 ? (
                 <div className="p-4"><Muted>No users yet.</Muted></div>
               ) : (
@@ -274,7 +274,7 @@ export default function IngestionPage() {
                           <td className={T.td}>{u.display_name || '—'}</td>
                           <td className={cx(T.tdMute, 'font-mono text-[13px]')}>{u.email || '—'}</td>
                           <td className={T.tdMute}>{u.department || '—'}</td>
-                          <td className={cx(T.tdMute, 'whitespace-nowrap')}>{u.source === 'openai' ? 'OpenAI export' : 'Claude telemetry'}</td>
+                          <td className={cx(T.tdMute, 'whitespace-nowrap')}>{u.source === 'openai' ? 'Compliance API' : 'Claude telemetry'}</td>
                           <td className={cx(T.tdMute, 'tabular-nums whitespace-nowrap')}>
                             {u.last_seen_at ? new Date(u.last_seen_at * 1000).toLocaleString('en-GB') : '—'}
                           </td>
@@ -292,7 +292,7 @@ export default function IngestionPage() {
                 <label htmlFor="otel-prepopulate" className="text-[13px] text-[#666666] leading-5">
                   Paste a CSV list of users (one per line: <code className="text-[12px] font-mono bg-[#F2F2F2] px-1 rounded-[6px]">email,display_name,department</code>).
                   Rows where the email already exists are skipped. Each person is matched by email when they first appear in
-                  Claude&apos;s telemetry or OpenAI&apos;s export, so their name and department are in place from the start.
+                  Claude&apos;s telemetry or OpenAI&apos;s Compliance API, so their name and department are in place from the start.
                 </label>
                 <textarea
                   id="otel-prepopulate"
@@ -324,7 +324,7 @@ export default function IngestionPage() {
             <Panel title="Exclude people from monitoring">
               <div className="flex flex-col gap-3">
                 <label htmlFor="otel-excluded" className="text-[13px] text-[#666666] leading-5">
-                  Claude records (telemetry, and Claude Chat from the Compliance API) and OpenAI export records (ChatGPT and Codex)
+                  Claude records (telemetry, and Claude Chat from the Compliance API) and ChatGPT and Codex records from OpenAI&apos;s Compliance API
                   for these email addresses are silently dropped: no data written, no alerts fired. The match ignores capital letters.
                   Use this for executives, risk teams, or other roles that should not be monitored.
                   One email address per line.

@@ -1743,7 +1743,7 @@ export async function exportUserData(userId: string): Promise<{
   compliance_events: ComplianceEvent[];
   analytics_snapshots: AnalyticsSnapshot[];
   alerts: Alert[];
-  /** ChatGPT and Codex (OpenAI's export): reply model and time, conversation times, Codex turns and actions, hourly costs. Never reply text. */
+  /** ChatGPT and Codex (OpenAI's Compliance API): reply model and time, conversation times, Codex turns and actions, hourly costs. Never reply text. */
   openai: {
     chatgpt_replies: (typeof schema.openaiReplies.$inferSelect)[];
     chatgpt_conversation_times: (typeof schema.chatgptSessionTime.$inferSelect)[];

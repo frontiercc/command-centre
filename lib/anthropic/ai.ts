@@ -87,7 +87,7 @@ You have data from these products (each captured event names its product):
 - **Claude Chat**: user prompts captured from Claude Desktop
 - **Claude Code**: user prompts and tool usage from Claude Code sessions
 - **Claude Cowork**: full conversation content including user messages, assistant responses, and tool calls
-- **ChatGPT Chat, ChatGPT Work and Codex** (where connected): user prompts from OpenAI's export, with no assistant replies
+- **ChatGPT Chat, ChatGPT Work and Codex** (where connected): user prompts from OpenAI's Compliance API, with no assistant replies
 
 Flag the following behavioural patterns:
 - A user accessing files or connectors significantly outside their usual scope
@@ -521,11 +521,11 @@ export async function generateGovernanceReport(
 
   // hasCoworkContent/getRecentCoworkSessions
   // are now async (converted in queries.ts) — await first.
-  // ChatGPT Work, from OpenAI's export, beside Claude Cowork (counted on its own, never as Cowork).
+  // ChatGPT Work, from OpenAI's Compliance API, beside Claude Cowork (counted on its own, never as Cowork).
   const gptWork = fig('chatgpt_work');
   const chatgptWorkBlock = gptWork ? `
 
-**ChatGPT Work** (OpenAI's compliance export): prompts are stored as text; ChatGPT's replies are recorded as model and time only, never as text.
+**ChatGPT Work** (OpenAI's Compliance API): prompts are stored as text; ChatGPT's replies are recorded as model and time only, never as text.
 
 - **ChatGPT Work prompts in this period:** ${gptWork.promptsInPeriod}
 - **Flagged prompts in this period (PII/policy):** ${gptWork.flaggedInPeriod}${gptWork.flaggedInPeriod > 0 ? `\n\n**Action required:** ${gptWork.flaggedInPeriod} ChatGPT Work prompts were flagged for PII or policy concerns in this period. Review these in the Audit Log.` : ''}` : '';
@@ -593,7 +593,7 @@ Cowork sessions seen in metadata (all time): ${coworkSessions}${chatgptWorkBlock
   // Build Code Audit section
   let codeSection: string;
   {
-    // Claude Code's rows only; Codex (OpenAI's export) has its own lines.
+    // Claude Code's rows only; Codex (OpenAI's Compliance API) has its own lines.
     const weekAgoS = Math.floor(Date.now() / 1000) - 7 * 86400;
     let totalCodeMessages = 0;
     let codeEventCount7d = 0;
@@ -613,14 +613,14 @@ Cowork sessions seen in metadata (all time): ${coworkSessions}${chatgptWorkBlock
     } catch { /* table might not exist */ }
     const codex = fig('codex');
     const codeSource = otelPath
-      ? `${captureLabel('code')}${codex ? '; Codex from OpenAI\'s compliance export' : ''}`
-      : codex ? 'Codex from OpenAI\'s compliance export. No Claude Code telemetry has arrived' : captureLabel('code');
+      ? `${captureLabel('code')}${codex ? '; Codex from OpenAI\'s Compliance API' : ''}`
+      : codex ? 'Codex from OpenAI\'s Compliance API. No Claude Code telemetry has arrived' : captureLabel('code');
 
     codeSection = `## Code Audit
 
 **Data source:** ${codeSource}
 
-User prompts and tool-usage metadata are captured from Claude Code sessions${codex ? ', and Codex sessions from OpenAI\'s export' : ''}. Assistant responses are never stored, only model, token and tool metadata.
+User prompts and tool-usage metadata are captured from Claude Code sessions${codex ? ', and Codex sessions from OpenAI\'s Compliance API' : ''}. Assistant responses are never stored, only model, token and tool metadata.
 
 - **Claude Code events in this period:** ${totalCodeMessages}
 - **Events in the last 7 days:** ${codeEventCount7d}
@@ -654,7 +654,7 @@ ${codeFlaggedCount + (codex?.flaggedInPeriod ?? 0) > 0 ? `**Action required:** $
     const gptChat = fig('chatgpt_chat');
     chatSection = `## Chat Audit
 
-**Data source:** ${gptChat ? (chatSources.length > 0 ? `${chatCaptureLabel} (Claude Chat); OpenAI's compliance export (ChatGPT Chat)` : `OpenAI's compliance export (ChatGPT Chat). No Claude Chat prompts have been captured`) : chatCaptureLabel}
+**Data source:** ${gptChat ? (chatSources.length > 0 ? `${chatCaptureLabel} (Claude Chat); OpenAI's Compliance API (ChatGPT Chat)` : `OpenAI's Compliance API (ChatGPT Chat). No Claude Chat prompts have been captured`) : chatCaptureLabel}
 
 Only user-side content is available: user prompts are stored as text, and assistant replies are recorded as metadata only (Claude: model, artifact and generated-file counts${gptChat ? '; ChatGPT: model and time' : ''}), never as text.
 
@@ -674,7 +674,7 @@ ${chatFlagged + (gptChat?.flaggedInPeriod ?? 0) > 0 ? `**Action required:** ${ch
 | OTLP push (OpenTelemetry) | ${otelPath ? 'Active' : 'Not detected'} | The primary path for Claude Cowork and Claude Code: user prompts as text, plus tool, session and model metadata. Assistant responses are not stored. |
 | Compliance API | ${chatSources.includes('compliance') ? 'Active' : dataSources.complianceApi ? 'Configured' : 'Not configured'} | Claude Chat prompts as text, assistant replies as metadata only, plus the org-wide activity feed. Requires a Claude Enterprise plan. |
 | Analytics API | ${dataSources.analyticsApi ? 'Configured' : 'Not configured'} | Org-wide per-user engagement snapshots (Enterprise only). |${(dataSources.openai && openaiVisible) || openaiPresent ? `
-| OpenAI compliance export | ${openaiSyncErrors > 0 ? 'Configured, last sync had errors' : openaiPresent ? 'Active' : 'Configured, no data yet'}${openaiLastSyncAt ? ` (last sync ${new Date(openaiLastSyncAt * 1000).toISOString().slice(0, 10)})` : ''} | ChatGPT Chat, ChatGPT Work and Codex prompts as text; replies as model and time only; hourly costs and Codex turns. Requires ChatGPT Enterprise or Edu. |` : ''}`;
+| OpenAI Compliance API | ${openaiSyncErrors > 0 ? 'Configured, last sync had errors' : openaiPresent ? 'Active' : 'Configured, no data yet'}${openaiLastSyncAt ? ` (last sync ${new Date(openaiLastSyncAt * 1000).toISOString().slice(0, 10)})` : ''} | ChatGPT Chat, ChatGPT Work and Codex prompts as text; replies as model and time only; hourly costs and Codex turns. Requires ChatGPT Enterprise or Edu. |` : ''}`;
 
   // Build compliance sections (deterministic, code-generated). buildGdprSection
   // / buildComplianceGaps are now async — they call getChatFlaggedCount(),

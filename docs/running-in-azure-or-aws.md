@@ -91,7 +91,7 @@ These show one way to build each, for reference. You do not need to follow them.
 | The Hub cannot connect to the database over TLS | The Hub does not trust the database's certificate authority | With Amazon RDS, the extra image layer and `NODE_EXTRA_CA_CERTS` |
 | People cannot stay signed in | The Hub reached over plain HTTP; its cookies are secure-only | Use the HTTPS address |
 | No setup token in the log | An admin already exists, or another copy of the Hub issued one in the last ten minutes | Search every Hub log stream for `setup token` |
-| One product sends nothing | Its Claude settings changed or were not distributed | For Claude Code, the managed settings; for Claude Cowork, Organization settings → Data and Privacy → Monitoring in claude.ai |
+| One product sends nothing | Its Claude settings changed or were not distributed | For Claude Code, the managed settings; for Claude Cowork, Organization settings → Data and Privacy → Monitoring in claude.ai; for Claude in Office/Google, Office agents → Monitoring, and that the load balancer passes OPTIONS requests through to the collector |
 | Nothing arrives at all | The collector is down, the bearer token is wrong, or the collector cannot reach the Hub (`HUB_HOST`) | The collector's log |
 | A collector copy will not start | No free queue slot | Its log for `no free queue slot`; raise `OTEL_QUEUE_SLOTS` |
 | Claude Code figures too high | Clients sending cumulative metrics | The managed settings: temporality must be `delta` |

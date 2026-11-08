@@ -117,7 +117,7 @@ describe('runSystemHealthAlerts (postgres)', () => {
       expect(await silence()).toHaveLength(2);
     });
 
-    it("watches OpenAI's export as one source, and its rows never keep a Claude feed alive", async () => {
+    it("watches OpenAI's Compliance API as one source, and its rows never keep a Claude feed alive", async () => {
       await clearOpenAi();
       await msg('k1', 'code', WED - 600);
       await run(`INSERT INTO code_otel_metrics (id, metric_name, occurred_at, ingested_at) VALUES ('m1', 'claude_code.lines_of_code.count', ${WED - 600}, ${WED - 600})`);
@@ -133,7 +133,7 @@ describe('runSystemHealthAlerts (postgres)', () => {
       await run(`INSERT INTO codex_turns (id, user_id, session_id, started_at, ingested_at) VALUES ('t1', 'u1', 'codex:t1', ${WED - 4 * 3600}, ${WED - 4 * 3600})`);
       expect(await runAt(WED + 60)).toBe(1);
       const openai = (await silence()).filter(a => a.subject === 'openai_export');
-      expect(openai).toEqual([{ title: 'No ChatGPT and Codex export data for 4 working hours', severity: 'high', user_id: null, rule: 'telemetry_silence', subject: 'openai_export' }]);
+      expect(openai).toEqual([{ title: 'No ChatGPT and Codex data for 4 working hours', severity: 'high', user_id: null, rule: 'telemetry_silence', subject: 'openai_export' }]);
       await clearOpenAi();
     });
 

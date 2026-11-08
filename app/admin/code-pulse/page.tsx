@@ -854,7 +854,7 @@ function CodePulseAdminContent() {
               )}
               <ToggleRow
                 label="Classify Codex sessions"
-                hint={<>The classifier judges Codex sessions from OpenAI&apos;s export the same way as Claude Code sessions, using the Anthropic API key and the classifier model below, so Work mix and the delegation journey cover Codex too. With Include first prompt on, a Codex session&apos;s first prompt is sent as well. Off stops new Codex sessions being judged; those already judged stay. Applies once Codex sessions arrive.</>}
+                hint={<>The classifier judges Codex sessions from OpenAI&apos;s Compliance API the same way as Claude Code sessions, using the Anthropic API key and the classifier model below, so Work mix and the delegation journey cover Codex too. With Include first prompt on, a Codex session&apos;s first prompt is sent as well. Off stops new Codex sessions being judged; those already judged stay. Applies once Codex sessions arrive.</>}
                 checked={classifyCodex}
                 onChange={setClassifyCodex}
               />

@@ -135,6 +135,8 @@ describe('getPerson360', () => {
       codeUsd: 12.5,
       coworkUsd: 3.25,
       totalUsd: 12.5 + 3.25,
+      chatgptUsd: null,
+      codeIncludesCodex: false,
     });
     expect(result.combinedSpend.totalIsPartial).toBeFalsy();
 
@@ -159,6 +161,8 @@ describe('getPerson360', () => {
       codeUsd: null,
       coworkUsd: 0,
       totalUsd: null,
+      chatgptUsd: null,
+      codeIncludesCodex: false,
     });
   });
 
@@ -192,6 +196,8 @@ describe('getPerson360', () => {
       coworkUsd: 5.0,
       totalUsd: 5.0,
       totalIsPartial: true,
+      chatgptUsd: null,
+      codeIncludesCodex: false,
     });
   });
 
@@ -203,7 +209,29 @@ describe('getPerson360', () => {
       codeUsd: null,
       coworkUsd: 0,
       totalUsd: null,
+      chatgptUsd: null,
+      codeIncludesCodex: false,
     });
     expect(result.combinedSpend.totalIsPartial).toBeFalsy();
+  });
+
+  it('adds ChatGPT spend to the combined total once ChatGPT cost records exist', async () => {
+    await seedUser('u5', 'Ada Lovelace', 'Finance');
+    await sql.run(
+      `INSERT INTO cowork_messages (id, session_id, user_id, message_type, occurred_at, cost_usd)
+       VALUES ('m5', 's5', 'u5', 'cowork_api_request', ?, 1.0)`,
+      [NOW - 1000],
+    );
+    // One hour of ChatGPT use: a million input tokens on gpt-6, $2 at OpenAI's list rate.
+    await sql.run(
+      `INSERT INTO openai_costs (id, user_id, hour_start, product, model, input_tokens, billed_in)
+       VALUES ('c5', 'u5', ?, 'chatgpt', 'gpt-6', 1000000, 'usd')`,
+      [NOW - 3600],
+    );
+
+    const result = await getPerson360('u5');
+    expect(result.combinedSpend.chatgptUsd).toBeCloseTo(2, 6);
+    expect(result.combinedSpend.coworkUsd).toBeCloseTo(1, 6);
+    expect(result.combinedSpend.totalUsd).toBeCloseTo(3, 6);
   });
 });

@@ -40,7 +40,7 @@ Command Centre works with Claude for Teams and Claude for Enterprise:
 | **Claude Cowork** | Prompts, models, tokens and cost, the tools, skills, connectors and subagents used, and the files people upload and Claude produces | Yes | Yes |
 | **Claude Chat** | Every conversation: people's prompts in full, the files they attach, the model, the connectors used, and the artifacts and files Claude made | No | Yes |
 
-It also works with ChatGPT Enterprise and Edu, through OpenAI's export:
+It also works with ChatGPT Enterprise and Edu, through OpenAI's Compliance API:
 
 | OpenAI product | What Command Centre receives |
 |---|---|
@@ -58,7 +58,7 @@ It also works with ChatGPT Enterprise and Edu, through OpenAI's export:
 | **Dashboard** | Brings together the week's AI activity, productivity, spending and governance risks into an executive briefing, with an organisation-wide risk score and recommendations on where to focus attention. | [Product overview](docs/product-overview.md#the-dashboard) |
 | **Alerts** | Identifies personal data, exposed secrets and potentially risky intent in prompts, with supporting evidence to help security teams investigate and prioritise concerns. | [Product overview](docs/product-overview.md#alerts) · [Detection](docs/security-and-data-protection.md#pii-and-secret-detection) |
 | ***Productivity*** | | |
-| **Work Pulse** | Measures how deeply employees delegate work to Claude Cowork and Claude in Excel, Word, PowerPoint, Outlook and Google Sheets, Docs and Slides, and to ChatGPT, from individual tasks to substantial processes. Compares adoption and delegation patterns across people and departments to identify progress and coaching opportunities. | [Product overview](docs/product-overview.md#work-pulse) · [Measured and AI-judged](docs/ai-data-flow.md#measured-and-ai-judged) |
+| **Work Pulse** | Measures how deeply employees delegate work to Claude Chat, Claude Cowork and Claude in Excel, Word, PowerPoint, Outlook and Google Sheets, Docs and Slides, and to ChatGPT, from individual tasks to substantial processes. Compares adoption and delegation patterns across people and departments to identify progress and coaching opportunities. | [Product overview](docs/product-overview.md#work-pulse) · [Measured and AI-judged](docs/ai-data-flow.md#measured-and-ai-judged) |
 | **Developer Pulse** | Shows how engineers use Claude Code and Codex, the work being produced and its associated costs, helping engineering leaders understand delivery activity, productivity and where AI is contributing to development. | [Product overview](docs/product-overview.md#developer-pulse) |
 | **Use Cases** | Discovers recurring business processes emerging from everyday AI activity, identifies opportunities to share successful approaches and helps turn repeated work into reusable skills that can be adopted across teams. | [Product overview](docs/product-overview.md#use-cases) |
 | **S&C Board** | Provides an organisation-wide view of the skills and connectors employees are using, who owns them and where they are being adopted, helping teams manage and share reusable AI capabilities. | [Product overview](docs/product-overview.md#skills-and-connectors-board) |
@@ -98,7 +98,7 @@ Command Centre is two parts that you run, the **Hub** (the web application you s
 | **Claude Code** | OpenTelemetry, set up in Claude Code's managed settings in claude.ai Organization settings | Claude for Teams and Enterprise |
 | **Claude Cowork** | OpenTelemetry, set up in the monitoring settings in claude.ai Organization settings | Claude for Teams and Enterprise |
 | **Claude Chat** | Anthropic's Compliance API, using a Compliance Access Key | Claude for Enterprise |
-| **ChatGPT and Codex** | OpenAI's Compliance Logs Platform, using an OpenAI Admin API key | ChatGPT Enterprise and Edu |
+| **ChatGPT and Codex** | OpenAI's Compliance API, using an OpenAI Admin API key | ChatGPT Enterprise and Edu |
 
 Command Centre's own AI features, such as grading work, briefings and reports, send requests to Claude through Anthropic's API, using the Claude API key you enter on **Admin → Access & Keys**. With ChatGPT and Codex connected, these features send their prompts to Anthropic too. [AI data flow](docs/ai-data-flow.md) lists every feature, what it sends and how to switch each one off.
 
@@ -368,7 +368,7 @@ The **Last sync** line under the fields shows ChatGPT and Codex prompts, and the
 
 **Which Claude plans does it work with?** Claude Code, Claude Cowork and Claude in Office/Google on Claude for Teams and Claude for Enterprise. Claude Chat on Claude for Enterprise, through Anthropic's Compliance API.
 
-**Does it work with ChatGPT and Codex?** Yes, on ChatGPT Enterprise and Edu, through OpenAI's export. See [4. Connect ChatGPT and Codex](#4-connect-chatgpt-and-codex).
+**Does it work with ChatGPT and Codex?** Yes, on ChatGPT Enterprise and Edu, through OpenAI's Compliance API. See [4. Connect ChatGPT and Codex](#4-connect-chatgpt-and-codex).
 
 **Do I need a Claude API key?** Not to explore the sample data, but yes if you want to bring every feature to life. Grading work, briefings and summaries use your organisation's own key, including when ChatGPT and Codex are your only products.
 

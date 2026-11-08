@@ -307,10 +307,11 @@ export default function CioPulsePage() {
   const [orgSummary, setOrgSummary] = useState<OrgSummarySlice | null>(null);
   const [delegationWeeks, setDelegationWeeks] = useState<13 | 26 | 52>(13);
   // The All / Claude / OpenAI switch, shared with the dashboard.
-  const [vendor, setVendor] = useVendor();
+  const [vendor, setVendor, vendorReady] = useVendor();
   const openaiOnly = useOpenAiOnly();
 
   useEffect(() => {
+    if (!vendorReady) return; // the saved view is read after the page loads
     fetch(`/api/pulse/cio?weeks=${delegationWeeks}&vendor=${vendor}`)
       .then(r => {
         if (!r.ok) throw new Error("Couldn't load this page. Try again.");
@@ -319,9 +320,10 @@ export default function CioPulsePage() {
       .then(setData)
       .catch(e => setError(e.message))
       .finally(() => setLoading(false));
-  }, [refreshKey, delegationWeeks, vendor]);
+  }, [refreshKey, delegationWeeks, vendor, vendorReady]);
 
   useEffect(() => {
+    if (!vendorReady) return; // the saved view is read after the page loads
     fetch('/api/pulse/governance-health')
       .then(r => r.ok ? r.json() : null)
       .then(d => { if (d) setGovHealth(d); })
@@ -330,15 +332,16 @@ export default function CioPulsePage() {
       .then(r => r.ok ? r.json() : null)
       .then(d => { if (d) setOrgSummary({ topSkills: d.topSkills ?? [], topConnectors: d.topConnectors ?? [], topNativeTools: d.topNativeTools ?? [], docSessions: d.docSessions, workMix: d.workMix ?? [], sessionOutput: d.sessionOutput ?? null, byProduct: d.byProduct ?? null, humanTime: d.humanTime ?? null }); })
       .catch(() => {});
-  }, [refreshKey, vendor]);
+  }, [refreshKey, vendor, vendorReady]);
 
   useEffect(() => {
+    if (!vendorReady) return; // the saved view is read after the page loads
     fetch(`/api/pulse/depts?vendor=${vendor}`)
       .then(r => r.ok ? r.json() : Promise.reject(r.status))
       .then(d => setDepts(d.depts ?? []))
       .catch(() => setDepts([]))
       .finally(() => setDeptsLoading(false));
-  }, [vendor]);
+  }, [vendor, vendorReady]);
 
   if (loading) return (
     <>

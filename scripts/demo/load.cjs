@@ -272,5 +272,46 @@ const run = (cmd, args) => execFileSync(cmd, args, { stdio: 'inherit', env: proc
   try { run('node', [path.join(__dirname, '12-weekly-history.cjs')]); }
   catch { console.error('12-weekly-history.cjs failed; continuing.'); }
 
+  // The Hub sets a person's last-seen time whenever their activity arrives.
+  // The sample writes activity straight to the tables, so set it here from
+  // each person's latest activity; otherwise the dashboard's Users column
+  // counts fewer active people than its product columns.
+  console.log('\nSetting when each person was last seen...');
+  {
+    const db2 = new Client({ connectionString: process.env.DATABASE_URL, ssl });
+    await db2.connect();
+    const seen = await db2.query(`
+      UPDATE users u SET last_seen_at = GREATEST(COALESCE(u.last_seen_at, 0), m.last)
+      FROM (SELECT user_id, MAX(occurred_at) AS last FROM cowork_messages WHERE user_id IS NOT NULL GROUP BY user_id) m
+      WHERE m.user_id = u.id`);
+    // Use case weekly figures, recounted from their matches as the Hub does:
+    // people and sessions from the matches, time and tool figures from the
+    // matched sessions (lib/usecases/impact-rollup.ts). The bundled weekly
+    // rows came from another installation and do not match this sample.
+    await db2.query(`
+      UPDATE use_case_activation_weeks w SET distinct_users = j.users, session_count = j.sessions
+      FROM (SELECT use_case_id, week_start, COUNT(DISTINCT user_id) AS users,
+                   COUNT(DISTINCT session_id) FILTER (WHERE session_id <> '') AS sessions
+            FROM use_case_week_matches GROUP BY 1, 2) j
+      WHERE j.use_case_id = w.use_case_id AND j.week_start = w.week_start`);
+    await db2.end();
+    console.log(`${seen.rowCount} people.`);
+  }
+  console.log('\nRecounting use case time from the matched sessions...');
+  run('npx', ['tsx', '-e', [
+    "import('./lib/usecases/impact-rollup.ts').then(async (m) => {",
+    '  const recompute = m.recomputeWeekImpact || m.default.recomputeWeekImpact;',
+    "  const pg = (await import('pg')).default;",
+    "  const ssl = process.env.CCC_PG_SSL && process.env.CCC_PG_SSL !== 'disable' ? { rejectUnauthorized: false } : false;",
+    '  const db = new pg.Client({ connectionString: process.env.DATABASE_URL, ssl });',
+    '  await db.connect();',
+    '  const weeks = (await db.query(`SELECT use_case_id, week_start FROM use_case_activation_weeks`)).rows;',
+    '  await db.end();',
+    '  for (const w of weeks) await recompute(w.use_case_id, Number(w.week_start));',
+    "  console.log(weeks.length + ' weeks.');",
+    '  process.exit(0);',
+    '}).catch((e) => { console.error(e); process.exit(1); });',
+  ].join('\n')]);
+
   console.log('\nSample data loaded. Pages fill in within a few minutes, once the Hub has run its scheduled jobs.');
 })().catch((e) => { console.error(e); process.exit(1); });

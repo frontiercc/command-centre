@@ -57,7 +57,7 @@ Set delta explicitly, even where it is already the client's default, so that no 
 
 `OTEL_LOG_TOOL_DETAILS` sends tool parameters and the names of your organisation's own skills. Command Centre keeps from the parameters only a connector's name and the name of the connector tool used, and the fact of a commit (never its identifier); it never stores the content of tool inputs. You can leave it unset at the cost of connector and organisation skill names in Claude Code and AI-assisted commit counts.
 
-Command Centre stores none of Claude's reply text: it skips reply events at ingest. Do not turn on tool-content logging or tracing; Command Centre has no trace pipeline.
+Command Centre stores none of Claude's reply text: it skips reply events at ingest. Do not turn on tool-content logging or tracing for Claude Code; Command Centre reads traces only from Claude in Office/Google and ignores Claude Code's.
 
 Command Centre reads a `department` attribute when a Claude Code client sends one, which is an alternative to loading departments by CSV. Add it to the same `env` block with the `OTEL_RESOURCE_ATTRIBUTES` variable, for example `"OTEL_RESOURCE_ATTRIBUTES": "department=Finance"`; Claude Code attaches the value to every event and metric it exports. The variable takes comma-separated `key=value` pairs, and a value may not contain spaces, commas, semicolons, double quotes or backslashes. Anthropic's guidance is to percent-encode such characters (a space as `%20`), so for a department name with a space, check on one machine that the name appears in Command Centre as intended before rollout. Command Centre takes the value when it first sees a person and never overwrites a department already recorded for them. Because the value differs by group, deliver it through a managed settings file or MDM profile per group: the managed settings in Claude's Organization settings apply identically to everyone in the organisation. Claude Cowork's telemetry settings carry no custom attributes, so load departments by CSV for people who use only Claude Cowork: under **Admin → Ingestion → Pre-populate users**, one line per person in the form `email,display_name,department`.
 
@@ -121,7 +121,7 @@ Claude Chat sends no telemetry. On Claude for Enterprise, Command Centre reads e
 3. Copy the key straight away: Anthropic shows it only once.
 4. In Command Centre, open **Admin → Access & Keys**, enter it in the **Compliance Access Key** field, use its test button, then select **Save settings**.
 
-Command Centre checks for new Claude Chat prompts every two minutes, and its first check brings in the last 30 days. Command Centre stores people's prompts in full, the model and the connectors used, and how many files were attached and how many artifacts and files Claude made. It never stores the text of Claude's replies.
+Command Centre checks for new Claude Chat prompts every two minutes, and its first check brings in the last 30 days. Command Centre stores people's prompts in full, the names of files they attach, the model and the connectors used, and how many artifacts and files Claude made. It never stores the text of Claude's replies.
 
 ## Why OpenTelemetry for Claude Cowork and Claude Code, and the Compliance API for Claude Chat
 

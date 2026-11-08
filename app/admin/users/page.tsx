@@ -37,7 +37,7 @@ type Tab = 'active' | 'deactivated';
 function captureBadge(source: string | null): { label: string; title: string } {
   if (source === 'otel') return { label: 'OTel', title: 'Monitored via OpenTelemetry' };
   if (source === 'compliance') return { label: 'Compliance API', title: 'Synced via the Anthropic Compliance API' };
-  if (source === 'openai') return { label: 'OpenAI', title: 'First seen in the OpenAI export (ChatGPT or Codex)' };
+  if (source === 'openai') return { label: 'Compliance API', title: "First seen through OpenAI's Compliance API (ChatGPT or Codex)" };
   return { label: 'Telemetry', title: 'Monitored via telemetry' };
 }
 

@@ -2,7 +2,9 @@
 // SPDX-License-Identifier: Apache-2.0
 
 // GET /api/events — the Audit Log's Product filter (?product=) and its
-// "how it arrived" Source filter (?source=otel|compliance|openai). ChatGPT
+// "how it arrived" Source filter (?source=otel|compliance|openai; the page's
+// one Compliance API option sends 'compliance', which covers Anthropic's and
+// OpenAI's Compliance APIs, and 'openai' stays for older links). ChatGPT
 // prompts are stored beside Claude Cowork prompts and Codex beside Claude
 // Code, so each product must be told apart by its source, never by surface
 // alone. Same harness as test/events-connector-source.test.ts.
@@ -85,7 +87,8 @@ describe('GET /api/events product and arrival filters', () => {
     try {
       expect(await ids('/api/events?source=openai')).toEqual(['chatgpt-chat', 'chatgpt-work', 'codex', 'mcp-chatgpt']);
       expect(await ids('/api/events?source=otel')).toEqual(['claude-code', 'claude-cowork', 'mcp-claude']);
-      expect(await ids('/api/events?source=compliance')).toEqual(['claude-chat']);
+      expect(await ids('/api/events?source=compliance')).toEqual(['chatgpt-chat', 'chatgpt-work', 'claude-chat', 'codex', 'mcp-chatgpt']);
+      expect(await ids('/api/events?product=claude_chat&source=compliance')).toEqual(['claude-chat']);
       expect(await ids('/api/events?product=codex&source=openai')).toEqual(['codex']);
       expect(await ids('/api/events?product=claude_code&source=openai')).toEqual([]);
       expect(await ids('/api/events?product=claude_chat&source=otel')).toEqual([]);

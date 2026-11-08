@@ -127,7 +127,7 @@ export function renderCodePulseSection(f: CodePulseFacts, codex: CodePulseFacts 
       : `### ${name}\n\nNo ${name} metrics have been computed yet.`;
     return `## Developer Pulse
 
-Claude Code and Codex are shown separately: Codex's figures come from OpenAI's compliance export and carry no engaged time, lines of code, pull requests or edit decisions.
+Claude Code and Codex are shown separately: Codex's figures come from OpenAI's Compliance API and carry no engaged time, lines of code, pull requests or edit decisions.
 
 ${part('Claude Code', f, false)}
 

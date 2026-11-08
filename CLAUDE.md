@@ -4,9 +4,9 @@ Guidance for Claude, or any AI assistant, helping someone contribute to Frontier
 
 ## What Command Centre is
 
-A single Next.js 15 (App Router) application, backed by PostgreSQL through Drizzle, styled with Tailwind, and run in Docker. Command Centre receives OpenTelemetry from Claude Code, Claude Cowork and Claude in Office/Google (Excel, Word, PowerPoint, Outlook and Google Sheets, Docs and Slides, stored beside Cowork with `cowork_messages.product` set; `lib/otel/office-receiver.ts`), and pulls Claude Chat from Anthropic's Compliance API; pulls from the Analytics and Admin APIs are on the roadmap. It also pulls ChatGPT and Codex activity from OpenAI's Compliance Logs Platform (`lib/openai/`), with a stand-in for testing in `scripts/openai-mock/`. Command Centre measures whether the work people hand to Claude is becoming deeper and more valuable, and governs what it stores.
+A single Next.js 15 (App Router) application, backed by PostgreSQL through Drizzle, styled with Tailwind, and run in Docker. Command Centre receives OpenTelemetry from Claude Code, Claude Cowork and Claude in Office/Google (Excel, Word, PowerPoint, Outlook and Google Sheets, Docs and Slides, stored beside Cowork with `cowork_messages.product` set; `lib/otel/office-receiver.ts`), and pulls Claude Chat from Anthropic's Compliance API; pulls from the Analytics and Admin APIs are on the roadmap. It also pulls ChatGPT and Codex activity from OpenAI's Compliance API (`lib/openai/`), with a stand-in for testing in `scripts/openai-mock/`. Command Centre measures whether the work people hand to AI (Claude, ChatGPT and Codex) is becoming deeper and more valuable, and governs what it stores.
 
-Command Centre is a downstream observer. Telemetry arrives after a prompt has reached Claude, so the product can flag, alert on and restrict access to what it stores, but can never block, alter or delay a prompt.
+Command Centre is a downstream observer. Activity arrives after a prompt has reached Claude, ChatGPT or Codex, so the product can flag, alert on and restrict access to what it stores, but can never block, alter or delay a prompt.
 
 ## Where things are
 

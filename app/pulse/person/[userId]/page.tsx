@@ -25,16 +25,16 @@ interface Person360Data {
     engagedHours: number | null; linesAdded: number; editAcceptRate: number | null;
   } | null;
   chat: { messages7d: number } | null;
-  combinedSpend: { codeUsd: number | null; coworkUsd: number; totalUsd: number | null; totalIsPartial?: boolean };
+  combinedSpend: { codeUsd: number | null; coworkUsd: number; totalUsd: number | null; totalIsPartial?: boolean; chatgptUsd?: number | null; codeIncludesCodex?: boolean };
   weekly: { codeSpend: SeriesPoint[]; coworkEvents: SeriesPoint[] };
   humanTime?: { cowork: HumanTimeSummary | null; code: HumanTimeSummary | null } | null;
   canSeeSpendReview?: boolean;
 }
 
 /** Figures inside a flush panel, joined by hairlines (same grammar as Strip). */
-function FigureGrid({ children, cols }: { children: ReactNode; cols: 2 | 3 }) {
+function FigureGrid({ children, cols }: { children: ReactNode; cols: 2 | 3 | 4 }) {
   return (
-    <div className={cx('grid grid-cols-1', cols === 3 ? 'sm:grid-cols-3' : 'sm:grid-cols-2',
+    <div className={cx('grid grid-cols-1', cols === 4 ? 'sm:grid-cols-4' : cols === 3 ? 'sm:grid-cols-3' : 'sm:grid-cols-2',
       '[&>*]:border-[#EAEAEA] [&>*+*]:border-t sm:[&>*+*]:border-t-0 sm:[&>*+*]:border-l')}>
       {children}
     </div>
@@ -136,10 +136,11 @@ export default function Person360Page() {
 
         {/* Combined AI Spend — measured, blue */}
         <Panel title="Combined AI spend" subtitle="7 days" right={<Tag tone="measured">Measured</Tag>} flush>
-          <FigureGrid cols={3}>
+          <FigureGrid cols={combinedSpend.chatgptUsd != null ? 4 : 3}>
             {fig('Total', combinedSpend.totalUsd === null ? '—' : formatCurrency(combinedSpend.totalUsd), undefined, 'measured')}
-            {fig('Code', combinedSpend.codeUsd === null ? '—' : formatCurrency(combinedSpend.codeUsd))}
+            {fig(combinedSpend.codeIncludesCodex ? 'Claude Code and Codex' : 'Code', combinedSpend.codeUsd === null ? '—' : formatCurrency(combinedSpend.codeUsd))}
             {fig('Claude Cowork', formatCurrency(combinedSpend.coworkUsd))}
+            {combinedSpend.chatgptUsd != null && fig('ChatGPT', formatCurrency(combinedSpend.chatgptUsd))}
           </FigureGrid>
           {combinedSpend.totalIsPartial && (
             <PanelFoot tone="warn">Excludes unpriced models, so the total is an underestimate.</PanelFoot>

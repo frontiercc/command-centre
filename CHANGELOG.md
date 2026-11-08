@@ -4,12 +4,12 @@
 
 ### Added
 
-- ChatGPT and Codex beside Claude. Command Centre reads OpenAI's Compliance Logs Platform export (ChatGPT Enterprise or Edu) with an OpenAI Admin API key: ChatGPT Chat and Work prompts, Codex prompts, turns and tool calls, and OpenAI's hourly cost records. Enter the key under **Admin → Access & Keys → OpenAI (ChatGPT and Codex)**: see [Connect ChatGPT and Codex](docs/configure-command-centre.md#connect-chatgpt-and-codex). The sync does nothing until a key and workspace ID are saved, and an admin can pause it or hide ChatGPT and Codex from the analytics pages.
-- An All / Claude / OpenAI switch on the dashboard, Work Pulse and Developer Pulse. Work Pulse grades ChatGPT prompts against the same tiers as Cowork, Developer Pulse shows Claude Code and Codex side by side, and each view keeps its own weekly history.
+- ChatGPT and Codex beside Claude. Command Centre reads OpenAI's Compliance API (ChatGPT Enterprise or Edu) with an OpenAI Admin API key: ChatGPT Chat and Work prompts, Codex prompts, turns and tool calls, and OpenAI's hourly cost records. Enter the key under **Admin → Access & Keys → OpenAI (ChatGPT and Codex)**: see [Connect ChatGPT and Codex](docs/configure-command-centre.md#connect-chatgpt-and-codex). The sync does nothing until a key and workspace ID are saved, and an admin can pause it or hide ChatGPT and Codex from the analytics pages.
+- A switch to show all products, Claude alone, or OpenAI alone, on the dashboard (All / Claude / OpenAI), Work Pulse (All / Claude / ChatGPT) and Developer Pulse (All / Claude / Codex). Work Pulse grades ChatGPT prompts against the same tiers as Cowork, Developer Pulse shows Claude Code and Codex side by side, and each view keeps its own weekly history.
 - ChatGPT and Codex spend on FinOps and Spend Review, priced from tokens at OpenAI's published USD rates and kept apart from Claude's, with a Claude / OpenAI split. Model advice never suggests a model from the other vendor. A ChatGPT seat price can be set for licence costs.
-- ChatGPT and Codex across the rest of Command Centre: personal data and risky-intent alerts on their prompts, the Audit Log (with spend for each prompt), Use Cases, the Skills and Connectors Board, human time, reports, briefings and telemetry-silence alerts.
+- ChatGPT and Codex across the rest of Command Centre: personal data and risky-intent alerts on their prompts, the Audit Log (with spend for each prompt), each person's combined spend on their Person 360 page, Use Cases, the Skills and Connectors Board, human time, reports, briefings and telemetry-silence alerts.
 - Sample data includes thirteen weeks of ChatGPT and Codex activity.
-- A stand-in for OpenAI's export (`scripts/openai-mock`) for building and testing the sync without a ChatGPT Enterprise workspace.
+- A stand-in for OpenAI's Compliance API (`scripts/openai-mock`) for building and testing the sync without a ChatGPT Enterprise workspace.
 
 ### Changed
 
@@ -21,13 +21,15 @@
 
 - Developer Pulse no longer shows "n/a" under a figure for a product a person has not used.
 - "Last active" on the department page shows when the person last worked, not when their work was graded.
-- Viewers no longer see the Users page in the menu, which they cannot open.
+- Viewers no longer see Work Pulse's Users page in the menu, which they cannot open.
+- A department's resilience score on the Work Pulse department page no longer falls back to "Pending data" after the daily run.
+- In an Audit Log conversation the newest turn stays at the top and is now numbered last: Turn 1 is the first prompt, and each turn shows the time of its prompt. Turns used to be numbered from the newest.
 
 ### Upgrading
 
 - The database changes apply when the Hub starts. Claude Chat prompts move from their own table into the Cowork table in one step; if the move fails, nothing changes.
 - To connect ChatGPT and Codex, create an OpenAI Admin API key with read access to conversation messages, Codex logs, Codex turns and costs, and enter it with the workspace and organisation IDs under **Admin → Access & Keys**. The first sync reaches back 30 days and reads at most 300 files a run, so on a busy workspace it spreads over several runs.
-- Some details of OpenAI's export are not yet confirmed against a live workspace: the exact model names, and how ChatGPT Work is marked in the Codex logs. A model Command Centre has no price for is named as not priced, never counted as $0, and an admin can add its price under **Admin → Developer Pulse**.
+- Some details of OpenAI's Compliance API are not yet confirmed against a live workspace: the exact model names, and how ChatGPT Work is marked in the Codex logs. A model Command Centre has no price for is named as not priced, never counted as $0, and an admin can add its price under **Admin → Developer Pulse**.
 
 ## 1.2.0 (2026-11-06)
 

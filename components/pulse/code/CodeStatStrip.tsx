@@ -110,14 +110,26 @@ export default function CodeStatStrip({ metrics, githubRepos, view = 'claude', s
     return `Claude Code ${fmt(c)} · Codex ${fmt(o)}`;
   };
   const actor = view === 'openai' ? 'Codex' : view === 'all' ? 'the AI' : 'Claude';
+  // The spend caption names the product the figure is from. In the All view a
+  // person or department with only one product's spend gets that product's caption.
+  const spendCaption = (): string => {
+    const codex = "Codex tokens at OpenAI's USD token rates";
+    const claude = 'API cost of Claude Code work';
+    if (view === 'openai') return codex;
+    if (view === 'claude') return claude;
+    const c = split?.claude?.spend_usd ?? null;
+    const o = split?.openai?.spend_usd ?? null;
+    if (o != null && c == null) return codex;
+    if (c != null && o == null) return claude;
+    return 'API cost of Claude Code and Codex work';
+  };
   const signals: CodeSignal[] = [
     {
       label: view === 'openai' ? 'Codex spend · 7 days' : view === 'all' ? 'Spend · 7 days' : 'Claude Code spend · 7 days',
       value: metrics === null ? null : metrics.spend_usd === null
         ? null
         : formatCurrency(metrics.spend_usd),
-      sublabel: part(r => r.spend_usd, formatCurrency)
-        ?? (view === 'openai' ? "Codex tokens at OpenAI's USD token rates" : 'API cost of Claude Code work'),
+      sublabel: part(r => r.spend_usd, formatCurrency) ?? spendCaption(),
       hint: metrics?.spend_usd === null && (metrics.input_tokens + metrics.output_tokens) > 0
         ? 'Models seen have no price set, see rates config'
         : `${formatTokens(metrics?.input_tokens ?? 0)} in · ${formatTokens(metrics?.output_tokens ?? 0)} out`,

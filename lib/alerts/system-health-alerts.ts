@@ -143,7 +143,7 @@ export function planSystemHealthAlerts(rows: JobRunRow[], nowS: number): Planned
 /**
  * When the hub last RECEIVED each OTel surface (ingested_at, not the client's
  * occurred_at: a late batch with old timestamps still proves delivery works).
- * Chat is a pull job, covered by the job rules. OpenAI's export is a pull job
+ * Chat is a pull job, covered by the job rules. OpenAI's Compliance API is a pull job
  * too, whose failures the job rules cover; it is also watched here as one
  * source (anything it wrote: prompts, replies, costs, Codex turns or actions),
  * because a sync can succeed and bring nothing (an export that stopped
@@ -175,7 +175,7 @@ async function readSilenceSurfaces(): Promise<SilenceSurface[]> {
     { key: 'code', label: 'Claude Code', lastReceivedAt: await last('code') },
     { key: 'code_metrics', label: 'Claude Code metrics', lastReceivedAt: num(metrics[0]?.v) },
     {
-      key: 'openai_export', label: 'ChatGPT and Codex', noun: 'export data', lastReceivedAt: openaiLast,
+      key: 'openai_export', label: 'ChatGPT and Codex', noun: 'data', lastReceivedAt: openaiLast,
       advice: 'Check the OpenAI sync on System health, the OpenAI Admin API key and workspace ID on Access & Keys, and that people are still using ChatGPT or Codex. Once the cause is fixed, the sync carries on from where it stopped, as long as OpenAI still holds the files (it keeps them for 30 days).',
     },
   ];

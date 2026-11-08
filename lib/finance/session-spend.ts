@@ -92,7 +92,7 @@ export async function buildSessionSpend(sessionId: string, promptId: string | nu
       const conv = await chatgptConversationReplies(client, rates, sessionId);
       userId = conv.userId;
       for (const r of conv.replies) {
-        // No cost record for its hour yet (OpenAI's export lags): nothing to count.
+        // No cost record for its hour yet (OpenAI's Compliance API lags): nothing to count.
         if (r.parts.length === 0) continue;
         // One reply can carry shares of more than one cost record; it is one call.
         r.parts.forEach((p, i) => add(p.model, p.usd, i === 0 ? 1 : 0, r.occurredAt));

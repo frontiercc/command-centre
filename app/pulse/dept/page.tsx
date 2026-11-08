@@ -24,7 +24,7 @@ import DelegationBands, { type BandSegment, type PersonDelegation } from '@/comp
 import CoachingPrompts, { type CoachingPromptItem } from '@/components/pulse/CoachingPrompts';
 import HumanTimeCard, { type HumanTimeSummary } from '@/components/pulse/HumanTimeCard';
 import { PageBody, Toolbar, Strip, Figure, Notice, B, cx } from '@/components/precision/ui';
-import { useVendor, useOpenAiOnly, VendorSwitch } from '@/components/shared/VendorSwitch';
+import { useVendor, useOpenAiOnly, useConnectedProducts, VendorSwitch } from '@/components/shared/VendorSwitch';
 import { WORK_PULSE_VENDOR_LABELS } from '@/lib/dashboard/vendor';
 import { workSpendFigure } from '@/lib/pulse/spend-figure';
 
@@ -82,6 +82,15 @@ function spendValue(usd: number | null | undefined) {
   return usd >= 100 ? `$${usd.toFixed(0)}` : `$${usd.toFixed(2)}`;
 }
 
+/** The Document sessions caption, naming what the figure covers in the switch's view. */
+function docSessionsCaption(vendor: 'all' | 'claude' | 'openai', openaiConnected: boolean): string {
+  if (vendor === 'openai') return 'ChatGPT conversations where one or more files were attached';
+  if (vendor === 'claude') return 'Claude sessions where one or more files were attached';
+  return openaiConnected
+    ? 'Sessions where one or more files were attached, Claude and ChatGPT'
+    : 'Sessions where one or more files were attached';
+}
+
 export default function DeptPickerPage() {
   const searchParams = useSearchParams();
   const router = useRouter();
@@ -93,7 +102,8 @@ export default function DeptPickerPage() {
   const [error, setError] = useState<string | null>(null);
   const [delegationWeeks, setDelegationWeeks] = useState<13 | 26 | 52>(13);
   // The All / Claude / OpenAI switch, shared with the dashboard and Executive View.
-  const [vendor, setVendor] = useVendor();
+  const [vendor, setVendor, vendorReady] = useVendor();
+  const connected = useConnectedProducts();
   const openaiOnly = useOpenAiOnly();
 
   const selectedDept = searchParams.get('dept') ?? '';
@@ -125,6 +135,7 @@ export default function DeptPickerPage() {
   // click does not blank the whole page or lose the scroll position.
   const loadedDeptRef = useRef<string | null>(null);
   const loadDept = useCallback((dept: string) => {
+    if (!vendorReady) return; // the saved view is read after the page loads
     if (!dept) return;
     if (loadedDeptRef.current !== dept) setDataLoading(true);
     setError(null);
@@ -136,7 +147,7 @@ export default function DeptPickerPage() {
       .then(d => { loadedDeptRef.current = dept; setDeptData(d); })
       .catch(e => setError(e.message))
       .finally(() => setDataLoading(false));
-  }, [delegationWeeks, vendor]);
+  }, [delegationWeeks, vendor, vendorReady]);
 
   useEffect(() => {
     if (selectedDept) loadDept(selectedDept);
@@ -285,7 +296,7 @@ export default function DeptPickerPage() {
                       label="Document sessions, 30 days"
                       value={d.docSessions!.sessions_with_uploads}
                       unit="sessions with uploads"
-                      sub="Sessions where one or more files were attached, Claude and ChatGPT"
+                      sub={docSessionsCaption(vendor, connected?.openai === true)}
                     />
                   )}
                   {showDocs && (

@@ -239,6 +239,7 @@ function ChatThread({ messages }: { messages: ChatThreadMessage[] }) {
   );
 }
 
+/** A session's messages, newest first; turns are numbered in time order, so the top one is the latest. */
 function CoworkThread({ messages }: { messages: CoworkMessage[] }) {
   if (messages.length === 0) {
     return (
@@ -265,7 +266,7 @@ function CoworkThread({ messages }: { messages: CoworkMessage[] }) {
             <div className="flex items-center gap-2">
               <div className="h-px flex-1 bg-[#EAEAEA]" />
               <span className="text-[12px] text-[#8F8F8F] whitespace-nowrap tabular-nums">
-                Turn {ti + 1} · {timeOf(turn.messages[0].occurred_at)}
+                Turn {turns.length - ti} · {timeOf(Math.min(...turn.messages.map(m => m.occurred_at)))}
               </span>
               <div className="h-px flex-1 bg-[#EAEAEA]" />
             </div>
@@ -365,7 +366,7 @@ function CoworkThread({ messages }: { messages: CoworkMessage[] }) {
 }
 
 function SourceCell({ event }: { event: AuditEvent }) {
-  if (isOpenAiSource(event._source)) return <>OpenAI export</>;
+  if (isOpenAiSource(event._source)) return <>Compliance API</>;
   if (event._source === 'otel') return <>OTel</>;
   if (event._source === 'local-agent') return <>Agent</>;
   return <>{event.surface === 'cowork_partial' ? 'OpenTelemetry' : 'Compliance API'}</>;
@@ -613,7 +614,7 @@ export default function AuditPage() {
             <span><span className="font-semibold">Cowork:</span> Prompts, models, cost and tool use.</span>
             <span><span className="font-semibold">Claude in Office and Claude in Google:</span> Prompts, models and tool use. No cost, and never the document&apos;s content.</span>
             <span><span className="font-semibold">Chat:</span> Prompts, through the Compliance API (Enterprise plan).</span>
-            <span><span className="font-semibold">ChatGPT and Codex:</span> Prompts, through OpenAI&apos;s compliance export (ChatGPT Enterprise or Edu).</span>
+            <span><span className="font-semibold">ChatGPT and Codex:</span> Prompts, through OpenAI&apos;s Compliance API (ChatGPT Enterprise or Edu).</span>
             <span>Replies from Claude, ChatGPT and Codex are never stored.</span>
           </div>
         </Notice>
@@ -657,8 +658,7 @@ export default function AuditPage() {
           <select value={sourceFilter} onChange={e => setSourceFilter(e.target.value)} className={B.select} aria-label="Source">
             <option value="">All sources</option>
             {!openaiOnly && <option value="otel">OpenTelemetry</option>}
-            {!openaiOnly && <option value="compliance">Compliance API</option>}
-            {openaiConnected && <option value="openai">OpenAI export</option>}
+            <option value="compliance">Compliance API</option>
           </select>
 
           <select value={userFilter} onChange={e => setUserFilter(e.target.value)} className={`${B.select} max-w-[220px]`} aria-label="User">
@@ -1031,7 +1031,7 @@ export default function AuditPage() {
 
                   <NoteBox>
                     <span className="font-semibold text-[#333333]">Source:</span> {selectedEvent?._source === 'codex'
-                      ? "Codex log from OpenAI's export. User prompts and tool activity are captured. Codex's replies are not stored."
+                      ? "Codex log from OpenAI's Compliance API. User prompts and tool activity are captured. Codex's replies are not stored."
                       : 'Claude Code telemetry. User prompts and tool summaries are captured. Full assistant responses are not stored.'}
                   </NoteBox>
                 </div>

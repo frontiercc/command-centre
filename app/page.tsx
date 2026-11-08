@@ -135,7 +135,7 @@ export default function DashboardPage() {
   const [, setTick] = useState(0);
   const [pulseEnabled, setPulseEnabled] = useState(false);
   // The vendor switch, remembered per browser and shared with Work Pulse.
-  const [vendor, setVendor] = useVendor();
+  const [vendor, setVendor, vendorReady] = useVendor();
 
   // Manual Refresh click refreshes both dashboard data AND briefing
   const refreshDashboard = () => {
@@ -144,6 +144,7 @@ export default function DashboardPage() {
   };
 
   useEffect(() => {
+    if (!vendorReady) return; // the saved view is read after the page loads
     fetch(`/api/dashboard?vendor=${vendor}`)
       .then(r => {
         if (!r.ok) throw new Error("Couldn't load this page. Try again.");
@@ -154,7 +155,7 @@ export default function DashboardPage() {
       })
       .catch(console.error)
       .finally(() => setLoading(false));
-  }, [refreshKey, vendor]);
+  }, [refreshKey, vendor, vendorReady]);
 
   useEffect(() => {
     fetch('/api/config')

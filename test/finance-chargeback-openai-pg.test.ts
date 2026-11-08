@@ -1,7 +1,7 @@
 // Copyright 2026 Lee James
 // SPDX-License-Identifier: Apache-2.0
 
-// FinOps with the OpenAI export connected (lib/finance/chargeback.ts):
+// FinOps with OpenAI's Compliance API connected (lib/finance/chargeback.ts):
 // ChatGPT and Codex spend priced from tokens at OpenAI's USD rates, added to
 // each person's and cost centre's total, with a Claude / OpenAI split. A
 // Claude-only install's report is unchanged (no vendors, no OpenAI fields).

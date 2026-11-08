@@ -341,11 +341,12 @@ export default function CodePulseOverviewPage() {
   const [data, setData] = useState<OrgSummary | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
-  const [vendor, setVendor] = useVendor();
+  const [vendor, setVendor, vendorReady] = useVendor();
   // Only OpenAI connected: the Codex view, with nothing that only Claude Code can fill.
   const openaiOnly = useOpenAiOnly();
 
   useEffect(() => {
+    if (!vendorReady) return; // the saved view is read after the page loads
     fetch(`/api/pulse/code/org-summary?vendor=${vendor}`)
       .then(async r => {
         if (!r.ok) throw new Error((await r.json()).error || "Couldn't load this page. Try again.");
@@ -354,7 +355,7 @@ export default function CodePulseOverviewPage() {
       .then(setData)
       .catch(e => setError(e.message))
       .finally(() => setLoading(false));
-  }, [vendor]);
+  }, [vendor, vendorReady]);
 
   if (loading) return <LoadingSpinner />;
 
@@ -363,7 +364,8 @@ export default function CodePulseOverviewPage() {
   const hasRepoData = !!data && ((data.metrics?.repo_count ?? 0) > 0 || (data.activeRepos?.length ?? 0) > 0 || (data.darkRepos?.length ?? 0) > 0);
   const repoOrLanguage = hasRepoData
     ? <RepoCoverageList active={data?.activeRepos ?? []} dark={data?.darkRepos ?? []} githubTotals={data?.githubOverlay?.totalCommits30dByRepo} />
-    : openaiOnly ? null : <LanguageMixCard items={data?.languageMix ?? []} />;
+    // Codex sends no edit decisions, so its view has no Language mix card.
+    : openaiOnly || (vendor === 'openai' && data?.codexPresent) ? null : <LanguageMixCard items={data?.languageMix ?? []} />;
 
   const hasWorkMix = data?.workMix !== null && data?.workMix !== undefined;
   const codexPresent = data?.codexPresent ?? false;

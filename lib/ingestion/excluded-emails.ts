@@ -2,7 +2,7 @@
 // SPDX-License-Identifier: Apache-2.0
 
 // The Admin → Ingestion exclusion list, read by the syncs that pull from an
-// API (OpenAI's export, Anthropic's Compliance API). The OTel receivers read
+// API (OpenAI's Compliance API, Anthropic's Compliance API). The OTel receivers read
 // the same config key themselves.
 import { getConfigValue } from '@/lib/config';
 

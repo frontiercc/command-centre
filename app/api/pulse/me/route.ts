@@ -19,7 +19,7 @@ import { getTypedClient } from '@/lib/db/client';
 import { schema } from '@/lib/db/schema';
 import { getCoworkCostUsd, getCoworkFrictionIndex } from '@/lib/pulse/aggregator';
 import { hasOpenAiData } from '@/lib/dashboard/queries';
-import { vendorClause } from '@/lib/dashboard/product-sql';
+import { vendorClause, workPulseToolClause } from '@/lib/dashboard/product-sql';
 import { messageVendor } from '@/lib/pulse/vendor-filter';
 import { getPublishedAgreement } from '@/lib/pulse/audit/cycle';
 import { readHumanTime } from '@/lib/pulse/human-time-summary';
@@ -363,7 +363,7 @@ export async function GET(request: NextRequest) {
     SELECT skill_name AS name, COUNT(*) AS cnt
     FROM cowork_skill_invocations
     WHERE user_id = ${userId} AND occurred_at >= ${sevenDaysAgoTools}
-      AND ${sql.raw(vendorClause(vendor))}
+      AND ${sql.raw(workPulseToolClause(vendor))}
     GROUP BY skill_name
   `);
   const skillsUsed = skillsUsedRaw.map(r => ({ name: r.name, cnt: Number(r.cnt) }));
@@ -373,7 +373,7 @@ export async function GET(request: NextRequest) {
     FROM cowork_mcp_invocations
     WHERE user_id = ${userId} AND occurred_at >= ${sevenDaysAgoTools}
       AND mcp_server NOT IN ('workspace', 'cowork', 'Claude_in_Chrome')
-      AND ${sql.raw(vendorClause(vendor))}
+      AND ${sql.raw(workPulseToolClause(vendor))}
     GROUP BY mcp_server
   `);
   const connectorsUsed = connectorsUsedRaw.map(r => ({ name: r.name, cnt: Number(r.cnt) }));

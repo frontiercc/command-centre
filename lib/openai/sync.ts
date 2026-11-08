@@ -764,7 +764,7 @@ async function storeSpend(tx: TypedClient, s: SpendRow, userId: string | null, s
 function raiseAlerts(alerts: PendingAlert[]): void {
   for (const a of alerts) {
     if (a.pii.length > 0) {
-      createPiiAlertsWithDedup(a.userId, a.pii, a.text, a.messageId, a.surface, `${OPENAI_SOURCE_LABELS[a.source]} (OpenAI export)`).catch((e: Error) => {
+      createPiiAlertsWithDedup(a.userId, a.pii, a.text, a.messageId, a.surface, `${OPENAI_SOURCE_LABELS[a.source]} (Compliance API)`).catch((e: Error) => {
         console.error('[openai-sync] pii alert error:', e.message);
         void recordPiiAlertFailure(a.surface, a.messageId, e);
       });
@@ -880,7 +880,7 @@ export async function runOpenAiSync(opts: RunOptions = {}): Promise<OpenAiSyncSt
 }
 
 /**
- * Writes OpenAI export files straight into the tables, through the same code
+ * Writes OpenAI Compliance API files straight into the tables, through the same code
  * as the sync, without fetching anything: the sample data's ChatGPT and Codex
  * activity (scripts/demo/11-chatgpt-codex.ts). Does not record a first OpenAI
  * prompt, so the sample loader can still tell sample rows from real ones.

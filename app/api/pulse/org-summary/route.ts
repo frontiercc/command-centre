@@ -19,7 +19,7 @@ import { buildByProduct } from '@/lib/pulse/cowork/by-product';
 import { getConnectedProducts, isOpenAiOnly } from '@/lib/sources/connected';
 import { getConfigValue } from '@/lib/config';
 import { readHumanTime } from '@/lib/pulse/human-time-summary';
-import { vendorClause, vendorExpr, toolTagExpr } from '@/lib/dashboard/product-sql';
+import { vendorClause, vendorExpr, toolTagExpr, workPulseToolClause } from '@/lib/dashboard/product-sql';
 import { messageVendor } from '@/lib/pulse/vendor-filter';
 import { getDocSessions } from '@/lib/pulse/cowork/doc-sessions';
 
@@ -56,7 +56,8 @@ export async function GET(request: NextRequest) {
   const pmv = schema.pulseMetricsVendor;
   const mt = vendor === 'all' ? pm : pmv as unknown as typeof pm;
   const mtOnly = vendor === 'all' ? sql`TRUE` : eq(pmv.vendor, vendor);
-  const vendorSql = sql.raw(vendorClause(vendor, 'cm.'));
+  // Skills and connectors: the ChatGPT view leaves Codex's out.
+  const vendorSql = sql.raw(workPulseToolClause(vendor, 'cm.'));
   const now = Math.floor(Date.now() / 1000);
   const sevenDaysAgo = now - 7 * 24 * 3600;
   const thirtyDaysAgo = now - 30 * 24 * 3600;
@@ -260,9 +261,15 @@ export async function GET(request: NextRequest) {
   // Session output rate — additive, own module, 13 completed Monday-UTC weeks.
   // Never throws the whole route: a failure here returns null and the card hides,
   // rather than taking down every other signal on /pulse/cio with it.
+  // Only Claude's telemetry records files made; OpenAI's Compliance API does
+  // not, so the ChatGPT view has no card and the other views say the figure
+  // is Claude's once ChatGPT is connected.
   let sessionOutput = null;
   try {
-    sessionOutput = await buildSessionOutputRate();
+    if (vendor !== 'openai') {
+      const report = await buildSessionOutputRate();
+      sessionOutput = { ...report, claudeOnly: (await getConnectedProducts()).openai };
+    }
   } catch (e) {
     console.error('[org-summary] session output rate failed', e);
   }

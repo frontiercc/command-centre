@@ -4,7 +4,7 @@
 /**
  * Chargeback rollup engine — attributes measured Code + Cowork API spend to
  * departments ("cost centres") for a given calendar-month period, plus
- * ChatGPT and Codex spend when the OpenAI export is connected (priced from
+ * ChatGPT and Codex spend when OpenAI's Compliance API is connected (priced from
  * tokens at OpenAI's USD rates, exactly as Work Pulse and Developer Pulse
  * price them: lib/openai/spend.ts). Each person's total is all four; the
  * report also carries a Claude / OpenAI split.
@@ -97,7 +97,7 @@ export interface ChargebackReport {
    */
   leaderboard: LeaderboardEntry[];
   /**
-   * Claude / OpenAI split of grandTotalUsd. Absent when the OpenAI export has
+   * Claude / OpenAI split of grandTotalUsd. Absent when OpenAI's Compliance API has
    * never sent a ChatGPT cost record or a Codex turn (and on old snapshots).
    */
   vendors?: { claudeUsd: number; openaiUsd: number };
@@ -319,7 +319,7 @@ export async function buildChargeback(period: string, nowS: number = Math.floor(
     coworkSurfaceTokens.cacheRead += Number(parsed.cacheReadTokens) || 0;
   }
 
-  // --- ChatGPT and Codex (OpenAI export) ---
+  // --- ChatGPT and Codex (OpenAI Compliance API) ---
   // Same pricing as lib/openai/spend.ts: ChatGPT is the tokens in OpenAI's
   // hourly cost records (product 'chatgpt'; Codex cost records are left out,
   // since Codex is priced per turn), Codex each turn's tokens, both from the

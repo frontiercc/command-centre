@@ -70,7 +70,7 @@ The setup is in [Connect ChatGPT and Codex](configure-command-centre.md#connect-
 
 **The test passes but says spend is not checked.** No organisation ID is entered. Prompts and Codex spend will still arrive. ChatGPT spend needs the organisation ID.
 
-**The test passed but nothing arrives.** Select **Save settings** after the test: the test does not save. Then check **Admin → Ingestion → OpenAI export status**. "Key set, awaiting the first sync" clears within a few minutes. "The last sync reported errors" means a log could not be read: the **System health** card on **Admin → System** shows the OpenAI sync job and its error.
+**The test passed but nothing arrives.** Select **Save settings** after the test: the test does not save. Then check the status line in **Admin → Ingestion → Connect ChatGPT and Codex**. "Key set, awaiting the first sync" clears within a few minutes. "The last sync reported errors" means a log could not be read: the **System health** card on **Admin → System** shows the OpenAI sync job and its error.
 
 **Only older activity has arrived.** The first sync reads the last 30 days oldest first, at most 300 files a run, so on a busy workspace the newest activity arrives last and can take some hours.
 
@@ -84,11 +84,11 @@ The setup is in [Connect ChatGPT and Codex](configure-command-centre.md#connect-
 
 1. Make one: `docker run --rm node:22-alpine node -e "console.log(require('crypto').randomBytes(32).toString('hex'))"`
 2. Put it after `OTEL_ENDPOINT_SECRET=` in `.env`, then run `docker compose up -d`.
-3. Straight away, copy the new settings from **Admin → Ingestion** into claude.ai, and update the OTLP headers in the Claude Cowork monitoring settings. Telemetry sent with the old token is refused and lost.
+3. Straight away, copy the new settings from **Admin → Ingestion** into claude.ai, and update the OTLP headers in the Claude Cowork monitoring settings and in Office agents → Monitoring. Telemetry sent with the old token is refused and lost.
 
 On AWS or Azure, change `OTEL_ENDPOINT_SECRET` in your secret store and redeploy the collector, then update Claude's settings as in step 3.
 
-**Change the collector address.** On **Admin → Ingestion**, select **Edit** beside the collector address, enter the new one and save. Then copy the new Claude Code settings into claude.ai and update the OTLP endpoint in the Claude Cowork monitoring settings.
+**Change the collector address.** On **Admin → Ingestion**, select **Edit** beside the collector address, enter the new one and save. Then copy the new Claude Code settings into claude.ai and update the OTLP endpoint in the Claude Cowork monitoring settings and in Office agents → Monitoring.
 
 ## Running it
 

@@ -253,7 +253,7 @@ export async function buildIso27001Section(periodStart: string, periodEnd: strin
   const totalOpen = Object.values(alertCounts).reduce((a, b) => a + b, 0);
   const incidentStatus = `${totalOpen} open (${alertCounts.high ?? 0} high, ${alertCounts.medium ?? 0} medium)`;
 
-  // Access control: people first seen through Claude's telemetry, and through OpenAI's export.
+  // Access control: people first seen through Claude's telemetry, and through OpenAI's Compliance API.
   let otelUserCount = 0;
   let openaiUserCount = 0;
   try {
@@ -271,7 +271,7 @@ export async function buildIso27001Section(periodStart: string, periodEnd: strin
   } catch { /* users table may not exist */ }
 
   const otelPart = otelUserCount > 0 ? `${otelUserCount} OTel user${otelUserCount !== 1 ? 's' : ''}` : null;
-  const openaiPart = openaiUserCount > 0 ? `${openaiUserCount} first seen through OpenAI's export` : null;
+  const openaiPart = openaiUserCount > 0 ? `${openaiUserCount} first seen through OpenAI's Compliance API` : null;
   const accessControlStatus = otelPart || openaiPart
     ? [otelPart, openaiPart].filter(Boolean).join('; ')
     : 'No OTel users registered';

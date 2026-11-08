@@ -97,7 +97,7 @@ export default function SecurityPage() {
   const [complianceLastSyncAt, setComplianceLastSyncAt] = useState('');
   const [complianceLastSyncStats, setComplianceLastSyncStats] = useState('');
   const [otelEndpointSecret, setOtelEndpointSecret] = useState('');
-  // --- OpenAI export (ChatGPT and Codex) ---
+  // --- OpenAI Compliance API (ChatGPT and Codex) ---
   const [openaiAdminApiKey, setOpenaiAdminApiKey] = useState('');
   const [openaiWorkspaceId, setOpenaiWorkspaceId] = useState('');
   const [openaiOrganizationId, setOpenaiOrganizationId] = useState('');
@@ -1521,7 +1521,7 @@ export default function SecurityPage() {
           </div>
         </Panel>
 
-        {/* OpenAI export: ChatGPT and Codex */}
+        {/* OpenAI Compliance API: ChatGPT and Codex */}
         <Panel title="OpenAI (ChatGPT and Codex)">
           <div className="flex flex-col gap-4">
             <ApiKeyField

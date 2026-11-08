@@ -123,7 +123,7 @@ export default function GetStartedPanel() {
           Command Centre&apos;s own analysis runs on Claude: briefings, work classification and summaries. It needs this key even with ChatGPT and Codex as your only products.
         </Step>
         <Step n={2} done={openaiDone} title="Connect ChatGPT and Codex" link={{ href: '/admin/security', label: 'Go to Access & Keys' }} onDone={done('openai')} busy={busy}>
-          {arrived(s.openaiAt) ?? <>ChatGPT Enterprise only. Add an OpenAI Admin API key with your workspace ID, and ChatGPT prompts join Work Pulse and Codex prompts join Developer Pulse. This ticks when the first prompt arrives.</>}
+          {arrived(s.openaiAt) ?? <>ChatGPT Enterprise or Edu only. Add an OpenAI Admin API key with your workspace ID, and ChatGPT prompts join Work Pulse and Codex prompts join Developer Pulse. This ticks when the first prompt arrives.</>}
         </Step>
         <Step n={3} done={s.rubricReviewed} title="Review how work is classified" link={{ href: '/admin/pulse?tab=tiers', label: 'Go to tiers' }} onDone={done('rubric')} busy={busy}>
           Check the tiers that grade the depth of work people hand to AI, and adjust them for your organisation if needed. This ticks once they are saved.
@@ -162,7 +162,7 @@ export default function GetStartedPanel() {
           Claude Enterprise plans only. Add a Compliance Access Key under Claude Enterprise APIs, and Claude Chat prompts join Work Pulse. This ticks when the first prompt arrives.
         </Step>
         <Step n={7} optional done={s.openaiAt !== null} title="Connect ChatGPT and Codex" link={{ href: '/admin/security', label: 'Go to Access & Keys' }}>
-          ChatGPT Enterprise only. Add an OpenAI Admin API key with your workspace ID, and ChatGPT prompts join Work Pulse and Codex prompts join Developer Pulse. This ticks when the first prompt arrives.
+          ChatGPT Enterprise or Edu only. Add an OpenAI Admin API key with your workspace ID, and ChatGPT prompts join Work Pulse and Codex prompts join Developer Pulse. This ticks when the first prompt arrives.
         </Step>
         {s.sampleData.available && noTelemetry && (
           <Step n={8} optional done={s.sampleData.loaded} title="Explore with sample data">

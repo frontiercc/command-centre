@@ -88,7 +88,7 @@ export async function GET(request: NextRequest) {
       getCoworkSessionCountThisWeek(),
       getAdoptionTrendByProduct(14),
       getSurfaceBreakdown(),
-      getDepartmentBreakdownByProduct(),
+      getDepartmentBreakdownByProduct(vendor),
       getTopUsersByProduct(5, shown),
       getChatMessageCount(),
       getCodeEventCount(),

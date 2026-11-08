@@ -509,7 +509,8 @@ const isCodexSession = (s: { session_id: string }) => s.session_id.startsWith('c
  * Codex session's row in the per-product figures counts them the way a Claude
  * Code session counts its tool calls and commits.
  */
-async function codexActionCounts(client: TypedClient, sessionIds: string[]): Promise<Map<string, { tools: number; errors: number; commits: number }>> {
+/** Actions, failed actions and commits per Codex session, from codex_actions. */
+export async function codexActionCounts(client: TypedClient, sessionIds: string[]): Promise<Map<string, { tools: number; errors: number; commits: number }>> {
   const out = new Map<string, { tools: number; errors: number; commits: number }>();
   const ca = schema.codexActions;
   for (let i = 0; i < sessionIds.length; i += 500) {

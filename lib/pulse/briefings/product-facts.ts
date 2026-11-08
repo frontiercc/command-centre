@@ -77,7 +77,7 @@ export async function buildProductFacts(opts: {
 /** The PRODUCTS block for a briefing prompt, or nothing when there are no facts. */
 export function productFactsBlock(lines: string[]): string {
   if (lines.length === 0) return '';
-  return `\nPRODUCTS (the figures above cover all four; ChatGPT prompts come from OpenAI's export)\n${lines.join('\n')}\n`;
+  return `\nPRODUCTS (the figures above cover all four; ChatGPT prompts come from OpenAI's Compliance API)\n${lines.join('\n')}\n`;
 }
 
 /** The instruction added to a briefing's system prompt. */

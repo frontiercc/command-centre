@@ -33,12 +33,17 @@ function fetchConnected(): Promise<ConnectedProducts | null> {
   });
 }
 
-/** Which vendors are connected; null until known (no stored answer yet). */
+/**
+ * Which vendors are connected; null until known. The stored answer is read
+ * after the page loads, never during the first render, so the browser's first
+ * render matches the server's (no hydration mismatch, React error #418).
+ */
 export function useConnectedProducts(): ConnectedProducts | null {
-  const [connected, setConnected] = useState<ConnectedProducts | null>(() =>
-    typeof window === 'undefined' ? null : readStoredConnected());
+  const [connected, setConnected] = useState<ConnectedProducts | null>(null);
   useEffect(() => {
     let live = true;
+    const stored = readStoredConnected();
+    if (stored) setConnected(stored);
     fetchConnected().then((c) => { if (live && c) setConnected(c); });
     return () => { live = false; };
   }, []);
@@ -50,10 +55,19 @@ export function useOpenAiOnly(): boolean {
   return isOpenAiOnly(useConnectedProducts());
 }
 
-export function useVendor(): [Vendor, (v: Vendor) => void] {
-  const [vendor, setVendorState] = useState<Vendor>(() => {
-    try { return typeof window === 'undefined' ? 'all' : parseVendor(window.localStorage.getItem(VENDOR_KEY)); } catch { return 'all'; }
-  });
+/**
+ * The switch's view, its setter, and whether the saved view has been read.
+ * The saved view is read after the page loads (the first render matches the
+ * server's), so a page waits for the third value before fetching, and never
+ * loads one view and then another.
+ */
+export function useVendor(): [Vendor, (v: Vendor) => void, boolean] {
+  const [vendor, setVendorState] = useState<Vendor>('all');
+  const [ready, setReady] = useState(false);
+  useEffect(() => {
+    try { setVendorState(parseVendor(window.localStorage.getItem(VENDOR_KEY))); } catch { /* All */ }
+    setReady(true);
+  }, []);
   const connected = useConnectedProducts();
   const openaiOnly = isOpenAiOnly(connected);
   // ChatGPT and Codex hidden (the OpenAI panel): a remembered vendor view gives way to All, which the server reads as Claude.
@@ -62,7 +76,7 @@ export function useVendor(): [Vendor, (v: Vendor) => void] {
     setVendorState(v);
     try { window.localStorage.setItem(VENDOR_KEY, v); } catch { /* not remembered */ }
   };
-  return [openaiOnly ? 'openai' : openaiHidden ? 'all' : vendor, setVendor];
+  return [openaiOnly ? 'openai' : openaiHidden ? 'all' : vendor, setVendor, ready];
 }
 
 /** Shown once both vendors have data, or while a vendor view is still chosen. */

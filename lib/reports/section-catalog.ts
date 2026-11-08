@@ -27,7 +27,7 @@ export interface ReportSectionDef {
 
 export const REPORT_SECTIONS: ReportSectionDef[] = [
   { id: 'executive_summary', label: 'Executive Summary', description: 'High-level compliance posture overview', default: true },
-  { id: 'data_sources', label: 'Data Sources', description: "Capture paths: Claude telemetry, Anthropic APIs, and OpenAI's export where connected", default: true },
+  { id: 'data_sources', label: 'Data Sources', description: "Capture paths: Claude telemetry, Anthropic APIs, and OpenAI's Compliance API where connected", default: true },
   { id: 'usage', label: 'Usage by Product', description: 'Usage per product (Claude, and ChatGPT and Codex where connected) with trends', default: true },
   { id: 'adoption', label: 'Adoption Status', description: 'People active per product, seats, department breakdown', default: true },
   { id: 'gdpr', label: 'GDPR Compliance', description: 'Data protection impact, retention, access rights', default: true, requiresFlag: 'gdprApplicable' },

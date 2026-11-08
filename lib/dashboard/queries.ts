@@ -181,10 +181,14 @@ export interface DepartmentRow {
   products: ProductCounts;
 }
 
-/** People per department who used each product in the last 7 days. */
-export async function getDepartmentBreakdownByProduct(): Promise<DepartmentRow[]> {
+/**
+ * People per department who used each product in the last 7 days. In the
+ * Claude or OpenAI view, active people are those who used that vendor's
+ * products this week, so Users and Adoption follow the switch like the cells.
+ */
+export async function getDepartmentBreakdownByProduct(vendor: Vendor = 'all'): Promise<DepartmentRow[]> {
   const weekAgo = nowS() - 7 * DAY;
-  const [depts, used] = await Promise.all([
+  const [depts, used, vendorActive] = await Promise.all([
     rawAll<{ department: string; user_count: number | string; active_users: number | string }>(sql`
       SELECT u.department, COUNT(*) AS user_count,
              COUNT(CASE WHEN u.last_seen_at >= ${weekAgo} THEN 1 END) AS active_users
@@ -197,11 +201,18 @@ export async function getDepartmentBreakdownByProduct(): Promise<DepartmentRow[]
       WHERE u.department IS NOT NULL AND cm.occurred_at >= ${weekAgo}
       GROUP BY 1, 2
     `),
+    vendor === 'all' ? Promise.resolve(null) : rawAll<{ department: string; n: number | string }>(sql`
+      SELECT u.department, COUNT(DISTINCT cm.user_id) AS n
+      FROM cowork_messages cm JOIN users u ON u.id = cm.user_id
+      WHERE u.department IS NOT NULL AND cm.occurred_at >= ${weekAgo} AND ${sql.raw(vendorClause(vendor, 'cm.'))}
+      GROUP BY 1
+    `),
   ]);
+  const activeByDept = vendorActive ? new Map(vendorActive.map((r) => [r.department, Number(r.n)])) : null;
   const rows = new Map<string, DepartmentRow>(depts.map((d) => [d.department, {
     department: d.department,
     user_count: Number(d.user_count),
-    active_users: Number(d.active_users),
+    active_users: activeByDept ? (activeByDept.get(d.department) ?? 0) : Number(d.active_users),
     products: zeroCounts(),
   }]));
   for (const r of used) {

@@ -19,7 +19,7 @@ export interface LeaderboardEntry {
   totalUsd: number;
   codeUsd: number;
   coworkUsd: number;
-  /** Present when the OpenAI export is connected. */
+  /** Present when OpenAI's Compliance API is connected. */
   chatgptUsd?: number;
   codexUsd?: number;
 }

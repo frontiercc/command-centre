@@ -135,12 +135,13 @@ function MyCodePulseContent() {
 
   const [data, setData] = useState<MeData | null>(null);
   const [loading, setLoading] = useState(true);
-  const [vendor, setVendor] = useVendor();
+  const [vendor, setVendor, vendorReady] = useVendor();
   const openaiOnly = useOpenAiOnly();
   // The view: Codex's own when it is the only coding tool connected.
   const codexView = !!data?.codexPresent || openaiOnly;
 
   useEffect(() => {
+    if (!vendorReady) return; // the saved view is read after the page loads
     const qs = new URLSearchParams({ vendor });
     if (viewUserId) qs.set('userId', viewUserId);
     fetch(`/api/pulse/code/me?${qs.toString()}`)
@@ -148,7 +149,7 @@ function MyCodePulseContent() {
       .then(setData)
       .catch(() => {})
       .finally(() => setLoading(false));
-  }, [viewUserId, vendor]);
+  }, [viewUserId, vendor, vendorReady]);
 
   if (loading) return <LoadingSpinner />;
 
@@ -166,7 +167,7 @@ function MyCodePulseContent() {
         {!data?.userId ? (
           openaiOnly ? (
             <Empty title="No Codex activity linked to your account yet">
-              Codex activity is matched to your sign-in by email. It arrives from OpenAI&apos;s export a few hours after you use Codex.
+              Codex activity is matched to your sign-in by email. It arrives from OpenAI&apos;s Compliance API a few hours after you use Codex.
             </Empty>
           ) : (
             <Empty title="No Claude Code activity linked to your account yet">

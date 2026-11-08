@@ -87,10 +87,11 @@ export default function PersonalPulsePage() {
   const [refreshKey, setRefreshKey] = useState(0);
   const [pulseStartAt, setPulseStartAt] = useState<number | null>(null);
   // The All / Claude / OpenAI switch, shared with the dashboard and Executive View.
-  const [vendor, setVendor] = useVendor();
+  const [vendor, setVendor, vendorReady] = useVendor();
   const openaiOnly = useOpenAiOnly();
 
   useEffect(() => {
+    if (!vendorReady) return; // the saved view is read after the page loads
     setLoading(true);
     setError(null);
     const meUrl = viewingUserId
@@ -115,7 +116,7 @@ export default function PersonalPulsePage() {
       })
       .catch(e => setError(e.message))
       .finally(() => setLoading(false));
-  }, [refreshKey, viewingUserId, vendor]);
+  }, [refreshKey, viewingUserId, vendor, vendorReady]);
 
   if (loading) return (
     <>

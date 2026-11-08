@@ -8,6 +8,7 @@ If you connected Claude to Command Centre:
 
 - **Claude Code:** in claude.ai, open **Organization settings → Claude Code → Managed settings** and remove the telemetry settings. If you distributed them another way, remove the `managed-settings.json` file or the device management profile.
 - **Claude Cowork:** in claude.ai, open **Organization settings → Data and Privacy → Monitoring** and clear the three fields.
+- **Claude in Office/Google:** in claude.ai, open **Organization settings → Office agents → Monitoring** and clear the three fields.
 - **The `otlpContentCapture` device setting:** if you set it on any machine so Claude Cowork sends prompts in full, remove it.
 
   On Windows, in PowerShell run as administrator:

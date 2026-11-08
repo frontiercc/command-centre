@@ -12,7 +12,7 @@
  * Threshold measured on 14 days of real telemetry:
  * the longest gap inside UK working hours was 1.5 h for Cowork, 1.5 h for
  * Claude Code and 1.0 h for Claude Code metrics, so 3 h would have raised
- * nothing. The same threshold covers OpenAI's export, whose delay has not
+ * nothing. The same threshold covers OpenAI's Compliance API, whose delay has not
  * been measured on a real workspace. Off on a hub with `hours` = 0 (a demo hub, for example: its data is
  * seeded, not received, and its Code gaps reach 3.9 h inside working hours).
  */

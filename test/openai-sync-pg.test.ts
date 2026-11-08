@@ -2,7 +2,7 @@
 // SPDX-License-Identifier: Apache-2.0
 
 // The OpenAI sync end to end on Postgres: the real sync, over real HTTP,
-// against the localhost stand-in for OpenAI's export (scripts/openai-mock),
+// against the localhost stand-in for OpenAI's Compliance API (scripts/openai-mock),
 // into a migrated test database. Proves the paging, the signed-link download,
 // at-least-once delivery (repeats stored once), the Work-in-both-logs skip, the
 // retention floor, people created by email, flags on risky prompts, the
@@ -241,12 +241,12 @@ describe('OpenAI sync against the stand-in export', () => {
       expect(piiText.length).toBeGreaterThan(0);
       for (const a of piiText) {
         expect(a.explanation).not.toContain('via OTel');
-        expect(a.explanation).toMatch(/via (ChatGPT Chat|ChatGPT Work|Codex) \(OpenAI export\)/);
+        expect(a.explanation).toMatch(/via (ChatGPT Chat|ChatGPT Work|Codex) \(Compliance API\)/);
       }
       const chatPii = await sql.all<{ n: number }>(
         `SELECT COUNT(*) AS n FROM cowork_messages WHERE source = 'chatgpt_chat' AND flag_reason LIKE 'PII detected:%'`,
       );
-      if (chatPii[0].n > 0) expect(piiText.some(a => a.explanation.includes('via ChatGPT Chat (OpenAI export)'))).toBe(true);
+      if (chatPii[0].n > 0) expect(piiText.some(a => a.explanation.includes('via ChatGPT Chat (Compliance API)'))).toBe(true);
 
       // Cursor saved per log type.
       const cursors = JSON.parse(await getConfigValue('openaiSyncCursors'));

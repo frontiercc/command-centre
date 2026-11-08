@@ -32,7 +32,7 @@ export async function GET(request: NextRequest) {
     .selectDistinct({ model: cam.model })
     .from(cam)
     .where(ne(cam.model, ''));
-  // Codex models (OpenAI export) are priced from this same table.
+  // Codex models (OpenAI Compliance API) are priced from this same table.
   const codexModels = await client
     .selectDistinct({ model: schema.codexTurns.model })
     .from(schema.codexTurns)

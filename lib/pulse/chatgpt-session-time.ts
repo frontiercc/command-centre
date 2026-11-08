@@ -1,7 +1,7 @@
 // Copyright 2026 Lee James
 // SPDX-License-Identifier: Apache-2.0
 
-// Working time for ChatGPT conversations (OpenAI export), into
+// Working time for ChatGPT conversations (OpenAI Compliance API), into
 // chatgpt_session_time (migration 0046), for Work Pulse's human time card.
 // A conversation's time is measured the way Claude Cowork's is: the gaps
 // between consecutive events, counting gaps up to 30 minutes

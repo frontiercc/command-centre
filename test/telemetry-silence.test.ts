@@ -42,11 +42,11 @@ describe('planSilenceAlerts', () => {
   it('a surface with its own advice and noun uses them in place of the OTel text', () => {
     const now = at('2026-09-30T12:00:00Z');
     const p = planSilenceAlerts([{
-      key: 'openai_export', label: 'ChatGPT and Codex', noun: 'export data', advice: 'Check the OpenAI sync.',
+      key: 'openai_export', label: 'ChatGPT and Codex', noun: 'data', advice: 'Check the OpenAI sync.',
       lastReceivedAt: at('2026-09-30T08:00:00Z'),
     }], now, LON);
     expect(p).toHaveLength(1);
-    expect(p[0].title).toBe('No ChatGPT and Codex export data for 4 working hours');
+    expect(p[0].title).toBe('No ChatGPT and Codex data for 4 working hours');
     expect(p[0].explanation).toContain('Check the OpenAI sync. See System health on /admin/system.');
     expect(p[0].explanation).not.toContain('OTel');
   });
