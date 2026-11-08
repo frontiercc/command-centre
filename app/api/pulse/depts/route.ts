@@ -12,7 +12,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { visibleVendor } from '@/lib/sources/openai-visibility';
 import { sql } from 'drizzle-orm';
-import { getAdminSession, canAccessCoworkPulse } from '@/lib/auth/admin-auth';
+import { getAdminSession, canAccessCoworkPulse, isDeptScoped } from '@/lib/auth/admin-auth';
 import { getTypedClient } from '@/lib/db/client';
 
 
@@ -41,6 +41,16 @@ export async function GET(request: NextRequest) {
   if (!session.authenticated || !canAccessCoworkPulse(session.role)) {
     return NextResponse.json({ error: 'Forbidden' }, { status: 403 });
   }
+
+  // Contributor roles (cowork, pulse) see only their own department, the same
+  // rule as the department page's route and Developer Pulse's department list.
+  if (isDeptScoped(session.role) && !session.department) {
+    return NextResponse.json(
+      { error: 'no_department', message: 'Your account has no department assigned. Ask your admin to set one.' },
+      { status: 422 }
+    );
+  }
+  const ownDept = isDeptScoped(session.role) ? session.department! : null;
 
   const client = await getTypedClient();
   // The Claude / OpenAI switch: a vendor view reads the aggregator's per-vendor figures.
@@ -73,18 +83,22 @@ export async function GET(request: NextRequest) {
          )
      ) pm ON pm.user_id = u.id
      LEFT JOIN (
-       -- Most recent team-level metric per team (for ORS)
-       SELECT scope_id AS team_id, ors
+       -- Most recent department-level ORS. Read per department, as the
+       -- overview's headline does: the team grouping (users.team_id) is never
+       -- filled in, so joining on it left this column blank. Only rows that
+       -- carry ORS count: the daily run writes newer department rows without it.
+       SELECT scope_id AS department, ors
        FROM ${metrics}
-       WHERE scope_type = 'team' AND granularity = 'rolling' ${only}
+       WHERE scope_type = 'function' AND granularity = 'rolling' AND ors IS NOT NULL ${only}
          AND (scope_id, computed_at) IN (
            SELECT scope_id, MAX(computed_at)
            FROM ${metrics}
-           WHERE scope_type = 'team' AND granularity = 'rolling' ${only}
+           WHERE scope_type = 'function' AND granularity = 'rolling' AND ors IS NOT NULL ${only}
            GROUP BY scope_id
          )
-     ) tm ON tm.team_id = u.team_id
+     ) tm ON tm.department = u.department
      WHERE u.department IS NOT NULL AND u.department != ''
+       ${ownDept !== null ? sql`AND u.department = ${ownDept}` : sql``}
      GROUP BY u.department
      ORDER BY u.department
   `);

@@ -19,8 +19,11 @@ export const dynamic = 'force-dynamic';
 
 export async function GET(request: NextRequest) {
   const session = await getAdminSession(request);
-  if (!session.authenticated || session.role !== 'admin') {
+  if (!session.authenticated) {
     return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+  }
+  if (session.role !== 'admin') {
+    return NextResponse.json({ error: 'Forbidden' }, { status: 403 });
   }
 
   const client = await getTypedClient();

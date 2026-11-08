@@ -451,6 +451,7 @@ export default function AdminRiskPage() {
                 <input
                   id="alerts-slack-webhook"
                   type="password"
+                  autoComplete="new-password"
                   value={alertsSlackWebhookUrl}
                   onChange={(e) => setAlertsSlackWebhookUrl(e.target.value)}
                   className={cx(B.input, 'flex-1 min-w-0 font-mono')}

@@ -10,7 +10,7 @@ import { computeDdsForUsers } from '@/lib/pulse/metrics/dds';
 import { computeTeamOrsDetail, computeDeptOrsDetail } from '@/lib/pulse/metrics/ors';
 import { detectFrontierPushes } from '@/lib/pulse/events/frontier';
 import { detectCapabilityCreation } from '@/lib/pulse/events/capability';
-import { weekStart } from '@/lib/pulse/period';
+import { weekStart, weekStarts } from '@/lib/pulse/period';
 import { messageVendor, SPLIT_VENDORS, type SplitVendor } from '@/lib/pulse/vendor-filter';
 import { hasOpenAiData } from '@/lib/dashboard/queries';
 import type { Vendor } from '@/lib/dashboard/vendor';
@@ -587,9 +587,17 @@ export async function runHourlyAggregation(): Promise<void> {
 
   // ── Per-vendor rows (Claude / OpenAI), only while OpenAI data exists ──────
   if (await hasOpenAiData()) {
+    // Past weeks are recounted from the prompts graded since the last run
+    // (all of them the first time), so a week that gains prompts late (an
+    // OpenAI backfill, or the classifier catching up) is brought up to date.
+    // Five minutes of overlap, so nothing graded while this run starts is
+    // missed; recounting a week twice gives the same answer.
+    const gradedSince = Number(await getConfigValue('pulseVendorWeeksGradedSince')) || 0;
+    const runStart = Math.floor(Date.now() / 1000);
     for (const vendor of SPLIT_VENDORS) {
-      await aggregateVendor(client, vendor, now, startDateMap, departments);
+      await aggregateVendor(client, vendor, now, startDateMap, departments, gradedSince);
     }
+    await setConfigValue('pulseVendorWeeksGradedSince', String(runStart - 300));
   }
 
   // ── Event detection ───────────────────────────────────────────────────────
@@ -622,6 +630,7 @@ async function aggregateVendor(
   now: number,
   startDateMap: Map<string, number>,
   departments: string[],
+  gradedSince: number,
 ): Promise<void> {
   const SEVEN_DAYS = 7 * 24 * 60 * 60;
   const periodStart = now - SEVEN_DAYS;
@@ -723,6 +732,114 @@ async function aggregateVendor(
       eventCount: week.total,
       granularity: 'week',
     });
+  }
+
+  await refreshPastVendorWeeks(client, vendor, now, departments, gradedSince);
+}
+
+/** Completed weeks the per-vendor weekly rows reach back over (the Delegation View's longest window). */
+const PAST_VENDOR_WEEKS = 52;
+const WEEK = 7 * 24 * 60 * 60;
+
+/**
+ * The per-vendor table only gains a week while the aggregator runs in it, so
+ * a vendor view had no history before the first run, and a week written
+ * before all its prompts were graded stayed short. This recounts every
+ * completed week (within PAST_VENDOR_WEEKS) that has a prompt graded since
+ * gradedSince, writing its user and department rows with the same counts as
+ * the weekly rows above, bounded to the week by the prompt's own time. Weeks
+ * with nothing newly graded are left exactly as they are, so prompts later
+ * removed by retention never shrink an old week.
+ */
+async function refreshPastVendorWeeks(
+  client: TypedClient,
+  vendor: SplitVendor,
+  now: number,
+  departments: string[],
+  gradedSince: number,
+): Promise<void> {
+  const current = weekStart(now);
+  const from = weekStarts(current - 1, PAST_VENDOR_WEEKS)[0];
+  const pc = schema.pulseClassifications;
+  const cm = schema.coworkMessages;
+  // Monday 00:00 UTC of the prompt's week, the same rule as weekStart() (1 January 1970 was a Thursday).
+  const ws = sql<number | string>`(${cm.occurred_at} - (((${cm.occurred_at} / 86400) + 3) % 7) * 86400 - (${cm.occurred_at} % 86400))`;
+  const inWindow = and(
+    eq(pc.classifier_status, 'classified'),
+    gte(cm.occurred_at, from),
+    lt(cm.occurred_at, current),
+    messageVendor(vendor),
+  );
+
+  const touched = (await client
+    .selectDistinct({ week: ws })
+    .from(pc)
+    .innerJoin(cm, eq(cm.id, pc.cowork_message_id))
+    .where(and(inWindow, gte(pc.classified_at, gradedSince))))
+    .map(r => Number(r.week));
+  if (touched.length === 0) return;
+  const weekSet = new Set(touched);
+
+  const activity = (await client
+    .select({
+      user_id: pc.user_id,
+      week: ws,
+      t1: sql<number | string>`SUM(CASE WHEN ${pc.tier} = 1 THEN 1 ELSE 0 END)`,
+      t2: sql<number | string>`SUM(CASE WHEN ${pc.tier} = 2 THEN 1 ELSE 0 END)`,
+      t3: sql<number | string>`SUM(CASE WHEN ${pc.tier} = 3 THEN 1 ELSE 0 END)`,
+      total: sql<number | string>`COUNT(*)`,
+    })
+    .from(pc)
+    .innerJoin(cm, eq(cm.id, pc.cowork_message_id))
+    .where(and(inWindow, gte(cm.occurred_at, Math.min(...touched)), lt(cm.occurred_at, Math.max(...touched) + WEEK)))
+    .groupBy(pc.user_id, ws))
+    .filter(r => weekSet.has(Number(r.week)));
+
+  type Counts = { t1: number; t2: number; t3: number; total: number };
+  const write = async (scopeType: 'user' | 'function', scopeId: string, week: number, c: Counts) => {
+    await writeMetric(client, {
+      vendor,
+      scopeType,
+      scopeId,
+      periodStart: week,
+      periodEnd: week + WEEK,
+      oti: null,
+      dds: c.total > 0 ? (3 * c.t3 + 2 * c.t2 + c.t1) / c.total : null,
+      psr: null,
+      ors: null,
+      tier1Count: c.t1,
+      tier2Count: c.t2,
+      tier3Count: c.t3,
+      eventCount: c.total,
+      granularity: 'week',
+    });
+  };
+
+  const byUserWeek = new Map<string, Map<number, Counts>>();
+  for (const r of activity) {
+    if (!r.user_id) continue;
+    const week = Number(r.week);
+    const c = { t1: Number(r.t1), t2: Number(r.t2), t3: Number(r.t3), total: Number(r.total) };
+    if (!byUserWeek.has(r.user_id)) byUserWeek.set(r.user_id, new Map());
+    byUserWeek.get(r.user_id)!.set(week, c);
+    await write('user', r.user_id, week, c);
+  }
+
+  // Departments: the same members as the department rows above.
+  for (const department of departments) {
+    const memberIds = (await client
+      .select({ id: schema.adminUsers.linked_cowork_user_id })
+      .from(schema.adminUsers)
+      .where(and(eq(schema.adminUsers.department, department), isNotNull(schema.adminUsers.linked_cowork_user_id))))
+      .map(r => r.id as string);
+    const sums = new Map<number, Counts>();
+    for (const id of memberIds) {
+      for (const [week, c] of byUserWeek.get(id) ?? []) {
+        const s0 = sums.get(week) ?? { t1: 0, t2: 0, t3: 0, total: 0 };
+        sums.set(week, { t1: s0.t1 + c.t1, t2: s0.t2 + c.t2, t3: s0.t3 + c.t3, total: s0.total + c.total });
+      }
+    }
+    for (const [week, c] of sums) await write('function', department, week, c);
   }
 }
 

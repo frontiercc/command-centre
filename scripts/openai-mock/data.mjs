@@ -399,7 +399,7 @@ export function buildEvents({ nowMs, days = 14, horizonHours = 24, seed = 42 }) 
           // Assistant reply
           t += rng.int(isWork ? 90_000 : 6_000, isWork ? 600_000 : 70_000);
           const tools = isWork ? ['file_search', 'python', rng.pick(['browser', 'canvas'])] : (rng.chance(0.3) ? [rng.pick(['browser', 'python', 'file_search'])] : undefined);
-          const skills = rng.chance(0.12) ? [rng.pick(['pdfs', 'spreadsheets', 'slides'])] : undefined;
+          const skills = rng.chance(0.12) ? [rng.pick(['weekly-pipeline-summary', 'board-pack-formatting', 'contract-clause-check'])] : undefined;
           const lastTurn = i === turns.length - 1;
           const replyFiles = outputFile && lastTurn
             ? [{ id: rng.id('file-', 22), name: outputFile }]

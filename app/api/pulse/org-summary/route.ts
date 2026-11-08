@@ -41,8 +41,11 @@ async function rawGet<T>(client: unknown, query: unknown): Promise<T | undefined
 
 export async function GET(request: NextRequest) {
   const session = await getAdminSession(request);
-  if (!session.authenticated || !canAccessOrgOverview(session.role)) {
+  if (!session.authenticated) {
     return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+  }
+  if (!canAccessOrgOverview(session.role)) {
+    return NextResponse.json({ error: 'Forbidden' }, { status: 403 });
   }
 
   const client = await getTypedClient();

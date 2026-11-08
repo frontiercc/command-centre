@@ -105,6 +105,29 @@ describe('buildChargeback with OpenAI', () => {
     expect(top.codexUsd).toBeCloseTo(1, 5);
   });
 
+  it("values a ChatGPT record with only token totals at OpenAI's own figure, never $0", async () => {
+    // Totals-only plans: the split token counts arrive as zero (lib/openai/cost-value.ts).
+    const JAN_10 = Math.floor(Date.UTC(2026, 0, 10) / 1000);
+    await sql.run(
+      `INSERT INTO openai_costs (id, user_id, hour_start, product, model, input_tokens, cached_input_tokens, output_tokens, cost_usd, billed_in)
+       VALUES ('oc-t1', 'u-openai', ?, 'chatgpt', 'gpt-6.1-terra', 0, 0, 0, 2.5, 'credits')`, [JAN_10]);
+    // No dollar figure from OpenAI either: unknown, so the model is named, not counted.
+    await sql.run(
+      `INSERT INTO openai_costs (id, user_id, hour_start, product, model, input_tokens, cached_input_tokens, output_tokens, cost_usd, billed_in)
+       VALUES ('oc-t2', 'u-openai', ?, 'chatgpt', 'gpt-6', 0, 0, 0, NULL, 'credits')`, [JAN_10]);
+    const r = await buildChargeback('2026-01', NOW);
+    expect(r.surfaces.chatgpt!.usd).toBeCloseTo(2.5, 5);
+    expect(r.vendors?.openaiUsd).toBeCloseTo(2.5, 5);
+    expect(r.openaiUnpricedModels).toEqual(['gpt-6']);
+
+    // Work Pulse's ChatGPT spend uses the same rule: since 1 January it is
+    // January's $2.50 plus March's $1 and April's $7 (priced from tokens).
+    const { chatgptSpend } = await import('@/lib/openai/spend');
+    const s = await chatgptSpend({ since: Math.floor(Date.UTC(2026, 0, 1) / 1000) });
+    expect(s!.usd).toBeCloseTo(10.5, 5);
+    expect(s!.unpricedModels).toEqual(['gpt-6']);
+  });
+
   it('a month with no OpenAI usage still shows the OpenAI parts, at zero', async () => {
     const r = await buildChargeback('2026-02', NOW);
     expect(r.vendors).toEqual({ claudeUsd: 0, openaiUsd: 0 });

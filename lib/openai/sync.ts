@@ -151,8 +151,8 @@ interface CodexLogRecord extends Envelope {
 
 interface CodexTurnRecord extends Envelope {
   payload?: {
-    turn_id?: string; turn_key?: string; session_id?: string; product_client_id?: string; model?: string;
-    started_at?: string; completed_at?: string; credits?: number; estimated_cost_usd?: number; tags?: string[];
+    turn_id?: string; turn_key?: string; session_id?: string; thread_id?: string; product_client_id?: string; model?: string;
+    started_at?: string; completed_at?: string; credits?: number; estimated_cost_usd?: number; cost_usd?: number; tags?: string[];
     token_usage?: { uncached_input_tokens?: number; cached_input_tokens?: number; output_tokens?: number };
   };
 }
@@ -411,6 +411,16 @@ export type SpendRow =
 
 const count = (v: unknown): number => (typeof v === 'number' && Number.isFinite(v) && v > 0 ? Math.round(v) : 0);
 const money = (v: unknown): number | null => (typeof v === 'number' && Number.isFinite(v) ? v : null);
+/**
+ * OpenAI's own dollar figure for a Codex turn. It reports two amounts apart:
+ * `estimated_cost_usd` for the part billed in credits and `cost_usd` for usage
+ * billed directly in dollars (it never folds one into the other), so the
+ * turn's figure is their sum. Null only when it sends neither.
+ */
+function openAiTurnUsd(estimatedCreditUsd: unknown, nativeUsd: unknown): number | null {
+  const est = money(estimatedCreditUsd), usd = money(nativeUsd);
+  return est === null && usd === null ? null : (est ?? 0) + (usd ?? 0);
+}
 
 /**
  * Decides whether a record carries spend: a ChatGPT reply (its model and
@@ -444,19 +454,23 @@ export function interpretSpend(raw: unknown, floors: { cowork: number; code: num
   if (rec.type === 'CODEX_TURN') {
     const p = (rec as CodexTurnRecord).payload;
     const key = p?.turn_key ?? p?.turn_id;
-    if (!p || !key || !p.session_id) return null;
+    if (!p || !key) return null;
+    // OpenAI sends the session and thread IDs only "when available" (its own
+    // example turn has neither), so a turn without them is still kept: it
+    // falls back to the thread, then stands as a session of its own.
+    const session = p.session_id ?? p.thread_id ?? `turn:${key}`;
     if ((p.product_client_id ?? '').startsWith('CODEX_WORK_')) return null;
     const email = rec.actor?.user_email ?? '';
     if (!isPlainEmail(email)) return null;
     const startedAt = toSeconds(p.started_at) ?? toSeconds(rec.timestamp);
     if (startedAt === null || startedAt < floors.code) return null;
     return {
-      kind: 'turn', id: `codex-turn:${key}`, sessionId: `codex:${p.session_id}`, email, model: p.model ?? null,
+      kind: 'turn', id: `codex-turn:${key}`, sessionId: `codex:${session}`, email, model: p.model ?? null,
       startedAt, completedAt: toSeconds(p.completed_at),
       uncachedInput: count(p.token_usage?.uncached_input_tokens),
       cachedInput: count(p.token_usage?.cached_input_tokens),
       output: count(p.token_usage?.output_tokens),
-      credits: money(p.credits), openaiCostUsd: money(p.estimated_cost_usd),
+      credits: money(p.credits), openaiCostUsd: openAiTurnUsd(p.estimated_cost_usd, p.cost_usd),
       automation: (p.tags ?? []).includes('automation'),
     };
   }

@@ -22,7 +22,7 @@ const { Client } = require('pg');
 const MARKER = 'ff7-';
 const CLEAN_ONLY = process.argv.includes('--clean');
 const DAY = 86400;
-const N_DAYS = 60; // covers the 14-day chart window plus a longer trail
+const N_DAYS = 90; // thirteen weeks, the same as the rest of the sample
 const PREVIEW_CHARS = 250; // lib/otel/content-limits.ts CONTENT_PREVIEW_CHARS
 
 const rand = (min, max) => Math.floor(Math.random() * (max - min + 1)) + min;
@@ -87,6 +87,20 @@ const CHAT_PROMPTS = [
   'Rewrite this policy paragraph so a new starter would understand it.',
 ];
 
+// The sample's kinds of work (01-organisation.cjs), read from a prompt's words
+// as a classifier would; the same rule as 11-chatgpt-codex.ts.
+const TASK_TYPES = ['analysis', 'structured_report', 'synthesis', 'summarisation', 'basic_drafting', 'template_population', 'process_substitution'];
+function taskTypeFor(text) {
+  const t = text.toLowerCase();
+  if (/summar|recap|tl;?dr|key points/.test(t)) return 'summarisation';
+  if (/draft|email|write|reply|letter|post/.test(t)) return 'basic_drafting';
+  if (/report|brief|memo|pack|deck/.test(t)) return 'structured_report';
+  if (/analys|compare|forecast|trend|variance|why /.test(t)) return 'analysis';
+  if (/template|fill in|populate|form/.test(t)) return 'template_population';
+  if (/combine|pull together|across|synthes/.test(t)) return 'synthesis';
+  return pick(TASK_TYPES);
+}
+
 async function main() {
   const url = process.env.DATABASE_URL;
   if (!url) { console.error('DATABASE_URL not set — run inside the hub container.'); process.exit(1); }
@@ -129,13 +143,25 @@ async function main() {
         const nMsgs = rand(1, 3);
         const convId = uid('conv');
         let startedAt = null;
+        // Work deepens over the thirteen weeks, the same rule as 01-organisation.cjs.
+        const trend = (N_DAYS - daysAgo) / N_DAYS;
+        const depth = 0.25 + 0.45 * trend; // share at tier 2 or 3
+        const t3Share = 0.15 + 0.35 * trend; // of those, share at tier 3
         for (let i = 0; i < nMsgs; i++) {
           const ts = dayStart + rand(0, Math.max(1, dayEnd - dayStart - 1));
           const text = pick(CHAT_PROMPTS);
+          const msgId = uid('chat');
           await c.query(
             `INSERT INTO cowork_messages (id, session_id, user_id, message_type, surface, source, content_preview, content_full, occurred_at, ingested_at)
              VALUES ($1,$2,$3,'cowork_user_message','chat','compliance',$4,$5,$6,$6)`,
-            [uid('chat'), convId, u.id, text.slice(0, PREVIEW_CHARS), text, ts]);
+            [msgId, convId, u.id, text.slice(0, PREVIEW_CHARS), text, ts]);
+          // Graded at load, like the other sample prompts, so the weekly history
+          // worked out at the end of loading already counts them.
+          const tier = Math.random() < depth ? (Math.random() < t3Share ? 3 : 2) : 1;
+          await c.query(
+            `INSERT INTO pulse_classifications (cowork_message_id, user_id, tier, task_type, classifier_confidence, classifier_model, classified_at)
+             VALUES ($1,$2,$3,$4,$5,'claude-haiku-4-5-20251001',$6)`,
+            [msgId, u.id, tier, taskTypeFor(text), 0.85 + Math.random() * 0.12, ts + 30]);
           if (startedAt === null || ts < startedAt) startedAt = ts;
           n++;
         }

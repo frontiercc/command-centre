@@ -491,6 +491,7 @@ export default function AdminDataPage() {
                         <input
                           id="archive-secret-access-key"
                           type="password"
+                          autoComplete="new-password"
                           value={archiveSecretAccessKey}
                           onChange={(e) => setArchiveSecretAccessKey(e.target.value)}
                           className={cx(B.input, 'w-full min-w-0 font-mono')}

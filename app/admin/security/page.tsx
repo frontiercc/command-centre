@@ -839,6 +839,7 @@ export default function SecurityPage() {
                 <FormField label={<>Password <span className="text-[#B42318]">*</span></>}>
                   <input
                     type="password"
+                    autoComplete="new-password"
                     value={newPassword}
                     onChange={e => setNewPassword(e.target.value)}
                     className={cx(B.input, 'w-full')}
@@ -1176,6 +1177,7 @@ export default function SecurityPage() {
                 <FormField label="New password">
                   <input
                     type="password"
+                    autoComplete="new-password"
                     autoFocus
                     value={newPw}
                     onChange={e => setNewPw(e.target.value)}
@@ -1186,6 +1188,7 @@ export default function SecurityPage() {
                 <FormField label="Confirm password">
                   <input
                     type="password"
+                    autoComplete="new-password"
                     value={confirmPw}
                     onChange={e => setConfirmPw(e.target.value)}
                     className={cx(B.input, 'w-full')}
@@ -1404,6 +1407,7 @@ export default function SecurityPage() {
             <div className="flex flex-col gap-3">
               <input
                 type="password"
+                autoComplete="new-password"
                 autoFocus
                 value={disableMfaPassword}
                 onChange={e => setDisableMfaPassword(e.target.value)}
@@ -1687,6 +1691,7 @@ export default function SecurityPage() {
                   <input
                     id="sso-client-secret"
                     type="password"
+                    autoComplete="new-password"
                     value={ssoClientSecret}
                     onChange={e => setSsoClientSecret(e.target.value)}
                     className={cx(B.input, 'flex-1 min-w-0')}
@@ -1790,6 +1795,7 @@ export default function SecurityPage() {
             <FormField label="SMTP username">
               <input
                 type="text"
+                autoComplete="off"
                 value={smtpUser}
                 onChange={e => setSmtpUser(e.target.value)}
                 className={cx(B.input, 'w-full')}
@@ -1802,6 +1808,7 @@ export default function SecurityPage() {
                 <input
                   id="smtp-password"
                   type="password"
+                  autoComplete="new-password"
                   value={smtpPassword}
                   onChange={e => setSmtpPassword(e.target.value)}
                   className={cx(B.input, 'flex-1 min-w-0')}

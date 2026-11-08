@@ -49,8 +49,9 @@ export async function GET(
   if (!session.authenticated) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
 
   const { id: idStr } = await params;
-  const client = await getTypedClient();
   const id = parseInt(idStr, 10);
+  if (!Number.isInteger(id)) return NextResponse.json({ error: 'Not found' }, { status: 404 });
+  const client = await getTypedClient();
   const userId = session.userId ?? '';
   const now = Math.floor(Date.now() / 1000);
   const weekAgo = now - 7 * 86400;
@@ -264,6 +265,7 @@ export async function DELETE(
   if (!session.authenticated) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
   const { id: idStr } = await params;
   const id = parseInt(idStr, 10);
+  if (!Number.isInteger(id)) return NextResponse.json({ error: 'Not found' }, { status: 404 });
   const audit = (outcome: 'success' | 'denied' | 'failure', detail: string) =>
     logAccess({ actorId: session.userId ?? '', actorEmail: session.email ?? '', resource: 'library', action: 'DELETE', outcome, detail });
 
@@ -302,8 +304,9 @@ export async function PATCH(
   if (!session.authenticated) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
 
   const { id: idStr } = await params;
-  const client = await getTypedClient();
   const id = parseInt(idStr, 10);
+  if (!Number.isInteger(id)) return NextResponse.json({ error: 'Not found' }, { status: 404 });
+  const client = await getTypedClient();
   const e = schema.skillLibraryEntries;
 
   const entryRows = await client

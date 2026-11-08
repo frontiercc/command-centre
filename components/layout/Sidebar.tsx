@@ -196,7 +196,8 @@ export default function Sidebar({ theme = 'default' }: { theme?: Theme }) {
     finops: canSeeFinOps(userRole, chargebackEnabled),
     cowork: userRole === 'admin' || userRole === 'manager' || userRole === 'viewer' || userRole === 'cowork' || userRole === 'pulse',
     coworkOverview: canSeeCoworkOverview(userRole),
-    coworkUsers: userRole === 'admin' || userRole === 'manager' || userRole === 'cowork' || userRole === 'pulse' || userRole === 'viewer',
+    // Mirrors /pulse/users: a viewer cannot open another person's Pulse, so the page refuses them.
+    coworkUsers: userRole === 'admin' || userRole === 'manager' || userRole === 'cowork' || userRole === 'pulse',
     code: userRole === 'admin' || userRole === 'manager' || userRole === 'viewer' || userRole === 'code' || userRole === 'pulse',
     codeOverview: canSeeCodeOverview(userRole),
     codeTeam: userRole === 'admin' || userRole === 'manager' || userRole === 'viewer' || userRole === 'code' || userRole === 'pulse',

@@ -100,8 +100,8 @@ export default function WorkDetail({ item, showName, canOpenUseCases, compact = 
 
   const systems = [...f.connectors, ...f.skills.map(skillName)];
   const inputs = f.inputs.length
-    ? `${f.inputs.join(' and ')} in`
-    : (f.uploads != null && f.uploads > 0 ? `${plural(f.uploads, 'document', 'documents')} in` : null);
+    ? `${f.inputs.join(' and ')} uploaded`
+    : (f.uploads != null && f.uploads > 0 ? `${plural(f.uploads, 'document', 'documents')} uploaded` : null);
   const used = [systems.length ? systems.join(', ') : null, inputs].filter((x): x is string => !!x);
   const produced = producedParts(item);
 

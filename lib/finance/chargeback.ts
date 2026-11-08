@@ -21,6 +21,7 @@ import { getTypedClient } from '@/lib/db/client';
 import { jsonToText } from '@/lib/db/json';
 import { monthBounds, isCurrentMonth } from '@/lib/finance/period';
 import { priceTokens, getCodeModelRates, spendIsPartlyEstimated, normalizeModelId, type ModelRates } from '@/lib/pulse/code/rates';
+import { valueChatgptCost } from '@/lib/openai/cost-value';
 import { resolveDeptToCentre } from '@/lib/finance/cost-centres';
 
 // ─── Phase 3 raw-execution facade (mirrors lib/db/queries.ts's rawAll) ────────
@@ -342,6 +343,8 @@ export async function buildChargeback(period: string, nowS: number = Math.floor(
     const openaiRows = async (query: unknown) => rawAll<{
       user_id: string | null; model: string | null;
       inp: number | string | null; cached: number | string | null; outp: number | string | null;
+      // ChatGPT only: a group of records with no token split, valued at OpenAI's figure.
+      no_split?: boolean; reported?: number | string | null; unknown_usd?: number | string | null;
     }>(db, query);
     const priceInto = (
       rows: Awaited<ReturnType<typeof openaiRows>>,
@@ -355,9 +358,12 @@ export async function buildChargeback(period: string, nowS: number = Math.floor(
         tokens.cacheRead += cached;
         // Listed even when unpriced, as Claude Code's users are.
         const u = getUser(row.user_id);
-        const usd = row.model === null ? null : priceTokens(row.model, {
-          inputTokens: inp, outputTokens: outp, cacheReadTokens: cached, cacheCreationTokens: 0,
-        }, rates);
+        const usage = { inputTokens: inp, outputTokens: outp, cacheReadTokens: cached, cacheCreationTokens: 0 };
+        // A ChatGPT record with no token split is valued at OpenAI's own figure (lib/openai/cost-value.ts).
+        const usd = row.no_split
+          ? valueChatgptCost(row.model, usage, Number(row.reported ?? 0), rates)
+          : row.model === null ? null : priceTokens(row.model, usage, rates);
+        if (row.no_split && Number(row.unknown_usd ?? 0) > 0) openaiUnpriced.add(row.model ?? '(no model)');
         if (usd === null) { openaiUnpriced.add(row.model ?? '(no model)'); continue; }
         add(u, usd);
         // Cached input is billed at OpenAI's discounted rate: the saving joins the caching estimate.
@@ -370,10 +376,12 @@ export async function buildChargeback(period: string, nowS: number = Math.floor(
       }
     };
     priceInto(await openaiRows(sql`
-      SELECT user_id, model, SUM(input_tokens) AS inp, SUM(cached_input_tokens) AS cached, SUM(output_tokens) AS outp
+      SELECT user_id, model, (input_tokens + cached_input_tokens + output_tokens = 0) AS no_split,
+             SUM(input_tokens) AS inp, SUM(cached_input_tokens) AS cached, SUM(output_tokens) AS outp,
+             SUM(cost_usd) AS reported, SUM(CASE WHEN cost_usd IS NULL THEN 1 ELSE 0 END) AS unknown_usd
       FROM openai_costs
       WHERE product = 'chatgpt' AND hour_start >= ${start} AND hour_start < ${end}
-      GROUP BY user_id, model`), chatgptTokens, (u, usd) => { u.chatgptUsd += usd; chatgptSurfaceUsd = (chatgptSurfaceUsd ?? 0) + usd; });
+      GROUP BY user_id, model, no_split`), chatgptTokens, (u, usd) => { u.chatgptUsd += usd; chatgptSurfaceUsd = (chatgptSurfaceUsd ?? 0) + usd; });
     priceInto(await openaiRows(sql`
       SELECT user_id, model, SUM(uncached_input_tokens) AS inp, SUM(cached_input_tokens) AS cached, SUM(output_tokens) AS outp
       FROM codex_turns

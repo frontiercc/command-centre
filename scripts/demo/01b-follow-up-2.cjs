@@ -197,8 +197,11 @@ async function main() {
       console.log(`[fullflow-v2] moved rubric version ${latest.id} back to ${new Date(newChangedAt * 1000).toISOString()} — Delegation View's current segment now has enough weeks.`);
     }
 
-    // ── 5. Cowork + Code spend — real volume, all users, last 7 days (+ a
-    // lighter continuing trail across the last 8 weeks so it isn't a cliff) ──
+    // ── 5. Cowork + Code spend — real volume, all users, at one steady rate
+    // across the last 8 weeks. It used to be four times denser in the last 7
+    // days than before them (and Code only in those 7 days), so FinOps and
+    // Spend Review read the current month as far above the last ("on pace,
+    // +156%", people up twenty times) when nothing had changed. ──
     // NOTE on realism: nReq API-request rows for a given (user, day) share
     // ONE session_id — they used to each get their own unique session_id,
     // which is the dominant reason "sessions/week" read as 2,000+ across the
@@ -219,9 +222,7 @@ async function main() {
       // independent daily dice roll.
       const quietRecently = isRecentlyQuiet(u.id, quietChanceFor(intensity));
       for (let daysAgo = 55; daysAgo >= 0; daysAgo--) {
-        const inLast7 = daysAgo <= 7;
         if (daysAgo <= 13 && quietRecently) continue;
-        if (!inLast7 && Math.random() < 0.55) continue; // sparser trail before the last week
         if (Math.random() > activeChance) continue; // this user was quiet this particular day
         const dayStart = now - daysAgo * DAY;
         // Cap "today" at `now`, never the full day — an uncapped rand(0, DAY-1)
@@ -232,7 +233,7 @@ async function main() {
         const dayEnd = daysAgo === 0 ? now : dayStart + DAY;
 
         // Cowork API requests — grouped under one session for the day.
-        const nReq = inLast7 ? rand(2, 6) : rand(0, 2);
+        const nReq = rand(1, 4);
         const daySessionId = uid('capisess');
         for (let i = 0; i < nReq; i++) {
           const ts = dayStart + rand(0, Math.max(1, dayEnd - dayStart - 1));
@@ -247,9 +248,9 @@ async function main() {
           if (ts > (lastActivityByUser[u.id] ?? 0)) lastActivityByUser[u.id] = ts;
         }
 
-        // Code spend top-up — intensity-gated, heavier in the last 7 days.
+        // Code spend top-up — intensity-gated, the same rate every day.
         const codeChance = intensity === 'high' ? 0.9 : intensity === 'medium' ? 0.6 : 0.3;
-        if (inLast7 && Math.random() < codeChance) {
+        if (Math.random() < codeChance) {
           const model = weightedModel();
           const input = rand(3000, 20000), output = rand(500, 3500);
           const ts = dayStart + rand(0, Math.max(1, dayEnd - dayStart - 1));
@@ -309,7 +310,8 @@ async function main() {
         eventN++;
       }
       if (Math.random() < 0.35) {
-        const previewSnippet = pick(['Draft the board pack variance commentary end to end.', 'Reconcile the vendor spend ledger and flag anomalies.', 'Build the new-hire onboarding flow across three systems.']);
+        // The flagged session's own prompt, so the card's title and prompt agree.
+        const previewSnippet = anchorText;
         await c.query(
           `INSERT INTO pulse_events (user_id, event_type, status, title, body, cowork_message_id, tier, detected_at)
            VALUES ($1,'capability_creation','candidate',$2,$3,$4,3,$5)`,

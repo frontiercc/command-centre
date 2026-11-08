@@ -352,6 +352,7 @@ function FrameworkAdminPanel() {
           <Field label="DX API token" className="flex-1">
             <input
               type="password"
+              autoComplete="new-password"
               value={token}
               onChange={e => setToken(e.target.value)}
               placeholder={tokenConfigured ? 'Token configured. Paste to replace' : 'Read-scoped org token'}
@@ -936,6 +937,7 @@ function CodePulseAdminContent() {
                 <div className="flex items-center gap-2 flex-wrap">
                   <input
                     type="password"
+                    autoComplete="new-password"
                     value={token}
                     onChange={e => setToken(e.target.value)}
                     placeholder={data?.tokenConfigured ? 'Token configured. Paste to replace' : 'github_pat_…'}

@@ -439,7 +439,7 @@ export default function CioPulsePage() {
 
         {/* What to act on next: dept process boxes + coaching rows */}
         {((data.actNext?.length ?? 0) > 0 || (data.deptProcesses?.length ?? 0) > 0) && (
-          <ActNextPanel items={data.actNext ?? []} deptBoxes={data.deptProcesses ?? []} />
+          <ActNextPanel items={data.actNext ?? []} deptBoxes={data.deptProcesses ?? []} fromBothVendors={data.openaiPresent === true} />
         )}
 
         {/* Delegation over time: org bands + dept then-vs-now rows (AI-judged) */}

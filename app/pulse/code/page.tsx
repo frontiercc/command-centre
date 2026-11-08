@@ -120,7 +120,9 @@ function buildVerdicts(d: OrgSummary, vendor: Vendor): Verdict[] {
     if (!sp) return undefined;
     const c = sp.claude ? pick(sp.claude) : null;
     const o = sp.openai ? pick(sp.openai) : null;
-    return `Claude Code ${c == null ? 'n/a' : fmt(c)} · Codex ${o == null ? 'n/a' : fmt(o)}`;
+    // Shown only when both products have a figure, never as "n/a".
+    if (c == null || o == null) return undefined;
+    return `Claude Code ${fmt(c)} · Codex ${fmt(o)}`;
   };
   const spendPerSession = m && m.spend_usd !== null && m.session_count > 0 ? m.spend_usd / m.session_count : null;
   // Trend wording comes from the completed-week delta, never a render-time
@@ -418,7 +420,7 @@ export default function CodePulseOverviewPage() {
             <CodeBriefingCard />
 
             {data?.githubOverlay && (
-              <ShippingAlignmentChart series={data.githubOverlay.shippingSeries ?? []} codexPresent={codexPresent} openaiOnly={openaiOnly}>
+              <ShippingAlignmentChart series={data.githubOverlay.shippingSeries ?? []} codexPresent={codexPresent && vendor !== 'claude'} openaiOnly={openaiOnly || vendor === 'openai'}>
                 {(data.githubOverlay.repoCards?.length ?? 0) > 0
                   ? <GithubRepoCards cards={data.githubOverlay.repoCards} />
                   : undefined}

@@ -157,6 +157,8 @@ export interface AppConfig {
   pulseAuditLastRun: string;
   pulseSessionDescriptionsLastRun: string;
   pulseAggregatorLastRun: string;
+  /** Job-written: graded-at time the per-vendor past weeks were last brought up to date from. */
+  pulseVendorWeeksGradedSince: string;
   pulseAggregatorDailyLastRun: string;
   // Job-written only (lib/pulse/cowork/session-aggregator.ts's runCoworkSessionAggJob,
   // hourly, cadence-guarded inside the job) — deliberately NOT in
@@ -169,6 +171,8 @@ export interface AppConfig {
   codePulseEnabled: boolean;
   codeModelRates: string;
   codeAggregatorLastRun: string;
+  /** Job-written: session-stats time the per-product past weeks were last brought up to date from. */
+  codeVendorWeeksChangedSince: string;
   // Developer Pulse alerts (deterministic, evaluated hourly)
   codeAlertCostSpikeEnabled: boolean;
   codeCostSpikeMultiplier: number;
@@ -437,6 +441,7 @@ export const CONFIG_KEYS: Record<keyof AppConfig, string> = {
   pulseAuditLastRun: 'pulse_audit_last_run',
   pulseSessionDescriptionsLastRun: 'pulse_session_descriptions_last_run',
   pulseAggregatorLastRun: 'pulse_aggregator_last_run',
+  pulseVendorWeeksGradedSince: 'pulse_vendor_weeks_graded_since',
   pulseAggregatorDailyLastRun: 'pulse_aggregator_daily_last_run',
   coworkSessionAggLastRun: 'cowork_session_agg_last_run',
   pulseWeeklyBriefingLastRun: 'pulse_weekly_briefing_last_run',
@@ -445,6 +450,7 @@ export const CONFIG_KEYS: Record<keyof AppConfig, string> = {
   codePulseEnabled: 'code_pulse_enabled',
   codeModelRates: 'code_model_rates',
   codeAggregatorLastRun: 'code_aggregator_last_run',
+  codeVendorWeeksChangedSince: 'code_vendor_weeks_changed_since',
   codeAlertCostSpikeEnabled: 'code_alert_cost_spike_enabled',
   codeCostSpikeMultiplier: 'code_cost_spike_multiplier',
   codeCostSpikeFloorUsd: 'code_cost_spike_floor_usd',
@@ -833,6 +839,7 @@ export async function getAllConfig(): Promise<AppConfig> {
     pulseAuditLastRun: resolve('pulseAuditLastRun'),
     pulseSessionDescriptionsLastRun: resolve('pulseSessionDescriptionsLastRun'),
     pulseAggregatorLastRun: resolve('pulseAggregatorLastRun'),
+    pulseVendorWeeksGradedSince: resolve('pulseVendorWeeksGradedSince'),
     pulseAggregatorDailyLastRun: resolve('pulseAggregatorDailyLastRun'),
     coworkSessionAggLastRun: resolve('coworkSessionAggLastRun'),
     pulseWeeklyBriefingLastRun: resolve('pulseWeeklyBriefingLastRun'),
@@ -842,6 +849,7 @@ export async function getAllConfig(): Promise<AppConfig> {
     codePulseEnabled: resolve('codePulseEnabled', 'true') === 'true',
     codeModelRates: resolve('codeModelRates', '{}'),
     codeAggregatorLastRun: resolve('codeAggregatorLastRun'),
+    codeVendorWeeksChangedSince: resolve('codeVendorWeeksChangedSince'),
     codeAlertCostSpikeEnabled: resolve('codeAlertCostSpikeEnabled', 'true') === 'true',
     codeCostSpikeMultiplier: parseFloat(resolve('codeCostSpikeMultiplier', '3')),
     codeCostSpikeFloorUsd: parseFloat(resolve('codeCostSpikeFloorUsd', '100')),

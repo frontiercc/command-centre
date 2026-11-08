@@ -266,7 +266,7 @@ export default function DeptPickerPage() {
                 <Strip cols={activityCols === 1 ? undefined : activityCols as 2 | 3 | 4}>
                   {spend && (
                     <Figure
-                      label={`Dept ${spend.label.charAt(0).toLowerCase()}${spend.label.slice(1)}, 7 days`}
+                      label={`Dept ${spend.label === 'Spend' ? 'spend' : spend.label}, 7 days`}
                       value={spend.notPriced ? <span className="text-[15px] font-medium text-[#8F8F8F] tracking-normal">Not priced</span> : spendValue(spend.usd)}
                       sub={spend.sub}
                     />

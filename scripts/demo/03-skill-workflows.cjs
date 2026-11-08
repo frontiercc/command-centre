@@ -317,9 +317,10 @@ async function clean(c) {
   // can write for a seeded person: alerts (a PII alert on a seeded prompt
   // fired overnight on a demo install and blocked the users delete on
   // once, leaving the use cases deleted and nothing reinserted),
-  // classifications / skill runs keyed by user, and analytics snapshots.
+  // skill runs keyed by user, and analytics snapshots. Grades are cleared on
+  // this step's own prompts only (above): clearing them by user also wiped the
+  // grades step 01 gave these people's Cowork prompts.
   await c.query(`DELETE FROM alerts WHERE user_id LIKE $1`, [`${MARKER}%`]);
-  await c.query(`DELETE FROM pulse_classifications WHERE user_id LIKE $1`, [`${MARKER}%`]);
   await c.query(`DELETE FROM pulse_skill_runs WHERE user_id LIKE $1`, [`${MARKER}%`]);
   await c.query(`DELETE FROM analytics_snapshots WHERE user_id LIKE $1`, [`${MARKER}%`]);
   await c.query(`DELETE FROM otel_events WHERE user_id LIKE $1`, [`${MARKER}%`]);

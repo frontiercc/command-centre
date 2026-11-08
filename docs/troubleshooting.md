@@ -22,7 +22,7 @@ The commands are for Docker Compose installations: run them from the `command-ce
 
 **Pages still empty.** They fill in a few minutes after loading, once the scheduled jobs run. Reload to see new items in the sidebar.
 
-**Two demo views missing.** The FinOps Enterprise figures and Dev Framework Alignment scores are hidden by default. In `.env`, remove the `#` from `# CCC_FINOPS_ALLOW_MOCK=1` and `# CCC_DX_ALLOW_MOCK=1`, then run `docker compose up -d`. Do not do this on an installation with real data.
+**Dev Framework Alignment scores missing.** Its demo scores are hidden by default. In `.env`, remove the `#` from `# CCC_DX_ALLOW_MOCK=1`, then run `docker compose up -d`. Do not do this on an installation with real data.
 
 ## Connecting Claude
 

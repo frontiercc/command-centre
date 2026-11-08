@@ -808,6 +808,7 @@ export default function SystemPage() {
                 <input
                   id="digest-slack-webhook"
                   type="password"
+                  autoComplete="new-password"
                   value={digestSlackWebhookUrl}
                   onChange={(e) => setDigestSlackWebhookUrl(e.target.value)}
                   className={cx(B.input, 'flex-1 min-w-0 font-mono')}

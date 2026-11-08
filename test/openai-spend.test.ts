@@ -78,6 +78,36 @@ describe('interpretSpend', () => {
     });
     expect(interpretSpend(turn('CODEX_WORK_WEB'), floors)).toBeNull();
   });
+
+  // OpenAI's own example CODEX_TURN (Admin API reference, Codex Turns): no
+  // session or thread ID, no timing, and a native dollar charge with no credits.
+  const docTurn = (extra: Record<string, unknown> = {}) => ({
+    event_id: 'c73ce7eb', type: 'CODEX_TURN', timestamp: '2026-10-30T14:59:59Z',
+    actor: { type: 'ACCOUNT_USER', user_id: 'user_123', user_email: 'sam@example.com' },
+    payload: {
+      hour_partition: '2026-10-30T14', turn_id: 'turn_123', turn_key: 'turn_key_123',
+      product_client_id: 'CODEX_CLI', model: 'gpt-5', response_count: 1,
+      cost_usd: 0.2583, tags: ['automation'],
+      token_usage: { uncached_input_tokens: 100, cached_input_tokens: 20, output_tokens: 50 },
+      ...extra,
+    },
+  });
+
+  it('keeps a Codex turn with no session ID, as in OpenAI\'s own example', () => {
+    expect(interpretSpend(docTurn(), floors)).toMatchObject({
+      kind: 'turn', id: 'codex-turn:turn_key_123', sessionId: 'codex:turn:turn_key_123',
+      uncachedInput: 100, cachedInput: 20, output: 50, credits: null, openaiCostUsd: 0.2583,
+    });
+    expect(interpretSpend(docTurn({ thread_id: 'th-9' }), floors)).toMatchObject({ sessionId: 'codex:th-9' });
+    expect(interpretSpend(docTurn({ thread_id: 'th-9', session_id: 's-9' }), floors)).toMatchObject({ sessionId: 'codex:s-9' });
+  });
+
+  it('adds OpenAI\'s two dollar amounts for a turn billed partly in credits, partly in dollars', () => {
+    const s = interpretSpend(docTurn({ credits: 2, estimated_cost_usd: 0.08 }), floors);
+    expect(s).toMatchObject({ credits: 2 });
+    expect((s as { openaiCostUsd: number }).openaiCostUsd).toBeCloseTo(0.3383, 6);
+    expect(interpretSpend(docTurn({ cost_usd: undefined }), floors)).toMatchObject({ openaiCostUsd: null });
+  });
 });
 
 describe('workSpendFigure', () => {

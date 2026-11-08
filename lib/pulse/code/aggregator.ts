@@ -18,13 +18,13 @@
  * 'week' rows are upserted via onConflictDoUpdate with
  * `targetWhere: sql\`granularity = 'week'\`` as the partial index arbiter.
  */
-import { and, desc, eq, gte, inArray, isNotNull, ne, sql } from 'drizzle-orm';
+import { and, desc, eq, gte, inArray, isNotNull, lt, ne, sql } from 'drizzle-orm';
 import { getTypedClient } from '@/lib/db/client';
 import { schema } from '@/lib/db/schema';
 import { getConfigValue, setConfigValue } from '@/lib/config';
 import { getCodeModelRates, priceTokens, type ModelRates } from '@/lib/pulse/code/rates';
 import { runCodePulseAlerts } from '@/lib/alerts/code-pulse-alerts';
-import { weekStart } from '@/lib/pulse/period';
+import { weekStart, weekStarts } from '@/lib/pulse/period';
 import { activeSecondsFromTimestamps } from '@/lib/pulse/session-active-time';
 import { codexSpend } from '@/lib/openai/spend';
 
@@ -328,7 +328,7 @@ const EMPTY_OTEL_AGG: OtelMetricAgg = {
  * function cannot tell the two apart. Verify the fleet's temporality before
  * trusting these numbers.
  */
-export async function otelMetricsForUsers(userIds: string[], windowStart: number): Promise<OtelMetricAgg> {
+export async function otelMetricsForUsers(userIds: string[], windowStart: number, windowEnd?: number): Promise<OtelMetricAgg> {
   if (userIds.length === 0) return { ...EMPTY_OTEL_AGG };
   const client = await getTypedClient();
   const t = schema.codeOtelMetrics;
@@ -343,7 +343,7 @@ export async function otelMetricsForUsers(userIds: string[], windowStart: number
       er: sql<number | string>`COALESCE(SUM(CASE WHEN ${t.metric_name}='claude_code.code_edit_tool.decision' AND ${t.type}='reject' THEN ${t.value} END),0)`,
     })
     .from(t)
-    .where(and(inArray(t.user_id, userIds), gte(t.occurred_at, windowStart)));
+    .where(and(inArray(t.user_id, userIds), gte(t.occurred_at, windowStart), windowEnd !== undefined ? lt(t.occurred_at, windowEnd) : undefined));
   const row = rows[0];
   return {
     activeTimeUserS: Math.round(Number(row?.atu ?? 0)),
@@ -356,7 +356,7 @@ export async function otelMetricsForUsers(userIds: string[], windowStart: number
   };
 }
 
-async function skillLeverageForUsers(client: TypedClient, userIds: string[], windowStart: number): Promise<number | null> {
+async function skillLeverageForUsers(client: TypedClient, userIds: string[], windowStart: number, windowEnd?: number): Promise<number | null> {
   if (userIds.length === 0) return null;
   const csi = schema.coworkSkillInvocations;
   const css = schema.codeSessionStats;
@@ -368,12 +368,16 @@ async function skillLeverageForUsers(client: TypedClient, userIds: string[], win
     })
     .from(csi)
     .innerJoin(css, eq(css.session_id, csi.session_id))
-    .where(and(inArray(csi.user_id, userIds), gte(csi.occurred_at, windowStart)));
+    .where(and(inArray(csi.user_id, userIds), gte(csi.occurred_at, windowStart), windowEnd !== undefined ? lt(csi.occurred_at, windowEnd) : undefined));
   const row = rows[0];
   const total = Number(row?.total ?? 0);
   if (!total) return null;
   return Number(row?.chained ?? 0) / total;
 }
+
+/** Completed weeks the per-product weekly rows are kept up to date over. */
+const PAST_VENDOR_WEEKS = 13;
+const WEEK = 7 * 24 * 60 * 60;
 
 /** The three per-product views code_metrics_vendor holds. */
 export type CodeVendor = 'all' | 'claude' | 'openai';
@@ -682,16 +686,18 @@ async function runCodeHourlyAggregationInner(client: TypedClient): Promise<void>
         ? { ...s, tool_use_count: c?.tools ?? 0, error_count: c?.errors ?? 0, commit_count: c?.commits ?? 0 }
         : s;
     });
-    const vendorWriter = (vendor: CodeVendor, periodStart: number, granularity: 'rolling' | 'week'): ScopeWriter =>
+    // periodEnd is now for the current windows; a past week (below) passes its end, which also bounds every query.
+    const vendorWriter = (vendor: CodeVendor, periodStart: number, granularity: 'rolling' | 'week', periodEnd?: number): ScopeWriter =>
       async (scopeType, scopeId, scopeSessions, memberIds, isOrg) => {
+        const end = periodEnd ?? now;
         const base = computeScopeMetrics(scopeSessions, rates);
-        const skill = vendor === 'openai' ? null : await skillLeverageForUsers(client, memberIds, periodStart);
+        const skill = vendor === 'openai' ? null : await skillLeverageForUsers(client, memberIds, periodStart, periodEnd);
         if (vendor === 'claude') {
-          await writeCodeMetric(client, scopeType, scopeId, periodStart, now, base, skill,
-            await otelMetricsForUsers(memberIds, periodStart), granularity, vendor);
+          await writeCodeMetric(client, scopeType, scopeId, periodStart, end, base, skill,
+            await otelMetricsForUsers(memberIds, periodStart, periodEnd), granularity, vendor);
           return;
         }
-        const codex = await codexSpend({ since: periodStart, userIds: isOrg ? undefined : memberIds }, rates);
+        const codex = await codexSpend({ since: periodStart, until: periodEnd, userIds: isOrg ? undefined : memberIds }, rates);
         const codexUsd = codex.turns === 0 ? 0 : codex.usd;
         if (vendor === 'openai') {
           const m = {
@@ -701,7 +707,7 @@ async function runCodeHourlyAggregationInner(client: TypedClient): Promise<void>
             outputTokens: codex.outputTokens,
             cacheHitRatio: codex.inputTokens + codex.cachedTokens > 0 ? codex.cachedTokens / (codex.inputTokens + codex.cachedTokens) : null,
           };
-          await writeCodeMetric(client, scopeType, scopeId, periodStart, now, m, skill, { ...EMPTY_OTEL_AGG }, granularity, vendor);
+          await writeCodeMetric(client, scopeType, scopeId, periodStart, end, m, skill, { ...EMPTY_OTEL_AGG }, granularity, vendor);
           return;
         }
         // All products: Claude Code's figures plus Codex's.
@@ -716,14 +722,56 @@ async function runCodeHourlyAggregationInner(client: TypedClient): Promise<void>
           outputTokens: base.outputTokens + codex.outputTokens,
           cacheHitRatio: cacheDen > 0 ? (claudeCr + codex.cachedTokens) / cacheDen : null,
         };
-        await writeCodeMetric(client, scopeType, scopeId, periodStart, now, m, skill,
-          await otelMetricsForUsers(memberIds, periodStart), granularity, vendor);
+        await writeCodeMetric(client, scopeType, scopeId, periodStart, end, m, skill,
+          await otelMetricsForUsers(memberIds, periodStart, periodEnd), granularity, vendor);
       };
     for (const vendor of ['all', 'claude', 'openai'] as const) {
       const pick = (rows: typeof augmented) => vendor === 'all' ? rows : rows.filter(s => isCodexSession(s) === (vendor === 'openai'));
       await writeScopes(pick(augmented.filter(s => s.last_at >= rollingPeriodStart)), rollingPeriodStart, 'rolling', vendorWriter(vendor, rollingPeriodStart, 'rolling'));
       await writeScopes(pick(augmented.filter(s => s.last_at >= weeklyPeriodStart)), weeklyPeriodStart, 'week', vendorWriter(vendor, weeklyPeriodStart, 'week'));
     }
+
+    // Completed weeks whose sessions changed since the last run (every week
+    // the first time) are recounted from the session stats, each bounded to
+    // its week: the table only gains a week while this runs with Codex data
+    // present, and a week written before a late session (a Codex backfill)
+    // arrived would otherwise stay short. Weeks with no changed session are
+    // left exactly as they are. Five minutes of overlap, as in Work Pulse.
+    const changedSince = Number(await getConfigValue('codeVendorWeeksChangedSince')) || 0;
+    const runStart = Math.floor(Date.now() / 1000);
+    const pastFrom = weekStarts(weeklyPeriodStart - 1, PAST_VENDOR_WEEKS)[0];
+    const lastAtWeek = sql<number | string>`(${css.last_at} - (((${css.last_at} / 86400) + 3) % 7) * 86400 - (${css.last_at} % 86400))`;
+    const changedWeeks = (await client
+      .selectDistinct({ week: lastAtWeek })
+      .from(css)
+      .where(and(gte(css.last_at, pastFrom), lt(css.last_at, weeklyPeriodStart), gte(css.computed_at, changedSince))))
+      .map(r => Number(r.week))
+      .sort((a, b) => b - a);
+    for (const week of changedWeeks) {
+      const weekEnd = week + WEEK;
+      const sessions = await client
+        .select({
+          session_id: css.session_id, user_id: css.user_id, repo: css.repo,
+          user_msg_count: css.user_msg_count, tool_use_count: css.tool_use_count, error_count: css.error_count,
+          commit_count: css.commit_count, input_tokens: css.input_tokens, output_tokens: css.output_tokens,
+          cache_creation_tokens: css.cache_creation_tokens, cache_read_tokens: css.cache_read_tokens,
+          models_json: css.models_json, last_at: css.last_at,
+        })
+        .from(css)
+        .where(and(gte(css.last_at, week), lt(css.last_at, weekEnd)));
+      const weekCounts = await codexActionCounts(client, sessions.filter(isCodexSession).map(s => s.session_id));
+      const weekSessions: Array<SessionRow & { last_at: number }> = sessions.map(s => {
+        const c = isCodexSession(s) ? weekCounts.get(s.session_id) : undefined;
+        return isCodexSession(s)
+          ? { ...s, tool_use_count: c?.tools ?? 0, error_count: c?.errors ?? 0, commit_count: c?.commits ?? 0 }
+          : s;
+      });
+      for (const vendor of ['all', 'claude', 'openai'] as const) {
+        const rows = vendor === 'all' ? weekSessions : weekSessions.filter(s => isCodexSession(s) === (vendor === 'openai'));
+        await writeScopes(rows, week, 'week', vendorWriter(vendor, week, 'week', weekEnd));
+      }
+    }
+    await setConfigValue('codeVendorWeeksChangedSince', String(runStart - 300));
   }
 
   // Deterministic alert evaluation — runs after rollups so it sees fresh stats

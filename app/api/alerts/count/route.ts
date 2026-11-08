@@ -9,8 +9,11 @@ export const dynamic = 'force-dynamic';
 
 export async function GET(request: NextRequest) {
   const session = await getAdminSession(request);
-  if (!session.authenticated || !canAccessCorePlatform(session.role)) {
+  if (!session.authenticated) {
     return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+  }
+  if (!canAccessCorePlatform(session.role)) {
+    return NextResponse.json({ error: 'Forbidden' }, { status: 403 });
   }
 
   return NextResponse.json({ count: await getOpenAlertCount() });

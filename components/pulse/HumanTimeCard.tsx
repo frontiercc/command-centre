@@ -86,7 +86,8 @@ export default function HumanTimeCard({ summary, surface, scope, className = '',
               <p className="m-0 mt-1 text-[13px] text-[#8F8F8F]">{claudeLabel}</p>
             </div>
           </div>
-          {bp && (
+          {/* The split only says something when both products have hours. */}
+          {bp && (bp.claude.humanMinutes > 0 || bp.claude.claudeMinutes > 0) && (bp.openai.humanMinutes > 0 || bp.openai.claudeMinutes > 0) && (
             <p className="m-0 text-[13px] text-[#8F8F8F] tabular-nums">
               Claude Cowork ~{hours(bp.claude.humanMinutes)} h by hand, {hours(bp.claude.claudeMinutes)} h measured · ChatGPT ~{hours(bp.openai.humanMinutes)} h by hand, {hours(bp.openai.claudeMinutes)} h measured
             </p>

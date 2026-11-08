@@ -204,8 +204,11 @@ export async function GET(
        u.email,
        pm.dds,
        pm.oti,
-       (SELECT MAX(classified_at) FROM pulse_classifications
-        WHERE user_id = u.id AND classifier_status = 'classified') AS last_active
+       -- When they last worked: the time of their latest classified prompt, not
+       -- when the classifier got to it (on a fresh install that is everyone at once).
+       (SELECT MAX(cm.occurred_at) FROM pulse_classifications pc
+        JOIN cowork_messages cm ON cm.id = pc.cowork_message_id
+        WHERE pc.user_id = u.id AND pc.classifier_status = 'classified') AS last_active
      FROM users u
      LEFT JOIN (
        SELECT scope_id AS user_id, dds, oti

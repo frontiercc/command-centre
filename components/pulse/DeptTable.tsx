@@ -5,6 +5,7 @@
 
 import Link from 'next/link';
 import { Panel, T, Muted } from '@/components/precision/ui';
+import { orsLevel, readOrs } from '@/lib/pulse/metrics/ors-status';
 
 export interface DeptRow {
   department: string;
@@ -25,13 +26,17 @@ function fmt(val: number | null, decimals = 2): string {
 
 function ResilienceCell({ ors }: { ors: number | null }) {
   if (ors === null) return <span className="text-[#8F8F8F]">—</span>;
-  const low = ors < 0.7;
+  // The same bands as the overview's headline (lib/pulse/metrics/ors-status.ts):
+  // only "Concentrated" is a warning; "Early stage" is amber without one.
+  const level = orsLevel(ors);
+  const concentrated = level === 'concentrated';
+  const early = level === 'early';
   return (
     <span
-      className={low ? 'font-medium text-[#B54708]' : 'text-[#0A0A0A]'}
-      title={low ? 'Concentration risk: resilience below 0.70' : undefined}
+      className={concentrated ? 'font-medium text-[#B54708]' : early ? 'text-[#B54708]' : 'text-[#0A0A0A]'}
+      title={concentrated || early ? readOrs(ors).status : undefined}
     >
-      {ors.toFixed(2)}{low && <><span aria-hidden="true"> ⚠️</span><span className="sr-only"> (concentration risk)</span></>}
+      {ors.toFixed(2)}{concentrated && <><span aria-hidden="true"> ⚠️</span><span className="sr-only"> (concentration risk)</span></>}
     </span>
   );
 }

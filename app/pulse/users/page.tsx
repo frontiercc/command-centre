@@ -49,6 +49,7 @@ export default function UsersPickerPage() {
 
   const [adminChecked, setAdminChecked] = useState(false);
   const [userRole, setUserRole] = useState('');
+  const deptScoped = userRole === 'cowork' || userRole === 'pulse';
   const [userDept, setUserDept] = useState<string | null>(null);
   const [users, setUsers] = useState<UserListRow[]>([]);
   const [usersLoading, setUsersLoading] = useState(true);
@@ -65,7 +66,9 @@ export default function UsersPickerPage() {
       .then(data => {
         if (!data.authenticated) { router.replace('/pulse/me'); return; }
         const role = data.user?.role ?? '';
-        if (role !== 'admin' && role !== 'manager' && role !== 'cowork') {
+        // Admins and managers see everyone; cowork and pulse roles see their own
+        // department, the rule both routes this page reads already apply.
+        if (role !== 'admin' && role !== 'manager' && role !== 'cowork' && role !== 'pulse') {
           router.replace('/pulse/me');
           return;
         }
@@ -79,8 +82,8 @@ export default function UsersPickerPage() {
   // Load user list
   useEffect(() => {
     if (!adminChecked) return;
-    if (userRole === 'cowork' && !userDept) { setUsersLoading(false); return; }
-    const url = userRole === 'cowork' && userDept
+    if (deptScoped && !userDept) { setUsersLoading(false); return; }
+    const url = deptScoped && userDept
       ? `/api/pulse/admin/users?dept=${encodeURIComponent(userDept)}`
       : '/api/pulse/admin/users';
     fetch(url)
@@ -96,7 +99,7 @@ export default function UsersPickerPage() {
       })
       .catch(() => {})
       .finally(() => setUsersLoading(false));
-  }, [adminChecked, userRole, userDept]); // eslint-disable-line react-hooks/exhaustive-deps
+  }, [adminChecked, deptScoped, userDept]); // eslint-disable-line react-hooks/exhaustive-deps
 
   const loadUser = useCallback((userId: string) => {
     if (!userId) return;
@@ -129,7 +132,7 @@ export default function UsersPickerPage() {
     </>
   );
 
-  if (adminChecked && userRole === 'cowork' && !userDept) {
+  if (adminChecked && deptScoped && !userDept) {
     return (
       <>
         <TopBar title="Users" subtitle="Per-user delegation pulse" />

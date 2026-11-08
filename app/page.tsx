@@ -241,7 +241,7 @@ export default function DashboardPage() {
             />
           </Panel>
         ) : (
-          <AiBriefing refreshKey={briefingRefreshKey} />
+          <AiBriefing refreshKey={briefingRefreshKey} coversBoth={data.openaiPresent === true} />
         )}
 
         {/* Headline figures */}

@@ -56,6 +56,32 @@ describe('shareHourlyCosts', () => {
     expect(r.unpricedModels).toEqual(new Set(['gpt-unknown']));
     expect(r.bySession.get('chatgpt:a')!.parts[0].usd).toBeNull();
   });
+
+  it("values an hour with only token totals at OpenAI's own figure, never $0", () => {
+    const r = shareHourlyCosts(
+      [
+        { userId: 'u', model: TERRA, hourStart: H, usage: usage(0), reportedUsd: 4 },
+        { userId: 'u', model: 'gpt-6', hourStart: H + 3600, usage: usage(0), reportedUsd: null }, // no figure either
+      ],
+      [
+        { userId: 'u', sessionId: 'chatgpt:a', model: TERRA, occurredAt: H + 1 },
+        { userId: 'u', sessionId: 'chatgpt:b', model: 'gpt-6', occurredAt: H + 3601 },
+      ],
+      RATES,
+    );
+    expect(r.bySession.get('chatgpt:a')!.parts[0].usd).toBeCloseTo(4, 6);
+    expect(r.bySession.get('chatgpt:b')!.parts[0].usd).toBeNull();
+    expect(r.unpricedModels).toEqual(new Set(['gpt-6']));
+  });
+
+  it("prices an hour with a token split from the tokens, ignoring OpenAI's figure", () => {
+    const r = shareHourlyCosts(
+      [{ userId: 'u', model: TERRA, hourStart: H, usage: usage(1_000_000), reportedUsd: 9.99 }],
+      [{ userId: 'u', sessionId: 'chatgpt:a', model: TERRA, occurredAt: H + 1 }],
+      RATES,
+    );
+    expect(r.bySession.get('chatgpt:a')!.parts[0].usd).toBeCloseTo(1, 6);
+  });
 });
 
 describe('model advice stays with one vendor', () => {

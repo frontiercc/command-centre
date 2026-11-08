@@ -17,6 +17,7 @@
 import { and, gte, lt, eq, inArray } from 'drizzle-orm';
 import { schema } from '@/lib/db/schema';
 import { priceTokens, type ModelRates, type TokenUsage } from '@/lib/pulse/code/rates';
+import { valueChatgptCost } from '@/lib/openai/cost-value';
 import type { getTypedClient } from '@/lib/db/client';
 
 type Client = Awaited<ReturnType<typeof getTypedClient>>;
@@ -26,6 +27,8 @@ export interface HourlyCost {
   model: string | null;
   hourStart: number;
   usage: TokenUsage;
+  /** OpenAI's own dollar figure for the record: used only when it carries no token split. */
+  reportedUsd?: number | null;
 }
 
 export interface Reply {
@@ -77,7 +80,7 @@ export function shareHourlyCosts(costs: HourlyCost[], replies: Reply[], rates: M
   }
   const out: SharedCosts = { bySession: new Map(), byReply: new Map(), unmatchedByUser: new Map(), unpricedModels: new Set() };
   for (const c of costs) {
-    const usd = c.model === null ? null : priceTokens(c.model, c.usage, rates);
+    const usd = valueChatgptCost(c.model, c.usage, c.reportedUsd ?? null, rates);
     if (usd === null) out.unpricedModels.add(c.model ?? '(no model)');
     const matched = byHourModel.get(`${c.userId}|${c.hourStart}|${c.model ?? ''}`) ?? byHour.get(`${c.userId}|${c.hourStart}`);
     if (!matched || matched.length === 0) {
@@ -128,7 +131,7 @@ export async function chatgptSessionShares(client: Client, rates: ModelRates, st
   const costWhere = and(eq(oc.product, 'chatgpt'), gte(oc.hour_start, start), lt(oc.hour_start, end));
   const costSelect = {
     user_id: oc.user_id, model: oc.model, hour_start: oc.hour_start,
-    inp: oc.input_tokens, cached: oc.cached_input_tokens, outp: oc.output_tokens,
+    inp: oc.input_tokens, cached: oc.cached_input_tokens, outp: oc.output_tokens, reported: oc.cost_usd,
   };
   const costRows = userIds === null
     ? await client.select(costSelect).from(oc).where(costWhere)
@@ -143,6 +146,7 @@ export async function chatgptSessionShares(client: Client, rates: ModelRates, st
     costRows.filter(r => r.user_id).map(r => ({
       userId: r.user_id!, model: r.model, hourStart: Number(r.hour_start),
       usage: { inputTokens: Number(r.inp) || 0, outputTokens: Number(r.outp) || 0, cacheCreationTokens: 0, cacheReadTokens: Number(r.cached) || 0 },
+      reportedUsd: r.reported === null ? null : Number(r.reported),
     })),
     replyRows.map(r => ({ userId: r.user_id, sessionId: r.session_id, model: r.model, occurredAt: Number(r.occurred_at) })),
     rates,
@@ -211,7 +215,7 @@ export async function chatgptConversationReplies(client: Client, rates: ModelRat
   if (own.length === 0) return { userId: null, replies: [], unpricedModels: new Set() };
   const userId = own[0].user_id;
   const hours = [...new Set(own.map(r => Math.floor(Number(r.occurred_at) / HOUR) * HOUR))];
-  const costs = await client.select({ model: oc.model, hour_start: oc.hour_start, inp: oc.input_tokens, cached: oc.cached_input_tokens, outp: oc.output_tokens })
+  const costs = await client.select({ model: oc.model, hour_start: oc.hour_start, inp: oc.input_tokens, cached: oc.cached_input_tokens, outp: oc.output_tokens, reported: oc.cost_usd })
     .from(oc).where(and(eq(oc.product, 'chatgpt'), eq(oc.user_id, userId), inArray(oc.hour_start, hours)));
   const minH = Math.min(...hours);
   const maxH = Math.max(...hours) + HOUR;
@@ -221,6 +225,7 @@ export async function chatgptConversationReplies(client: Client, rates: ModelRat
     costs.map(c => ({
       userId, model: c.model, hourStart: Number(c.hour_start),
       usage: { inputTokens: Number(c.inp) || 0, outputTokens: Number(c.outp) || 0, cacheCreationTokens: 0, cacheReadTokens: Number(c.cached) || 0 },
+      reportedUsd: c.reported === null ? null : Number(c.reported),
     })),
     theirs.map(r => ({ id: r.id, userId, sessionId: r.session_id, model: r.model, occurredAt: Number(r.occurred_at) })),
     rates,

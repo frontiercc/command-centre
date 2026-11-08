@@ -15,6 +15,7 @@
 import { sql, type SQL } from 'drizzle-orm';
 import { getTypedClient } from '@/lib/db/client';
 import { getCodeModelRates, priceTokens, type ModelRates } from '@/lib/pulse/code/rates';
+import { valueChatgptCost } from '@/lib/openai/cost-value';
 
 interface RawFacade {
   execute: (q: unknown) => Promise<{ rows: unknown[] }>;
@@ -47,12 +48,19 @@ export interface ChatgptSpend {
 export async function chatgptSpend(opts: { since: number; userIds?: string[] }, rates?: ModelRates): Promise<ChatgptSpend | null> {
   const any = await rawAll<{ x: number }>(sql`SELECT 1 AS x FROM openai_costs WHERE product = 'chatgpt' LIMIT 1`);
   if (any.length === 0) return null;
-  const rows = await rawAll<{ model: string | null; inp: string | number; cached: string | number; outp: string | number; openai_usd: string | number | null }>(sql`
-    SELECT model, COALESCE(SUM(input_tokens), 0) AS inp, COALESCE(SUM(cached_input_tokens), 0) AS cached,
-           COALESCE(SUM(output_tokens), 0) AS outp, COALESCE(SUM(cost_usd), 0) AS openai_usd
+  // Records with no token split (totals-only plans) are grouped apart and
+  // valued at OpenAI's own figure (lib/openai/cost-value.ts).
+  const rows = await rawAll<{
+    model: string | null; no_split: boolean; inp: string | number; cached: string | number; outp: string | number;
+    openai_usd: string | number | null; unknown_usd: string | number;
+  }>(sql`
+    SELECT model, (input_tokens + cached_input_tokens + output_tokens = 0) AS no_split,
+           COALESCE(SUM(input_tokens), 0) AS inp, COALESCE(SUM(cached_input_tokens), 0) AS cached,
+           COALESCE(SUM(output_tokens), 0) AS outp, COALESCE(SUM(cost_usd), 0) AS openai_usd,
+           SUM(CASE WHEN cost_usd IS NULL THEN 1 ELSE 0 END) AS unknown_usd
     FROM openai_costs
     WHERE product = 'chatgpt' AND hour_start >= ${opts.since} AND ${people(sql`user_id`, opts.userIds)}
-    GROUP BY model
+    GROUP BY model, no_split
   `);
   const r = rates ?? await getCodeModelRates();
   let usd = 0;
@@ -60,14 +68,16 @@ export async function chatgptSpend(opts: { since: number; userIds?: string[] }, 
   const unpriced: string[] = [];
   for (const row of rows) {
     openaiUsd += Number(row.openai_usd ?? 0);
-    const priced = row.model === null ? null : priceTokens(row.model, {
+    // A no-split group with a record OpenAI gave no dollar figure for: that part is unknown.
+    const someUnknown = row.no_split && Number(row.unknown_usd) > 0;
+    const priced = valueChatgptCost(row.model, {
       inputTokens: Number(row.inp), outputTokens: Number(row.outp),
       cacheReadTokens: Number(row.cached), cacheCreationTokens: 0,
-    }, r);
-    if (priced === null) unpriced.push(row.model ?? '(no model)');
-    else usd += priced;
+    }, row.no_split ? Number(row.openai_usd ?? 0) : null, r);
+    if (priced === null || someUnknown) unpriced.push(row.model ?? '(no model)');
+    if (priced !== null) usd += priced;
   }
-  return { usd, openaiUsd, unpricedModels: unpriced.sort() };
+  return { usd, openaiUsd, unpricedModels: [...new Set(unpriced)].sort() };
 }
 
 /** ChatGPT spend in dollars (see chatgptSpend), or null when no cost record has arrived. */
@@ -91,7 +101,7 @@ export interface CodexSpend {
 
 /** Codex spend since `since`, for everyone or the given people. */
 export async function codexSpend(
-  opts: { since: number; userIds?: string[] },
+  opts: { since: number; until?: number; userIds?: string[] },
   rates?: ModelRates,
 ): Promise<CodexSpend> {
   const rows = await rawAll<{
@@ -104,7 +114,7 @@ export async function codexSpend(
            COALESCE(SUM(output_tokens), 0) AS output,
            COALESCE(SUM(openai_cost_usd), 0) AS openai_usd
     FROM codex_turns
-    WHERE started_at >= ${opts.since} AND ${people(sql`user_id`, opts.userIds)}
+    WHERE started_at >= ${opts.since} ${opts.until !== undefined ? sql`AND started_at < ${opts.until}` : sql``} AND ${people(sql`user_id`, opts.userIds)}
     GROUP BY model
   `);
   const r = rates ?? await getCodeModelRates();

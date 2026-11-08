@@ -105,12 +105,14 @@ export default function CodeStatStrip({ metrics, githubRepos, view = 'claude', s
     if (!split) return null;
     const c = split.claude ? pick(split.claude) : null;
     const o = split.openai ? pick(split.openai) : null;
-    return `Claude Code ${c == null ? 'n/a' : fmt(c)} · Codex ${o == null ? 'n/a' : fmt(o)}`;
+    // Shown only when both products have a figure, never as "n/a".
+    if (c == null || o == null) return null;
+    return `Claude Code ${fmt(c)} · Codex ${fmt(o)}`;
   };
   const actor = view === 'openai' ? 'Codex' : view === 'all' ? 'the AI' : 'Claude';
   const signals: CodeSignal[] = [
     {
-      label: view === 'openai' ? 'Codex spend · 7 days' : view === 'all' ? 'Spend · 7 days' : 'Claude spend · 7 days',
+      label: view === 'openai' ? 'Codex spend · 7 days' : view === 'all' ? 'Spend · 7 days' : 'Claude Code spend · 7 days',
       value: metrics === null ? null : metrics.spend_usd === null
         ? null
         : formatCurrency(metrics.spend_usd),

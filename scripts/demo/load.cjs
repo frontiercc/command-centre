@@ -52,8 +52,10 @@ const STEPS = [
 ];
 
 // The feature switches the sample data shows (all but single sign-on, which
-// needs an identity provider). Its demo figures for FinOps and Dev Framework Alignment
-// also need CCC_FINOPS_ALLOW_MOCK and CCC_DX_ALLOW_MOCK on the Hub.
+// needs an identity provider). Its demo Dev Framework Alignment scores also
+// need CCC_DX_ALLOW_MOCK on the Hub. The demo FinOps Enterprise figures are
+// left off: they do not match the sample's own spend, so the reconciliation
+// check raised a High alert ("94% drift") on every load.
 const SWITCHES = [
   ['chargeback_enabled', 'true'],
   ['code_alert_cost_spike_enabled', 'true'],
@@ -64,7 +66,6 @@ const SWITCHES = [
   ['code_pulse_enabled', 'true'],
   ['dx_framework_enabled', 'true'],
   ['dx_framework_mock', 'true'],
-  ['finance_enterprise_mock', 'true'],
   ['finance_model_efficiency_enabled', 'true'],
   ['highlights_enabled', 'true'],
   ['human_time_enabled', 'true'],
@@ -155,7 +156,36 @@ const run = (cmd, args) => execFileSync(cmd, args, { stdio: 'inherit', env: proc
   // matches) and department process suggestions. Nothing in them is tied to
   // anyone outside the fictional organisation.
   console.log('\nAdding the sample S&C Board, use cases and suggestions...');
-  const extra = require('./demo-hub-board-and-use-cases.json');
+  // The bundled file was exported on fixed dates. Move every date forward by
+  // whole weeks so its last week becomes the last completed week before
+  // loading: use cases, their weekly figures and matches, the S&C Board and
+  // the suggestions then look current whenever the sample is loaded, and
+  // every week still starts on a Monday.
+  const raw = require('./demo-hub-board-and-use-cases.json');
+  const WEEK_S = 7 * 86400;
+  const nowS = Math.floor(Date.now() / 1000);
+  const today = new Date(nowS * 1000);
+  const thisWeek = Date.UTC(today.getUTCFullYear(), today.getUTCMonth(), today.getUTCDate()) / 1000
+    - ((today.getUTCDay() + 6) % 7) * 86400;
+  const fileLastWeek = Math.max(...raw.weeks.map((w) => Number(w.week_start)));
+  const shift = (thisWeek - WEEK_S) - fileLastWeek;
+  const isDate = (k) => k === 'week_start' || k.endsWith('_at');
+  const moveRow = (r) => {
+    const out = {};
+    for (const [k, v] of Object.entries(r)) {
+      if (isDate(k) && typeof v === 'number') out[k] = v + shift;
+      else if (k === 'activate_result' && typeof v === 'string') {
+        // The stored activity snapshot carries its own last-seen date.
+        try {
+          const j = JSON.parse(v);
+          if (typeof j.lastSeenAt === 'number') j.lastSeenAt += shift;
+          out[k] = JSON.stringify(j);
+        } catch { out[k] = v; }
+      } else out[k] = v;
+    }
+    return out;
+  };
+  const extra = Object.fromEntries(Object.entries(raw).map(([table, rows]) => [table, rows.map(moveRow)]));
   const asParam = (v) => (v !== null && typeof v === 'object' ? JSON.stringify(v) : v);
   const insertRows = async (table, rows) => {
     let n = 0;
@@ -172,7 +202,8 @@ const run = (cmd, args) => execFileSync(cmd, args, { stdio: 'inherit', env: proc
   const ucN = await insertRows('use_cases', extra.use_cases);
   const weekN = await insertRows('use_case_activation_weeks', extra.weeks);
   const sugN = await insertRows('use_case_suggestions', extra.suggestions);
-  const matches = JSON.parse(zlib.gunzipSync(fs.readFileSync(path.join(__dirname, 'demo-hub-use-case-matches.json.gz'))).toString('utf8'));
+  const matches = JSON.parse(zlib.gunzipSync(fs.readFileSync(path.join(__dirname, 'demo-hub-use-case-matches.json.gz'))).toString('utf8'))
+    .map((m) => [m[0], Number(m[1]) + shift, m[2], m[3]]);
   let matchN = 0;
   for (let i = 0; i < matches.length; i += 5000) {
     const part = matches.slice(i, i + 5000);
@@ -236,5 +267,10 @@ const run = (cmd, args) => execFileSync(cmd, args, { stdio: 'inherit', env: proc
     '  process.exit(0);',
     '}).catch((e) => { console.error(e); process.exit(1); });',
   ].join('\n')]);
+  // The all-products weekly history, worked out now that every prompt is in.
+  console.log('\nWorking out the weekly history...');
+  try { run('node', [path.join(__dirname, '12-weekly-history.cjs')]); }
+  catch { console.error('12-weekly-history.cjs failed; continuing.'); }
+
   console.log('\nSample data loaded. Pages fill in within a few minutes, once the Hub has run its scheduled jobs.');
 })().catch((e) => { console.error(e); process.exit(1); });

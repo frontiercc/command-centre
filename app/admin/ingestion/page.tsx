@@ -193,12 +193,12 @@ export default function IngestionPage() {
                     collectorStatus === 'amber' ? 'text-[#B54708]' :
                     'text-[#B42318]')}>
                     {collectorStatus === 'green' ? 'Collector active, OTel events flowing' :
-                     collectorStatus === 'amber' ? (otelStatus?.lastOtelEventAt ? 'Collector token set, no recent events' : 'Awaiting first OTel event') :
+                     collectorStatus === 'amber' ? (otelStatus?.lastOtelEventAt ? 'Collector token set, no events in the last 10 minutes' : 'Awaiting first OTel event') :
                      'Collector token not configured'}
                   </p>
                   <p className="m-0 mt-0.5 text-[13px] text-[#8F8F8F] tabular-nums">
                     {otelStatus?.otelUserCount ?? 0} OTel users &middot; {otelStatus?.newUsersToday ?? 0} new today
-                    {otelStatus?.lastOtelEventAt ? ` · Last event ${new Date(otelStatus.lastOtelEventAt * 1000).toLocaleString()}` : ''}
+                    {otelStatus?.lastOtelEventAt ? ` · Last event ${new Date(otelStatus.lastOtelEventAt * 1000).toLocaleString('en-GB')}` : ''}
                   </p>
                 </div>
               </div>
@@ -276,7 +276,7 @@ export default function IngestionPage() {
                           <td className={T.tdMute}>{u.department || '—'}</td>
                           <td className={cx(T.tdMute, 'whitespace-nowrap')}>{u.source === 'openai' ? 'OpenAI export' : 'Claude telemetry'}</td>
                           <td className={cx(T.tdMute, 'tabular-nums whitespace-nowrap')}>
-                            {u.last_seen_at ? new Date(u.last_seen_at * 1000).toLocaleString() : '—'}
+                            {u.last_seen_at ? new Date(u.last_seen_at * 1000).toLocaleString('en-GB') : '—'}
                           </td>
                         </tr>
                       ))}
