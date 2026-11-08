@@ -1450,8 +1450,8 @@ export default function SecurityPage() {
           />
         </Panel>
 
-        {/* Enterprise APIs */}
-        <Panel title="Enterprise APIs">
+        {/* Claude Enterprise APIs */}
+        <Panel title="Claude Enterprise APIs">
           <div className="flex flex-col gap-5">
             <div className="flex flex-col gap-2">
               <ApiKeyField

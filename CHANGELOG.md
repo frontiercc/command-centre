@@ -4,7 +4,7 @@
 
 ### Added
 
-- ChatGPT and Codex beside Claude. Command Centre reads OpenAI's Compliance Logs Platform export (ChatGPT Enterprise) with an OpenAI Admin API key: ChatGPT Chat and Work prompts, Codex prompts, turns and tool calls, and OpenAI's hourly cost records. Enter the key under **Admin → Access & Keys → OpenAI (ChatGPT and Codex)**: see [Connect ChatGPT and Codex](docs/configure-command-centre.md#connect-chatgpt-and-codex). The sync does nothing until a key and workspace ID are saved, and an admin can pause it or hide ChatGPT and Codex from the analytics pages.
+- ChatGPT and Codex beside Claude. Command Centre reads OpenAI's Compliance Logs Platform export (ChatGPT Enterprise or Edu) with an OpenAI Admin API key: ChatGPT Chat and Work prompts, Codex prompts, turns and tool calls, and OpenAI's hourly cost records. Enter the key under **Admin → Access & Keys → OpenAI (ChatGPT and Codex)**: see [Connect ChatGPT and Codex](docs/configure-command-centre.md#connect-chatgpt-and-codex). The sync does nothing until a key and workspace ID are saved, and an admin can pause it or hide ChatGPT and Codex from the analytics pages.
 - An All / Claude / OpenAI switch on the dashboard, Work Pulse and Developer Pulse. Work Pulse grades ChatGPT prompts against the same tiers as Cowork, Developer Pulse shows Claude Code and Codex side by side, and each view keeps its own weekly history.
 - ChatGPT and Codex spend on FinOps and Spend Review, priced from tokens at OpenAI's published USD rates and kept apart from Claude's, with a Claude / OpenAI split. Model advice never suggests a model from the other vendor. A ChatGPT seat price can be set for licence costs.
 - ChatGPT and Codex across the rest of Command Centre: personal data and risky-intent alerts on their prompts, the Audit Log (with spend for each prompt), Use Cases, the Skills and Connectors Board, human time, reports, briefings and telemetry-silence alerts.
@@ -14,6 +14,7 @@
 ### Changed
 
 - Claude Chat prompts are stored beside Cowork prompts, so Work Pulse grades them into tiers like other work. With grading on, their text is sent to the classifier model, as Cowork prompts are.
+- **Enterprise APIs** on **Admin → Access & Keys** is now **Claude Enterprise APIs**.
 - The department table on the Work Pulse overview shows each department's resilience score, which was always blank, and marks only a concentrated score (below 0.35) as a risk.
 
 ### Fixed

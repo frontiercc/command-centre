@@ -37,9 +37,9 @@ Add `--write <folder>` to also save the files available at start-up, to read the
 
 ## What is assumed, not documented
 
-Check each of these on a real workspace before release:
+OpenAI's Admin API reference (version 2.5.40, downloadable from its OpenAPI link) documents the four log types the sync reads. The mock follows it where it is specific. Check the rest on a real workspace before release:
 
-- **Model names and prices.** Models take the names on OpenAI's rate cards in lower case with hyphens (`gpt-6`, `gpt-5.3`, `gpt-6-pro`, `gpt-6.1-sol`, `gpt-6-astra`, `gpt-6.1-terra`, `gpt-5.6-sol`); whether the real export names them so is unconfirmed. Credits use the credit rate card's per-token rates at $0.04 a credit, which equals the token-based USD card. On real credit plans Chat is charged per message, not per token.
-- **ChatGPT Work in both logs.** OpenAI says Work appears in both `CONVERSATION_MESSAGE` and `CODEX_LOG`. It documents no shared identifier, so the mock gives none; the two can only be matched on person, prompt text and time.
-- **Codex token counts.** The mock treats cached input as part of input and reasoning as part of output.
-- **Wording.** Error message text, OpenAI's work labels and cost SKU names are illustrative.
+- **Model names and prices.** Models take the names on OpenAI's rate cards in lower case with hyphens (`gpt-6`, `gpt-5.3`, `gpt-6-pro`, `gpt-6.1-sol`, `gpt-6-astra`, `gpt-6.1-terra`, `gpt-5.6-sol`). OpenAI's own examples use both forms, such as `gpt-5.1-codex-max` and `gpt-5-2-pro`, so whether the real export names them so is unconfirmed. Credits use the credit rate card's per-token rates at $0.04 a credit, which equals the token-based USD card. On real credit plans Chat is charged per message, not per token.
+- **ChatGPT Work in both logs.** OpenAI's reference confirms there is no shared identifier. Work is marked in conversation messages (`conversation.mode` is `work`), but no field in the Codex logs is documented as marking it. The mock's `CODEX_WORK_` client names, which the sync uses to skip Work in the Codex logs, are an assumption.
+- **Codex token counts.** Documented for Codex turns: uncached input, cached input and output are separate figures, which is how the mock writes them and what the sync reads. Cost records also keep cached input apart from input. For Codex log replies the reference lists input, output, cached input and reasoning tokens without saying whether cached input is inside input; the mock treats it as inside, and the sync takes no token counts from that log.
+- **Wording.** OpenAI documents its turn work labels (`classification` levels) as open labels that may change; the sync does not read them. Error message text and cost SKU names in the mock are illustrative.

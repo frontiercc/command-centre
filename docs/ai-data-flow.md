@@ -10,11 +10,11 @@ It lists the sub-processors involved. Everything here applies however you run Co
 
 ## Summary
 
-Command Centre calculates its measured figures in code from Claude's activity data, with no AI involved. Only a defined set of features uses Anthropic's Claude models: grading the depth and kind of work in prompts, writing briefings and summaries, assessing flagged messages, matching sessions to use cases, finding recurring processes and drafting skills.
+Command Centre calculates its measured figures in code from the activity data, with no AI involved. Only a defined set of features uses Anthropic's Claude models: grading the depth and kind of work in prompts, writing briefings and summaries, assessing flagged messages, matching sessions to use cases, finding recurring processes and drafting skills.
 
 Each of these calls goes from the Hub, on infrastructure you control, directly to `api.anthropic.com`, using a Claude API key your organisation supplies. No service run by the Command Centre project sits in the data path. Anthropic is the only model provider, and Command Centre does no training or fine-tuning and keeps no embeddings or vector store.
 
-Command Centre only sees prompts after they have reached Claude, so it cannot block them.
+Command Centre only sees prompts after they have reached Claude, ChatGPT or Codex, so it cannot block them.
 
 ## Measured and AI-judged
 
@@ -23,7 +23,7 @@ Command Centre only sees prompts after they have reached Claude, so it cannot bl
 | Measured from telemetry | Judged by AI |
 |---|---|
 | Prompts, sessions, active time, tokens, models used | How deeply work was delegated (Tiers 1 to 3), and the kind of work |
-| Spend, from Claude Code's token counts and Claude Cowork's reported cost (Claude in Office/Google spend is an estimate from its token counts, shown separately), and from ChatGPT's and Codex's token counts at OpenAI's published rates | How long the work would take by hand (an estimate) |
+| Spend, from Claude Code's token counts and Claude Cowork's reported cost (Claude in Office/Google spend is an estimate from its token counts, shown separately), and from ChatGPT's and Codex's token counts at OpenAI's published rates (a ChatGPT cost record with only token totals is valued at OpenAI's own figure) | How long the work would take by hand (an estimate) |
 | Lines of code, commits, pull requests, edits accepted | Which use case a session belongs to, and suggested new use cases |
 | Session Output Rate, chargeback and FinOps totals | Briefings, recommendations, the risk score and the written parts of reports |
 | Personal data and intent detection (pattern and phrase matching) | Whether a possible personal-data match is genuine, and how serious a risky intent is |
@@ -282,13 +282,13 @@ Captured prompts are written by your people, and some will contain instructions.
 - **Labelling.** AI-judged figures and AI-written summaries carry their own colour and label, and estimates are shown beside measured time and cost, never combined with them.
 - **Confirmation by a person.** Capability candidates identified by the classifier are confirmed or dismissed by a person before they count as confirmed capabilities. Use cases mined from prompts, extracted from transcripts or proposed in ideation exist only as suggestions until a person adds them. Skill drafts can be reviewed and edited by an owner before download. Highlights drafts are sent only when an administrator chooses to send them.
 - **Quality checks.** A monthly sample of classifier decisions is drawn for administrators to review and score, and the Classifier Health page shows queue depth, failures, tier distribution and confidence. Administrators can also spot-check human time estimates.
-- **No automated decisions about people.** Alerts and judgements are advisory. Nothing in Command Centre changes a person's access, blocks their use of Claude or takes any action against them.
+- **No automated decisions about people.** Alerts and judgements are advisory. Nothing in Command Centre changes a person's access, blocks their use of Claude, ChatGPT or Codex or takes any action against them.
 
 ## Positioning against the EU AI Act and ISO/IEC 42001
 
 The following is offered to support your own assessment and is not legal advice.
 
-Under the EU AI Act, Command Centre uses general-purpose AI models supplied by Anthropic to classify and summarise employees' work with Claude, and your organisation is the deployer. The relevant provision is Annex III, point 4, which treats as high-risk AI systems intended to make decisions affecting work-related relationships or to monitor and evaluate the performance and behaviour of persons in such relationships. Command Centre's design points away from that category: its judgements describe pieces of work rather than rate people, its outputs are advisory and labelled, and it takes no decision about anyone. It does, however, give administrators and managers per-person views, including individual delegation profiles and Spend Review, which names people. Whether a deployment falls within Annex III therefore depends on use: if those views inform the evaluation of individual employees, treat the deployment as potentially high-risk and assess it accordingly.
+Under the EU AI Act, Command Centre uses general-purpose AI models supplied by Anthropic to classify and summarise employees' work with Claude, ChatGPT and Codex, and your organisation is the deployer. The relevant provision is Annex III, point 4, which treats as high-risk AI systems intended to make decisions affecting work-related relationships or to monitor and evaluate the performance and behaviour of persons in such relationships. Command Centre's design points away from that category: its judgements describe pieces of work rather than rate people, its outputs are advisory and labelled, and it takes no decision about anyone. It does, however, give administrators and managers per-person views, including individual delegation profiles and Spend Review, which names people. Whether a deployment falls within Annex III therefore depends on use: if those views inform the evaluation of individual employees, treat the deployment as potentially high-risk and assess it accordingly.
 
 Under GDPR, the processing involves employee personal data and, through prompts, potentially any personal data employees typed. A data protection impact assessment is appropriate, as is consultation with employee representatives where your jurisdiction requires it. Command Centre makes no solely automated decision with legal or similarly significant effect within the meaning of Article 22.
 

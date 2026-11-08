@@ -10,7 +10,7 @@ Everything here applies however Command Centre is run. AI data flows are covered
 
 Command Centre consists of a web application (the Hub), an OpenTelemetry Collector and a PostgreSQL database. With the supported Docker Compose installation, all three run as containers on a machine you control; the Hub can instead use a managed PostgreSQL database. Claude clients on your organisation's machines (Claude Code and Claude Cowork) and Claude in Office/Google, from people's browsers, export telemetry to the collector, which forwards it to the Hub. On Claude for Enterprise, the Hub also pulls Claude Chat conversations from Anthropic's Compliance API using a read-only key that you create. With ChatGPT and Codex connected, the Hub also pulls their activity from OpenAI's export, using an OpenAI Admin API key that you create with read permissions.
 
-Command Centre is a downstream observer. Telemetry reaches it only after a prompt has gone to Claude, so it cannot block, alter or delay anything a person sends. Command Centre can flag, alert on, restrict access to and delete what it stores. Controls that must act before content reaches Claude belong in Claude's own administrative settings, your identity provider and your endpoint controls.
+Command Centre is a downstream observer. Activity reaches it only after a prompt has gone to Claude, ChatGPT or Codex, so it cannot block, alter or delay anything a person sends. Command Centre can flag, alert on, restrict access to and delete what it stores. Controls that must act before content reaches Claude belong in Claude's own administrative settings, your identity provider and your endpoint controls.
 
 All data Command Centre stores remains on infrastructure you control. The Command Centre project operates no service in the data path and receives no telemetry from your deployment. The Hub makes outbound calls only to services you configure: the Anthropic API (AI features and the read-only Compliance, Analytics and Admin API pulls; the Analytics and Admin pulls are on the roadmap), OpenAI's API at `api.chatgpt.com` and the download links it returns (if you connect ChatGPT and Codex), your identity provider, your SMTP relay, Slack webhooks you supply, the GitHub API and, if you enable archiving, your own Amazon S3 bucket.
 
@@ -134,7 +134,7 @@ The bearer token and the collector token authorise ingest only; they cannot call
 
 ### Data inventory
 
-Command Centre processes personal data about your employees to measure how teams work with Claude. Your organisation is the controller of that data.
+Command Centre processes personal data about your employees to measure how teams work with AI. Your organisation is the controller of that data.
 
 | Category | Examples | Default retention | Can it be switched off |
 |---|---|---|---|

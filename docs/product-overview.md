@@ -8,11 +8,11 @@ This document describes what Frontier Command Centre is, the question it answers
 
 Command Centre is a self-hosted web application that receives telemetry from your organisation's use of Anthropic's Claude, analyses it and shows whether teams are becoming more productive with it. Command Centre runs on infrastructure you control: a single machine with Docker Compose, or your own servers or cloud. Command Centre's main inputs are the telemetry that Claude Code and Claude Cowork already send, and the Claude Chat conversation export that Anthropic provides to Claude for Enterprise customers through Anthropic's Compliance API. It can also read ChatGPT and Codex activity from OpenAI's export, for ChatGPT Enterprise and Edu workspaces.
 
-The object of measurement is the work people hand to Claude. Command Centre answers four questions for every employee and department:
+The object of measurement is the work people hand to AI. Command Centre answers four questions for every employee and department:
 
 - Is each employee and department producing more valuable work with the same time?
 - Is each employee and department using AI for simple tasks, or fundamentally changing how work gets done?
-- How many new types of work has each employee and department handed to Claude?
+- How many new types of work has each employee and department handed to AI?
 - Would this capability survive if the best AI person in the department left tomorrow?
 
 Anthropic's administration console already reports who uses Claude and how often. Command Centre tells leaders whether the investment is changing the work, where it is changing fastest, where capability is fragile and where the next gains lie. Governance and security controls sit underneath that view. They are a substantial part of the product and a secondary benefit: they allow an organisation to leave the telemetry switched on with confidence.
@@ -27,7 +27,7 @@ Command Centre opens on the dashboard. An AI briefing explains what changed this
 
 ![The dashboard: an AI briefing, the organisation risk score and AI recommendations](images/dashboard.png)
 
-![The dashboard: activity over 14 days, product stickiness, department activity, top users and Work Pulse signals](images/dashboard-activity.png)
+![The dashboard: activity over 14 days by product, product stickiness, department activity and top users](images/dashboard-activity.png)
 
 ![The Get started panel on a new installation, with the setup steps ticked off as they are done](images/get-started.png)
 
@@ -49,7 +49,7 @@ Work Pulse shows how deeply your people hand work to AI, from routine tasks to m
 
 Work Pulse also surfaces new kinds of work, standout individual contributions and outputs such as documents and files. Managers see where to coach; leaders see whether their investment is changing how work gets done. Every grade is labelled as an AI judgement, and an administrator can sample grades for human review.
 
-![Work Pulse: how deeply people hand work to Claude, and how Claude Cowork compares with Claude in Office and Claude in Google, app by app](images/work-pulse.png)
+![Work Pulse: how deeply people hand work to AI, and how each product compares, from Claude Chat and Cowork to Claude in Office, Claude in Google and ChatGPT](images/work-pulse.png)
 
 ![Work Pulse: top skills and connectors, files produced, work mix and what the signals are telling you](images/work-pulse-signals.png)
 
@@ -57,7 +57,7 @@ Work Pulse also surfaces new kinds of work, standout individual contributions an
 
 **Developer Pulse**
 
-Developer Pulse shows how Claude Code is changing engineering activity: engaged time, work type, code and accepted edits, autonomy measured as actions per developer instruction, and AI-assisted commits checked against GitHub. Developer Pulse also shows the cost per commit and per pull request, and how much of the work came from the prompt cache.
+Developer Pulse shows how Claude Code is changing engineering activity: engaged time, work type, code and accepted edits, autonomy measured as actions per developer instruction, and AI-assisted commits checked against GitHub. Developer Pulse also shows the cost per commit and per pull request, and how much of the work came from the prompt cache. With OpenAI's export connected, Codex appears beside Claude Code.
 
 Dev Framework Alignment, switched off by default, is an example of how Developer Pulse's engineering indicators could be organised using DORA, SPACE and DX Core 4 concepts, with measured values, proxies and AI-specific indicators distinguished. It has not been fully tested, and its getDX figures are demo data: a live getDX integration is not yet available.
 
@@ -103,7 +103,7 @@ FinOps attributes AI spend to people, departments and cost centres, down to mode
 
 **Spend Review**
 
-Spend Review shows what each person's Claude spend goes on, whether it produced anything, and how colleagues do the same kind of work, with cheaper routes where they exist. Savings are labelled as estimates based on list prices.
+Spend Review shows what each person's AI spend goes on, whether it produced anything, and how colleagues do the same kind of work, with cheaper routes where they exist. Savings are labelled as estimates based on list prices.
 
 ![Spend Review: who spends what, who is most efficient, and who has a better route](images/spend-review.png)
 
@@ -117,7 +117,7 @@ Spend Review shows what each person's Claude spend goes on, whether it produced 
 
 **Audit Log**
 
-Command Centre brings supported Claude activity into a searchable audit trail, with role-based access to prompt content and logging of who reads it. Retention, erasure, departmental access, single sign-on and encrypted stored secrets support organisational controls.
+Command Centre brings supported Claude, ChatGPT and Codex activity into a searchable audit trail, with role-based access to prompt content and logging of who reads it. Retention, erasure, departmental access, single sign-on and encrypted stored secrets support organisational controls.
 
 **Operational boundary:** Command Centre observes telemetry after prompts reach Claude, so Command Centre cannot block or change a prompt. Command Centre stores people's prompts, never the replies of Claude, ChatGPT or Codex.
 
@@ -143,7 +143,7 @@ Admin holds Command Centre's settings: users and roles, integration keys, alert 
 
 *Sample data from Acme Corp, a fictional company.*
 
-Explore Command Centre with sample data, connect supported Claude services, inspect the code and extend Command Centre for your organisation.
+Explore Command Centre with sample data, connect Claude, ChatGPT and Codex, inspect the code and extend Command Centre for your organisation.
 
 ## The problem it answers
 
@@ -164,7 +164,7 @@ Claude Code, Claude Cowork and Claude in Office/Google, given the collector's ad
 
 ![High-level data flow](diagrams/High-level%20data%20flow.png)
 
-*Figure 1. How data reaches Command Centre. Command Centre sits outside the path between people and Claude.*
+*Figure 1. How data reaches Command Centre. Command Centre sits outside the path between people and Claude, ChatGPT or Codex.*
 
 ## How Command Centre measures productivity
 
@@ -186,7 +186,7 @@ Four signals sit on top of the grades, each presented as a plain question with a
 
 | Signal | Question | How it is computed |
 |---|---|---|
-| Delegation depth | Is the team using AI for simple tasks, or fundamentally changing how work gets done? | Weighted average tier of Claude Cowork work over the last 14 days, from 1 to 3 |
+| Delegation depth | Is the team using AI for simple tasks, or fundamentally changing how work gets done? | Weighted average tier of graded Work Pulse work over the last 14 days, from 1 to 3 |
 | Output quality | Is the team producing more valuable work with the same time? | A person's last seven days against a frozen baseline of their own first 30 graded tasks, using the median of each active day's weighted output; a self-comparison |
 | Capabilities created | How many new types of work has the team handed to Claude? | The count of confirmed capability-creation events |
 | Resilience | Would this capability survive if the best AI person on the team left tomorrow? | A score from 0 to 1 over the last 30 days, combining the share of active people doing Tier 2 or 3 work, shared use of connectors on serious work, and skills used by more than one person |
@@ -205,7 +205,7 @@ An unmeasured value is shown as "not measured" or a dash, never as zero, and a m
 
 ## The dashboard
 
-The dashboard is the landing page for administrators, managers and viewers. The dashboard carries an Intelligence Briefing written by Claude and labelled as an AI summary, open alerts, activity on each surface, the Claude Cowork and Claude Code headline bands and a department breakdown.
+The dashboard is the landing page for administrators, managers and viewers. The dashboard carries an Intelligence Briefing written by Claude and labelled as an AI summary, open alerts, activity on each surface, the Work Pulse and Developer Pulse headline bands and a department breakdown.
 
 ## Work Pulse
 
@@ -213,11 +213,11 @@ Work Pulse is the productivity view of Claude Cowork, Claude in Office/Google an
 
 The executive view opens with five headline figures: people using AI for work each week, the share of work at Tier 2 or 3, output against baseline, delegation depth, and concentration (the share of the last 14 days' Tier 3 work carried by the three people who did the most of it). Beneath them sit the four signals, a department table and a "what to act on next" panel listing suggested department processes and coaching opportunities and, for administrators and managers when Model Efficiency is on, kinds of work where a cheaper model merits review.
 
-Once ChatGPT data arrives, a switch reading All, Claude or ChatGPT appears on the executive view, the department view, My Pulse and the per-person view. It is the dashboard's switch, where ChatGPT appears as OpenAI because the dashboard also counts Codex, and the choice carries across the dashboard and these views. In the All view each headline figure shows its Claude and ChatGPT parts, each kind of work in Work Mix shows its split, and skills and connectors carry a tag naming the product they came from; choosing Claude or ChatGPT narrows every figure, signal, chart and list to that product's work. The spend figure on the executive view, the department view and My Pulse shows Claude Cowork's spend, measured from its telemetry, and ChatGPT's spend: the tokens in OpenAI's hourly cost records, a few hours behind, priced at OpenAI's published USD rates for token-based Enterprise contracts. The All view shows their total with each part beneath it, and each vendor view shows its own. As Claude is priced at Anthropic's list rates whatever the plan, ChatGPT is priced at these list rates whether the customer's contract is token-based or credit-based; seat fees, discounts and extra charges such as web search and voice are not included. Claude Chat carries no spend. Session Output Rate comes from Claude Cowork's telemetry and is labelled Claude Cowork; OpenAI's export carries no tool activity, so it is hidden in the ChatGPT view. Human time covers ChatGPT conversations too (see below). An administrator can stop ChatGPT prompts being graded under **Admin → Work Pulse**.
+Once ChatGPT data arrives, a switch reading All, Claude or ChatGPT appears on the executive view, the department view, My Pulse and the per-person view. It is the dashboard's switch, where ChatGPT appears as OpenAI because the dashboard also counts Codex, and the choice carries across the dashboard and these views. In the All view each headline figure shows its Claude and ChatGPT parts, each kind of work in Work Mix shows its split, and skills and connectors carry a tag naming the product they came from; choosing Claude or ChatGPT narrows every figure, signal, chart and list to that product's work. The spend figure on the executive view, the department view and My Pulse shows Claude Cowork's spend, measured from its telemetry, and ChatGPT's spend: the tokens in OpenAI's hourly cost records, a few hours behind, priced at OpenAI's published USD rates for token-based Enterprise contracts; a cost record that carries only token totals is valued at OpenAI's own figure. The All view shows their total with each part beneath it, and each vendor view shows its own. As Claude is priced at Anthropic's list rates whatever the plan, ChatGPT is priced at these list rates whether the customer's contract is token-based or credit-based; seat fees, discounts and extra charges such as web search and voice are not included. Claude Chat carries no spend. Session Output Rate comes from Claude Cowork's telemetry and is labelled Claude Cowork; OpenAI's export carries no tool activity, so it is hidden in the ChatGPT view. Human time covers ChatGPT conversations too (see below). An administrator can stop ChatGPT prompts being graded under **Admin → Work Pulse**.
 
 ### By product
 
-The By product panel, under the headline figures, compares each product over the last 30 days: Claude Chat, Claude Cowork, Claude in Excel, Word, PowerPoint and Outlook, Claude in Google Sheets, Docs and Slides, and, once OpenAI's export is connected, ChatGPT (ChatGPT Chat and Work together, because OpenAI reports their spend as one figure). Each row shows app users, sessions, the share of work at Tier 2 or 3, the share of sessions that produced something, and spend. Claude Cowork's spend is the cost Claude reports. Claude in Office/Google sends no cost, so its spend is priced from the model rates and marked as an estimate. ChatGPT's spend is OpenAI's own reported cost. Claude Chat's spend and the share of ChatGPT and Claude Chat sessions that produced something are not measured. The panel follows the All, Claude or ChatGPT switch, and the All products row adds up the rows shown; its spend is marked as an estimate once Office or Google spend is part of it. An app's shares show once it has five judged prompts or five sessions, so one prompt never reads as 0% or 100%. Every Office and Google app is listed from the start, at zero until its activity arrives. An administrator can hide the Office and Google rows under **Admin → Work Pulse → Show Claude in Office and Google**.
+The By product panel, under the headline figures, compares each product over the last 30 days: Claude Chat, Claude Cowork, Claude in Excel, Word, PowerPoint and Outlook, Claude in Google Sheets, Docs and Slides, and, once OpenAI's export is connected, ChatGPT (ChatGPT Chat and Work together, because OpenAI reports their spend as one figure). Each row shows app users, sessions, the share of work at Tier 2 or 3, the share of sessions that produced something, and spend. Claude Cowork's spend is the cost Claude reports. Claude in Office/Google sends no cost, so its spend is priced from the model rates and marked as an estimate. ChatGPT's spend is priced from OpenAI's token counts at the rate table, as on FinOps; a cost record that carries only token totals is valued at OpenAI's own figure. Claude Chat's spend and the share of ChatGPT and Claude Chat sessions that produced something are not measured. The panel follows the All, Claude or ChatGPT switch, and the All products row adds up the rows shown; its spend is marked as an estimate once Office or Google spend is part of it. An app's shares show once it has five judged prompts or five sessions, so one prompt never reads as 0% or 100%. Every Office and Google app is listed from the start, at zero until its activity arrives. An administrator can hide the Office and Google rows under **Admin → Work Pulse → Show Claude in Office and Google**.
 
 ### Work Mix and Session Output Rate
 
@@ -331,7 +331,7 @@ Each department is a cost centre by default. Administrators can create named cos
 
 List-rate spend, such as Claude Code through Amazon Bedrock, is labelled "estimated, for visibility, not billing".
 
-**ChatGPT and Codex.** With the OpenAI export connected, each person's and cost centre's spend also includes ChatGPT (Chat and Work) and Codex, priced from tokens at OpenAI's published USD rates for token-based Enterprise contracts, the same figures Work Pulse and Developer Pulse show. The page names each product, adds a Claude / OpenAI split, and says how the OpenAI figures are priced: a credit-based contract, negotiated discounts and seat fees are not reflected. ChatGPT or Codex models with no rate are named and left out, never counted as $0; an administrator adds their rates under **Admin → Developer Pulse → Rates**. Where an administrator records ChatGPT seats and a seat price under **Admin → System**, the licence cost appears on its own line, never added to usage, with how many seats were used in the last 30 days. Claude's own seat count leaves out ChatGPT and Codex users. Model Efficiency gains ChatGPT and Codex tabs: spend by kind of work and model, cost drivers and review flags that only name a cheaper model the same work already uses, so a flag never crosses vendors; ChatGPT's split by kind of work is an estimate, because OpenAI reports cost per hour. The prompt-caching estimate includes ChatGPT's and Codex's cached input. With only OpenAI connected, the page shows no Claude figures.
+**ChatGPT and Codex.** With the OpenAI export connected, each person's and cost centre's spend also includes ChatGPT (Chat and Work) and Codex, priced from tokens at OpenAI's published USD rates for token-based Enterprise contracts, the same figures Work Pulse and Developer Pulse show. On plans where OpenAI's cost records carry only token totals, which cannot be split into input and output, those records are valued at the dollar figure OpenAI reports in them; one with no dollar figure either is named as not priced, never counted as $0. The page names each product, adds a Claude / OpenAI split, and says how the OpenAI figures are priced: a credit-based contract, negotiated discounts and seat fees are not reflected. ChatGPT or Codex models with no rate are named and left out, never counted as $0; an administrator adds their rates under **Admin → Developer Pulse → Rates**. Where an administrator records ChatGPT seats and a seat price under **Admin → System**, the licence cost appears on its own line, never added to usage, with how many seats were used in the last 30 days. Claude's own seat count leaves out ChatGPT and Codex users. Model Efficiency gains ChatGPT and Codex tabs: spend by kind of work and model, cost drivers and review flags that only name a cheaper model the same work already uses, so a flag never crosses vendors; ChatGPT's split by kind of work is an estimate, because OpenAI reports cost per hour. The prompt-caching estimate includes ChatGPT's and Codex's cached input. With only OpenAI connected, the page shows no Claude figures.
 
 An administrator can close a month, which stores an immutable snapshot; every later view and CSV export of that month returns the snapshot exactly, so a billed figure cannot drift.
 
@@ -343,11 +343,11 @@ With the OpenAI export connected, Spend Review also covers ChatGPT and Codex. Co
 
 ## Governance and risk
 
-Command Centre applies its controls to what it stores. Command Centre sees a prompt only after the prompt has reached Claude, so Command Centre flags, alerts, restricts access and applies retention, but cannot block.
+Command Centre applies its controls to what it stores. Command Centre sees a prompt only after the prompt has reached Claude, ChatGPT or Codex, so Command Centre flags, alerts, restricts access and applies retention, but cannot block.
 
 ### Personal data, secrets and intent
 
-Every stored prompt from every surface is scanned at ingest by 20 patterns covering personal data under GDPR and LGPD (such as email addresses, UK National Insurance numbers, payment card numbers with checksum validation, IBANs, passport numbers and Brazilian CPF numbers) and secrets (such as cloud access keys, API keys, tokens, private keys and database connection strings). On Claude Code and Claude Cowork prompts, seven patterns that match on shape alone, such as phone numbers and IP addresses, are confirmed by a Claude model before an alert fires; a match judged to be something else is recorded as dismissed with a one-sentence reason, and any failure in the check raises the alert regardless. Detection flags the message and raises an alert; the stored prompt is unchanged.
+Every stored prompt from every surface is scanned at ingest by 20 patterns covering personal data under GDPR and LGPD (such as email addresses, UK National Insurance numbers, payment card numbers with checksum validation, IBANs, passport numbers and Brazilian CPF numbers) and secrets (such as cloud access keys, API keys, tokens, private keys and database connection strings). On Claude Cowork, Claude Code, ChatGPT and Codex prompts, seven patterns that match on shape alone, such as phone numbers and IP addresses, are confirmed by a Claude model before an alert fires; a match judged to be something else is recorded as dismissed with a one-sentence reason, and any failure in the check raises the alert regardless. Detection flags the message and raises an alert; the stored prompt is unchanged.
 
 Prompts are also matched, in English and Brazilian Portuguese, against 12 built-in categories of risky intent, among them data exfiltration, access escalation, credential harvesting, policy evasion and destructive actions. Administrators can add categories. A Claude model then assesses each match in context and sets the alert's severity.
 
@@ -364,7 +364,7 @@ The Audit Log is where people's prompt text is browsed. The Audit Log lists each
 
 ### Retention and data-subject rights
 
-Each surface has its own retention window under one organisation-wide mode that either removes the content of old messages while keeping metadata and flags, or deletes the rows; the [Security and Data Protection](security-and-data-protection.md) document sets out the defaults. On request, an administrator can export a defined set of one person's records as JSON (their person record, Claude Cowork and Claude Code prompts and activity messages, Claude Chat prompts and reply metadata, telemetry events, Compliance activity, usage snapshots and alerts) and can erase the person, which deletes their monitoring record and the records keyed to it; their sign-in account is removed separately, in user administration.
+Each surface has its own retention window under one organisation-wide mode that either removes the content of old messages while keeping metadata and flags, or deletes the rows; the [Security and Data Protection](security-and-data-protection.md) document sets out the defaults. On request, an administrator can export a defined set of one person's records as JSON (their person record, Claude Cowork and Claude Code prompts and activity messages, Claude Chat prompts and reply metadata, ChatGPT and Codex prompts with their reply records, conversation times, Codex turns, tool calls and hourly costs, telemetry events, Compliance activity, usage snapshots and alerts) and can erase the person, which deletes their monitoring record and the records keyed to it; their sign-in account is removed separately, in user administration.
 
 ## Reporting and outputs
 
@@ -393,7 +393,7 @@ Command Centre has six roles, enforced on the server for every page and data req
 | Cowork member | As above, Claude Cowork only | Their own and their department's Work Pulse views, the Board, their own Spend Review |
 | Code member | As above, Claude Code only | Their own and their department's Developer Pulse views, the Board, their own Spend Review |
 
-When telemetry or the Claude Chat export first shows a new person, Command Centre creates a Pulse member record so their work can be attributed. That record has no password and cannot be used to sign in until the account is activated.
+When telemetry, the Claude Chat export or OpenAI's export first shows a new person, Command Centre creates a Pulse member record so their work can be attributed. That record has no password and cannot be used to sign in until the account is activated.
 
 ### Sign-in, single sign-on and MFA
 
@@ -420,7 +420,7 @@ Administrators reach these from **Admin** in the sidebar.
 | **Intent Detection** | Controls which kinds of risky intent are flagged in prompts: twelve built-in categories that can be switched on or off, and your own categories written as plain phrases. | [Personal data, secrets and intent](#personal-data-secrets-and-intent) |
 | **Claude Sub Agents** | Shows every subagent people ran in Claude Code and Claude Cowork in the last 30 days, built-in or custom, who ran each one and what it cost, with new custom subagents marked. | |
 | **Access Audit** | Keeps an unalterable record of who read what and when, including prompt text, exports and reports, as evidence for security reviews and audits. | [Audit logging](security-and-data-protection.md#audit-logging) |
-| **Files** | Lists the files people attached to Claude Cowork sessions across the organisation, with a breakdown by kind of document. | |
+| **Files** | Lists the files people attached to Claude Cowork sessions and, when connected, in ChatGPT, across the organisation, with a breakdown by kind of document. | |
 | ***Products*** | | |
 | **Work Pulse** | Configures how Claude Cowork, Claude Chat, ChatGPT Work and ChatGPT Chat work is graded: the AI models, the tier definitions, whether ChatGPT prompts are graded, and optional features, with drill-downs by person and department, classifier health, and a monthly audit an administrator can run against the AI's grades. | [Work Pulse](#work-pulse) · [Measured and AI-judged](ai-data-flow.md#measured-and-ai-judged) |
 | **Developer Pulse** | Configures Claude Code and Codex analytics: the grading models and tiers, whether Codex sessions are graded, the model prices used for spend, the GitHub connection, the assumptions behind the value estimate, and checks on data quality and classifier health. | [Developer Pulse](#developer-pulse) |
@@ -432,7 +432,7 @@ Administrators reach these from **Admin** in the sidebar.
 
 ## What Command Centre does not do
 
-- **Command Centre does not sit between people and Claude.** Telemetry arrives after a prompt has reached the model, so Command Centre can flag, alert and restrict access to what it stores, but cannot block, alter or delay a prompt.
+- **Command Centre does not sit between people and Claude, ChatGPT or Codex.** Activity arrives after a prompt has reached the model, so Command Centre can flag, alert and restrict access to what it stores, but cannot block, alter or delay a prompt.
 - **Command Centre does not store Claude's replies.** For Claude Code, Claude Cowork and Claude in Office/Google, Command Centre stores people's prompts (up to 4,000 characters each) and metadata about Claude's activity: model, tokens, cost, tool names and outcomes, and, for Claude Cowork and Claude in Office, the file name of an output or document Claude wrote or changed (Claude in Google sends no file name). Command Centre never stores the text of Claude's answers or the contents of files. For Claude Chat it stores prompts and, for replies, only the model and counts of artifacts and generated files. For ChatGPT and Codex it stores prompts up to the same 4,000 characters; for ChatGPT replies it keeps only the model and time, and it never stores the commands Codex runs.
 
 Several features send prompt text to Anthropic's Claude API using your Claude API key, among them the classifiers, use case judging and suggestions, skill drafting, session descriptions, human-time estimates, personal-data confirmation and intent assessment. With ChatGPT and Codex connected, these features also send ChatGPT and Codex prompts. The [AI Data Flow and Sub-processors](ai-data-flow.md) document lists each feature and what it sends.

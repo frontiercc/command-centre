@@ -138,7 +138,7 @@ export default function GetStartedPanel() {
           If you also use Claude Cowork: Admin → Ingestion shows what to enter in Claude&apos;s Organization settings, under Data and Privacy → Monitoring.
         </Step>
         <Step n={7} optional done={s.chatAt !== null} title="Connect Claude Chat" link={{ href: '/admin/security', label: 'Go to Access & Keys' }}>
-          Claude Enterprise plans only. Add a Compliance Access Key under Enterprise APIs, and Claude Chat prompts join Work Pulse.
+          Claude Enterprise plans only. Add a Compliance Access Key under Claude Enterprise APIs, and Claude Chat prompts join Work Pulse.
         </Step>
       </ol>
       ) : (
@@ -159,7 +159,7 @@ export default function GetStartedPanel() {
           Most views and briefings group people by department.
         </Step>
         <Step n={6} optional done={s.chatAt !== null} title="Connect Claude Chat" link={{ href: '/admin/security', label: 'Go to Access & Keys' }}>
-          Claude Enterprise plans only. Add a Compliance Access Key under Enterprise APIs, and Claude Chat prompts join Work Pulse. This ticks when the first prompt arrives.
+          Claude Enterprise plans only. Add a Compliance Access Key under Claude Enterprise APIs, and Claude Chat prompts join Work Pulse. This ticks when the first prompt arrives.
         </Step>
         <Step n={7} optional done={s.openaiAt !== null} title="Connect ChatGPT and Codex" link={{ href: '/admin/security', label: 'Go to Access & Keys' }}>
           ChatGPT Enterprise only. Add an OpenAI Admin API key with your workspace ID, and ChatGPT prompts join Work Pulse and Codex prompts join Developer Pulse. This ticks when the first prompt arrives.

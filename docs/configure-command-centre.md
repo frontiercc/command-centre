@@ -37,7 +37,7 @@ Most features with their own model offer a drop-down filled from your key's mode
 Command Centre captures Claude Chat by pulling it from the Anthropic Compliance API, which requires Claude for Enterprise. Command Centre stores each person's prompts in full, subject to personal-data and intent flagging, with the names of any files they attach, and Work Pulse sorts them into tiers alongside Claude Cowork work. For Claude's replies it stores metadata only: the model and the number of artifacts and files Claude made, never the reply text. Command Centre also records which named connectors a chat used.
 
 1. In claude.ai, open [Organization settings → API](https://claude.ai/admin-settings/api-access). The Primary Owner turns the Compliance API on there; a Primary Owner or Owner then creates a Compliance Access Key with the scopes `read:compliance_activities` and `read:compliance_user_data`.
-2. In **Admin → Access & Keys → Enterprise APIs**, paste it into **Compliance Access Key**, select **Test**, then **Save settings** below the Endpoint security panel.
+2. In **Admin → Access & Keys → Claude Enterprise APIs**, paste it into **Compliance Access Key**, select **Test**, then **Save settings** below the Endpoint security panel.
 
 The sync runs every two minutes, up to 200 changed chats per run. The first run reaches back 30 days, or less if your Chat retention period is shorter.
 
@@ -116,7 +116,7 @@ If your Claude Code settings send a `department` attribute with telemetry, Comma
 
 ## Cost centres, licensed seats and seat price
 
-FinOps rolls up each person's measured AI spend on Claude Code and Claude Cowork, and on ChatGPT and Codex when connected, by cost centre for a calendar month (Claude in Office/Google spend is shown separately as an estimate, since Office sends no cost), and Spend Review shows, person by person, where the money goes and whether a cheaper route exists. FinOps is visible to administrators and managers only, because individual cost is close to salary information; Spend Review shows administrators and managers everyone's review and each person their own. Spend figures are measured from telemetry: Claude Code spend is priced from the model rates in Developer Pulse, and Claude Cowork spend is the cost each Claude Cowork request reports. ChatGPT and Codex spend is priced from OpenAI's token counts with the same rate table, which includes OpenAI's published rates. Claude Chat cost is not part of the chargeback total.
+FinOps rolls up each person's measured AI spend on Claude Code and Claude Cowork, and on ChatGPT and Codex when connected, by cost centre for a calendar month (Claude in Office/Google spend is shown separately as an estimate, since Office sends no cost), and Spend Review shows, person by person, where the money goes and whether a cheaper route exists. FinOps is visible to administrators and managers only, because individual cost is close to salary information; Spend Review shows administrators and managers everyone's review and each person their own. Spend figures are measured from telemetry: Claude Code spend is priced from the model rates in Developer Pulse, and Claude Cowork spend is the cost each Claude Cowork request reports. ChatGPT and Codex spend is priced from OpenAI's token counts with the same rate table, which includes OpenAI's published rates. A ChatGPT cost record that carries only token totals is valued at the dollar figure OpenAI reports in it. Claude Chat cost is not part of the chargeback total.
 
 1. In **Admin → System → FinOps**, switch on **Enable FinOps (cost and chargeback)**. Switch on **Model efficiency (FinOps)** as well if you want the spend-by-activity and model view. Enter **Seat price (USD/month)**. If you use ChatGPT Enterprise, also enter **ChatGPT seats** and **ChatGPT seat price (USD/month)**: OpenAI charges per seat assigned at the start of each month, apart from usage, and FinOps shows that licence cost beside ChatGPT usage, never added to it. Save.
 2. In **Admin → System → General**, enter **Licensed seats** and save. FinOps uses seats and price to estimate the cost of unused seats; the estimate never enters the chargeback total.
@@ -156,7 +156,7 @@ The features in the table below send people's prompt text, masked for personal d
 
 | Switch | Where | Default |
 |---|---|---|
-| Session descriptions (one AI-written sentence per notable Claude Cowork session) | Admin → Work Pulse → Overview | On |
+| Session descriptions (one AI-written sentence per notable Claude Cowork or ChatGPT session) | Admin → Work Pulse → Overview | On |
 | Human time vs AI time (Claude Cowork and ChatGPT) | Admin → Work Pulse → Overview | Off |
 | Human time vs AI time · Code (Claude Code and Codex) | Admin → Developer Pulse → Overview | Follows the Work Pulse switch |
 | Include first prompt (Code session classifier) | Admin → Developer Pulse → Overview | On |
