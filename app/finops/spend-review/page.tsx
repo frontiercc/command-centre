@@ -104,7 +104,7 @@ function EfficiencyBoard({ rows, period, boardPeriod }: { rows: EfficiencyEntry[
         </table>
       </div>
       <PanelFoot>
-        Each person&apos;s typical session cost against colleagues doing the same kinds of work, weighted by where their money goes. Only people whose share of Tier 3 work is within 10 points of colleagues&apos; are ranked, so cheaper-because-shallower work doesn&apos;t count as efficient.
+        Each person&apos;s typical session cost against colleagues doing the same kinds of work, weighted by where their money goes. Only people whose share of Tier 3 work is no more than 10 points below colleagues&apos; are ranked, so cheaper-because-shallower work doesn&apos;t count as efficient.
       </PanelFoot>
     </Panel>
   );

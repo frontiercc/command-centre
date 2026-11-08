@@ -142,10 +142,11 @@ export async function getPerson360(userId: string): Promise<Person360> {
   if (codeUsd !== null) {
     totalUsd = codeUsd + known;
   } else if (known > 0) {
-    // Code spend unknown (unpriced model or no code data) but other spend is
-    // real — total is a known underestimate; the UI must flag this.
+    // Code spend unknown but other spend is real. Only a person with coding
+    // activity on an unpriced model makes the total an underestimate; someone
+    // with no coding activity at all has nothing missing from it.
     totalUsd = known;
-    totalIsPartial = true;
+    totalIsPartial = code !== null;
   } else {
     totalUsd = null;
   }

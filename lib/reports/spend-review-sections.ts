@@ -167,7 +167,7 @@ export function renderSpendReviewSection(input: SpendReviewSectionInput): string
   if (board.rows.length) {
     out.push(`#### Most efficient in ${monthName(board.period)}`);
     if (board.period !== period) out.push(`Showing ${monthName(board.period)}: nobody has ${EFFICIENCY_MIN_SESSIONS} sessions in ${monthName(period)} yet, which the comparison needs to be fair.`);
-    out.push('Typical session cost against colleagues doing the same kinds of work, weighted by where each person\'s money goes; ranked only when their share of Tier 3 work is within 10 points of colleagues\'.');
+    out.push('Typical session cost against colleagues doing the same kinds of work, weighted by where each person\'s money goes; ranked only when their share of Tier 3 work is no more than 10 points below colleagues\'.');
     out.push(['| | Person | Department | Cost vs colleagues | Sessions | Tier 3 (vs colleagues) |', '|---|---|---|---|---|---|',
       ...board.rows.map((e, i) => `| ${i + 1} | ${e.displayName} | ${e.department ?? '—'} | ${gapPct(e.vsColleagues)} below | ${e.sessions} | ${pct(e.deepRate)} vs ${pct(e.peerDeepRate)} |`),
     ].join('\n'));

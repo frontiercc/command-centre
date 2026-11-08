@@ -83,8 +83,11 @@ export default function UserDetailPage() {
 
   useEffect(() => {
     fetch(`/api/users?id=${userId}`)
-      .then(r => r.json())
+      // A refusal or a missing person ({ error }) is not a user: the page
+      // says "User not found" rather than reading fields that aren't there.
+      .then(r => (r.ok ? r.json() : null))
       .then(data => {
+        if (!data || data.error) return;
         setUser(data);
         setAlias(data.display_name || '');
         setDepartment(data.department || '');

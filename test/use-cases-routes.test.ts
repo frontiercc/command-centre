@@ -195,6 +195,8 @@ describe('CRUD', () => {
 
     const missing = await GET(makeRequest('/api/use-cases/does-not-exist'), { params: Promise.resolve({ id: 'does-not-exist' }) });
     expect(missing.status).toBe(404);
+    // Told apart from the feature switch's 404, so the page never says Use Cases is off.
+    expect((await missing.json()).error).toBe('use_case_not_found');
   });
 
   it('PATCH edits fields and confirms a status transition candidate -> confirmed', async () => {

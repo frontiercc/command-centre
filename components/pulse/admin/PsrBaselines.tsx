@@ -21,11 +21,16 @@ export default function PsrBaselines() {
   const [drafts, setDrafts] = useState<Record<string, string>>({});
   const [saving, setSaving] = useState<string | null>(null);
   const [msg, setMsg] = useState<Record<string, string>>({});
+  // The baselines route is admin-only; a manager sees why, not "No departments".
+  const [forbidden, setForbidden] = useState(false);
 
   function load() {
     setLoading(true);
     fetch('/api/admin/pulse/psr-baselines')
-      .then(r => (r.ok ? r.json() : Promise.reject()))
+      .then(r => {
+        if (r.status === 403) { setForbidden(true); return Promise.reject(); }
+        return r.ok ? r.json() : Promise.reject();
+      })
       .then(d => {
         const rows: TeamBaseline[] = d.teams ?? [];
         setTeams(rows);
@@ -74,6 +79,8 @@ export default function PsrBaselines() {
 
       {loading ? (
         <div className="px-4 pb-4"><Muted>Loading…</Muted></div>
+      ) : forbidden ? (
+        <div className="px-4 pb-4"><Muted>Process baselines are set by an admin.</Muted></div>
       ) : teams.length === 0 ? (
         <div className="px-4 pb-4">
           <Muted>

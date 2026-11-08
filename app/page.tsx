@@ -147,11 +147,14 @@ export default function DashboardPage() {
     if (!vendorReady) return; // the saved view is read after the page loads
     fetch(`/api/dashboard?vendor=${vendor}`)
       .then(r => {
+        // A role without the dashboard is refused here and sent to its own
+        // Pulse page by useCorePlatformGuard; that is not an error to log.
+        if (r.status === 403) return null;
         if (!r.ok) throw new Error("Couldn't load this page. Try again.");
         return r.json();
       })
       .then(d => {
-        if (d.stats) { setData(d); setLastRefreshed(new Date()); }
+        if (d?.stats) { setData(d); setLastRefreshed(new Date()); }
       })
       .catch(console.error)
       .finally(() => setLoading(false));

@@ -24,6 +24,22 @@
 - Viewers no longer see Work Pulse's Users page in the menu, which they cannot open.
 - A department's resilience score on the Work Pulse department page no longer falls back to "Pending data" after the daily run.
 - In an Audit Log conversation the newest turn stays at the top and is now numbered last: Turn 1 is the first prompt, and each turn shows the time of its prompt. Turns used to be numbered from the newest.
+- Spend Review's efficiency board says what its rule is: people are ranked when their share of Tier 3 work is no more than 10 points below colleagues', not "within 10 points".
+- A model with two ids (a dated id and its alias, such as Claude Haiku 4.5) is listed once in spend by model and its legend, with one colour.
+- The use case governance summary says how many completed weeks an at-risk bet has had no matching activity, not "quiet for 0 weeks".
+- Opening a person or a use case that doesn't exist says so, instead of crashing or saying Use Cases is switched off.
+- A use case's measured time under six minutes reads in minutes, never "0.0h".
+- An AI session summary containing characters from another writing system is refused and written again.
+- Briefing "Generate" buttons are shown only to admins and managers, who are the only people the server lets generate one.
+- Opening another department's Work Pulse page says it is not available, instead of "Couldn't load, try again".
+- Spend Review offers a manager "Show prompts" only for people in their own department, as the Audit Log does.
+- A manager on the Work Pulse admin overview sees that process baselines are set by an admin, not "No departments found".
+- The department page's "at this depth" line says it covers the same kind of work over the last 30 days.
+- The S&C Board's tile reads "Organisation connectors", matching the skills tile, and Hot this week lists only rising entries.
+- Person 360 no longer calls the combined spend an underestimate for someone with no coding activity.
+- The dashboard no longer logs an error when a Pulse-only role is sent to its own page.
+- The Users page shows "Agent" for people first seen by the retired local agent.
+- Sample data: each use case match points at a real session the sample has, in the week that session happened (a match to a session the sample lacks moves to one the same person had that week), so each use case's people, sessions and time agree.
 
 ### Upgrading
 

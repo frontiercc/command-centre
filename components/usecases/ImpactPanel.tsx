@@ -60,8 +60,14 @@ function round1(n: number): number {
   return Math.round(n * 10) / 10;
 }
 
+/** Measured time: hours to one decimal, or minutes when under 0.1h, so a real minute never reads "0.0h". */
+function timeText(secs: number): string {
+  if (secs > 0 && secs < 360) return `${Math.max(1, Math.round(secs / 60))}m`;
+  return `${round1(secs / 3600).toFixed(1)}h`;
+}
+
 function hoursLabel(secs: number | null): string {
-  return secs === null ? 'Not measured' : `${round1(secs / 3600).toFixed(1)}h`;
+  return secs === null ? 'Not measured' : timeText(secs);
 }
 
 /**
@@ -72,7 +78,7 @@ function hoursLabel(secs: number | null): string {
 function surfaceSplitLabel(coworkSecs: number | null, codeSecs: number | null, chatgptSecs: number | null = null, codexSecs: number | null = null): string | null {
   const openai = chatgptSecs !== null || codexSecs !== null;
   const parts: string[] = [];
-  const add = (label: string, secs: number | null) => { if (secs !== null) parts.push(`${label} ${round1(secs / 3600).toFixed(1)}h`); };
+  const add = (label: string, secs: number | null) => { if (secs !== null) parts.push(`${label} ${timeText(secs)}`); };
   add(openai ? 'Claude Cowork' : 'Cowork', coworkSecs);
   add(openai ? 'Claude Code' : 'Code', codeSecs);
   add('ChatGPT', chatgptSecs);

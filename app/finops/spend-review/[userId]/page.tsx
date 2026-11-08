@@ -10,7 +10,7 @@ import TopBar from '@/components/layout/TopBar';
 import LoadingSpinner from '@/components/shared/LoadingSpinner';
 import { sessionsFact, spansDays, surfaceName, type SpendReviewSurface } from '@/lib/finance/spend-review-format';
 import { useOpenAiOnly } from '@/components/shared/VendorSwitch';
-import { CostDrivers, shadeForModel, prettyModel, type CostDriverFigures } from '@/components/finance/ModelEfficiencySection';
+import { CostDrivers, shadeForModel, prettyModel, modelsByLabel, type CostDriverFigures } from '@/components/finance/ModelEfficiencySection';
 import { MonthPicker, monthOptions, monthName, money, pct, ukDate, duration, LimitsNotice, LimitBar, UpdatedLine, type LimitsStatus } from '@/components/spend-review/shared';
 import { PageBody, Toolbar, Panel, PanelFoot, Strip, Figure, T, B, Tag, Pill, Notice, Muted, SubHead, Bar, cx } from '@/components/precision/ui';
 import { formatModelLabel } from '@/lib/pulse/code/model-label';
@@ -409,7 +409,7 @@ function ModelEfficiency({ data, onShowAll }: { data: Review; onShowAll: () => v
       </div>
       {me.modelOrder.length > 0 && (
         <div className="px-4 py-2.5 border-t border-[#F2F2F2] flex flex-wrap items-center gap-x-4 gap-y-1 text-[13px] text-[#8F8F8F]">
-          {me.modelOrder.map(m => (
+          {modelsByLabel(me.modelOrder).map(m => (
             <span key={m} className="inline-flex items-center gap-1.5">
               <span className="inline-block w-2.5 h-2 rounded-full" style={{ backgroundColor: shadeForModel(m, me.modelOrder) }} />
               {prettyModel(m)}

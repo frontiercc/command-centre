@@ -55,6 +55,11 @@ describe('checkDescription reasons', () => {
     expect(checkDescription('Built a summary. Then sent it.', prompts)).toMatchObject({ ok: false, reason: 'multiple_sentences' });
     const n = checkDescription('Compared 40 opportunities with 12 targets.', prompts);
     expect(n).toMatchObject({ ok: false, reason: 'ungrounded_number' });
+    // A stray character from another script (seen in a stored summary) is refused...
+    expect(checkDescription('Analysed regional performance and sales cycle\u5ef6lengthening.', prompts)).toMatchObject({ ok: false, reason: 'foreign_script' });
+    // ...unless the person wrote in that script, and accented Latin is always fine.
+    expect(checkDescription('Prepared the \u5e74 summary.', ['Write the \u5e74 summary'])).toMatchObject({ ok: true });
+    expect(checkDescription('Drafted the São Paulo rollout note.', prompts)).toMatchObject({ ok: true });
     if (!n.ok) {
       expect(n.detail).toContain('40, 12');
       expect(n.detail).not.toContain('opportunities');

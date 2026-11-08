@@ -215,6 +215,19 @@ describe('getPerson360', () => {
     expect(result.combinedSpend.totalIsPartial).toBeFalsy();
   });
 
+  it('does not call the total partial for someone with no coding activity', async () => {
+    await seedUser('u6', 'Cowork Only', 'Sales');
+    await sql.run(
+      `INSERT INTO cowork_messages (id, session_id, user_id, message_type, occurred_at, cost_usd)
+       VALUES ('m6', 's6', 'u6', 'cowork_api_request', ?, 2.0)`,
+      [NOW - 1000],
+    );
+    const result = await getPerson360('u6');
+    expect(result.code).toBeNull();
+    expect(result.combinedSpend.totalUsd).toBeCloseTo(2, 6);
+    expect(result.combinedSpend.totalIsPartial).toBeFalsy();
+  });
+
   it('adds ChatGPT spend to the combined total once ChatGPT cost records exist', async () => {
     await seedUser('u5', 'Ada Lovelace', 'Finance');
     await sql.run(

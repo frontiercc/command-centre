@@ -259,7 +259,8 @@ function HeadlineStrip({ data }: { data: LibraryData }) {
         sub={`${data.stats.new_this_week} new to the board this week`}
       />
       <Figure label="Organisation skills" value={data.stats.skill_count.toLocaleString()} />
-      <Figure label="Connectors" value={data.stats.connector_count.toLocaleString()} />
+      {/* Organisation entries only, like the skills tile; the Connectors tab also lists Anthropic's. */}
+      <Figure label="Organisation connectors" value={data.stats.connector_count.toLocaleString()} />
       {ur ? (
         <Figure
           label="Your standing"
@@ -339,8 +340,10 @@ function Highlights({ entries, recentEntries, deptPicks, userDept }: {
   const [slideKey, setSlideKey] = useState<SlideKey | null>(null);
   const [paused, setPaused] = useState(false);
 
+  // Hot this week is rising use only: a falling entry is not "hot", and its
+  // badge would have read "+-26%".
   const hot: StripCard[] = entries
-    .filter(e => e.week_count >= 3 && e.source === 'org' && e.is_published === 1)
+    .filter(e => e.week_count >= 3 && e.source === 'org' && e.is_published === 1 && e.trend_pct > 0)
     .sort((a, b) => b.trend_pct - a.trend_pct)
     .slice(0, 3)
     .map(e => ({

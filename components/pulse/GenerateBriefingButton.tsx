@@ -4,8 +4,32 @@
 
 'use client';
 
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { B } from '@/components/precision/ui';
+
+// One session read per page load, shared by every button on the page.
+let rolePromise: Promise<string | null> | null = null;
+function fetchRole(): Promise<string | null> {
+  rolePromise ??= fetch('/api/admin/session')
+    .then((r) => (r.ok ? r.json() : null))
+    .then((d) => (d?.authenticated ? (d.user?.role ?? null) : null))
+    .catch(() => null);
+  return rolePromise;
+}
+
+/**
+ * True when the signed-in person may generate briefings: admins and managers,
+ * the same rule as POST /api/pulse/briefing. Null until known.
+ */
+export function useCanGenerateBriefings(): boolean | null {
+  const [can, setCan] = useState<boolean | null>(null);
+  useEffect(() => {
+    let live = true;
+    fetchRole().then((role) => { if (live) setCan(role === 'admin' || role === 'manager'); });
+    return () => { live = false; };
+  }, []);
+  return can;
+}
 
 interface GenerateBriefingButtonProps {
   type: 'user' | 'cio' | 'all_users' | 'dept';
@@ -25,6 +49,8 @@ export default function GenerateBriefingButton({
   const [generating, setGenerating] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [done, setDone] = useState(false);
+  // Hidden for anyone the server would refuse.
+  const canGenerate = useCanGenerateBriefings();
 
   const defaultLabel = type === 'all_users' ? 'Generate all briefings' : 'Generate now';
 
@@ -54,6 +80,8 @@ export default function GenerateBriefingButton({
       setGenerating(false);
     }
   }
+
+  if (!canGenerate) return null;
 
   return (
     <div className="flex items-center gap-2">

@@ -140,12 +140,16 @@ export default function DeptPickerPage() {
     if (loadedDeptRef.current !== dept) setDataLoading(true);
     setError(null);
     fetch(`/api/pulse/dept/${encodeURIComponent(dept)}?weeks=${delegationWeeks}&vendor=${vendor}`)
-      .then(r => {
-        if (!r.ok) throw new Error("Couldn't load this page. Try again.");
-        return r.json();
+      .then(async r => {
+        if (r.ok) return r.json();
+        // A refusal says why, so nobody retries what can never load; the
+        // previous department's figures are cleared, not left under this name.
+        const body = await r.json().catch(() => ({}));
+        if (r.status === 403) throw new Error('You can only view your own department.');
+        throw new Error(body.message || "Couldn't load this page. Try again.");
       })
       .then(d => { loadedDeptRef.current = dept; setDeptData(d); })
-      .catch(e => setError(e.message))
+      .catch(e => { loadedDeptRef.current = null; setDeptData(null); setError(e.message); })
       .finally(() => setDataLoading(false));
   }, [delegationWeeks, vendor, vendorReady]);
 
@@ -204,7 +208,7 @@ export default function DeptPickerPage() {
         {dataLoading && <LoadingSpinner />}
 
         {error && (
-          <Notice tone="error" title="Failed to load.">{error}</Notice>
+          <Notice tone="error" title={error.startsWith('You can only') ? 'Not available.' : 'Failed to load.'}>{error}</Notice>
         )}
 
         {deptData && !dataLoading && (() => {

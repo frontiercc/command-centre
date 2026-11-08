@@ -284,16 +284,81 @@ const run = (cmd, args) => execFileSync(cmd, args, { stdio: 'inherit', env: proc
       UPDATE users u SET last_seen_at = GREATEST(COALESCE(u.last_seen_at, 0), m.last)
       FROM (SELECT user_id, MAX(occurred_at) AS last FROM cowork_messages WHERE user_id IS NOT NULL GROUP BY user_id) m
       WHERE m.user_id = u.id`);
-    // Use case weekly figures, recounted from their matches as the Hub does:
-    // people and sessions from the matches, time and tool figures from the
-    // matched sessions (lib/usecases/impact-rollup.ts). The bundled weekly
-    // rows came from another installation and do not match this sample.
+    // Use case matches and weekly figures, made to agree with this sample's
+    // sessions. The bundled matches came from another installation: most name
+    // sessions this sample doesn't have (its session ids change on each load),
+    // and the rest sit in a week other than the one their session happened in,
+    // so their time could not be measured. A match to a session the sample has
+    // is filed, as the Hub does, under the Monday-UTC week of that session's
+    // first prompt. A match to a session it doesn't have is moved onto a real
+    // session the same person had that week, of the kind of work the use case
+    // covers (Claude Cowork for Work, Claude Code for Code, either when it
+    // names neither), spreading a person's matches across their sessions; with
+    // no such session it goes. Each week's people, sessions, prompts and
+    // last-seen time are then counted from its matches (a week left with none
+    // reads zero), and time and tool figures are worked out from the matched
+    // sessions below (lib/usecases/impact-rollup.ts).
+    await db2.query('BEGIN');
     await db2.query(`
-      UPDATE use_case_activation_weeks w SET distinct_users = j.users, session_count = j.sessions
-      FROM (SELECT use_case_id, week_start, COUNT(DISTINCT user_id) AS users,
-                   COUNT(DISTINCT session_id) FILTER (WHERE session_id <> '') AS sessions
-            FROM use_case_week_matches GROUP BY 1, 2) j
-      WHERE j.use_case_id = w.use_case_id AND j.week_start = w.week_start`);
+      CREATE TEMP TABLE uc_realigned ON COMMIT DROP AS
+      WITH msg AS (
+        SELECT session_id, MIN(occurred_at) AS first_at, MIN(user_id) AS user_id
+        FROM cowork_messages WHERE session_id IS NOT NULL AND user_id IS NOT NULL GROUP BY session_id),
+      known AS (
+        SELECT DISTINCT m.use_case_id,
+               (floor((s.first_at - 345600) / 604800.0) * 604800 + 345600)::bigint AS week_start,
+               s.user_id, m.session_id
+        FROM use_case_week_matches m JOIN msg s ON s.session_id = m.session_id
+        WHERE m.session_id <> ''),
+      cand AS (
+        SELECT st.session_id, msg.user_id, st.first_event_at AS first_at, 'cowork' AS kind
+        FROM cowork_session_stats st JOIN msg ON msg.session_id = st.session_id
+        WHERE st.first_event_at IS NOT NULL
+        UNION ALL
+        SELECT session_id, user_id, first_at, 'code' FROM code_session_stats
+        WHERE session_id NOT LIKE 'codex:%' AND user_id IS NOT NULL AND first_at IS NOT NULL),
+      miss AS (
+        SELECT m.use_case_id, m.week_start, m.user_id, uc.surfaces,
+               ROW_NUMBER() OVER (PARTITION BY m.use_case_id, m.week_start, m.user_id ORDER BY m.session_id) AS k
+        FROM use_case_week_matches m JOIN use_cases uc ON uc.id = m.use_case_id
+        WHERE m.session_id <> '' AND NOT EXISTS (SELECT 1 FROM msg WHERE msg.session_id = m.session_id)),
+      keys AS (SELECT DISTINCT use_case_id, week_start, user_id, surfaces FROM miss),
+      ranked AS (
+        SELECT k.use_case_id, k.week_start, k.user_id, c.session_id,
+               ROW_NUMBER() OVER (PARTITION BY k.use_case_id, k.week_start, k.user_id ORDER BY md5(c.session_id || k.use_case_id)) AS r,
+               COUNT(*) OVER (PARTITION BY k.use_case_id, k.week_start, k.user_id) AS n
+        FROM keys k JOIN cand c ON c.user_id = k.user_id
+         AND (floor((c.first_at - 345600) / 604800.0) * 604800 + 345600)::bigint = k.week_start
+         AND (k.surfaces IS NULL OR k.surfaces::jsonb = '[]'::jsonb OR k.surfaces::jsonb ? c.kind)),
+      remapped AS (
+        SELECT DISTINCT m.use_case_id, m.week_start, m.user_id, r.session_id
+        FROM miss m JOIN ranked r ON r.use_case_id = m.use_case_id AND r.week_start = m.week_start
+         AND r.user_id = m.user_id AND r.r = ((m.k - 1) % r.n) + 1)
+      SELECT * FROM known UNION SELECT * FROM remapped`);
+    await db2.query(`DELETE FROM use_case_week_matches WHERE session_id <> ''`);
+    await db2.query(`INSERT INTO use_case_week_matches (use_case_id, week_start, user_id, session_id)
+      SELECT use_case_id, week_start, user_id, session_id FROM uc_realigned ON CONFLICT DO NOTHING`);
+    await db2.query(`INSERT INTO use_case_activation_weeks (use_case_id, week_start)
+      SELECT DISTINCT use_case_id, week_start FROM uc_realigned ON CONFLICT DO NOTHING`);
+    await db2.query(`
+      WITH s AS (
+        SELECT session_id,
+               COUNT(*) FILTER (WHERE message_type IN ('cowork_user_message', 'code_user_message')) AS prompts,
+               MAX(occurred_at) AS last_at
+        FROM cowork_messages WHERE session_id IS NOT NULL GROUP BY session_id),
+      j AS (
+        SELECT m.use_case_id, m.week_start, COUNT(DISTINCT m.user_id) AS users,
+               COUNT(DISTINCT m.session_id) FILTER (WHERE m.session_id <> '') AS sessions,
+               COALESCE(SUM(s.prompts), 0) AS prompts, MAX(s.last_at) AS last_seen
+        FROM use_case_week_matches m LEFT JOIN s ON s.session_id = m.session_id
+        GROUP BY 1, 2)
+      UPDATE use_case_activation_weeks w
+      SET distinct_users = COALESCE(j.users, 0), session_count = COALESCE(j.sessions, 0),
+          matched_messages = COALESCE(j.prompts, 0), last_seen_at = j.last_seen
+      FROM use_case_activation_weeks w2
+      LEFT JOIN j ON j.use_case_id = w2.use_case_id AND j.week_start = w2.week_start
+      WHERE w.use_case_id = w2.use_case_id AND w.week_start = w2.week_start`);
+    await db2.query('COMMIT');
     await db2.end();
     console.log(`${seen.rowCount} people.`);
   }
