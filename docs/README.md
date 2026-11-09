@@ -1,6 +1,6 @@
 # Documentation
 
-New here? Start with the [README](../README.md): try Frontier Command Centre with sample data, then connect Claude for Teams or Enterprise, and ChatGPT and Codex if you use them.
+New here? Start with the [README](../README.md): try Frontier Command Centre with sample data, then connect Claude, ChatGPT or both.
 
 ## Use it
 

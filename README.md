@@ -15,13 +15,13 @@ Works with Claude, ChatGPT and Codex.
 
 https://github.com/user-attachments/assets/2dfb1fe4-3fdd-45ce-aad9-a94536c582ad
 
-Command Centre gives organisations a complete picture of how Claude is being used across their business, the work it's delivering, what it costs, where the risks sit and whether their investment is creating measurable value. It brings together productivity, adoption, financial management and governance across Claude Code, Claude Cowork and Claude Chat, providing visibility from individual employees through to departments, engineering teams and the organisation as a whole. Organisations on ChatGPT Enterprise or Edu can bring in ChatGPT and Codex activity too, shown beside Claude.
+Command Centre shows whether AI is making your teams more productive, and what that is worth. It covers Claude and ChatGPT for everyday work and Claude Code and Codex for coding, showing the results for each person, each department and the organisation as a whole.
 
-Command Centre shows how employees are progressing from simple prompting to delegating substantial work and entire business processes, while identifying valuable use cases that may otherwise remain undiscovered. Organisations can turn repeated processes into reusable skills, track how those capabilities spread, understand engineering output and identify where coaching or further investment will deliver the greatest benefit.
+It shows how far people have moved from quick questions to handing over substantial work and whole processes. It finds the recurring work teams have already given to AI, helps turn that work into skills others can use, and shows where coaching or further investment would help most.
 
-Command Centre also provides the financial and governance controls needed to manage AI at scale. Leaders can examine expenditure by employee, department, cost centre and model, identify opportunities to reduce costs, detect sensitive information and risky activity in prompts, and maintain searchable audit trails and compliance evidence.
+Finance and security teams get what they need from the same place. Spend is broken down by person, department, cost centre, model and vendor, with suggestions for doing the same work for less. Prompts are checked for personal data, secrets and risky intent, and a searchable audit trail supports GDPR, the EU AI Act, ISO 27001 and ISO 42001.
 
-Somewhere in your organisation, someone may already have handed an entire process to AI. Command Centre helps you discover that work, understand its value, make it repeatable and scale it across the business, with the financial accountability, security and governance needed to do so responsibly.
+Somewhere in your organisation, someone may already have handed an entire process to AI. Command Centre helps you find that work, understand its value, make it repeatable and spread it across the business, with the financial accountability, security and governance needed to do so responsibly.
 
 ## Who it is for
 
@@ -30,22 +30,22 @@ Somewhere in your organisation, someone may already have handed an entire proces
 - **Engineering leaders** who want to see what Claude Code and Codex produce and what they cost.
 - **Finance teams** who need AI spend by cost centre and by month.
 - **Security, privacy and compliance teams** who need an audit trail of prompts, alerts on personal data and evidence for GDPR, the EU AI Act, ISO 27001 and ISO 42001.
-- **The administrator** who installs Command Centre and connects Claude, and ChatGPT and Codex if your organisation uses them.
+- **The administrator** who installs Command Centre and connects Claude, ChatGPT or both.
 
-Command Centre works with Claude for Teams and Claude for Enterprise:
+## What it works with
 
-| Claude product | What Command Centre receives | Claude for Teams | Claude for Enterprise |
-|---|---|---|---|
-| **Claude Code** | Prompts, models, tokens and cost, the tools, skills, connectors and subagents used, active time, lines of code, commits, pull requests and accepted edits | Yes | Yes |
-| **Claude Cowork** | Prompts, models, tokens and cost, the tools, skills, connectors and subagents used, and the files people upload and Claude produces | Yes | Yes |
-| **Claude Chat** | Every conversation: people's prompts in full, the files they attach, the model, the connectors used, and the artifacts and files Claude made | No | Yes |
+Command Centre works with Claude for Teams, Claude for Enterprise, and ChatGPT Enterprise and Edu. You can connect Claude, ChatGPT or both, and each product sends the following:
 
-It also works with ChatGPT Enterprise and Edu, through OpenAI's Compliance API:
-
-| OpenAI product | What Command Centre receives |
+| Product | What Command Centre receives |
 |---|---|
+| **Claude Chat** | Every conversation: people's prompts in full, the files they attach, the model, the connectors used, and the artifacts and files Claude made |
 | **ChatGPT Chat and ChatGPT Work** | Prompts, the names of files people attach, the skills ChatGPT used, the model and time of each reply, and spend from OpenAI's hourly cost records |
+| **Claude Cowork** | Prompts, models, tokens and cost, the tools, skills, connectors and subagents used, and the files people upload and Claude produces |
+| **Claude in Office and Google apps** | Prompts in Excel, Word, PowerPoint, Outlook, Google Sheets, Docs and Slides, models and tokens, the tools Claude used, and the names of the documents it changed. Spend is estimated from published prices. |
+| **Claude Code** | Prompts, models, tokens and cost, the tools, skills, connectors and subagents used, active time, lines of code, commits, pull requests and accepted edits |
 | **Codex** | Prompts, models, tokens and cost for each turn, the connectors used, and each action's outcome, including commits |
+
+[How it integrates](#how-it-integrates) shows how each product connects and which plan it needs.
 
 **Get started:** [1. Try it with sample data](#1-quick-start-try-it-with-sample-data) · [2. Connect Claude for Teams](#2-connect-claude-for-teams) · [3. Connect Claude for Enterprise](#3-connect-claude-for-enterprise) · [4. Connect ChatGPT and Codex](#4-connect-chatgpt-and-codex)
 
@@ -58,12 +58,12 @@ It also works with ChatGPT Enterprise and Edu, through OpenAI's Compliance API:
 | **Dashboard** | Brings together the week's AI activity, productivity, spending and governance risks into an executive briefing, with an organisation-wide risk score and recommendations on where to focus attention. | [Product overview](docs/product-overview.md#the-dashboard) |
 | **Alerts** | Identifies personal data, exposed secrets and potentially risky intent in prompts, with supporting evidence to help security teams investigate and prioritise concerns. | [Product overview](docs/product-overview.md#alerts) · [Detection](docs/security-and-data-protection.md#pii-and-secret-detection) |
 | ***Productivity*** | | |
-| **Work Pulse** | Measures how deeply employees delegate work to Claude Chat, Claude Cowork and Claude in Excel, Word, PowerPoint, Outlook and Google Sheets, Docs and Slides, and to ChatGPT, from individual tasks to substantial processes. Compares adoption and delegation patterns across people and departments to identify progress and coaching opportunities. | [Product overview](docs/product-overview.md#work-pulse) · [Measured and AI-judged](docs/ai-data-flow.md#measured-and-ai-judged) |
+| **Work Pulse** | Measures how deeply employees delegate everyday work to Claude and ChatGPT, across Claude Chat, Claude Cowork, Claude in Office and Google apps, and ChatGPT Chat and Work, from individual tasks to substantial processes. Compares adoption and delegation patterns across people and departments to identify progress and coaching opportunities. | [Product overview](docs/product-overview.md#work-pulse) · [Measured and AI-judged](docs/ai-data-flow.md#measured-and-ai-judged) |
 | **Developer Pulse** | Shows how engineers use Claude Code and Codex, the work being produced and its associated costs, helping engineering leaders understand delivery activity, productivity and where AI is contributing to development. | [Product overview](docs/product-overview.md#developer-pulse) |
 | **Use Cases** | Discovers recurring business processes emerging from everyday AI activity, identifies opportunities to share successful approaches and helps turn repeated work into reusable skills that can be adopted across teams. | [Product overview](docs/product-overview.md#use-cases) |
 | **S&C Board** | Provides an organisation-wide view of the skills and connectors employees are using, who owns them and where they are being adopted, helping teams manage and share reusable AI capabilities. | [Product overview](docs/product-overview.md#skills-and-connectors-board) |
 | ***Spend*** | | |
-| **FinOps** | Tracks AI expenditure across employees, departments, cost centres and models, giving finance and technology leaders visibility into spending patterns, allocation and the financial impact of AI adoption. | [Product overview](docs/product-overview.md#finops) |
+| **FinOps** | Tracks AI expenditure across employees, departments, cost centres, models and vendors, giving finance and technology leaders visibility into spending patterns, allocation and the financial impact of AI adoption. | [Product overview](docs/product-overview.md#finops) |
 | **Spend Review** | Examines what each employee's AI spend is being used for, identifies expensive usage patterns and recommends opportunities to complete similar work more economically. | [Product overview](docs/product-overview.md#spend-review) |
 | ***Governance*** | | |
 | **Audit Log** | Maintains a searchable record of prompts and activity from Claude, ChatGPT and Codex, including who accessed prompt content, supporting investigations, accountability and oversight of AI usage across the organisation. | [Product overview](docs/product-overview.md#the-audit-log) · [Who can read prompts](docs/security-and-data-protection.md#who-can-read-prompt-text) · [AI data flow](docs/ai-data-flow.md) |
@@ -78,7 +78,7 @@ It also works with ChatGPT Enterprise and Edu, through OpenAI's Compliance API:
 
 ## How it works
 
-Command Centre is two parts that you run, the **Hub** (the web application you sign in to) and the **collector** (which receives the activity data Claude sends), plus a **PostgreSQL database**. Where they run depends on how you use it:
+Command Centre is two parts that you run, the **Hub** (the web application you sign in to, which also fetches Claude Chat, ChatGPT and Codex activity from Anthropic's and OpenAI's Compliance APIs) and the **collector** (which receives the activity Claude Code, Claude Cowork and Claude in Office and Google apps send), plus a **PostgreSQL database**. Where they run depends on how you use it:
 
 | | On your computer | On one server | On AWS or Azure |
 |---|---|---|---|
@@ -87,7 +87,7 @@ Command Centre is two parts that you run, the **Hub** (the web application you s
 | **Database** | A PostgreSQL container, included | The included PostgreSQL container, or your own PostgreSQL | AWS: Amazon RDS for PostgreSQL. Azure: Azure Database for PostgreSQL |
 | **HTTPS** | Not needed (`http://localhost`) | A reverse proxy you provide, such as Caddy | AWS: Application Load Balancer. Azure: Container Apps ingress with a managed certificate |
 | **Secrets** | `.env` | `.env` | AWS Secrets Manager / Azure Key Vault |
-| **How to set it up** | [1. Quick start](#1-quick-start-try-it-with-sample-data) | [2. Teams](#2-connect-claude-for-teams) or [3. Enterprise](#3-connect-claude-for-enterprise) | [Running in Azure or AWS](docs/running-in-azure-or-aws.md) |
+| **How to set it up** | [1. Quick start](#1-quick-start-try-it-with-sample-data) | Claude: [2. Teams](#2-connect-claude-for-teams) or [3. Enterprise](#3-connect-claude-for-enterprise). ChatGPT and Codex: [4](#4-connect-chatgpt-and-codex) | [Running in Azure or AWS](docs/running-in-azure-or-aws.md) |
 
 ![How Command Centre runs: on your computer, on one server, and on AWS or Azure, coloured by who provides each part](docs/diagrams/How%20Command%20Centre%20runs.png)
 
@@ -97,20 +97,21 @@ Command Centre is two parts that you run, the **Hub** (the web application you s
 |---|---|---|
 | **Claude Code** | OpenTelemetry, set up in Claude Code's managed settings in claude.ai Organization settings | Claude for Teams and Enterprise |
 | **Claude Cowork** | OpenTelemetry, set up in the monitoring settings in claude.ai Organization settings | Claude for Teams and Enterprise |
+| **Claude in Office and Google apps** | OpenTelemetry, set up in Office agents → Monitoring in claude.ai Organization settings | Claude for Teams and Enterprise |
 | **Claude Chat** | Anthropic's Compliance API, using a Compliance Access Key | Claude for Enterprise |
 | **ChatGPT and Codex** | OpenAI's Compliance API, using an OpenAI Admin API key | ChatGPT Enterprise and Edu |
 
-Command Centre's own AI features, such as grading work, briefings and reports, send requests to Claude through Anthropic's API, using the Claude API key you enter on **Admin → Access & Keys**. With ChatGPT and Codex connected, these features send their prompts to Anthropic too. [AI data flow](docs/ai-data-flow.md) lists every feature, what it sends and how to switch each one off.
+Command Centre's own AI features, such as grading work, briefings and reports, run on Claude through Anthropic's API, using the Claude API key you enter on **Admin → Access & Keys**, whichever products you connect. They send prompts from every connected product, Claude and OpenAI alike, to Anthropic. [AI data flow](docs/ai-data-flow.md) lists every feature, what it sends and how to switch each one off.
 
 Command Centre sees prompts only after they reach Claude, ChatGPT or Codex: it can flag them, alert on them and control who reads them, but it cannot stop or change them. Command Centre stores what people asked, never the replies of Claude, ChatGPT or Codex.
 
 ### Measured and AI-judged
 
-**Measured** figures are counted from Claude Code, Claude Cowork and Claude Chat activity, and from ChatGPT and Codex activity when connected, such as the number of prompts, spend, lines of code and commits. **AI-judged** figures are Claude's assessment of that work, such as how deeply someone delegated a task, or which use case a session belongs to. The app labels judged figures as AI judgements. [What is measured and what is AI-judged](docs/ai-data-flow.md#measured-and-ai-judged) lists each one, and how the AI's judgements are checked.
+**Measured** figures are counted from the activity of every connected product, such as the number of prompts, spend, lines of code and commits. **AI-judged** figures are Claude's assessment of that work, such as how deeply someone delegated a task, or which use case a session belongs to. The app labels judged figures as AI judgements. [What is measured and what is AI-judged](docs/ai-data-flow.md#measured-and-ai-judged) lists each one, and how the AI's judgements are checked.
 
 ### Your data stays with you
 
-Frontier Command Centre runs on your own computer, server or cloud account, and everything it collects stays there. It sends no telemetry, usage data or heartbeat to anyone. The only outside services it calls are the ones you set up: Anthropic's API for its AI features, and optionally OpenAI's API for ChatGPT and Codex, your sign-in provider, email server, Slack or GitHub. It stores people's prompts, never the AI's replies. [Security and data protection](docs/security-and-data-protection.md) has the detail.
+Frontier Command Centre runs on your own computer, server or cloud account, and everything it collects stays there. It sends no telemetry, usage data or heartbeat to anyone. The only outside services it calls are the ones you set up: Anthropic's API for its AI features, Anthropic's Compliance API for Claude Chat, OpenAI's API for ChatGPT and Codex, and your sign-in provider, email server, Slack or GitHub. It stores people's prompts, never the AI's replies. [Security and data protection](docs/security-and-data-protection.md) has the detail.
 
 ## 1. Quick start: try it with sample data
 
@@ -212,7 +213,7 @@ The Dashboard shows Acme Corp's briefing and recommendations, and Work Pulse, De
 ### Next steps
 
 - **[Your first ten minutes](docs/first-ten-minutes.md)**: what to look at first in the sample data.
-- **Run it for your organisation:** [2. Connect Claude for Teams](#2-connect-claude-for-teams) or [3. Connect Claude for Enterprise](#3-connect-claude-for-enterprise), and [4. Connect ChatGPT and Codex](#4-connect-chatgpt-and-codex) if you use them.
+- **Run it for your organisation:** connect Claude ([2. Teams](#2-connect-claude-for-teams) or [3. Enterprise](#3-connect-claude-for-enterprise)), ChatGPT and Codex ([4](#4-connect-chatgpt-and-codex)), or both.
 - **Something not working?** See [Troubleshooting and FAQ](docs/troubleshooting.md).
 
 ### Need to start again?
@@ -342,7 +343,7 @@ Claude Chat prompts appear in the **Audit Log** alongside Claude Code and Claude
 
 ## 4. Connect ChatGPT and Codex
 
-This brings ChatGPT prompts into Work Pulse, Codex prompts into Developer Pulse, and their spend into FinOps. You can do it on its own or alongside journey 2 or 3.
+ChatGPT work then appears in Work Pulse and Codex work in Developer Pulse, graded on the same tiers as Claude's, and their spend appears in FinOps and Spend Review. You can connect OpenAI on its own or together with Claude (journey 2 or 3).
 
 ### Before you begin
 
@@ -366,9 +367,7 @@ The **Last sync** line under the fields shows ChatGPT and Codex prompts, and the
 
 **Does my data leave my network?** No. It runs on infrastructure you control and sends nothing back. See [Your data stays with you](#your-data-stays-with-you).
 
-**Which Claude plans does it work with?** Claude Code, Claude Cowork and Claude in Office/Google on Claude for Teams and Claude for Enterprise. Claude Chat on Claude for Enterprise, through Anthropic's Compliance API.
-
-**Does it work with ChatGPT and Codex?** Yes, on ChatGPT Enterprise and Edu, through OpenAI's Compliance API. See [4. Connect ChatGPT and Codex](#4-connect-chatgpt-and-codex).
+**Which plans does it work with?** Claude for Teams and Claude for Enterprise, and ChatGPT Enterprise and Edu. Claude Code, Claude Cowork and Claude in Office/Google work on both Claude plans; Claude Chat needs Claude for Enterprise, through Anthropic's Compliance API. ChatGPT and Codex come through OpenAI's Compliance API. See [How it integrates](#how-it-integrates).
 
 **Do I need a Claude API key?** Not to explore the sample data, but yes if you want to bring every feature to life. Grading work, briefings and summaries use your organisation's own key, including when ChatGPT and Codex are your only products.
 
