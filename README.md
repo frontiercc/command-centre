@@ -49,7 +49,7 @@ Command Centre works with Claude for Teams, Claude for Enterprise, and ChatGPT E
 
 **Get started:** [1. Try it with sample data](#1-quick-start-try-it-with-sample-data) · [2. Connect Claude for Teams](#2-connect-claude-for-teams) · [3. Connect Claude for Enterprise](#3-connect-claude-for-enterprise) · [4. Connect ChatGPT and Codex](#4-connect-chatgpt-and-codex)
 
-**Explore:** [What it does](#what-it-does) · [How it works](#how-it-works) · [Your first ten minutes](docs/first-ten-minutes.md) · [Walkthrough video](https://vimeo.com/1238818389) · [FAQ](#questions-people-ask-first) · [Documentation](#documentation)
+**Explore:** [What it does](#what-it-does) · [How it works](#how-it-works) · [Your first ten minutes](docs/first-ten-minutes.md) · [Walkthrough video](https://vimeo.com/1238818389) · [ChatGPT walkthrough video](https://vimeo.com/1245175471) · [FAQ](#questions-people-ask-first) · [Documentation](#documentation)
 
 ## What it does
 
