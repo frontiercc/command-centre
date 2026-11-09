@@ -18,6 +18,8 @@ import GenerateBriefingButton from '@/components/pulse/GenerateBriefingButton';
 import WeeklyPulse from '@/components/pulse/WeeklyPulse';
 import HumanTimeCard, { type HumanTimeSummary } from '@/components/pulse/HumanTimeCard';
 import { PageBody, Toolbar, Notice, B, cx } from '@/components/precision/ui';
+import { useVendor, useOpenAiOnly, VendorSwitch } from '@/components/shared/VendorSwitch';
+import { WORK_PULSE_VENDOR_LABELS } from '@/lib/dashboard/vendor';
 
 interface PersonalPulseData {
   humanTime?: HumanTimeSummary | null;
@@ -33,6 +35,7 @@ interface PersonalPulseData {
   weeklyPulse: { body: string; suggestion: string | null; generated_at: number } | null;
   capabilitiesDetail: { count: number } | null;
   teamMetrics: { ors: number | null } | null;
+  openaiPresent?: boolean;
 }
 
 interface UserListRow {
@@ -58,6 +61,9 @@ export default function UsersPickerPage() {
   const [error, setError] = useState<string | null>(null);
 
   const selectedUserId = searchParams.get('userId') ?? '';
+  // The All / Claude / ChatGPT switch, the same remembered choice as My Pulse.
+  const [vendor, setVendor, vendorReady] = useVendor();
+  const openaiOnly = useOpenAiOnly();
 
   // Admin gate
   useEffect(() => {
@@ -105,7 +111,7 @@ export default function UsersPickerPage() {
     if (!userId) return;
     setDataLoading(true);
     setError(null);
-    fetch(`/api/pulse/me?userId=${encodeURIComponent(userId)}`)
+    fetch(`/api/pulse/me?userId=${encodeURIComponent(userId)}&vendor=${vendor}`)
       .then(r => {
         if (!r.ok) throw new Error("Couldn't load this page. Try again.");
         return r.json();
@@ -113,11 +119,12 @@ export default function UsersPickerPage() {
       .then(setPulseData)
       .catch(e => setError(e.message))
       .finally(() => setDataLoading(false));
-  }, []);
+  }, [vendor]);
 
   useEffect(() => {
-    if (selectedUserId && adminChecked) loadUser(selectedUserId);
-  }, [selectedUserId, adminChecked, loadUser]);
+    // The saved view is read after the page loads; wait for it so one view loads, not two.
+    if (selectedUserId && adminChecked && vendorReady) loadUser(selectedUserId);
+  }, [selectedUserId, adminChecked, vendorReady, loadUser]);
 
   const handleSelect = (userId: string) => {
     const params = new URLSearchParams(searchParams.toString());
@@ -194,7 +201,14 @@ export default function UsersPickerPage() {
               {selectedUser?.department && <span>{selectedUser.department}</span>}
             </span>
           }
-        />
+        >
+          <VendorSwitch vendor={vendor} onChange={setVendor} openaiPresent={pulseData?.openaiPresent ?? false} labels={WORK_PULSE_VENDOR_LABELS} />
+        </Toolbar>
+        {vendor !== 'all' && !openaiOnly && (
+          <p className="m-0 -mt-2 text-[13px] text-[#8F8F8F]">
+            Showing {WORK_PULSE_VENDOR_LABELS[vendor]} only{vendor === 'openai' ? ': ChatGPT Chat and ChatGPT Work' : ': Claude Chat, Claude Cowork and Claude in Office/Google'}.
+          </p>
+        )}
 
         {dataLoading && <LoadingSpinner />}
         {error && <Notice tone="error" title="Failed to load.">{error}</Notice>}
@@ -210,7 +224,7 @@ export default function UsersPickerPage() {
             <>
               <FrontierHero view={d.frontier} canOpenUseCases={d.frontierAccess?.canOpenUseCases ?? false} />
 
-              <HumanTimeCard summary={d.humanTime} surface="cowork" scope="Personal" view="all" />
+              <HumanTimeCard summary={d.humanTime} surface="cowork" scope="Personal" view={d.openaiPresent ? vendor : 'claude'} />
 
               <StatStrip
                 oti={m?.oti ?? null} dds={m?.dds ?? null}

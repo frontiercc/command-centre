@@ -165,10 +165,11 @@ function CodeUsersContent() {
                   Person 360
                 </Link>
               )}
-              <VendorSwitch vendor={vendor} onChange={setVendor} openaiPresent={codexPresent} labels={DEVELOPER_PULSE_VENDOR_LABELS} />
             </span>
           }
-        />
+        >
+          <VendorSwitch vendor={vendor} onChange={setVendor} openaiPresent={codexPresent} labels={DEVELOPER_PULSE_VENDOR_LABELS} />
+        </Toolbar>
 
         {dataLoading && <LoadingSpinner />}
 
