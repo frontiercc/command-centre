@@ -28,6 +28,7 @@
 - ChatGPT and Codex are watched for silence as two sources, and not while the OpenAI sync is paused. A rejected OpenAI Admin API key raises its own alert.
 - Admin → Ingestion: the collector panel is named Claude collector (OpenTelemetry); Recent users shows the product each person was first seen in and includes people first seen through Claude Chat. The Pulse role reads Pulse (Work and Developer). Admin → Files shows each file's product, with a filter. Database health and the support bundle count ChatGPT and Codex on their own lines. Licensed seats is labelled Claude licensed seats.
 - In the Audit Log, a ChatGPT or Codex conversation that used one model shows it on one line ("all on gpt-5").
+- Wherever a source is named (the dashboard's source chips, the Users page, System health, personal-data and key-rejected alerts, the Audit Log's notes), it says whose API it is: Anthropic's or OpenAI's.
 
 ### Fixed
 
