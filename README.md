@@ -45,6 +45,8 @@ Command Centre works with Claude for Teams, Claude for Enterprise, and ChatGPT E
 | **Claude Code** | Prompts, models, tokens and cost, the tools, skills, connectors and subagents used, active time, lines of code, commits, pull requests and accepted edits |
 | **Codex** | Prompts, models, tokens and cost for each turn, the connectors used, and each action's outcome, including commits |
 
+ChatGPT and Codex support is in preview, and we are looking for organisations on ChatGPT Enterprise or Edu to test it. To take part, say hello in [Discussions](https://github.com/frontiercc/command-centre/discussions).
+
 [How it integrates](#how-it-integrates) shows how each product connects and which plan it needs.
 
 **Get started:** [1. Try it with sample data](#1-quick-start-try-it-with-sample-data) · [2. Connect Claude for Teams](#2-connect-claude-for-teams) · [3. Connect Claude for Enterprise](#3-connect-claude-for-enterprise) · [4. Connect ChatGPT and Codex](#4-connect-chatgpt-and-codex)
@@ -343,6 +345,8 @@ Claude Chat prompts appear in the **Audit Log** alongside Claude Code and Claude
 
 ## 4. Connect ChatGPT and Codex
 
+> **Preview.** ChatGPT and Codex support is in preview. We are looking for organisations on ChatGPT Enterprise or Edu to test it; to take part, say hello in [Discussions](https://github.com/frontiercc/command-centre/discussions).
+
 ChatGPT work then appears in Work Pulse and Codex work in Developer Pulse, graded on the same tiers as Claude's, and their spend appears in FinOps and Spend Review. You can connect OpenAI on its own or together with Claude (journey 2 or 3).
 
 ### Before you begin
@@ -402,7 +406,7 @@ Vote or add ideas in [Discussions](https://github.com/frontiercc/command-centre/
 
 ## Status
 
-1.0.0, in October 2026, was the first public release; the current release is 1.3.0. Command Centre was built with Claude Code, then reviewed, tested and run in production; it has been in daily use since mid-2026. Several features ship switched off and are turned on from the admin pages: FinOps, Use Cases, Weekly Highlights, Dev Framework Alignment and single sign-on.
+1.0.0, in October 2026, was the first public release; the current release is 1.3.0, which adds ChatGPT and Codex in preview. Command Centre was built with Claude Code, then reviewed, tested and run in production; it has been in daily use since mid-2026. Several features ship switched off and are turned on from the admin pages: FinOps, Use Cases, Weekly Highlights, Dev Framework Alignment and single sign-on.
 
 ## Support
 
