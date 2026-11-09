@@ -49,6 +49,15 @@ export async function GET(request: NextRequest) {
   const nowS = Math.floor(Date.now() / 1000);
   const current = await buildChargeback(period, nowS);
   const projection = buildFinopsProjection(current.grandTotalUsd, current.monthToDate, nowS);
+  // Claude's and OpenAI's month-end figures, each projected from its own
+  // month-to-date spend by the same run rate (so they add up to `projection`).
+  // Only with the Claude / OpenAI split, i.e. ChatGPT and Codex connected and shown.
+  const projectionByVendor = projection && current.vendors
+    ? {
+        claudeUsd: buildFinopsProjection(current.vendors.claudeUsd, current.monthToDate, nowS)!.projected,
+        openaiUsd: buildFinopsProjection(current.vendors.openaiUsd, current.monthToDate, nowS)!.projected,
+      }
+    : null;
 
   // Insight is fully deterministic — computed facts + a templated prose summary,
   // NO LLM call (keeps the page fast; no synchronous Claude round-trip). Best-effort:
@@ -87,5 +96,5 @@ export async function GET(request: NextRequest) {
     ? await officeSpendByUser(start, end).then(rows => summariseOfficeSpend(rows, { allApps: true })).catch(() => null)
     : null;
 
-  return NextResponse.json({ ...current, projection, insight, seats, chatgptSeats, office });
+  return NextResponse.json({ ...current, projection, projectionByVendor, insight, seats, chatgptSeats, office });
 }

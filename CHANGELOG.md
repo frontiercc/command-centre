@@ -10,12 +10,24 @@
 - ChatGPT and Codex across the rest of Command Centre: personal data and risky-intent alerts on their prompts, the Audit Log (with spend for each prompt), each person's combined spend on their Person 360 page, Use Cases, the Skills and Connectors Board, human time, reports, briefings and telemetry-silence alerts.
 - Sample data includes thirteen weeks of ChatGPT and Codex activity.
 - A stand-in for OpenAI's Compliance API (`scripts/openai-mock`) for building and testing the sync without a ChatGPT Enterprise workspace.
+- GitHub commits are matched to the tool that made them. A commit counts as made with Claude Code or Codex when its author is a Command Centre person whose Claude Code or Codex activity recorded a commit within 15 minutes of it; commit messages are never read. Shipping Alignment compares each tool with its own GitHub commits, and each person's repository count and the Codex view's codebase reach follow the same matching.
+- The use cases register shows each use case's matched sessions in the last 13 weeks by vendor ("Claude 12 · OpenAI 4"), and Use Case Governance shows sessions and measured hours by vendor.
+- Identity conflicts catch one OpenAI account arriving under two email addresses, beside Claude's installation conflicts, with the same merge and undo.
+- Anomaly detection runs once a day while a Claude API key is set and at least one of its alert types is on, takes the acceptable use policy into account, and sees Codex turns and tokens and ChatGPT replies per person (no prompt text).
 
 ### Changed
 
 - Claude Chat prompts are stored beside Cowork prompts, so Work Pulse grades them into tiers like other work. With grading on, their text is sent to the classifier model, as Cowork prompts are.
 - **Enterprise APIs** on **Admin → Access & Keys** is now **Claude Enterprise APIs**.
 - The department table on the Work Pulse overview shows each department's resilience score, which was always blank, and marks only a concentrated score (below 0.35) as a risk.
+- The Audit Log's source filter and labels name the vendor: OpenTelemetry (Claude), Anthropic Compliance API (Claude Chat) and OpenAI Compliance API (ChatGPT and Codex). Choosing the Anthropic Compliance API no longer returns ChatGPT and Codex too.
+- FinOps splits its 12-month trend and spend concentration by product and its month-end projection into Claude and OpenAI. Spend Review shows the month's Claude and OpenAI totals and ranks the most efficient people on separate Claude and OpenAI boards, in the page and in Reports.
+- The Value page counts Codex spend, commits and people beside Claude Code's; Dev Framework Alignment has the Claude / Codex switch; Data Quality shows the last Codex record. The Observed signal stays Claude Code only, because Codex reports no engaged time.
+- Codex sessions are graded from their real actions, failed actions, commits and models. The allowed-models and high-friction alerts cover Codex. Risky-intent alerts name the product the prompt came from.
+- The human-time spot-check draws ChatGPT conversations. The weekly digest, Weekly Highlights, Reports and the Metrics Connector include Codex spend and ChatGPT and Codex time while they are shown.
+- ChatGPT and Codex are watched for silence as two sources, and not while the OpenAI sync is paused. A rejected OpenAI Admin API key raises its own alert.
+- Admin → Ingestion: the collector panel is named Claude collector (OpenTelemetry); Recent users shows the product each person was first seen in and includes people first seen through Claude Chat. The Pulse role reads Pulse (Work and Developer). Admin → Files shows each file's product, with a filter. Database health and the support bundle count ChatGPT and Codex on their own lines. Licensed seats is labelled Claude licensed seats.
+- In the Audit Log, a ChatGPT or Codex conversation that used one model shows it on one line ("all on gpt-5").
 
 ### Fixed
 
@@ -40,6 +52,7 @@
 - The dashboard no longer logs an error when a Pulse-only role is sent to its own page.
 - The Users page shows "Agent" for people first seen by the retired local agent.
 - Sample data: each use case match points at a real session the sample has, in the week that session happened (a match to a session the sample lacks moves to one the same person had that week), so each use case's people, sessions and time agree.
+- Retention clears the names of files attached in a session once the session is past its window, in both modes, and archiving now copies ChatGPT and Codex reply records, turns, actions, spend and conversation times before they are deleted.
 
 ### Upgrading
 

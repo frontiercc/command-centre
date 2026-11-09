@@ -17,6 +17,10 @@ export interface GhDailyRow {
   date: string;        // YYYY-MM-DD (UTC), as stored in github_repo_stats
   commit_count: number;
   prs_merged: number;
+  /** Tool split of commit_count (migration 0047); null/absent = synced before the split. */
+  claude?: number | null;
+  codex?: number | null;
+  none?: number | null;
 }
 
 export interface ShippingDay {
@@ -24,6 +28,14 @@ export interface ShippingDay {
   aiCommits: number;   // org-wide commits made inside Claude Code sessions
   ghCommits: number;   // total commits across tracked repos (GitHub)
   ghPrs: number;       // merged PRs across tracked repos (GitHub)
+  /**
+   * ghCommits split by the tool that made each commit (matched by person and
+   * time). All three null when any tracked repo's row for the day was synced
+   * before the split existed: that day shows the total only.
+   */
+  ghClaude: number | null;
+  ghCodex: number | null;
+  ghNone: number | null;
 }
 
 export interface RepoShippingCard {
@@ -52,16 +64,65 @@ export function buildShippingSeries(
 ): ShippingDay[] {
   const ghCommits = new Map<string, number>();
   const ghPrs = new Map<string, number>();
+  const split = new Map<string, { claude: number; codex: number; none: number } | null>();
   for (const r of ghRows) {
     ghCommits.set(r.date, (ghCommits.get(r.date) ?? 0) + r.commit_count);
     ghPrs.set(r.date, (ghPrs.get(r.date) ?? 0) + r.prs_merged);
+    const known = r.claude != null && r.codex != null && r.none != null;
+    const cur = split.has(r.date) ? split.get(r.date)! : { claude: 0, codex: 0, none: 0 };
+    split.set(r.date, cur === null || !known ? null : {
+      claude: cur.claude + r.claude!, codex: cur.codex + r.codex!, none: cur.none + r.none!,
+    });
   }
-  return days.map(date => ({
-    date,
-    aiCommits: aiByDay[date] ?? 0,
-    ghCommits: ghCommits.get(date) ?? 0,
-    ghPrs: ghPrs.get(date) ?? 0,
-  }));
+  return days.map(date => {
+    // A day with no rows is a genuine zero (the sync rewrites the window), split included.
+    const s = split.has(date) ? split.get(date)! : { claude: 0, codex: 0, none: 0 };
+    return {
+      date,
+      aiCommits: aiByDay[date] ?? 0,
+      ghCommits: ghCommits.get(date) ?? 0,
+      ghPrs: ghPrs.get(date) ?? 0,
+      ghClaude: s ? s.claude : null,
+      ghCodex: s ? s.codex : null,
+      ghNone: s ? s.none : null,
+    };
+  });
+}
+
+/** True when any row carries the tool split, i.e. a sync has run since migration 0047. */
+export function hasToolSplit(ghRows: GhDailyRow[]): boolean {
+  return ghRows.some(r => r.claude != null && r.codex != null && r.none != null);
+}
+
+export interface CodexRepoReach {
+  /** Tracked repos with at least one commit matched to Codex in the window's last 7 days. */
+  activeRepos7d: number;
+  /** Tracked repos with no commit matched to Codex in the whole 30-day window. */
+  quietRepos30d: number;
+  trackedRepos: number;
+}
+
+/**
+ * Codex reports no repository, so its reach is worked out from GitHub
+ * commits matched to Codex, on the tracked repos only. Null until a sync has
+ * written the tool split.
+ */
+export function buildCodexRepoReach(days: string[], ghRows: GhDailyRow[], trackedRepos: string[]): CodexRepoReach | null {
+  if (!hasToolSplit(ghRows)) return null;
+  const last7 = new Set(days.slice(-7));
+  const window = new Set(days);
+  const active7 = new Set<string>();
+  const active30 = new Set<string>();
+  for (const r of ghRows) {
+    if (!window.has(r.date) || !(r.codex != null && r.codex > 0)) continue;
+    active30.add(r.repo);
+    if (last7.has(r.date)) active7.add(r.repo);
+  }
+  return {
+    activeRepos7d: active7.size,
+    quietRepos30d: trackedRepos.filter(repo => !active30.has(repo)).length,
+    trackedRepos: trackedRepos.length,
+  };
 }
 
 export function buildRepoCards(days: string[], ghRows: GhDailyRow[]): RepoShippingCard[] {

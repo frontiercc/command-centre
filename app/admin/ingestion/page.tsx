@@ -11,6 +11,7 @@ import { useToast } from '@/components/shared/ToastProvider';
 import IdentityConflictsCard from '@/components/admin/IdentityConflictsCard';
 import CollectorConnection from '@/components/setup/CollectorConnection';
 import { PageBody, Panel, Muted, T, B, C, cx } from '@/components/precision/ui';
+import { firstSeenLabel } from '@/lib/sources/first-seen';
 
 interface OtelStatus {
   collectorTokenSet: boolean;
@@ -18,7 +19,8 @@ interface OtelStatus {
   lastOtelEventAt: number | null;
   otelUserCount: number;
   newUsersToday: number;
-  recentOtelUsers: Array<{ id: string; display_name: string | null; email: string | null; department: string | null; last_seen_at: number | null; source: string | null }>;
+  /** first_seen_in: the product of the person's earliest surviving prompt, else their arrival route. */
+  recentOtelUsers: Array<{ id: string; display_name: string | null; email: string | null; department: string | null; last_seen_at: number | null; source: string | null; first_seen_in?: string }>;
   openai: {
     keySet: boolean;
     lastSyncAt: number | null;
@@ -173,9 +175,9 @@ export default function IngestionPage() {
               )}
             </Panel>
 
-            {/* Collector Status Card */}
+            {/* Claude collector status (OpenTelemetry only; ChatGPT and Codex have their own panel below) */}
             <Panel
-              title="Collector status"
+              title="Claude collector (OpenTelemetry)"
               right={
                 <button type="button" className={B.secondary} onClick={fetchOtelStatus}>
                   Refresh
@@ -197,7 +199,7 @@ export default function IngestionPage() {
                      'Collector token not configured'}
                   </p>
                   <p className="m-0 mt-0.5 text-[13px] text-[#8F8F8F] tabular-nums">
-                    {otelStatus?.otelUserCount ?? 0} OTel users &middot; {otelStatus?.newUsersToday ?? 0} new today
+                    People seen through Claude telemetry: {otelStatus?.otelUserCount ?? 0} &middot; {otelStatus?.newUsersToday ?? 0} new today
                     {otelStatus?.lastOtelEventAt ? ` · Last event ${new Date(otelStatus.lastOtelEventAt * 1000).toLocaleString('en-GB')}` : ''}
                   </p>
                 </div>
@@ -252,8 +254,8 @@ export default function IngestionPage() {
 
             <IdentityConflictsCard />
 
-            {/* Recent users, from either capture path */}
-            <Panel title="Recent users" subtitle="First seen through Claude's telemetry or OpenAI's Compliance API" flush>
+            {/* Recent users, from every capture path */}
+            <Panel title="Recent users" subtitle="First seen through Claude's telemetry, Anthropic's Compliance API or OpenAI's Compliance API" flush>
               {(otelStatus?.recentOtelUsers ?? []).length === 0 ? (
                 <div className="p-4"><Muted>No users yet.</Muted></div>
               ) : (
@@ -264,7 +266,7 @@ export default function IngestionPage() {
                         <th className={T.th}>Name</th>
                         <th className={T.th}>Email</th>
                         <th className={T.th}>Department</th>
-                        <th className={T.th}>First seen through</th>
+                        <th className={T.th}>First seen in</th>
                         <th className={T.th}>Last seen</th>
                       </tr>
                     </thead>
@@ -274,7 +276,7 @@ export default function IngestionPage() {
                           <td className={T.td}>{u.display_name || '—'}</td>
                           <td className={cx(T.tdMute, 'font-mono text-[13px]')}>{u.email || '—'}</td>
                           <td className={T.tdMute}>{u.department || '—'}</td>
-                          <td className={cx(T.tdMute, 'whitespace-nowrap')}>{u.source === 'openai' ? 'Compliance API' : 'Claude telemetry'}</td>
+                          <td className={cx(T.tdMute, 'whitespace-nowrap')}>{u.first_seen_in ?? firstSeenLabel(null, null, u.source)}</td>
                           <td className={cx(T.tdMute, 'tabular-nums whitespace-nowrap')}>
                             {u.last_seen_at ? new Date(u.last_seen_at * 1000).toLocaleString('en-GB') : '—'}
                           </td>

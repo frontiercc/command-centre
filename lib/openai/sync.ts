@@ -58,6 +58,8 @@ import { recordPiiAlertFailure } from '@/lib/alerts/pii-alert-failure';
 import { createFileUploadAlerts } from '@/lib/alerts/file-upload-alerts';
 import { CONTENT_PREVIEW_CHARS, CONTENT_FULL_CHARS } from '@/lib/otel/content-limits';
 import { resolveOtelUser } from '@/lib/otel/resolve-user';
+import { openAiAccountOf, noteOpenAiAccount, type NewConflict } from '@/lib/openai/identity';
+import { raiseIdentityConflictAlert } from '@/lib/otel/resolve-user';
 import { isPlainEmail } from '@/lib/email/address';
 import { listLogFiles, downloadLogFile, parseJsonl, type LogScope, type OpenAiEventType } from './client';
 import { OPENAI_SOURCE_LABELS, OPENAI_USER_SOURCE, type OpenAiSource } from './sources';
@@ -547,24 +549,41 @@ async function storeRecords(
   const nowS = Math.floor(Date.now() / 1000);
   const customCategories = await getCustomCategories();
   const pending: PendingAlert[] = [];
+  // Identity conflicts this file created; their alerts are raised after it commits.
+  const newConflicts: NewConflict[] = [];
 
   await withTx(client, async (tx) => {
-    const personFor = async (email: string, surface: 'cowork' | 'code'): Promise<string> => {
+    // Accounts already checked in this file: an account seen with the person
+    // it first resolved to needs no further reads; a clashing one counts each record.
+    const accountsOk = new Set<string>();
+    newConflicts.length = 0;
+    const personFor = async (email: string, surface: 'cowork' | 'code', openaiUserId: string | null = null): Promise<string> => {
       const key = email.trim().toLowerCase();
-      const cached = userCache.get(key);
-      if (cached) return cached;
-      const resolved = await resolveOtelUser(tx, {
-        email,
-        installationId: null,
-        displayName: displayNameFromEmail(email),
-        department: null,
-        surface,
-        nowS,
-        eventCount: 1,
-        userSource: OPENAI_USER_SOURCE,
-      });
-      userCache.set(key, resolved.userId);
-      return resolved.userId;
+      let userId = userCache.get(key);
+      if (!userId) {
+        const resolved = await resolveOtelUser(tx, {
+          email,
+          installationId: null,
+          displayName: displayNameFromEmail(email),
+          department: null,
+          surface,
+          nowS,
+          eventCount: 1,
+          userSource: OPENAI_USER_SOURCE,
+        });
+        userId = resolved.userId;
+        userCache.set(key, userId);
+      }
+      // One OpenAI account under a second email: an identity conflict (lib/openai/identity.ts).
+      if (openaiUserId) {
+        const accountKey = `${openaiUserId}\u0000${key}`;
+        if (!accountsOk.has(accountKey)) {
+          const noted = await noteOpenAiAccount(tx, { openaiUserId, email, userId, surface, nowS });
+          if (noted.outcome === 'ok') accountsOk.add(accountKey);
+          if (noted.created) newConflicts.push(noted.created);
+        }
+      }
+      return userId;
     };
 
     // The same exclusion list as Claude's telemetry: nothing is written for
@@ -586,10 +605,10 @@ async function storeRecords(
           const action = interpretCodexAction(raw, floors);
           const spend = interpretSpend(raw, floors);
           if (isExcluded(activity?.email ?? action?.email ?? spend?.email ?? null)) { stats.excluded++; continue; }
-          if (activity) await storeActivity(tx, activity, await personFor(activity.email, activity.surface), stats);
+          if (activity) await storeActivity(tx, activity, await personFor(activity.email, activity.surface, openAiAccountOf(raw, activity.email)), stats);
           if (action) {
             const inserted = await tx.insert(schema.codexActions).values({
-              id: action.id, user_id: await personFor(action.email, 'code'), session_id: action.sessionId,
+              id: action.id, user_id: await personFor(action.email, 'code', openAiAccountOf(raw, action.email)), session_id: action.sessionId,
               tool_name: action.toolName, failed: action.failed ? 1 : 0, commit_count: action.commits,
               occurred_at: action.occurredAt,
             }).onConflictDoNothing().returning({ id: schema.codexActions.id });
@@ -597,14 +616,14 @@ async function storeRecords(
           }
           if (spend) {
             const surface = spend.kind === 'turn' || (spend.kind === 'cost' && spend.product === 'codex') ? 'code' : 'cowork';
-            await storeSpend(tx, spend, spend.email ? await personFor(spend.email, surface) : null, stats);
+            await storeSpend(tx, spend, spend.email ? await personFor(spend.email, surface, openAiAccountOf(raw, spend.email)) : null, stats);
           }
         }
         continue;
       }
       const row = it.row;
       if (isExcluded(row.email)) { stats.excluded++; continue; }
-      const userId = await personFor(row.email, row.surface);
+      const userId = await personFor(row.email, row.surface, openAiAccountOf(raw, row.email));
 
       const piiMatches = detectPiiWithMatches(row.text);
       const intentMatches = detectIntent(row.text, customCategories);
@@ -673,6 +692,7 @@ async function storeRecords(
     }
   });
 
+  for (const c of newConflicts) await raiseIdentityConflictAlert(client, c.input, c.conflictId);
   return pending;
 }
 
@@ -770,7 +790,7 @@ function raiseAlerts(alerts: PendingAlert[]): void {
       });
     }
     if (a.intent.length > 0) {
-      createIntentAlerts(a.userId, a.surface, a.messageId, a.text, a.intent).catch((e: Error) => {
+      createIntentAlerts(a.userId, a.surface, a.messageId, a.text, a.intent, OPENAI_SOURCE_LABELS[a.source]).catch((e: Error) => {
         console.error('[openai-sync] intent alert error:', e.message);
       });
     }

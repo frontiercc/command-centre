@@ -92,7 +92,7 @@ Claude Cowork loads these settings when a session starts, so sessions already op
 
 On Anthropic's standard deployment of Claude desktop, Claude Cowork events carry prompt text and tool details unless the device setting `otlpContentCapture` says otherwise. Command Centre needs both, so if your device management sets that key, include `userPrompts` and `toolDetails` in it. If Claude Cowork prompts show as `<REDACTED>`, see [Troubleshooting and FAQ](troubleshooting.md#connecting-claude). Events that carry prompt text also carry Claude's reply text; Command Centre discards reply events at ingest and stores none of their text. Claude Cowork events are told apart from Claude Code events by the service name each client reports, and both travel through the same collector.
 
-**Check:** **Admin → Ingestion → Collector status** reads "Collector active, OTel events flowing", with the time of the last event.
+**Check:** **Admin → Ingestion → Claude collector (OpenTelemetry)** reads "Collector active, OTel events flowing", with the time of the last event.
 
 ## Claude in Office
 

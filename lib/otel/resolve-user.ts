@@ -180,12 +180,13 @@ export async function resolveOtelUser(client: Client, input: ResolveInput): Prom
   }
 
   if (clashWith && input.installationId && created) {
-    await recordConflict(client, {
+    await recordIdentityConflict(client, {
       installationId: input.installationId,
       existingUserId: clashWith,
       newEmail: lowerEmail,
       newUserId: userId,
       surface: input.surface,
+      product: 'claude',
       nowS: input.nowS,
       eventCount: input.eventCount,
     });
@@ -194,10 +195,26 @@ export async function resolveOtelUser(client: Client, input: ResolveInput): Prom
   return { userId, existing: false, created };
 }
 
-async function recordConflict(client: Client, c: {
-  installationId: string; existingUserId: string; newEmail: string; newUserId: string;
-  surface: string; nowS: number; eventCount: number;
-}): Promise<void> {
+export interface IdentityConflictInput {
+  /** Claude: the installation id. OpenAI: the account's actor.user_id. */
+  installationId: string;
+  existingUserId: string;
+  newEmail: string;
+  newUserId: string;
+  /** Claude: 'cowork' | 'code'. OpenAI: 'chatgpt' | 'codex'. */
+  surface: string;
+  product: 'claude' | 'openai';
+  nowS: number;
+  eventCount: number;
+}
+
+/**
+ * Records a clash for an admin to Merge or Keep separate, with a medium alert
+ * the first time. Returns the conflict's id when this call created it.
+ * `alert: false` leaves the alert to the caller (raiseIdentityConflictAlert),
+ * for a caller that must not raise one before its transaction commits.
+ */
+export async function recordIdentityConflict(client: Client, c: IdentityConflictInput, opts: { alert?: boolean } = {}): Promise<string | null> {
   const inserted = await client.insert(schema.otelIdentityConflicts).values({
     id: uuidv4(),
     installation_id: c.installationId,
@@ -209,24 +226,35 @@ async function recordConflict(client: Client, c: {
     last_seen_at: c.nowS,
     event_count: c.eventCount,
     status: 'open',
+    product: c.product,
   }).onConflictDoNothing().returning({ id: schema.otelIdentityConflicts.id });
-  if (!inserted[0]) return;
+  if (!inserted[0]) return null;
+  if (opts.alert !== false) await raiseIdentityConflictAlert(client, c, inserted[0].id);
+  return inserted[0].id;
+}
 
-  // Medium: visible on /alerts, not pushed through the high-priority Slack sweep.
+/** Medium: visible on /alerts, not pushed through the high-priority Slack sweep. Never throws. */
+export async function raiseIdentityConflictAlert(client: Client, c: IdentityConflictInput, conflictId: string): Promise<void> {
   try {
     const holder = await client
       .select({ email: schema.users.email })
       .from(schema.users)
       .where(eq(schema.users.id, c.existingUserId))
       .limit(1);
+    const holderEmail = holder[0]?.email ?? 'another user';
+    const openai = c.product === 'openai';
     await insertAlert({
       id: uuidv4(),
       user_id: c.newUserId,
       alert_type: 'identity_conflict',
       severity: 'medium',
-      title: 'Two Claude accounts are sending from one machine',
-      explanation: `${c.newEmail} is sending ${c.surface} telemetry from a Claude installation already used by ${holder[0]?.email ?? 'another user'}. It has been kept as a separate person. Review it on Admin → Ingestion → Identity conflicts to merge or keep separate.`,
-      raw_evidence: JSON.stringify({ conflict_id: inserted[0].id, surface: c.surface }),
+      title: openai
+        ? 'One ChatGPT and Codex account is arriving under two emails'
+        : 'Two Claude accounts are sending from one machine',
+      explanation: openai
+        ? `${c.newEmail} is arriving in ${c.surface === 'codex' ? 'Codex' : 'ChatGPT'} activity from an OpenAI account already used by ${holderEmail}. It has been kept as a separate person. Review it on Admin → Ingestion → Identity conflicts to merge or keep separate.`
+        : `${c.newEmail} is sending ${c.surface} telemetry from a Claude installation already used by ${holderEmail}. It has been kept as a separate person. Review it on Admin → Ingestion → Identity conflicts to merge or keep separate.`,
+      raw_evidence: JSON.stringify({ conflict_id: conflictId, surface: c.surface, product: c.product }),
     });
   } catch (err) {
     console.error('[OTel identity] conflict alert failed:', err instanceof Error ? err.message : err);

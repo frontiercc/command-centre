@@ -247,6 +247,16 @@ describe('OpenAI sync against the stand-in export', () => {
         `SELECT COUNT(*) AS n FROM cowork_messages WHERE source = 'chatgpt_chat' AND flag_reason LIKE 'PII detected:%'`,
       );
       if (chatPii[0].n > 0) expect(piiText.some(a => a.explanation.includes('via ChatGPT Chat (Compliance API)'))).toBe(true);
+      // Intent alerts name the product too, in the title and in the evidence,
+      // and it is the product the prompt really came from.
+      const intentAlerts = await sql.all<{ title: string; raw_evidence: string }>(`SELECT title, raw_evidence::text AS raw_evidence FROM alerts WHERE alert_type = 'intent'`);
+      const labels: Record<string, string> = { chatgpt_chat: 'ChatGPT Chat', chatgpt_work: 'ChatGPT Work', codex: 'Codex' };
+      for (const a of intentAlerts) {
+        const ev = JSON.parse(a.raw_evidence) as { product: string; message_id: string };
+        const msg = await sql.get<{ source: string }>(`SELECT source FROM cowork_messages WHERE id = ?`, [ev.message_id]);
+        expect(ev.product).toBe(labels[msg!.source]);
+        expect(a.title).toMatch(new RegExp(` intent detected in ${ev.product}$`));
+      }
 
       // Cursor saved per log type.
       const cursors = JSON.parse(await getConfigValue('openaiSyncCursors'));

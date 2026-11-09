@@ -22,7 +22,7 @@ import { ORG_SCOPE_ID } from '@/lib/pulse/code/aggregator';
 import { computeSpendConcentration } from '@/lib/pulse/code/concentration';
 import { getWeeklySeries, getWeeklyDelta } from '@/lib/pulse/trends';
 import { projectMonthEndSpend, type SpendProjection } from '@/lib/pulse/code/projection';
-import { buildDailyWindow, buildShippingSeries, buildRepoCards, countReposActive7d, type GhDailyRow, type ShippingDay, type RepoShippingCard } from '@/lib/pulse/code/shipping-alignment';
+import { buildDailyWindow, buildShippingSeries, buildRepoCards, countReposActive7d, hasToolSplit, buildCodexRepoReach, type GhDailyRow, type ShippingDay, type RepoShippingCard, type CodexRepoReach } from '@/lib/pulse/code/shipping-alignment';
 import { readHumanTime } from '@/lib/pulse/human-time-summary';
 import { hasCodexData, readCodeMetrics, trendVendor, codeSessionVendor } from '@/lib/pulse/code/vendor-view';
 import { codexSpend } from '@/lib/openai/spend';
@@ -406,6 +406,10 @@ export async function GET(request: NextRequest) {
     reposActive7d: number;
     shippingSeries: ShippingDay[];
     repoCards: RepoShippingCard[];
+    /** A sync has written the tool split (made with Claude Code / Codex / no AI tool recorded). */
+    toolSplit: boolean;
+    /** Codex tab's "How much of our codebase" box: worked out from GitHub commits matched to Codex. */
+    codexReach: CodexRepoReach | null;
   } | null = null;
 
   if (mappedRepos.length > 0) {
@@ -463,10 +467,21 @@ export async function GET(request: NextRequest) {
       }
 
       const ghDailyRows: GhDailyRow[] = (await client
-        .select({ repo: grs.repo, date: grs.date, commit_count: grs.commit_count, prs_merged: grs.prs_merged })
+        .select({
+          repo: grs.repo, date: grs.date, commit_count: grs.commit_count, prs_merged: grs.prs_merged,
+          claude: grs.claude_commit_count, codex: grs.codex_commit_count, none: grs.no_tool_commit_count,
+        })
         .from(grs)
         .where(and(gte(grs.date, windowDays[0]), inArray(grs.repo, mappedRepos))))
-        .map(r => ({ repo: r.repo, date: r.date, commit_count: Number(r.commit_count), prs_merged: Number(r.prs_merged) }));
+        .map(r => ({
+          repo: r.repo, date: r.date, commit_count: Number(r.commit_count), prs_merged: Number(r.prs_merged),
+          claude: r.claude == null ? null : Number(r.claude),
+          // While Codex is hidden (or has no data) the hub reads as Claude only,
+          // so commits matched to Codex count as no AI tool recorded, the same
+          // as a tool that is not connected.
+          codex: r.codex == null ? null : (codexPresent ? Number(r.codex) : 0),
+          none: r.none == null ? null : Number(r.none) + (codexPresent || r.codex == null ? 0 : Number(r.codex)),
+        }));
 
       githubOverlay = {
         trackedRepoCount: coveredRepos.length,
@@ -476,6 +491,8 @@ export async function GET(request: NextRequest) {
         reposActive7d: countReposActive7d(windowDays, ghDailyRows),
         shippingSeries: buildShippingSeries(windowDays, aiByDay, ghDailyRows),
         repoCards: buildRepoCards(windowDays, ghDailyRows),
+        toolSplit: hasToolSplit(ghDailyRows),
+        codexReach: withCodex ? buildCodexRepoReach(windowDays, ghDailyRows, coveredRepos) : null,
       };
     }
   }

@@ -1933,6 +1933,8 @@ export async function deleteUserData(userId: string): Promise<{
       // keyed by their own email (an email is personal data too).
       async (h) => { await h.delete(schema.otelIdentityConflicts).where(or(eq(schema.otelIdentityConflicts.existing_user_id, userId), eq(schema.otelIdentityConflicts.new_user_id, userId))); },
       async (h) => { await h.delete(schema.otelIdentityAliases).where(eq(schema.otelIdentityAliases.user_id, userId)); },
+      // The OpenAI accounts this person resolved to (migration 0048).
+      async (h) => { await h.delete(schema.openaiIdentityUsers).where(eq(schema.openaiIdentityUsers.user_id, userId)); },
       async (h) => { if (userRows[0].email) await h.delete(schema.otelIdentityAliases).where(eq(schema.otelIdentityAliases.email, String(userRows[0].email).toLowerCase())); },
     ];
     const preResult = await savepointEach(tx, preOps, async (h, op) => { await op(h); });
@@ -1982,6 +1984,10 @@ export async function getDbStats(): Promise<{
   coworkCount: number;
   codeCount: number;
   coworkOnlyCount: number;
+  /** ChatGPT Chat and Work prompts (cowork_messages, surface 'cowork'); not in coworkOnlyCount. */
+  chatgptCount: number;
+  /** Codex prompts (cowork_messages, surface 'code'); not in codeCount. */
+  codexCount: number;
   otelCount: number;
   complianceCount: number;
   chatCount: number;
@@ -2000,17 +2006,23 @@ export async function getDbStats(): Promise<{
   const u = schema.users;
 
   // Claude Chat prompts share cowork_messages (surface 'chat'); counted apart.
+  // So do ChatGPT (surface 'cowork') and Codex (surface 'code') prompts: the
+  // Code and Cowork counts are Claude's alone, OpenAI's are their own lines.
+  // coworkCount stays the combined non-Chat total, for API compatibility.
   const notChat = or(isNull(cm.surface), sql`${cm.surface} <> 'chat'`);
-  const [coworkRows, otelRows, complianceRows, userRows, chatRows, codeRows, coworkOnlyRows, latestOtelRows, latestCoworkOtelRows] = await Promise.all([
+  const notOpenAi = notInArray(cm.source, [...OPENAI_SOURCES]);
+  const [coworkRows, otelRows, complianceRows, userRows, chatRows, codeRows, coworkOnlyRows, latestOtelRows, latestCoworkOtelRows, chatgptRows, codexRows] = await Promise.all([
     db.select({ count: sql<number | string>`count(*)` }).from(cm).where(notChat),
     db.select({ count: sql<number | string>`count(*)` }).from(oe),
     db.select({ count: sql<number | string>`count(*)` }).from(ce),
     db.select({ count: sql<number | string>`count(*)` }).from(u),
     db.select({ count: sql<number | string>`count(*)` }).from(cm).where(eq(cm.surface, 'chat')),
-    db.select({ count: sql<number | string>`count(*)` }).from(cm).where(eq(cm.surface, 'code')),
-    db.select({ count: sql<number | string>`count(*)` }).from(cm).where(eq(cm.surface, 'cowork')),
+    db.select({ count: sql<number | string>`count(*)` }).from(cm).where(and(eq(cm.surface, 'code'), notOpenAi)),
+    db.select({ count: sql<number | string>`count(*)` }).from(cm).where(and(eq(cm.surface, 'cowork'), notOpenAi)),
     db.select({ ts: sql<number | string | null>`max(${oe.occurred_at})` }).from(oe),
     db.select({ ts: sql<number | string | null>`max(${cm.occurred_at})` }).from(cm).where(eq(cm.source, 'otel')),
+    db.select({ count: sql<number | string>`count(*)` }).from(cm).where(inArray(cm.source, ['chatgpt_chat', 'chatgpt_work'])),
+    db.select({ count: sql<number | string>`count(*)` }).from(cm).where(eq(cm.source, 'codex')),
   ]);
 
   const tsA = latestOtelRows[0]?.ts != null ? Number(latestOtelRows[0].ts) : null;
@@ -2023,6 +2035,8 @@ export async function getDbStats(): Promise<{
     coworkCount: Number(coworkRows[0]?.count ?? 0),
     codeCount: Number(codeRows[0]?.count ?? 0),
     coworkOnlyCount: Number(coworkOnlyRows[0]?.count ?? 0),
+    chatgptCount: Number(chatgptRows[0]?.count ?? 0),
+    codexCount: Number(codexRows[0]?.count ?? 0),
     otelCount: Number(otelRows[0]?.count ?? 0),
     complianceCount: Number(complianceRows[0]?.count ?? 0),
     chatCount: Number(chatRows[0]?.count ?? 0),

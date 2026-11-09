@@ -18,6 +18,7 @@ import { getAllConfig } from '@/lib/config';
 import { buildCrosswalk, computeEngagedHours, type CodeSignals } from '@/lib/pulse/code/framework';
 import { getDxFramework } from '@/lib/pulse/code/dx-framework';
 import { ORG_SCOPE_ID } from '@/lib/pulse/code/aggregator';
+import { visibleVendor, visibleOpenAi } from '@/lib/sources/openai-visibility';
 
 export const dynamic = 'force-dynamic';
 
@@ -36,9 +37,13 @@ export async function GET(request: NextRequest) {
   }
 
   const client = await getTypedClient();
-  // Latest rolling org-scope code_metrics row, built on Claude Code's
-  // telemetry: once Codex data exists, Claude Code's own row.
-  const metricsRows = await readCodeMetrics('claude', await hasCodexData(), (t, only) => client
+  // Developer Pulse's All / Claude / Codex switch (?vendor=), as its other
+  // pages: once Codex data exists and is shown, the view's own row in
+  // code_metrics_vendor; before then Claude Code's code_metrics row.
+  const codexPresent = await visibleOpenAi(hasCodexData());
+  const requested = await visibleVendor(request.nextUrl.searchParams.get('vendor'));
+  const vendor = codexPresent ? requested : 'claude';
+  const metricsRows = await readCodeMetrics(vendor, codexPresent, (t, only) => client
     .select({
       spend_usd: t.spend_usd, autonomy_ratio: t.autonomy_ratio, cache_hit_ratio: t.cache_hit_ratio,
       commit_count: t.commit_count, pr_count: t.pr_count, lines_added: t.lines_added, lines_removed: t.lines_removed,
@@ -67,6 +72,7 @@ export async function GET(request: NextRequest) {
     engagedHours,
     cacheHitRatio: n(row?.cache_hit_ratio),
     hasWorkMix: cfg.codeClassifierEnabled === true,
+    vendor,
   };
 
   const boxes = buildCrosswalk(signals);
@@ -75,6 +81,8 @@ export async function GET(request: NextRequest) {
 
   return NextResponse.json({
     enabled: true,
+    vendor,
+    codexPresent,
     hasData,
     boxes,
     spendContext: { spendUsd: signals.spendUsd, autonomyRatio: signals.autonomyRatio },

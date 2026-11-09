@@ -772,6 +772,10 @@ export const githubRepoStats = pgTable('github_repo_stats', {
     commit_count: integer().notNull().default(0),
     prs_merged: integer().notNull().default(0),
     synced_at: bigint({ mode: 'number' }).notNull(),
+    // Split of commit_count by the tool that made it (migration 0047); NULL = synced before the split.
+    claude_commit_count: integer(),
+    codex_commit_count: integer(),
+    no_tool_commit_count: integer(),
 }, (t) => [
     primaryKey({ columns: [t.repo, t.date] }),
     index('idx_grs_date').on(t.date),
@@ -783,6 +787,9 @@ export const githubUserRepoStats = pgTable('github_user_repo_stats', {
     date: text().notNull(),
     commit_count: integer().notNull().default(0),
     synced_at: bigint({ mode: 'number' }).notNull(),
+    claude_commit_count: integer(),
+    codex_commit_count: integer(),
+    no_tool_commit_count: integer(),
 }, (t) => [
     primaryKey({ columns: [t.user_id, t.repo, t.date] }),
     index('idx_gurs_repo_date').on(t.repo, t.date),
@@ -1258,9 +1265,21 @@ export const otelIdentityConflicts = pgTable('otel_identity_conflicts', {
     status: text().notNull().default('open'),
     decided_by: text(),
     decided_at: bigint({ mode: 'number' }),
+    // 'claude' (an installation id shared by two accounts) or 'openai' (one OpenAI account under two emails); migration 0048.
+    product: text().notNull().default('claude'),
 }, (t) => [
     uniqueIndex('otel_identity_conflicts_install_email_uq').on(t.installation_id, t.new_email),
     index('idx_otel_identity_conflicts_status').on(t.status),
+]);
+
+/** The person each OpenAI account (export actor.user_id) resolved to; migration 0048. */
+export const openaiIdentityUsers = pgTable('openai_identity_users', {
+    openai_user_id: text().primaryKey(),
+    user_id: text().notNull(),
+    first_seen_at: bigint({ mode: 'number' }).notNull(),
+    last_seen_at: bigint({ mode: 'number' }).notNull(),
+}, (t) => [
+    index('idx_openai_identity_users_user').on(t.user_id),
 ]);
 
 export const otelIdentityAliases = pgTable('otel_identity_aliases', {
@@ -1414,6 +1433,7 @@ export const pgSchema = {
   otelIngestedEvents,
   jobRuns,
   otelIdentityConflicts,
+  openaiIdentityUsers,
   totpConsumedSteps,
   totpRecoveryCodes,
   useCaseActivationWeeks,

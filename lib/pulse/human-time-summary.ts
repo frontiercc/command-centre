@@ -207,8 +207,13 @@ export interface OrgHumanTime {
  * and the Metrics Connector. Null when switched off, when nothing in the window
  * carries both figures, or on a read failure. Org-level only: no person or
  * session appears in the result.
+ *
+ * `openai`: true counts ChatGPT conversations beside Claude Cowork and every
+ * Code session (Codex included), as Work Pulse's All view does; false counts
+ * Claude alone (no ChatGPT, Claude Code sessions only), for when "Show ChatGPT
+ * and Codex" is off. Omitted: Claude Cowork and every Code session, as before.
  */
-export async function readOrgHumanTime(startS: number, endS: number): Promise<OrgHumanTime | null> {
+export async function readOrgHumanTime(startS: number, endS: number, opts?: { openai?: boolean }): Promise<OrgHumanTime | null> {
   try {
     const { getConfigValue } = await import('@/lib/config');
     const { humanTimeOn } = await import('@/lib/pulse/human-time-flags');
@@ -220,8 +225,10 @@ export async function readOrgHumanTime(startS: number, endS: number): Promise<Or
     const range = { startS, endS };
     // A surface that is switched off contributes nothing (shown as not measured).
     const days = Math.round((endS - startS) / 86400);
-    const code = codeOn ? await buildHumanTimeSummary({ surface: 'code', range, minSessionsForRatio }) : summariseHumanTime([], minSessionsForRatio, days);
-    const cowork = coworkOn ? await buildHumanTimeSummary({ surface: 'cowork', range, minSessionsForRatio }) : summariseHumanTime([], minSessionsForRatio, days);
+    const vendor: Vendor | undefined = opts?.openai === false ? 'claude' : undefined;
+    const includeChatgpt = opts?.openai === true;
+    const code = codeOn ? await buildHumanTimeSummary({ surface: 'code', range, minSessionsForRatio, vendor }) : summariseHumanTime([], minSessionsForRatio, days);
+    const cowork = coworkOn ? await buildHumanTimeSummary({ surface: 'cowork', range, minSessionsForRatio, includeChatgpt }) : summariseHumanTime([], minSessionsForRatio, days);
     const sessions = code.sessions + cowork.sessions;
     if (sessions === 0) return null;
     return {

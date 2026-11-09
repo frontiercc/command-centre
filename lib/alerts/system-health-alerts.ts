@@ -38,6 +38,7 @@ import { insertAlert } from '@/lib/db/queries';
 import { JOB_CATALOG, jobLabel } from '@/lib/health/job-catalog';
 import { planSilenceAlerts, silenceSettingsFrom, type SilenceSurface } from '@/lib/alerts/telemetry-silence';
 import { OPENAI_SOURCES } from '@/lib/openai/sources';
+import { readOpenAiLastArrivals } from '@/lib/health/openai-arrivals';
 
 export const SYSTEM_HEALTH_ALERT_TYPE = 'system_health';
 const DAY = 24 * 3600;
@@ -52,6 +53,7 @@ export const KEY_JOBS: Record<string, string> = {
   github_sync: 'GitHub',
   pulse_classifier: 'Anthropic API',
   code_classifier: 'Anthropic API',
+  openai_sync: 'OpenAI Admin API',
 };
 
 /** Pure: does this error text look like a rejected credential? */
@@ -144,10 +146,12 @@ export function planSystemHealthAlerts(rows: JobRunRow[], nowS: number): Planned
  * When the hub last RECEIVED each OTel surface (ingested_at, not the client's
  * occurred_at: a late batch with old timestamps still proves delivery works).
  * Chat is a pull job, covered by the job rules. OpenAI's Compliance API is a pull job
- * too, whose failures the job rules cover; it is also watched here as one
- * source (anything it wrote: prompts, replies, costs, Codex turns or actions),
- * because a sync can succeed and bring nothing (an export that stopped
- * writing files, the wrong workspace). Never raised before it has sent data.
+ * too, whose failures the job rules cover; ChatGPT and Codex are also watched
+ * here as two separate sources (lib/health/openai-arrivals.ts), because a sync
+ * can succeed and bring nothing (an export that stopped writing files, the
+ * wrong workspace) and one product can stop while the other carries on. Never
+ * raised for a source that has not sent data, nor while the OpenAI sync is
+ * paused (openaiSyncPaused): nothing arrives then by design.
  */
 async function readSilenceSurfaces(): Promise<SilenceSurface[]> {
   const client = await getTypedClient();
@@ -162,23 +166,21 @@ async function readSilenceSurfaces(): Promise<SilenceSurface[]> {
     return num(rows[0]?.v);
   };
   const metrics = await client.select({ v: sql<number | string | null>`MAX(${com.ingested_at})` }).from(com);
-  const openaiRows = await client.execute(sql`
-    SELECT GREATEST(
-      (SELECT MAX(ingested_at) FROM cowork_messages WHERE source IN (${sql.join(OPENAI_SOURCES.map(s => sql`${s}`), sql`, `)})),
-      (SELECT MAX(ingested_at) FROM openai_replies),
-      (SELECT MAX(ingested_at) FROM openai_costs),
-      (SELECT MAX(ingested_at) FROM codex_turns),
-      (SELECT MAX(ingested_at) FROM codex_actions)) AS v`);
-  const openaiLast = num((openaiRows as unknown as { rows: Array<{ v: unknown }> }).rows[0]?.v);
-  return [
+  const surfaces: SilenceSurface[] = [
     { key: 'cowork', label: 'Cowork', lastReceivedAt: await last('cowork') },
     { key: 'code', label: 'Claude Code', lastReceivedAt: await last('code') },
     { key: 'code_metrics', label: 'Claude Code metrics', lastReceivedAt: num(metrics[0]?.v) },
-    {
-      key: 'openai_export', label: 'ChatGPT and Codex', noun: 'data', lastReceivedAt: openaiLast,
-      advice: 'Check the OpenAI sync on System health, the OpenAI Admin API key and workspace ID on Access & Keys, and that people are still using ChatGPT or Codex. Once the cause is fixed, the sync carries on from where it stopped, as long as OpenAI still holds the files (it keeps them for 30 days).',
-    },
   ];
+  const { getConfigValue } = await import('@/lib/config');
+  if ((await getConfigValue('openaiSyncPaused')) !== 'true') {
+    const arrivals = await readOpenAiLastArrivals();
+    const advice = (product: string) => `Check the OpenAI sync on System health, the OpenAI Admin API key and workspace ID on Access & Keys, and that people are still using ${product}. Once the cause is fixed, the sync carries on from where it stopped, as long as OpenAI still holds the files (it keeps them for 30 days).`;
+    surfaces.push(
+      { key: 'chatgpt', label: 'ChatGPT', noun: 'data', lastReceivedAt: arrivals.chatgpt, advice: advice('ChatGPT') },
+      { key: 'codex', label: 'Codex', noun: 'data', lastReceivedAt: arrivals.codex, advice: advice('Codex') },
+    );
+  }
+  return surfaces;
 }
 
 async function alreadyRaised(rule: string, subject: string, sinceS: number): Promise<boolean> {

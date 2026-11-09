@@ -126,9 +126,8 @@ async function getCoworkEventsForAudit(filters: {
     if (filters.surface) conditions.push(sql`cm.surface = ${filters.surface}`);
     // Claude Chat prompts (surface 'chat') are listed by getChatEventsForAudit.
     else conditions.push(sql`COALESCE(cm.surface, '') <> 'chat'`);
-    // 'compliance' covers both Compliance APIs: Anthropic's and OpenAI's.
+    // 'compliance' is Anthropic's Compliance API alone; 'openai' is OpenAI's (all three OpenAI sources).
     if (filters.source === 'openai') conditions.push(sql.raw(vendorClause('openai', 'cm.')));
-    else if (filters.source === 'compliance') conditions.push(sql.raw(`(cm.source = 'compliance' OR ${vendorClause('openai', 'cm.')})`));
     else if (filters.source) conditions.push(sql`cm.source = ${filters.source}`);
     if (filters.product) conditions.push(sql.raw(productClause(filters.product, 'cm.')));
     // App (Work Pulse): Cowork alone (Claude's, never ChatGPT Work), all of
@@ -385,7 +384,7 @@ async function getSkillConnectorEventsForAudit(filters: {
   flaggedOnly?: boolean;
   surface?: string;
   /** Filter on the rows' own `source` column — 'compliance' rows came from
-   *  the Compliance API chat sync, 'openai' rows from OpenAI's Compliance API,
+   *  Anthropic's Compliance API chat sync, 'openai' rows from OpenAI's Compliance API,
    *  everything else from OTel. */
   source?: 'compliance' | 'otel' | 'openai';
   product?: ProductId;
@@ -418,7 +417,7 @@ async function getSkillConnectorEventsForAudit(filters: {
     if (filters.dateTo) skillConds.push(sql`csi.occurred_at <= ${filters.dateTo}`);
     if (filters.search) skillConds.push(sql`csi.skill_name ${likeKeyword()} ${`%${filters.search}%`}`);
     if (filters.surface) skillConds.push(sql`csi.surface = ${filters.surface}`);
-    if (filters.source === 'compliance') skillConds.push(sql.raw(`(csi.source = 'compliance' OR ${vendorClause('openai', 'csi.')})`));
+    if (filters.source === 'compliance') skillConds.push(sql`csi.source = 'compliance'`);
     if (filters.source === 'otel') skillConds.push(sql`csi.source = 'otel'`);
     if (filters.source === 'openai') skillConds.push(sql.raw(vendorClause('openai', 'csi.')));
     if (filters.product) skillConds.push(sql.raw(productClause(filters.product, 'csi.')));
@@ -469,7 +468,7 @@ async function getSkillConnectorEventsForAudit(filters: {
       mcpConds.push(sql`(cmi.mcp_server ${kw} ${like} OR cmi.mcp_tool ${kw} ${like})`);
     }
     if (filters.surface) mcpConds.push(sql`cmi.surface = ${filters.surface}`);
-    if (filters.source === 'compliance') mcpConds.push(sql.raw(`(cmi.source = 'compliance' OR ${vendorClause('openai', 'cmi.')})`));
+    if (filters.source === 'compliance') mcpConds.push(sql`cmi.source = 'compliance'`);
     if (filters.source === 'otel') mcpConds.push(sql`cmi.source = 'otel'`);
     if (filters.source === 'openai') mcpConds.push(sql.raw(vendorClause('openai', 'cmi.')));
     if (filters.product) mcpConds.push(sql.raw(productClause(filters.product, 'cmi.')));
@@ -651,7 +650,7 @@ export async function GET(request: NextRequest) {
   const offset = parseInt(params.get('offset') || '0');
 
   // The page's filters: a product (Claude Chat ... Codex) and how the rows
-  // arrived (OpenTelemetry, the Compliance API or OpenAI's Compliance API).
+  // arrived (OpenTelemetry, Anthropic's Compliance API or OpenAI's Compliance API).
   const productParam = params.get('product');
   const product = isProductId(productParam) ? productParam : (isOpenAiSource(source) ? source : undefined);
   const arrival = source === 'otel' || source === 'compliance' || source === 'openai' ? source : undefined;

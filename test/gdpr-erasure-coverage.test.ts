@@ -113,6 +113,8 @@ const COVERAGE: Record<string, { status: Status; why: string }> = {
   'otel_identity_conflicts.existing_user_id': { status: 'deleted', why: 'identity-conflict rows naming the person on either side are deleted (migration 083)' },
   'otel_identity_conflicts.new_user_id':      { status: 'deleted', why: 'identity-conflict rows naming the person on either side are deleted (migration 083)' },
   'otel_identity_aliases.user_id':            { status: 'deleted', why: 'merge aliases pointing at the person, plus the alias keyed by their own email' },
+  'openai_identity_users.user_id':            { status: 'deleted', why: 'the OpenAI accounts the person resolved to, kept to spot one account under two emails (migration 0048)' },
+  'openai_identity_users.openai_user_id':     { status: 'deleted', why: 'the OpenAI account id itself, the key of the row; the whole row goes with the person (deleted by user_id)' },
   'use_cases.owner_user_id':             { status: 'nulled', why: 'attribution field — mirrors pulse_skills.author_user_id' },
   'pulse_skills.author_user_id':         { status: 'nulled', why: 'existing behaviour' },
   'users.manager_id':                    { status: 'nulled', why: 'self-FK NO ACTION: erasing a manager must not fail' },

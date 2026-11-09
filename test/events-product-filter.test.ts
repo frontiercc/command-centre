@@ -2,9 +2,8 @@
 // SPDX-License-Identifier: Apache-2.0
 
 // GET /api/events — the Audit Log's Product filter (?product=) and its
-// "how it arrived" Source filter (?source=otel|compliance|openai; the page's
-// one Compliance API option sends 'compliance', which covers Anthropic's and
-// OpenAI's Compliance APIs, and 'openai' stays for older links). ChatGPT
+// "how it arrived" Source filter (?source=otel|compliance|openai: OpenTelemetry,
+// Anthropic's Compliance API alone, and OpenAI's Compliance API). ChatGPT
 // prompts are stored beside Claude Cowork prompts and Codex beside Claude
 // Code, so each product must be told apart by its source, never by surface
 // alone. Same harness as test/events-connector-source.test.ts.
@@ -43,6 +42,8 @@ async function setupDb() {
   await db.insert(schema.coworkMcpInvocations).values([
     { id: 'mcp-claude', user_id: 'u1', session_id: 's-claude-cowork', mcp_server: 'salesforce', mcp_tool: 'soql', occurred_at: 210, source: 'otel', surface: 'cowork' },
     { id: 'mcp-chatgpt', user_id: 'u1', session_id: 's-chatgpt-work', mcp_server: 'notion', mcp_tool: 'search', occurred_at: 510, source: 'chatgpt_work', surface: 'cowork' },
+    // A Claude Chat connector synced by Anthropic's Compliance API.
+    { id: 'mcp-claude-chat', user_id: 'u1', session_id: 's-claude-chat', mcp_server: 'google-drive', mcp_tool: 'search', occurred_at: 110, source: 'compliance', surface: 'chat' },
     // Stamped 'agent', the column default (the retired agent, older seed data): shown under All sources only.
     { id: 'mcp-unstamped', user_id: 'u1', session_id: 's-claude-cowork', mcp_server: 'jira', mcp_tool: 'search', occurred_at: 220, source: 'agent', surface: 'cowork' },
   ]);
@@ -60,7 +61,7 @@ describe('GET /api/events product and arrival filters', () => {
   it('returns each product on its own, keeping ChatGPT apart from Claude Cowork and Codex apart from Claude Code', async () => {
     const { cleanup } = await setupDb();
     try {
-      expect(await ids('/api/events?product=claude_chat')).toEqual(['claude-chat']);
+      expect(await ids('/api/events?product=claude_chat')).toEqual(['claude-chat', 'mcp-claude-chat']);
       expect(await ids('/api/events?product=claude_cowork')).toEqual(['claude-cowork', 'mcp-claude', 'mcp-unstamped']);
       expect(await ids('/api/events?product=claude_code')).toEqual(['claude-code']);
       expect(await ids('/api/events?product=chatgpt_chat')).toEqual(['chatgpt-chat']);
@@ -87,8 +88,10 @@ describe('GET /api/events product and arrival filters', () => {
     try {
       expect(await ids('/api/events?source=openai')).toEqual(['chatgpt-chat', 'chatgpt-work', 'codex', 'mcp-chatgpt']);
       expect(await ids('/api/events?source=otel')).toEqual(['claude-code', 'claude-cowork', 'mcp-claude']);
-      expect(await ids('/api/events?source=compliance')).toEqual(['chatgpt-chat', 'chatgpt-work', 'claude-chat', 'codex', 'mcp-chatgpt']);
-      expect(await ids('/api/events?product=claude_chat&source=compliance')).toEqual(['claude-chat']);
+      // Anthropic's Compliance API alone: never a ChatGPT or Codex row.
+      expect(await ids('/api/events?source=compliance')).toEqual(['claude-chat', 'mcp-claude-chat']);
+      expect(await ids('/api/events?product=claude_chat&source=compliance')).toEqual(['claude-chat', 'mcp-claude-chat']);
+      expect(await ids('/api/events?product=chatgpt_chat&source=compliance')).toEqual([]);
       expect(await ids('/api/events?product=codex&source=openai')).toEqual(['codex']);
       expect(await ids('/api/events?product=claude_code&source=openai')).toEqual([]);
       expect(await ids('/api/events?product=claude_chat&source=otel')).toEqual([]);

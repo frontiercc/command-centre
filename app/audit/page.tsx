@@ -17,7 +17,7 @@ import { flagSeverity, isFullyDismissed } from '@/lib/pii/flag-severity';
 import { useCorePlatformGuard } from '@/components/shared/useCorePlatformGuard';
 import { PageBody, Panel, PanelFoot, Notice, Empty, Tag, Dot, T, B, SEVERITY_COLOR } from '@/components/precision/ui';
 import WhereMoneyWent, { SplitLine, spendMoney } from '@/components/finance/WhereMoneyWent';
-import { hasBreakdown, type SpendSplit } from '@/lib/finance/where-money-went';
+import { hasBreakdown, onlyModel, type SpendSplit } from '@/lib/finance/where-money-went';
 import { isOpenAiSource, OPENAI_SOURCE_LABELS } from '@/lib/openai/sources';
 import { productLabel, productOf } from '@/lib/dashboard/vendor';
 import { useConnectedProducts } from '@/components/shared/VendorSwitch';
@@ -366,10 +366,10 @@ function CoworkThread({ messages }: { messages: CoworkMessage[] }) {
 }
 
 function SourceCell({ event }: { event: AuditEvent }) {
-  if (isOpenAiSource(event._source)) return <>Compliance API</>;
-  if (event._source === 'otel') return <>OTel</>;
+  if (isOpenAiSource(event._source)) return <>OpenAI Compliance API</>;
+  if (event._source === 'otel') return <>OpenTelemetry</>;
   if (event._source === 'local-agent') return <>Agent</>;
-  return <>{event.surface === 'cowork_partial' ? 'OpenTelemetry' : 'Compliance API'}</>;
+  return <>{event.surface === 'cowork_partial' ? 'OpenTelemetry' : 'Anthropic Compliance API'}</>;
 }
 
 function StatusCell({ event }: { event: AuditEvent }) {
@@ -657,8 +657,9 @@ export default function AuditPage() {
 
           <select value={sourceFilter} onChange={e => setSourceFilter(e.target.value)} className={B.select} aria-label="Source">
             <option value="">All sources</option>
-            {!openaiOnly && <option value="otel">OpenTelemetry</option>}
-            <option value="compliance">Compliance API</option>
+            {!openaiOnly && <option value="otel">OpenTelemetry (Claude)</option>}
+            {!openaiOnly && <option value="compliance">Anthropic Compliance API (Claude Chat)</option>}
+            {openaiConnected && <option value="openai">OpenAI Compliance API (ChatGPT and Codex)</option>}
           </select>
 
           <select value={userFilter} onChange={e => setUserFilter(e.target.value)} className={`${B.select} max-w-[220px]`} aria-label="User">
@@ -932,8 +933,18 @@ export default function AuditPage() {
                             <SplitLine s={sessionSpend.prompt} />
                           </span>
                         )}
-                        <span className="text-[#333333]">This conversation</span>
-                        <WhereMoneyWent s={sessionSpend.conversation} showModels />
+                        {/* ChatGPT and Codex conversations run on one model: name it in the line, not a one-line list. */}
+                        {isOpenAiSource(selectedEvent?._source) && onlyModel(sessionSpend.conversation) ? (
+                          <span className="text-[#333333] tabular-nums">
+                            This conversation: {sessionSpend.conversation.totalUsd === null ? 'not priced' : spendMoney(sessionSpend.conversation.totalUsd)}, all on{' '}
+                            <span className="font-mono text-[12px]">{onlyModel(sessionSpend.conversation)}</span>
+                          </span>
+                        ) : (
+                          <>
+                            <span className="text-[#333333]">This conversation</span>
+                            <WhereMoneyWent s={sessionSpend.conversation} showModels />
+                          </>
+                        )}
                         {sessionSpend.conversation.unpricedModels.length > 0 && (
                           <span className="text-[13px] text-[#B54708]">Not priced, so left out: {sessionSpend.conversation.unpricedModels.join(', ')}</span>
                         )}

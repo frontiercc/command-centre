@@ -8,9 +8,10 @@
  * Types:
  *   code_cost_spike    — user's Claude Code spend in the last 24h is over a fixed daily limit
  *   codex_cost_spike   — the same for Codex, against Codex's own daily limit
- *   code_model_policy  — model seen that is not on the admin allowlist (empty list = disabled)
- *   code_repo_exposure — session in a repo matching a sensitive pattern (off by default)
- *   code_friction      — session with high tool-error density (off by default)
+ *   code_model_policy  — model seen in Claude Code or Codex that is not on the admin allowlist (empty list = disabled)
+ *   code_repo_exposure — Claude Code session in a repo matching a sensitive pattern (off by default;
+ *                        Codex reports no repository, so it cannot be checked)
+ *   code_friction      — Claude Code or Codex session with high tool-error density (off by default)
  *
  * Each alert dedupes against open/recent alerts of the same type + subject so
  * an ongoing condition doesn't re-fire every hour.
@@ -278,6 +279,34 @@ async function checkModelPolicy(): Promise<void> {
       raw_evidence: JSON.stringify({ source: 'code_pulse', subject, user_id: userId, model }),
     });
   }
+
+  // Codex models, from its turns, against the same approved list. The subject
+  // carries "codex:" so a Codex alert and a Claude Code alert never dedupe
+  // each other.
+  const ct = schema.codexTurns;
+  const codexRows = await client
+    .selectDistinct({ user_id: ct.user_id, model: ct.model })
+    .from(ct)
+    .where(and(isNotNull(ct.model), sql`${ct.model} != ''`, gte(ct.started_at, now - DAY)));
+
+  for (const r of codexRows) {
+    const model = r.model as string;
+    const userId = r.user_id;
+    if (allowlist.has(model)) continue;
+    const subject = `${userId}:codex:${model}`;
+    if (await recentlyAlerted('code_model_policy', subject)) continue;
+    const who = await personLabel(userId);
+
+    await insertAlert({
+      id: uuidv4(),
+      user_id: userId,
+      alert_type: 'code_model_policy',
+      severity: 'medium',
+      title: `Non-approved model in Codex: ${model}`,
+      explanation: `${who} used model "${model}" in Codex, which is not on the approved model list.`,
+      raw_evidence: JSON.stringify({ source: 'code_pulse', product: 'Codex', subject, user_id: userId, model }),
+    });
+  }
 }
 
 // ── code_repo_exposure ───────────────────────────────────────────────────────
@@ -351,6 +380,39 @@ async function checkFriction(): Promise<void> {
       title: `High-friction Claude Code session${r.repo ? ` in ${r.repo}` : ''}`,
       explanation: `${r.error_count} of ${r.tool_use_count} tool actions failed (${Math.round((r.error_count / r.tool_use_count) * 100)}%). A coaching signal: the session may have fought tooling, permissions, or a confusing codebase.`,
       raw_evidence: JSON.stringify({ source: 'code_pulse', subject, session_id: r.session_id, repo: r.repo, errors: r.error_count, tools: r.tool_use_count }),
+    });
+  }
+
+  // Codex sessions carry no tool counts in code_session_stats; their actions
+  // are in codex_actions. Counted as the Developer Pulse Overview's
+  // high-friction list counts them (app/api/pulse/code/org-summary), so the
+  // alert and the page agree: actions per session, failed ones out of all.
+  const ca = schema.codexActions;
+  const codexRows = await client
+    .select({
+      session_id: ca.session_id,
+      user_id: sql<string>`MAX(${ca.user_id})`,
+      error_count: sql<number | string>`SUM(${ca.failed})`,
+      tool_use_count: sql<number | string>`COUNT(*)`,
+    })
+    .from(ca)
+    .groupBy(ca.session_id)
+    .having(sql`MAX(${ca.occurred_at}) >= ${now - DAY} AND COUNT(*) >= ${minTools} AND CAST(SUM(${ca.failed}) AS REAL) / COUNT(*) > ${threshold}`);
+
+  for (const r of codexRows) {
+    const subject = `session:${r.session_id}`;
+    if (await recentlyAlerted('code_friction', subject)) continue;
+    const errors = Number(r.error_count);
+    const tools = Number(r.tool_use_count);
+
+    await insertAlert({
+      id: uuidv4(),
+      user_id: r.user_id ?? 'unknown',
+      alert_type: 'code_friction',
+      severity: 'low',
+      title: 'High-friction Codex session',
+      explanation: `${errors} of ${tools} tool actions failed (${Math.round((errors / tools) * 100)}%). A coaching signal: the session may have fought tooling, permissions, or a confusing codebase.`,
+      raw_evidence: JSON.stringify({ source: 'code_pulse', product: 'Codex', subject, session_id: r.session_id, repo: null, errors, tools }),
     });
   }
 }

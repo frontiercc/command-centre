@@ -101,7 +101,7 @@ The table lists every model call in the application. Defaults are the values a f
 | Intent severity assessment | When a prompt matches an intent phrase | Core AI model (Haiku) | The matched prompt as written, matched phrases, acceptable use policy | Always on |
 | Personal-data confirmation | When one of seven shape-only patterns matches | Core AI model (Haiku) | The matched prompt as written, pattern name, masked value | Always on |
 | Governance reports | On request | Core AI model (Haiku) | Chosen report sections, usage snapshots, 20 most recent alerts with their evidence, which can include up to 200 characters of a prompt | Do not generate |
-| Anomaly and adoption analysis | On request | Core AI model (Haiku) | Event metadata, flag reasons, per-person activity counts; no prompt text | Do not request |
+| Anomaly and adoption analysis | Daily (anomalies), and on request | Core AI model (Haiku) | Event metadata, flag reasons, per-person activity counts including Codex turns and tokens and ChatGPT replies, acceptable use policy; no prompt text | Switch off all its alert types under Admin → Risk Scoring (daily run); do not request |
 | Use case session judging | Hourly, up to 400 sessions, 10 per call | Session judging model (Sonnet) | Up to 6 cleaned prompts per session, 400 characters each; use case definitions | Use Cases content off |
 | Process mining | Every 7 days | Department process model (Sonnet) | Samples of up to 120 cleaned prompts, 600 characters each | Use Cases content off |
 | Transcript extraction | On request | Extraction model (Haiku) | The transcript or document an administrator or manager uploads | Do not use |
@@ -174,7 +174,7 @@ The finished report is stored in the Hub and its generation is recorded in the a
 
 ### Anomaly and adoption analysis
 
-On request by an administrator, manager or viewer, an analysis makes two calls: one asks a model to identify unusual usage patterns, the other to suggest adoption nudges. It sends event metadata, such as pseudonymous user and session identifiers, event types, tool names, timings and flag reasons (which name the pattern or intent category and carry no content), and per-person daily activity counts. No prompt text is sent. Alerts it proposes are filtered to the alert types you have enabled before they are stored; the adoption suggestions are returned to the caller and not stored.
+Once a day, while a Claude API key is set and at least one of its alert types is on under **Admin → Risk Scoring**, a model is asked to identify unusual usage patterns; on request by an administrator, manager or viewer, a second call also suggests adoption nudges. It sends event metadata, such as pseudonymous user and session identifiers, event types, tool names, timings and flag reasons (which name the pattern or intent category and carry no content), per-person daily activity counts, per-person counts of Codex turns and tokens and of ChatGPT replies over the last day and week (keyed by pseudonymous identifier), and your acceptable use policy where one is set. No prompt text is sent. Alerts it proposes are filtered to the alert types you have enabled before they are stored; the adoption suggestions are returned to the caller and not stored.
 
 ### Use case session judging
 

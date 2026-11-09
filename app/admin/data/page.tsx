@@ -210,8 +210,8 @@ export default function AdminDataPage() {
             <Field
               label={openaiOnly ? 'ChatGPT retention (days)' : 'Cowork content retention (days)'}
               hint={openaiConnected ? (openaiOnly
-                ? 'ChatGPT Chat and ChatGPT Work prompts, reply times and spend. No replies are stored, only your prompts and metadata.'
-                : 'Claude Cowork, plus ChatGPT Chat and ChatGPT Work prompts, reply times and spend.') : undefined}
+                ? 'ChatGPT Chat and ChatGPT Work prompts, attached file names, reply times and spend. No replies are stored, only your prompts and metadata.'
+                : 'Claude Cowork prompts and attached file names, plus ChatGPT Chat and ChatGPT Work prompts, attached file names, reply times and spend.') : 'Claude Cowork prompts and attached file names.'}
             >
               <input
                 type="number"
@@ -421,8 +421,8 @@ export default function AdminDataPage() {
         <Panel
           title="Cloud archive"
           subtitle={openaiOnly
-            ? 'Archives ChatGPT and Codex prompts and error rows to cloud storage before retention cleanup runs. Reply times, turns and spend are deleted, not archived.'
-            : `Archives cowork, OTel, compliance, chat and error rows to cloud storage before retention cleanup runs.${openaiConnected ? ' ChatGPT and Codex prompts are included; their reply times, turns and spend are deleted, not archived.' : ''}`}
+            ? 'Archives ChatGPT and Codex prompts, reply times, turns, actions and spend, and error rows, to cloud storage before retention cleanup runs.'
+            : `Archives cowork, OTel, compliance, chat and error rows to cloud storage before retention cleanup runs.${openaiConnected ? ' ChatGPT and Codex prompts, reply times, turns, actions and spend are included.' : ''}`}
           flush
         >
           <ToggleRow

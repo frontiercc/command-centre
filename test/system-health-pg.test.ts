@@ -98,6 +98,27 @@ describe('getSystemHealth (postgres)', () => {
     expect(h.surfaces.find(s => s.key === 'cowork')!.lastEventAt).toBeNull();
   });
 
+  it('ChatGPT and Codex are two rows, each from everything the sync writes for it, by arrival', async () => {
+    for (const t of ['openai_replies', 'openai_costs', 'codex_turns', 'codex_actions']) await run(`DELETE FROM ${t}`);
+    // Nothing yet, no key: no rows.
+    let h = await health.getSystemHealth(NOW);
+    expect(h.surfaces.some(s => s.key === 'chatgpt' || s.key === 'codex')).toBe(false);
+    // ChatGPT: a prompt, then a reply and ChatGPT spend arriving later.
+    await run(`INSERT INTO cowork_messages (id, session_id, message_type, surface, source, occurred_at, ingested_at) VALUES
+               ('g1', 'chatgpt:g1', 'cowork_user_message', 'cowork', 'chatgpt_chat', ${NOW - 5000}, ${NOW - 4000})`);
+    await run(`INSERT INTO openai_replies (id, user_id, session_id, source, occurred_at, ingested_at) VALUES ('r1', 'u1', 'chatgpt:g1', 'chatgpt_chat', ${NOW - 5000}, ${NOW - 3000})`);
+    await run(`INSERT INTO openai_costs (id, hour_start, product, billed_in, ingested_at) VALUES ('k1', ${NOW - 7200}, 'chatgpt', 'usd', ${NOW - 2000})`);
+    // Codex: newer Codex spend must not count for ChatGPT.
+    await run(`INSERT INTO codex_actions (id, user_id, session_id, occurred_at, ingested_at) VALUES ('a1', 'u1', 'codex:x', ${NOW - 9000}, ${NOW - 900})`);
+    await run(`INSERT INTO openai_costs (id, hour_start, product, billed_in, ingested_at) VALUES ('k2', ${NOW - 7200}, 'codex', 'usd', ${NOW - 100})`);
+    h = await health.getSystemHealth(NOW);
+    expect(h.surfaces.find(s => s.key === 'chatgpt')).toMatchObject({ label: 'ChatGPT (OpenAI Compliance API)', lastEventAt: NOW - 2000 });
+    expect(h.surfaces.find(s => s.key === 'codex')).toMatchObject({ label: 'Codex (OpenAI Compliance API)', lastEventAt: NOW - 100 });
+    // None of it is Claude Cowork telemetry.
+    expect(h.surfaces.find(s => s.key === 'cowork')!.lastEventAt).toBeNull();
+    for (const t of ['openai_replies', 'openai_costs', 'codex_turns', 'codex_actions']) await run(`DELETE FROM ${t}`);
+  });
+
   it('counts only ingest failures, over 24 hours and 7 days', async () => {
     await run(`INSERT INTO error_events (occurred_at, severity, source, message) VALUES
                (${NOW - 3600}, 'error', 'otel-ingest', 'insert failed'),

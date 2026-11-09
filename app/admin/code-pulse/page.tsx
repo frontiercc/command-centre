@@ -82,6 +82,8 @@ interface CodeHealth {
   aggregatorLastRun: string | null;
   lastOtelIngest: number | null;
   lastMetaIngest: number | null;
+  /** Codex's latest record, once OpenAI is connected; null otherwise. */
+  codex?: { lastRecordAt: number | null } | null;
 }
 
 // ── Shared with the Work Pulse admin look ──────────────────────────────────
@@ -651,6 +653,8 @@ function HealthPanel({ onAddRate }: { onAddRate: (model: string) => void }) {
           { label: 'Aggregator last run', ts: health.aggregatorLastRun, warn: 2 },
           { label: 'Last OTel ingest', ts: health.lastOtelIngest, warn: 2 },
           { label: 'Last meta ingest', ts: health.lastMetaIngest, warn: 26 },
+          // Codex (OpenAI export files, read on the OpenAI sync's interval), once OpenAI is connected.
+          ...(health.codex ? [{ label: 'Last Codex record', ts: health.codex.lastRecordAt, warn: 26 }] : []),
         ] as const).map(r => (
           <div key={r.label} className="flex items-center justify-between gap-3 px-4 py-2.5 border-t border-[#F2F2F2]">
             <span className="text-[14px] text-[#333333]">{r.label}</span>

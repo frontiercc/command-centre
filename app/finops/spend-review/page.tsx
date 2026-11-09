@@ -10,10 +10,10 @@ import TopBar from '@/components/layout/TopBar';
 import LoadingSpinner from '@/components/shared/LoadingSpinner';
 import { gapPct } from '@/lib/finance/spend-review-format';
 import { MonthPicker, monthOptions, money, pct, ukDate, LimitsNotice, LimitBar, UpdatedLine, type LimitsStatus } from '@/components/spend-review/shared';
-import { PageBody, Toolbar, Panel, PanelFoot, Strip, Figure, T, B, Tag, Chip, Notice, Muted, cx } from '@/components/precision/ui';
+import { PageBody, Toolbar, Panel, PanelFoot, Strip, Figure, T, B, Tag, Chip, Notice, Muted, Segmented, cx } from '@/components/precision/ui';
 import { SURFACE_COLOR, PRODUCT_COLOR } from '@/lib/ui/chart-colours';
 import { surfaceName, type SpendReviewSurface } from '@/lib/finance/spend-review-format';
-import { useOpenAiOnly } from '@/components/shared/VendorSwitch';
+import { useOpenAiOnly, useConnectedProducts } from '@/components/shared/VendorSwitch';
 import { formatModelLabel } from '@/lib/pulse/code/model-label';
 
 type Surface = SpendReviewSurface;
@@ -39,6 +39,10 @@ interface Person {
 interface Summary {
   totalUsd: number;
   priorTotalUsd: number | null;
+  /** Claude / OpenAI split of totalUsd, present with ChatGPT and Codex connected and shown. */
+  vendors?: { claudeUsd: number; openaiUsd: number };
+  /** Last month's split (all Claude when last month had none); null when last month had no spend. */
+  priorVendors?: { claudeUsd: number; openaiUsd: number } | null;
   people: number;
   halfSpendPeople: number | null;
   topWork: { label: string; surface: Surface; share: number }[];
@@ -46,6 +50,9 @@ interface Summary {
   orgRereadShare: number | null;
 }
 interface EfficiencyEntry { userId: string; displayName: string; department: string | null; vsColleagues: number; sessions: number; deepRate: number | null; peerDeepRate: number | null }
+type BoardVendor = 'claude' | 'openai';
+interface Board { vendor: BoardVendor; rows: EfficiencyEntry[]; boardPeriod: string }
+const BOARD_VENDOR_LABEL: Record<BoardVendor, string> = { claude: 'Claude', openai: 'OpenAI' };
 
 const MONTH_LONG = ['January', 'February', 'March', 'April', 'May', 'June', 'July', 'August', 'September', 'October', 'November', 'December'];
 function monthLabel(p: string): string {
@@ -53,58 +60,82 @@ function monthLabel(p: string): string {
   return `${MONTH_LONG[m - 1]} ${y}`;
 }
 
-function EfficiencyBoard({ rows, period, boardPeriod }: { rows: EfficiencyEntry[]; period: string; boardPeriod: string }) {
-  if (rows.length === 0) return null;
+/**
+ * "Most efficient this month", one board per vendor: Claude's work (Code and
+ * Cowork) and OpenAI's (ChatGPT and Codex) are scored apart, never mixed. Two
+ * boards show as tabs; one shows on its own.
+ */
+function EfficiencyBoard({ boards, period }: { boards: Board[]; period: string }) {
+  const [picked, setPicked] = useState<BoardVendor | null>(null);
+  if (boards.every(b => b.rows.length === 0)) return null;
+  const tabs = boards.length > 1;
+  // Open on the first board with anyone on it, unless a tab was picked.
+  const board = boards.find(b => b.vendor === picked) ?? boards.find(b => b.rows.length > 0) ?? boards[0];
+  const { rows, boardPeriod } = board;
+  const vendorWork = tabs ? ` of ${BOARD_VENDOR_LABEL[board.vendor]} work` : '';
   const earlier = boardPeriod !== period;
   return (
     <Panel
       title={earlier || period !== monthOptions()[0].value ? `Most efficient in ${monthLabel(boardPeriod)}` : 'Most efficient this month'}
       subtitle="Lower cost than colleagues for the same kinds of work, with work as deep as theirs · at least 10 sessions"
+      right={tabs ? (
+        <Segmented
+          label="Most efficient on"
+          options={boards.map(b => ({ value: b.vendor, label: BOARD_VENDOR_LABEL[b.vendor] }))}
+          value={board.vendor}
+          onChange={setPicked}
+        />
+      ) : undefined}
       flush
     >
       {earlier && (
         <div className="px-4 pt-3">
           <Notice tone="warn">
-            Showing {monthLabel(boardPeriod)}: nobody has 10 sessions in {monthLabel(period)} yet, which the comparison needs to be fair. The board switches to {monthLabel(period)} once enough work is in, usually within the first week.
+            Showing {monthLabel(boardPeriod)}: nobody has 10 sessions{vendorWork} in {monthLabel(period)} yet, which the comparison needs to be fair. The board switches to {monthLabel(period)} once enough work is in, usually within the first week.
           </Notice>
         </div>
       )}
-      <div className="overflow-x-auto">
-        <table className={cx(T.table, earlier && 'mt-2')}>
-          <thead>
-            <tr className={T.headRow}>
-              <th scope="col" className={T.th}><span className="sr-only">Rank</span></th>
-              <th scope="col" className={T.th}>Person</th>
-              <th scope="col" className={T.thRight}>Sessions</th>
-              <th scope="col" className={T.thRight}>vs colleagues</th>
-              <th scope="col" className={T.thRight}>Tier 3 share</th>
-            </tr>
-          </thead>
-          <tbody>
-            {rows.map((r, i) => {
-              const below = 1 - r.vsColleagues;
-              return (
-                <tr key={r.userId} className={T.row}>
-                  <td className={cx(T.td, 'w-8 text-[12px] text-[#B3B3B3] tabular-nums')}>{i + 1}</td>
-                  <td className={T.td}>
-                    <Link href={`/finops/spend-review/${encodeURIComponent(r.userId)}?period=${boardPeriod}`} className="font-medium text-[#0A0A0A] hover:text-[#245BF3] hover:underline">{r.displayName}</Link>
-                    <span className="block text-[13px] text-[#8F8F8F]">{r.department ?? 'No department'}</span>
-                  </td>
-                  <td className={cx(T.tdRight, 'text-[#666666]')}>{r.sessions}</td>
-                  <td className={cx(T.tdRight, 'font-medium', below > 0 ? 'text-[#1A7F37]' : 'text-[#666666]')}>
-                    {gapPct(r.vsColleagues)} {below > 0 ? 'below' : 'above'} colleagues
-                  </td>
-                  <td className={cx(T.tdRight, 'text-[13px] text-[#666666]')}>
-                    {r.deepRate !== null && r.peerDeepRate !== null ? <>{pct(r.deepRate)} vs {pct(r.peerDeepRate)}</> : 'Not measured'}
-                  </td>
-                </tr>
-              );
-            })}
-          </tbody>
-        </table>
-      </div>
+      {rows.length === 0 ? (
+        <div className="p-6 text-center"><Muted>Nobody ranked on {BOARD_VENDOR_LABEL[board.vendor]} work yet: it needs at least 10 sessions with colleagues doing the same kinds of work.</Muted></div>
+      ) : (
+        <div className="overflow-x-auto">
+          <table className={cx(T.table, earlier && 'mt-2')}>
+            <thead>
+              <tr className={T.headRow}>
+                <th scope="col" className={T.th}><span className="sr-only">Rank</span></th>
+                <th scope="col" className={T.th}>Person</th>
+                <th scope="col" className={T.thRight}>Sessions</th>
+                <th scope="col" className={T.thRight}>vs colleagues</th>
+                <th scope="col" className={T.thRight}>Tier 3 share</th>
+              </tr>
+            </thead>
+            <tbody>
+              {rows.map((r, i) => {
+                const below = 1 - r.vsColleagues;
+                return (
+                  <tr key={r.userId} className={T.row}>
+                    <td className={cx(T.td, 'w-8 text-[12px] text-[#B3B3B3] tabular-nums')}>{i + 1}</td>
+                    <td className={T.td}>
+                      <Link href={`/finops/spend-review/${encodeURIComponent(r.userId)}?period=${boardPeriod}`} className="font-medium text-[#0A0A0A] hover:text-[#245BF3] hover:underline">{r.displayName}</Link>
+                      <span className="block text-[13px] text-[#8F8F8F]">{r.department ?? 'No department'}</span>
+                    </td>
+                    <td className={cx(T.tdRight, 'text-[#666666]')}>{r.sessions}</td>
+                    <td className={cx(T.tdRight, 'font-medium', below > 0 ? 'text-[#1A7F37]' : 'text-[#666666]')}>
+                      {gapPct(r.vsColleagues)} {below > 0 ? 'below' : 'above'} colleagues
+                    </td>
+                    <td className={cx(T.tdRight, 'text-[13px] text-[#666666]')}>
+                      {r.deepRate !== null && r.peerDeepRate !== null ? <>{pct(r.deepRate)} vs {pct(r.peerDeepRate)}</> : 'Not measured'}
+                    </td>
+                  </tr>
+                );
+              })}
+            </tbody>
+          </table>
+        </div>
+      )}
       <PanelFoot>
         Each person&apos;s typical session cost against colleagues doing the same kinds of work, weighted by where their money goes. Only people whose share of Tier 3 work is no more than 10 points below colleagues&apos; are ranked, so cheaper-because-shallower work doesn&apos;t count as efficient.
+        {tabs && ' Claude and OpenAI are ranked separately: each board scores people on that vendor’s work only (Claude Code and Cowork, or ChatGPT and Codex).'}
       </PanelFoot>
     </Panel>
   );
@@ -115,9 +146,13 @@ interface IndexData {
   isCurrentMonth: boolean;
   /** ChatGPT and Codex spend is included (OpenAI's Compliance API is connected). */
   openai?: boolean;
+  /** The board on Claude's work (Claude Code and Cowork). */
   efficiency?: EfficiencyEntry[];
   /** The month the efficiency board covers: last month while this month is too new. */
   efficiencyPeriod?: string;
+  /** The board on OpenAI's work (ChatGPT and Codex), and its month. */
+  efficiencyOpenai?: EfficiencyEntry[];
+  efficiencyOpenaiPeriod?: string;
   updatedAt?: number;
   people: Person[];
   summary: Summary;
@@ -209,6 +244,8 @@ function SpendReviewIndex() {
   const [data, setData] = useState<IndexData | null>(null);
   // Only OpenAI connected: no Anthropic limits and no Claude in the key or notes.
   const openaiOnly = useOpenAiOnly();
+  // ChatGPT and Codex connected and shown (false while hidden on the OpenAI panel).
+  const openaiConnected = useConnectedProducts()?.openai ?? false;
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [onlyRoutes, setOnlyRoutes] = useState(false);
@@ -276,7 +313,14 @@ function SpendReviewIndex() {
   const near = limitsOn ? (data?.people ?? []).filter(p => (p.anthropic?.shareUsed ?? 0) >= nearShare && (p.anthropic?.shareUsed ?? 0) < 1).length : 0;
   const over = limitsOn ? (data?.people ?? []).filter(p => (p.anthropic?.shareUsed ?? 0) >= 1).length : 0;
   const s = data?.summary;
-  const boardRows = data?.efficiency ?? [];
+  // Claude's board unless only OpenAI is connected; OpenAI's when it is connected and shown.
+  const boards: Board[] = data ? [
+    ...(!openaiOnly ? [{ vendor: 'claude' as const, rows: data.efficiency ?? [], boardPeriod: data.efficiencyPeriod ?? period }] : []),
+    ...(openaiOnly || openaiConnected || data.openai ? [{ vendor: 'openai' as const, rows: data.efficiencyOpenai ?? [], boardPeriod: data.efficiencyOpenaiPeriod ?? period }] : []),
+  ] : [];
+  const anyBoard = boards.some(b => b.rows.length > 0);
+  // Spend so far split by vendor only with both vendors' spend this month, and Claude shown.
+  const vendorSplit = data?.openai && !openaiOnly && s?.vendors && s.vendors.claudeUsd > 0 && s.vendors.openaiUsd > 0 ? s.vendors : null;
   const requestsPanel = pending.length > 0 ? (
         <Panel title="Requests for more usage" badge={<Tag tone="warn">{pending.length}</Tag>} flush>
           <div>
@@ -330,7 +374,18 @@ function SpendReviewIndex() {
                 <Figure
                   label={data.isCurrentMonth ? 'Spend so far' : 'Spend'}
                   value={money(s.totalUsd)}
-                  sub={s.priorTotalUsd !== null && <><Change now={s.totalUsd} prior={s.priorTotalUsd} pace={pace} /> {data.isCurrentMonth ? 'against last month’s pace' : 'against last month'}</>}
+                  sub={vendorSplit ? (
+                    <span className="flex flex-col gap-0.5">
+                      <span className="text-[#4D4D4D] tabular-nums">Claude {money(vendorSplit.claudeUsd)} · OpenAI {money(vendorSplit.openaiUsd)}</span>
+                      {s.priorTotalUsd !== null && (
+                        <span>
+                          Claude <Change now={vendorSplit.claudeUsd} prior={s.priorVendors?.claudeUsd ?? null} pace={pace} />
+                          {' · '}OpenAI <Change now={vendorSplit.openaiUsd} prior={s.priorVendors?.openaiUsd ?? null} pace={pace} />
+                          {' '}{data.isCurrentMonth ? 'against last month’s pace' : 'against last month'}
+                        </span>
+                      )}
+                    </span>
+                  ) : s.priorTotalUsd !== null && <><Change now={s.totalUsd} prior={s.priorTotalUsd} pace={pace} /> {data.isCurrentMonth ? 'against last month’s pace' : 'against last month'}</>}
                 />
                 <Figure
                   label="Where it sits"
@@ -374,9 +429,9 @@ function SpendReviewIndex() {
               </Strip>
             )}
 
-            {boardRows.length > 0 && (requestsPanel || rereadNotice) ? (
+            {anyBoard && (requestsPanel || rereadNotice) ? (
               <div className="grid grid-cols-1 lg:grid-cols-[minmax(0,3fr)_minmax(0,2fr)] gap-4 items-start">
-                <EfficiencyBoard rows={boardRows} period={period} boardPeriod={data.efficiencyPeriod ?? period} />
+                <EfficiencyBoard boards={boards} period={period} />
                 <div className="flex flex-col gap-4 min-w-0">
                   {requestsPanel}
                   {rereadNotice}
@@ -384,7 +439,7 @@ function SpendReviewIndex() {
               </div>
             ) : (
               <>
-                <EfficiencyBoard rows={boardRows} period={period} boardPeriod={data.efficiencyPeriod ?? period} />
+                <EfficiencyBoard boards={boards} period={period} />
                 {rereadNotice}
                 {requestsPanel}
               </>

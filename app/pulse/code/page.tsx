@@ -68,8 +68,11 @@ interface OrgSummary {
     totalPrs7d: number;
     totalCommits30dByRepo: Record<string, number>;
     reposActive7d: number;
-    shippingSeries: Array<{ date: string; aiCommits: number; ghCommits: number; ghPrs: number }>;
+    shippingSeries: Array<{ date: string; aiCommits: number; ghCommits: number; ghPrs: number; ghClaude?: number | null; ghCodex?: number | null; ghNone?: number | null }>;
     repoCards: Array<{ repo: string; commits7d: number; commitsPrev7d: number; prs30d: number; commits30d: number; daily: number[] }>;
+    toolSplit?: boolean;
+    /** Codex tab: tracked repos reached, worked out from GitHub commits matched to Codex. */
+    codexReach?: { activeRepos7d: number; quietRepos30d: number; trackedRepos: number } | null;
   } | null;
   spendProjection: { projected: number; daysElapsed: number; daysInMonth: number } | null;
 }
@@ -89,6 +92,8 @@ interface Verdict {
   projection?: string;
   /** All view: the Claude Code and Codex parts under the value. */
   split?: string;
+  /** A quiet line under the explanation saying where the figure comes from. */
+  note?: string;
 }
 
 /** The product names each view uses in its wording. */
@@ -195,6 +200,25 @@ function buildVerdicts(d: OrgSummary, vendor: Vendor): Verdict[] {
         : `${activeCount} repo${activeCount === 1 ? '' : 's'} with ${w.tool} activity this week and nothing has gone quiet.`,
     },
   ];
+  // Codex reports no repository, so on the Codex tab the reach comes from
+  // GitHub: tracked repos that received commits matched to Codex.
+  const reach = d.githubOverlay?.codexReach ?? null;
+  if (vendor === 'openai') {
+    const rest = verdicts.filter(v => !v.question.startsWith('How much of our codebase'));
+    if (!reach) return rest;
+    const a = reach.activeRepos7d;
+    const quiet = reach.quietRepos30d;
+    return [...rest, {
+      question: 'How much of our codebase does this reach?',
+      value: `${a} repo${a === 1 ? '' : 's'}`,
+      status: quiet > a ? 'attention' : a > 0 ? 'building' : 'neutral',
+      plain: `${a} tracked repo${a === 1 ? '' : 's'} received commits made with Codex this week` +
+        (quiet > 0
+          ? `; ${quiet} of ${reach.trackedRepos} had none in the last 30 days. Quiet repos are the expansion opportunity.`
+          : ', and every tracked repo had one in the last 30 days.'),
+      note: 'Worked out from GitHub commits matched to Codex, on the GitHub-tracked repos only: Codex does not report which repository it worked in.',
+    }];
+  }
   // Retire the repo-centric verdict on OTel-only instances (no cwd → no repo data),
   // where it would always read "0 repos". Instances with repo data keep it.
   return hasRepoData ? verdicts : verdicts.filter(v => !v.question.startsWith('How much of our codebase'));
@@ -224,6 +248,7 @@ function VerdictPanel({ v }: { v: Verdict }) {
           </div>
         )}
         <p className="m-0 text-[14px] leading-[1.5] text-[#4D4D4D]">{v.plain}</p>
+        {v.note && <p className="m-0 text-[13px] text-[#8F8F8F]">{v.note}</p>}
         {v.trend && (
           <div className="flex items-center gap-2 flex-wrap text-[13px] text-[#8F8F8F]">
             <span>8-week trend · week to date shown hollow</span>
@@ -422,7 +447,7 @@ export default function CodePulseOverviewPage() {
             <CodeBriefingCard />
 
             {data?.githubOverlay && (
-              <ShippingAlignmentChart series={data.githubOverlay.shippingSeries ?? []} codexPresent={codexPresent && vendor !== 'claude'} openaiOnly={openaiOnly || vendor === 'openai'}>
+              <ShippingAlignmentChart series={data.githubOverlay.shippingSeries ?? []} codexPresent={codexPresent && vendor !== 'claude'} openaiOnly={openaiOnly || vendor === 'openai'} view={codexPresent || openaiOnly ? vendor : 'all'}>
                 {(data.githubOverlay.repoCards?.length ?? 0) > 0
                   ? <GithubRepoCards cards={data.githubOverlay.repoCards} />
                   : undefined}

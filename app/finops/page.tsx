@@ -40,6 +40,9 @@ interface ChargebackCentre {
   totalUsd: number;
   codeUsd: number;
   coworkUsd: number;
+  /** ChatGPT and Codex, present when OpenAI's Compliance API is connected. */
+  chatgptUsd?: number;
+  codexUsd?: number;
   users: ChargebackUser[];
 }
 
@@ -64,6 +67,8 @@ interface ChargebackReport {
   leaderboard?: LeaderboardEntry[];
   /** Server-computed month-end run-rate projection. null for historical periods; absent on old closed snapshots. */
   projection?: { projected: number; daysElapsed: number; daysInMonth: number } | null;
+  /** Claude's and OpenAI's projected month-end spend, each from its own month-to-date spend. null without the vendor split. */
+  projectionByVendor?: { claudeUsd: number; openaiUsd: number } | null;
   /** Server-computed deterministic facts + optional grounded narrative. Absent on old closed snapshots. */
   insight?: { facts: InsightFacts; narrative: string | null };
   /** Wasted-seats estimate (licensed vs active-in-30d). null when licensedSeats is unset/invalid. Absent on old closed snapshots. */
@@ -533,7 +538,9 @@ export default function CostChargebackPage() {
               trend={trend}
               monthToDate={report.monthToDate}
               projection={report.projection ?? null}
-              costCentreTotals={report.costCentres.map(c => c.totalUsd)}
+              projectionByVendor={report.projectionByVendor ?? null}
+              costCentres={report.costCentres}
+              openaiOnly={openaiOnly}
             />
 
             {/* Top spenders + this-month insight */}

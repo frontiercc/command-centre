@@ -152,6 +152,14 @@ const run = (cmd, args) => execFileSync(cmd, args, { stdio: 'inherit', env: proc
   try { run('npx', ['tsx', path.join(__dirname, '11-chatgpt-codex.ts')]); }
   catch { console.error('11-chatgpt-codex.ts failed; continuing with the rest.'); }
 
+  // GitHub commits made with Claude Code, with Codex and with no AI tool
+  // recorded, from the sample's own Claude Code and Codex commits.
+  console.log('\nSplitting the sample GitHub commits by tool...');
+  try {
+    const split = await require('./github-tool-split.cjs').fillGithubToolSplit(db);
+    console.log(`${split.claude} made with Claude Code, ${split.codex} with Codex, ${split.none} with no AI tool recorded.`);
+  } catch (e) { console.error(`GitHub tool split failed (${e.message}); continuing with the rest.`); }
+
   // The sample S&C Board entries, use cases (with their weekly figures and
   // matches) and department process suggestions. Nothing in them is tied to
   // anyone outside the fictional organisation.

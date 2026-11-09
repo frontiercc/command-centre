@@ -5,18 +5,26 @@
  * FinOps "charts A" row — spend trend, month-end projection, spend
  * concentration. Spend trend + concentration are pure presentational
  * wrappers around existing deterministic helpers (lib/finance/trend,
- * lib/pulse/code/concentration); the month-end projection is now computed
- * server-side (`lib/finance/finops-projection.ts`, an honest MTD run rate)
- * and passed straight through — no client-side recomputation.
+ * lib/finance/product-split over lib/pulse/code/concentration); the month-end
+ * projection is computed server-side (`lib/finance/finops-projection.ts`, an
+ * honest MTD run rate) and passed straight through — no client-side
+ * recomputation. The trend and concentration bars are split by product
+ * (Claude Code, Claude Cowork, ChatGPT, Codex) in the product colours.
  */
 import { Panel, Tag, Bar, Muted, cx } from '@/components/precision/ui';
-import { computeSpendConcentration } from '@/lib/pulse/code/concentration';
 import type { SpendProjection } from '@/lib/pulse/code/projection';
 import { MIN_PROJECTION_DAYS } from '@/lib/finance/finops-projection';
+import {
+  concentrationByProduct, productsPresent, legendGroups, partsOfRow,
+  PRODUCT_FILL, PRODUCT_NAME, PRODUCT_SHORT,
+  type FinopsProduct, type ProductParts, type ProductRow,
+} from '@/lib/finance/product-split';
 
 export interface SpendTrendPoint {
   period: string;
   usd: number | null;
+  /** Spend by product, adding up to `usd`. Absent from an older response: drawn as one Claude part. */
+  parts?: ProductParts;
 }
 
 export interface SpendTrend {
@@ -42,24 +50,66 @@ function periodInitial(period: string): string {
   return m >= 1 && m <= 12 ? MONTH_SHORT[m - 1].charAt(0) : '';
 }
 
+/** A point's parts, or the whole month as undivided Claude when a response predates the split. */
+function pointParts(p: SpendTrendPoint): ProductParts {
+  if (p.parts) return p.parts;
+  return p.usd != null && p.usd > 0 ? { claude: p.usd } : {};
+}
+
+/** Hover text for a month: each product's part, then the total. */
+function monthTitle(p: SpendTrendPoint, products: FinopsProduct[]): string {
+  if (p.usd === null) return `${periodLabel(p.period)}: no data`;
+  const parts = pointParts(p);
+  const lines = products.filter(k => (parts[k] ?? 0) > 0).map(k => `${PRODUCT_NAME[k]}: ${fmtUsd(parts[k]!)}`);
+  return [periodLabel(p.period), ...lines, `Total: ${fmtUsd(p.usd)}`].join('\n');
+}
+
+/** Coloured key, products grouped under Claude and OpenAI. */
+function ProductLegend({ products }: { products: FinopsProduct[] }) {
+  if (products.length === 0) return null;
+  return (
+    <div className="flex gap-x-5 gap-y-1 flex-wrap text-[12px] text-[#8F8F8F]">
+      {legendGroups(products).map(g => (
+        <span key={g.vendor} className="flex items-center gap-2.5 flex-wrap">
+          <span className="text-[#4D4D4D] font-medium">{g.label}</span>
+          {g.products.map(k => (
+            <span key={k} className="flex items-center gap-1.5">
+              <span className="w-2.5 h-2.5 rounded-[2px]" style={{ background: PRODUCT_FILL[k] }} aria-hidden="true" />
+              {PRODUCT_SHORT[k]}
+            </span>
+          ))}
+        </span>
+      ))}
+    </div>
+  );
+}
+
 /**
- * One bar per month. A null month is an empty slot with a faint baseline, never a
- * zero bar: no recorded spend is not the same as zero spend. The latest month is
- * solid blue, earlier months lighter blue; all of it is measured spend.
+ * One stacked bar per month, a segment per product in the product colours. A
+ * null month is an empty slot with a faint baseline, never a zero bar: no
+ * recorded spend is not the same as zero spend. All of it is measured spend.
  */
-function MonthBars({ series }: { series: SpendTrendPoint[] }) {
+function MonthBars({ series, products }: { series: SpendTrendPoint[]; products: FinopsProduct[] }) {
   const max = Math.max(0, ...series.map(p => p.usd ?? 0));
   return (
     <div>
-      <div className="flex items-end gap-1.5 h-[120px] border-b border-[#EAEAEA]" role="img" aria-label="Spend by month">
-        {series.map((p, i) => {
-          const last = i === series.length - 1;
+      <div className="flex items-end gap-1.5 h-[120px] border-b border-[#EAEAEA]" role="img" aria-label="Spend by month, split by product">
+        {series.map(p => {
           const h = p.usd === null || max <= 0 ? 0 : Math.max(1, Math.round((p.usd / max) * 100));
+          const parts = pointParts(p);
+          const shown = products.filter(k => (parts[k] ?? 0) > 0);
+          const sum = shown.reduce((a, k) => a + parts[k]!, 0);
           return (
-            <div key={p.period} className="flex-1 h-full flex flex-col justify-end" title={`${periodLabel(p.period)}: ${p.usd === null ? 'no data' : fmtUsd(p.usd)}`}>
+            <div key={p.period} className="flex-1 h-full flex flex-col justify-end" title={monthTitle(p, products)}>
               {p.usd === null
                 ? <div className="h-1 rounded-full bg-[#F2F2F2]" />
-                : <div className={cx('rounded-t-[2px]', last ? 'bg-[#05073F]' : 'bg-[#8C96BF]')} style={{ height: `${h}%` }} />}
+                : (
+                  <div className="flex flex-col-reverse rounded-t-[2px] overflow-hidden" style={{ height: `${h}%` }}>
+                    {sum > 0 && shown.map(k => (
+                      <div key={k} className="shrink-0" style={{ height: `${(parts[k]! / sum) * 100}%`, background: PRODUCT_FILL[k] }} />
+                    ))}
+                  </div>
+                )}
             </div>
           );
         })}
@@ -73,7 +123,7 @@ function MonthBars({ series }: { series: SpendTrendPoint[] }) {
   );
 }
 
-function SpendTrendCard({ trend }: { trend: SpendTrend | null }) {
+function SpendTrendCard({ trend, openaiOnly }: { trend: SpendTrend | null; openaiOnly: boolean }) {
   if (!trend || !trend.render) {
     return (
       <Panel title="Spend trend">
@@ -83,18 +133,27 @@ function SpendTrendCard({ trend }: { trend: SpendTrend | null }) {
   }
   const latest = trend.series[trend.series.length - 1];
   const first = trend.series[0];
+  const products = productsPresent(trend.series.map(pointParts), { openaiOnly });
   return (
     <Panel
       title="Spend trend"
       subtitle={`${periodLabel(first.period)} to ${periodLabel(latest.period)}`}
       right={<span className="text-[13px] text-[#666666] tabular-nums">{latest.usd != null ? fmtUsd(latest.usd) : '—'} <span className="text-[#8F8F8F]">this month</span></span>}
     >
-      <MonthBars series={trend.series} />
+      <div className="flex flex-col gap-3">
+        <MonthBars series={trend.series} products={products} />
+        <ProductLegend products={products} />
+      </div>
     </Panel>
   );
 }
 
-function ProjectionCard({ monthToDate, projection }: { monthToDate: boolean; projection: SpendProjection | null }) {
+function ProjectionCard({ monthToDate, projection, byVendor, openaiOnly }: {
+  monthToDate: boolean;
+  projection: SpendProjection | null;
+  byVendor: { claudeUsd: number; openaiUsd: number } | null;
+  openaiOnly: boolean;
+}) {
   if (!monthToDate || !projection) {
     return (
       <Panel title="Month-end projection">
@@ -114,33 +173,63 @@ function ProjectionCard({ monthToDate, projection }: { monthToDate: boolean; pro
       </Panel>
     );
   }
+  // Split only with both vendors' spend this month (and Claude shown): otherwise the plain total.
+  const split = byVendor && !openaiOnly && byVendor.claudeUsd > 0 && byVendor.openaiUsd > 0 ? byVendor : null;
   return (
     <Panel title="Month-end projection" right={<Tag tone="judged">Estimate</Tag>}>
       <div className="flex flex-col gap-2">
-        <span className="text-[24px] leading-7 font-semibold tracking-[-0.02em] tabular-nums text-[#2451F3]">{fmtUsd(projection.projected)}</span>
+        {split ? (
+          <p className="m-0 flex flex-col gap-0.5 tabular-nums">
+            <span className="text-[14px] text-[#4D4D4D]">
+              Projected <span className="text-[24px] leading-7 font-semibold tracking-[-0.02em] text-[#2451F3]">{fmtUsd(projection.projected)}</span>:
+            </span>
+            <span className="text-[13px] text-[#4D4D4D]">Claude {fmtUsd(split.claudeUsd)} · OpenAI {fmtUsd(split.openaiUsd)}</span>
+          </p>
+        ) : (
+          <span className="text-[24px] leading-7 font-semibold tracking-[-0.02em] tabular-nums text-[#2451F3]">{fmtUsd(projection.projected)}</span>
+        )}
         <span className="text-[13px] text-[#666666] tabular-nums">Day {projection.daysElapsed} of {projection.daysInMonth}</span>
         <Bar pct={(projection.daysElapsed / Math.max(1, projection.daysInMonth)) * 100} tone="measured" height={6} />
-        <Muted>Run-rate estimate, extrapolated from month-to-date spend.</Muted>
+        <Muted>{split ? 'Run-rate estimate: Claude and OpenAI each extrapolated from their own month-to-date spend.' : 'Run-rate estimate, extrapolated from month-to-date spend.'}</Muted>
       </div>
     </Panel>
   );
 }
 
-function ConcentrationCard({ costCentreTotals }: { costCentreTotals: number[] }) {
-  const concentration = computeSpendConcentration(costCentreTotals);
-  if (!concentration) return null;
+/** A share bar split into product segments, each as wide as its share of all spend. */
+function ProductShareBar({ parts, products }: { parts: ProductParts; products: FinopsProduct[] }) {
+  return (
+    <div className="w-full h-[3px] rounded-full bg-[#F2F2F2] overflow-hidden flex">
+      {products.filter(k => (parts[k] ?? 0) > 0).map(k => (
+        <div key={k} className="h-full shrink-0" style={{ width: `${Math.min(100, parts[k]! * 100)}%`, background: PRODUCT_FILL[k] }} />
+      ))}
+    </div>
+  );
+}
+
+function ConcentrationCard({ costCentres, openaiOnly }: { costCentres: ProductRow[]; openaiOnly: boolean }) {
+  const tiers = concentrationByProduct(costCentres);
+  if (!tiers) return null;
+  const products = productsPresent(costCentres.map(partsOfRow), { openaiOnly });
   return (
     <Panel title="Spend concentration" subtitle="Share of total spend by top cost centres" flush>
       <div className="py-1">
-        {concentration.tiers.map(t => (
-          <div key={t.topN} className="px-4 py-2 flex flex-col gap-1 border-t border-[#F2F2F2] first:border-t-0">
+        {tiers.map(t => (
+          <div
+            key={t.topN}
+            className="px-4 py-2 flex flex-col gap-1 border-t border-[#F2F2F2] first:border-t-0"
+            title={[`Top ${t.topN}: ${fmtPct(t.share)}`, ...products.filter(k => (t.parts[k] ?? 0) > 0).map(k => `${PRODUCT_NAME[k]}: ${fmtPct(t.parts[k]!)}`)].join('\n')}
+          >
             <div className="flex items-baseline gap-2 text-[14px]">
               <span className="text-[#0A0A0A]">Top {t.topN}</span>
               <span className="ml-auto text-[13px] text-[#666666] tabular-nums">{fmtPct(t.share)}</span>
             </div>
-            <Bar pct={t.share * 100} tone="measured" />
+            <ProductShareBar parts={t.parts} products={products} />
           </div>
         ))}
+        <div className="px-4 pt-2 pb-1 border-t border-[#F2F2F2]">
+          <ProductLegend products={products} />
+        </div>
       </div>
     </Panel>
   );
@@ -150,19 +239,26 @@ export default function FinopsCharts({
   trend,
   monthToDate,
   projection,
-  costCentreTotals,
+  projectionByVendor = null,
+  costCentres,
+  openaiOnly = false,
 }: {
   trend: SpendTrend | null;
   monthToDate: boolean;
   projection: SpendProjection | null;
-  costCentreTotals: number[];
+  /** Claude's and OpenAI's projected month-end spend; null without the vendor split. */
+  projectionByVendor?: { claudeUsd: number; openaiUsd: number } | null;
+  /** Each cost centre's total and per-product figures. */
+  costCentres: ProductRow[];
+  /** Only OpenAI connected: Claude's products are left out of the bars and keys. */
+  openaiOnly?: boolean;
 }) {
-  const concentration = computeSpendConcentration(costCentreTotals);
+  const concentration = concentrationByProduct(costCentres);
   return (
     <div className={cx('grid grid-cols-1 gap-4', concentration ? 'md:grid-cols-[minmax(0,2fr)_minmax(0,1fr)_minmax(0,1fr)]' : 'md:grid-cols-[minmax(0,2fr)_minmax(0,1fr)]')}>
-      <SpendTrendCard trend={trend} />
-      <ProjectionCard monthToDate={monthToDate} projection={projection} />
-      <ConcentrationCard costCentreTotals={costCentreTotals} />
+      <SpendTrendCard trend={trend} openaiOnly={openaiOnly} />
+      <ProjectionCard monthToDate={monthToDate} projection={projection} byVendor={projectionByVendor} openaiOnly={openaiOnly} />
+      <ConcentrationCard costCentres={costCentres} openaiOnly={openaiOnly} />
     </div>
   );
 }

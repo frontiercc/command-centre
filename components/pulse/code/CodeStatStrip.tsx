@@ -95,7 +95,8 @@ export function formatDuration(seconds: number): string {
 
 export default function CodeStatStrip({ metrics, githubRepos, view = 'claude', split }: {
   metrics: CodeMetricsRow | null;
-  githubRepos?: { count7d: number; names7d: string[] } | null;
+  /** basis: which commits were counted (Claude and Codex tabs: commits matched to that tool). */
+  githubRepos?: { count7d: number; names7d: string[]; basis?: 'all' | 'claude' | 'openai' } | null;
   /** Developer Pulse's switch, 'claude' until Codex data exists. */
   view?: 'all' | 'claude' | 'openai';
   /** All view: Claude Code's and Codex's own figures, for the line under each value. */
@@ -151,10 +152,15 @@ export default function CodeStatStrip({ metrics, githubRepos, view = 'claude', s
             ? (githubRepos.count7d > githubRepos.names7d.length
                 ? `${githubRepos.names7d.join(' · ')} · +${githubRepos.count7d - githubRepos.names7d.length} more`
                 : githubRepos.names7d.join(' · '))
-            : 'Repos with your GitHub commits',
-          hint: githubRepos.count7d === 0
-            ? 'From GitHub commit-author matching; a zero can also mean unmapped commits'
-            : 'From GitHub commit-author matching',
+            : githubRepos.basis === 'claude' ? 'Repos with GitHub commits made with Claude Code'
+              : githubRepos.basis === 'openai' ? 'Repos with GitHub commits made with Codex'
+                : 'Repos with your GitHub commits',
+          hint: (githubRepos.basis === 'claude'
+            ? 'Counts GitHub commits matched to Claude Code by author and time'
+            : githubRepos.basis === 'openai'
+              ? 'Counts GitHub commits matched to Codex by author and time'
+              : 'Counts all GitHub commits, from commit-author matching')
+            + (githubRepos.count7d === 0 ? '; a zero can also mean unmapped commits' : ''),
         }
       : metrics !== null && metrics.repo_count === 0
         ? {

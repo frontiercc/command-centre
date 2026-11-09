@@ -576,7 +576,7 @@ export default function SystemPage() {
         const data = await res.json();
         const sizeMb = (Number(data.fileSizeBytes) / 1024 / 1024).toFixed(2);
         setIntegrityResult(
-          `OK (${elapsed}ms). DB size: ${sizeMb} MB, users: ${data.userCount}, chat: ${Number(data.chatCount).toLocaleString()}, code: ${Number(data.codeCount).toLocaleString()}, cowork: ${Number(data.coworkOnlyCount).toLocaleString()}, events: ${Number(data.otelCount).toLocaleString()}`
+          `OK (${elapsed}ms). DB size: ${sizeMb} MB, users: ${data.userCount}, chat: ${Number(data.chatCount).toLocaleString()}, code: ${Number(data.codeCount).toLocaleString()}, cowork: ${Number(data.coworkOnlyCount).toLocaleString()}${Number(data.chatgptCount) > 0 || Number(data.codexCount) > 0 ? `, ChatGPT: ${Number(data.chatgptCount).toLocaleString()}, Codex: ${Number(data.codexCount).toLocaleString()}` : ''}, events: ${Number(data.otelCount).toLocaleString()}`
         );
       } else {
         setIntegrityResult("Couldn't run the check. Try again.");
@@ -638,7 +638,7 @@ export default function SystemPage() {
                 max={3600}
               />
             </Field>
-            <Field label="Licensed seats (optional)" hint="Shown as the Active Users denominator on the dashboard. Blank to hide.">
+            <Field label="Claude licensed seats (optional)" hint="Shown as the Active Users denominator on the dashboard. Blank to hide.">
               <input
                 type="number"
                 value={licensedSeats}
@@ -704,7 +704,7 @@ export default function SystemPage() {
             disabled={financeSaving}
           />
           <div className="px-4 py-3 border-t border-[#F2F2F2]">
-            <Field label="Claude seat price (USD/month)" hint="With Licensed seats under General, used only for the unused Claude seats estimate on FinOps." className="max-w-xs">
+            <Field label="Claude seat price (USD/month)" hint="With Claude licensed seats under General, used only for the unused Claude seats estimate on FinOps." className="max-w-xs">
               <input
                 type="number"
                 min={0}
@@ -1047,6 +1047,10 @@ export default function SystemPage() {
                   <Figure label="Chat prompts" value={Number(dbStats.chatCount).toLocaleString()} />
                   <Figure label="Code messages" value={Number(dbStats.codeCount).toLocaleString()} />
                   <Figure label="Cowork messages" value={Number(dbStats.coworkOnlyCount).toLocaleString()} />
+                  {(Number(dbStats.chatgptCount) > 0 || Number(dbStats.codexCount) > 0) && (<>
+                    <Figure label="ChatGPT messages" value={Number(dbStats.chatgptCount).toLocaleString()} />
+                    <Figure label="Codex messages" value={Number(dbStats.codexCount).toLocaleString()} />
+                  </>)}
                   <Figure label="OTel events" value={Number(dbStats.otelCount).toLocaleString()} />
                   <Figure label="Compliance events" value={Number(dbStats.complianceCount).toLocaleString()} />
                 </div>

@@ -28,7 +28,7 @@ interface DeptDetail {
   metrics: CodeMetricsRow | null;
   members: CodeUserRow[];
   journeyGrid: Array<{ week: number; tier: number; count: number; provisionalCount?: number }>;
-  githubRepos: { count7d: number; names7d: string[] } | null;
+  githubRepos: { count7d: number; names7d: string[]; basis?: 'all' | 'claude' | 'openai' } | null;
 }
 
 function DeptContent() {
@@ -162,7 +162,7 @@ function DeptContent() {
             )}
 
             <Panel title="Members" subtitle="7 days" flush>
-              <CodeUserTable users={detail.members} showDepartment={false} />
+              <CodeUserTable users={detail.members} showDepartment={false} githubBasis={detail.githubRepos?.basis ?? 'all'} />
             </Panel>
           </>
         )}

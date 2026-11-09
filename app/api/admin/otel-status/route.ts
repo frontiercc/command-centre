@@ -6,7 +6,7 @@
 // plain selects/joins/aggregates via the query builder (Number()-safe since
 // Drizzle's own column codecs decode bigint({mode:'number'}) correctly).
 import { NextRequest, NextResponse } from 'next/server';
-import { and, desc, eq, gte, inArray, sql } from 'drizzle-orm';
+import { and, eq, gte, inArray, sql } from 'drizzle-orm';
 import { getAdminSession } from '@/lib/auth/admin-auth';
 import { getTypedClient } from '@/lib/db/client';
 import { schema } from '@/lib/db/schema';
@@ -14,6 +14,8 @@ import { getConfigValue } from '@/lib/config';
 import { getCollectorConnection } from '@/lib/setup/collector';
 import { logAccess } from '@/lib/audit/log';
 import { OPENAI_SOURCES, OPENAI_USER_SOURCE } from '@/lib/openai/sources';
+import { productExpr } from '@/lib/dashboard/product-sql';
+import { FIRST_SEEN_USER_SOURCES, firstSeenLabel } from '@/lib/sources/first-seen';
 
 export const dynamic = 'force-dynamic';
 
@@ -50,20 +52,33 @@ export async function GET(request: NextRequest) {
     .where(and(eq(u.source, 'otel'), gte(u.first_seen_at, today)));
   const newUsersToday = Number(newUsersTodayRows[0]?.c ?? 0);
 
-  // People first seen through either capture path: Claude's telemetry or OpenAI's Compliance API.
-  const recentOtelUsers = await client
-    .select({
-      id: u.id,
-      display_name: u.display_name,
-      email: u.email,
-      department: u.department,
-      last_seen_at: u.last_seen_at,
-      source: u.source,
-    })
-    .from(u)
-    .where(inArray(u.source, ['otel', OPENAI_USER_SOURCE]))
-    .orderBy(desc(u.last_seen_at))
-    .limit(10);
+  // People first seen through any capture path: Claude's telemetry, Anthropic's
+  // Compliance API or OpenAI's. Each is labelled with the product of their
+  // earliest surviving prompt, or their arrival route when none survives.
+  const recentRows = (await client.execute(sql`
+    SELECT u.id, u.display_name, u.email, u.department, u.last_seen_at, u.source,
+           fp.product AS first_product, fp.app AS first_app
+      FROM users u
+      LEFT JOIN LATERAL (
+        SELECT ${sql.raw(productExpr('cm.'))} AS product, cm.product AS app
+          FROM cowork_messages cm
+         WHERE cm.user_id = u.id AND cm.message_type IN ('cowork_user_message', 'code_user_message')
+         ORDER BY cm.occurred_at, cm.id
+         LIMIT 1
+      ) fp ON TRUE
+     WHERE u.source IN (${sql.join(FIRST_SEEN_USER_SOURCES.map(v => sql`${v}`), sql`, `)})
+     ORDER BY u.last_seen_at DESC
+     LIMIT 10`) as unknown as { rows: Array<Record<string, unknown>> }).rows;
+  const str = (v: unknown): string | null => (typeof v === 'string' ? v : null);
+  const recentOtelUsers = recentRows.map(r => ({
+    id: String(r.id),
+    display_name: str(r.display_name),
+    email: str(r.email),
+    department: str(r.department),
+    last_seen_at: r.last_seen_at === null || r.last_seen_at === undefined ? null : Number(r.last_seen_at),
+    source: str(r.source),
+    first_seen_in: firstSeenLabel(str(r.first_product), str(r.first_app), str(r.source)),
+  }));
 
   // OpenAI's Compliance API (ChatGPT and Codex): the key and workspace live on
   // Admin → Security; this is how the sync is doing.

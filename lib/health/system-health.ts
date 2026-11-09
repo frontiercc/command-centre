@@ -21,6 +21,7 @@ import { schema } from '@/lib/db/schema';
 import { getConfigValue, getUnreadableSecretKeys } from '@/lib/config';
 import { JOB_CATALOG } from '@/lib/health/job-catalog';
 import { OPENAI_SOURCES } from '@/lib/openai/sources';
+import { readOpenAiLastArrivals } from '@/lib/health/openai-arrivals';
 
 export type JobStatus = 'ok' | 'failing' | 'not_run';
 
@@ -126,13 +127,6 @@ export async function getSystemHealth(nowS: number = Math.floor(Date.now() / 100
       .where(and(eq(cm.surface, surface), sql`${cm.source} NOT IN (${openAiList})`));
     return num(rows[0]?.v);
   };
-  const maxOccurredFor = async (sources: string[]) => {
-    const rows = await client
-      .select({ v: sql<number | string | null>`MAX(${cm.occurred_at})` })
-      .from(cm)
-      .where(sql`${cm.source} IN (${sql.join(sources.map(s => sql`${s}`), sql`, `)})`);
-    return num(rows[0]?.v);
-  };
   const com = schema.codeOtelMetrics;
   const metricsRows = await client.select({ v: sql<number | string | null>`MAX(${com.occurred_at})` }).from(com);
   const chatRows = await client.select({ v: sql<number | string | null>`MAX(${cm.ingested_at})` }).from(cm).where(eq(cm.surface, 'chat'));
@@ -147,8 +141,10 @@ export async function getSystemHealth(nowS: number = Math.floor(Date.now() / 100
   if (complianceKey || chatLast !== null) {
     surfaces.push({ key: 'chat', label: 'Chat (Compliance API)', lastEventAt: chatLast });
   }
-  const chatgptLast = await maxOccurredFor(['chatgpt_chat', 'chatgpt_work']);
-  const codexLast = await maxOccurredFor(['codex']);
+  // ChatGPT and Codex as two sources, each from everything the sync writes for
+  // it (prompts, replies or turns and actions, spend), by when it arrived: the
+  // same reading the telemetry-silence alert uses.
+  const { chatgpt: chatgptLast, codex: codexLast } = await readOpenAiLastArrivals();
   if ((await getConfigValue('openaiAdminApiKey')) || chatgptLast !== null || codexLast !== null) {
     surfaces.push({ key: 'chatgpt', label: 'ChatGPT (OpenAI Compliance API)', lastEventAt: chatgptLast });
     surfaces.push({ key: 'codex', label: 'Codex (OpenAI Compliance API)', lastEventAt: codexLast });

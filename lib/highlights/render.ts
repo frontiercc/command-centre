@@ -49,7 +49,9 @@ export function renderHighlightsPost(input: HighlightsInput, composed: ComposedH
 
   if (input.codeOutput) {
     const c = input.codeOutput;
-    const prefix = c.basis === 'rolling' ? 'Over the last 30 days, ' : '';
+    const prefix = c.claudeCodeLabel
+      ? (c.basis === 'rolling' ? 'Over the last 30 days in Claude Code, ' : 'In Claude Code, ')
+      : (c.basis === 'rolling' ? 'Over the last 30 days, ' : '');
     lines.push(`:computer: ${prefix}${fmt(c.linesChanged)} lines of code changed from ${fmt(c.handsOnHours)} hours at the keyboard, and ${fmt(c.changesKept)} of the ${fmt(c.changesProposed)} changes Claude proposed were kept`);
   }
 

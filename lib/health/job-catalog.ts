@@ -44,6 +44,7 @@ export const JOB_CATALOG: readonly JobCatalogEntry[] = [
   { name: 'pulse_weekly_briefing', label: 'Work Pulse weekly briefing', infrequent: true },
   { name: 'pulse_cio_briefing', label: 'Executive briefing', infrequent: true },
   { name: 'weekly_digest', label: 'Weekly digest' },
+  { name: 'anomaly_detection', label: 'Anomaly detection', infrequent: true },
   { name: 'system_health_alerts', label: 'System health alerts' },
   { name: 'alerts_slack_sweep', label: 'High-priority alerts to Slack' },
   { name: 'skills_discover', label: 'Skills discovery', infrequent: true },

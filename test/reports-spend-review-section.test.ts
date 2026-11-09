@@ -6,7 +6,7 @@
 // unpriced spend never reads $0; the month is stated when the report window
 // differs; Anthropic limits appear only with an ok snapshot.
 import { describe, it, expect } from 'vitest';
-import { renderSpendReviewSection, routeSentence, monthElapsed } from '@/lib/reports/spend-review-sections';
+import { renderSpendReviewSection, routeSentence, monthElapsed, chooseEfficiencyBoards } from '@/lib/reports/spend-review-sections';
 import { REPORT_SECTIONS, availableSections } from '@/lib/reports/section-catalog';
 import { gapPct } from '@/lib/finance/spend-review-format';
 
@@ -48,7 +48,11 @@ describe('Spend Review report section', () => {
     expect(md).toContain('**Marco Rossi** ($2,118)');
     expect(md).toContain('save with Claude Sonnet 5 instead of Claude Opus 5.5: 50% of the price per token, backed by 113 colleague sessions of this work, about $66.17 (27% of this work) less at list price (estimate)');
     expect(md).toContain('long conversations: 62% of this cost is re-reading earlier conversation, against 37% for colleagues');
+    expect(md).toContain('#### Most efficient on Claude in September 2026');
+    expect(md).toContain('Scored on Claude Code and Cowork work only.');
     expect(md).toContain('| 1 | Gabriel | Engineering | 58% below | 275 | 12% vs 3% |');
+    // A Claude-only hub: no OpenAI board.
+    expect(md).not.toContain('Most efficient on OpenAI');
   });
 
   it('never shows unpriced spend as $0', () => {
@@ -83,13 +87,55 @@ describe('Spend Review report section', () => {
   });
 
   it("shows last month's board, and says why, while this month has nobody ranked", () => {
-    const md = renderSpendReviewSection(input({ period: '2026-10', index: { ...index, period: '2026-10', efficiency: [] }, board: { rows: index.efficiency, period: '2026-09' } }));
-    expect(md).toContain('#### Most efficient in September 2026');
-    expect(md).toContain('Showing September 2026: nobody has 10 sessions in October 2026 yet');
+    const md = renderSpendReviewSection(input({ period: '2026-10', index: { ...index, period: '2026-10', efficiency: [] }, boards: [{ vendor: 'claude', rows: index.efficiency, period: '2026-09' }] }));
+    expect(md).toContain('#### Most efficient on Claude in September 2026');
+    expect(md).toContain('Showing September 2026: nobody has 10 sessions of Claude work in October 2026 yet');
     expect(md).toContain('| 1 | Gabriel | Engineering | 58% below |');
     const own = renderSpendReviewSection(input());
-    expect(own).toContain('#### Most efficient in September 2026');
+    expect(own).toContain('#### Most efficient on Claude in September 2026');
     expect(own).not.toContain('Showing September 2026');
+  });
+
+  it('carries the Claude and OpenAI boards apart, each with its own fallback to last month', () => {
+    const claudeNow = [{ userId: 'c1', displayName: 'Claude Now', department: 'Sales', vsColleagues: 0.5, sessions: 12, deepRate: 0.3, peerDeepRate: 0.3 }];
+    const openaiLast = [{ userId: 'o1', displayName: 'OpenAI Last', department: 'Ops', vsColleagues: 0.8, sessions: 11, deepRate: 0.2, peerDeepRate: 0.25 }];
+    const now = { openai: true, efficiency: claudeNow, efficiencyOpenai: [] };
+    const prior = { period: '2026-09', openai: true, efficiency: [], efficiencyOpenai: openaiLast };
+    const connected = { claude: true, openai: true };
+    const boards = chooseEfficiencyBoards({ period: '2026-10', index: now as never, prior: prior as never, connected });
+    expect(boards).toEqual([
+      { vendor: 'claude', rows: claudeNow, period: '2026-10' },
+      { vendor: 'openai', rows: openaiLast, period: '2026-09' },
+    ]);
+    const md = renderSpendReviewSection(input({ period: '2026-10', periodStart: '2026-10-01T00:00:00Z', periodEnd: '2026-10-31T23:59:59Z', boards }));
+    expect(md).toContain('#### Most efficient on Claude in October 2026');
+    expect(md).toContain('| 1 | Claude Now | Sales | 50% below | 12 | 30% vs 30% |');
+    expect(md).toContain('#### Most efficient on OpenAI in September 2026');
+    expect(md).toContain('Showing September 2026: nobody has 10 sessions of OpenAI work in October 2026 yet');
+    expect(md).toContain('Scored on ChatGPT and Codex work only.');
+    expect(md).toContain('| 1 | OpenAI Last | Ops | 20% below | 11 | 20% vs 25% |');
+    // Claude's board comes first, and neither borrows the other's people.
+    expect(md.indexOf('on Claude')).toBeLessThan(md.indexOf('on OpenAI'));
+    const claudeBlock = md.slice(md.indexOf('on Claude'), md.indexOf('on OpenAI'));
+    expect(claudeBlock).not.toContain('OpenAI Last');
+  });
+
+  it('shows OpenAI only when it is connected and shown, and OpenAI alone on an OpenAI-only hub', () => {
+    const rows = [{ userId: 'x', displayName: 'X', department: null, vsColleagues: 0.5, sessions: 10, deepRate: 0.3, peerDeepRate: 0.3 }];
+    const idx = { openai: false, efficiency: rows, efficiencyOpenai: rows };
+    // Hidden on the OpenAI panel (openai false, no OpenAI spend shown): Claude's board only.
+    expect(chooseEfficiencyBoards({ period: '2026-10', index: idx as never, prior: null, connected: { claude: true, openai: false, openaiConnected: true } }).map(b => b.vendor)).toEqual(['claude']);
+    // Connected and shown: both.
+    expect(chooseEfficiencyBoards({ period: '2026-10', index: idx as never, prior: null, connected: { claude: true, openai: true } }).map(b => b.vendor)).toEqual(['claude', 'openai']);
+    // OpenAI only: OpenAI alone.
+    const only = chooseEfficiencyBoards({ period: '2026-09', index: { ...idx, openai: true } as never, prior: null, connected: { claude: false, openai: true } });
+    expect(only.map(b => b.vendor)).toEqual(['openai']);
+    const md = renderSpendReviewSection(input({ boards: only }));
+    expect(md).toContain('#### Most efficient on OpenAI in September 2026');
+    expect(md).not.toContain('Most efficient on Claude');
+    // No fallback for a past month (no prior passed) and none when last month is empty too: the board is left out.
+    const none = renderSpendReviewSection(input({ boards: [{ vendor: 'openai', rows: [], period: '2026-09' }] }));
+    expect(none).not.toContain('Most efficient on');
   });
 
   it('shows a small gap to colleagues as it is, never rounded to 0%', () => {

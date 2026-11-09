@@ -1,7 +1,7 @@
 // Copyright 2026 Lee James
 // SPDX-License-Identifier: Apache-2.0
 
-import { getConfigValue, setConfigValue } from '@/lib/config';
+import { getAllConfig, getConfigValue, setConfigValue } from '@/lib/config';
 import { runComplianceSyncJob } from '@/lib/compliance/job';
 import { ingestAnalyticsSnapshots } from '@/lib/anthropic/analytics';
 import { runRetentionCleanup } from '@/lib/retention/cleanup';
@@ -41,6 +41,7 @@ let schedulerGeneration = 0;
 let descriptionRunInFlight = false;
 let judgeRunInFlight = false;
 let openAiSyncInFlight = false;
+let anomalyRunInFlight = false;
 
 /**
  * Wall-clock budget per SCHEDULED classifier drain. Bounds when a pass may
@@ -113,6 +114,31 @@ async function claimUseCaseJudgeRun(): Promise<boolean> {
     return true;
   } catch (err) {
     console.error('[Scheduler] Could not check use case judging:', err instanceof Error ? err.message : err);
+    return false;
+  }
+}
+
+/**
+ * Whether to start the daily anomaly detection run now (once a day, never
+ * while one is still in flight, never without a Claude API key: it is a model
+ * call). Marks the run as started when it returns true. Never throws.
+ */
+async function claimAnomalyDetectionRun(): Promise<boolean> {
+  try {
+    if (anomalyRunInFlight) return false;
+    if (!(await getConfigValue('anthropicAiApiKey'))) return false;
+    // Nothing to raise when every alert type the detector produces is off on
+    // Admin → Risk Scoring, so make no model call.
+    const cfg = await getAllConfig();
+    if (!cfg.riskAlertAnomalyEnabled && !cfg.riskAlertPolicyEnabled && !cfg.riskAlertAdoptionEnabled && !cfg.riskAlertRiskEnabled) return false;
+    const lastRun = await getConfigValue('anomalyDetectionLastRun');
+    const oneDayAgo = new Date(Date.now() - 24 * 60 * 60 * 1000).toISOString();
+    if (lastRun && lastRun >= oneDayAgo) return false;
+    anomalyRunInFlight = true;
+    await setConfigValue('anomalyDetectionLastRun', new Date().toISOString());
+    return true;
+  } catch (err) {
+    console.error('[Scheduler] Could not check anomaly detection:', err instanceof Error ? err.message : err);
     return false;
   }
 }
@@ -419,6 +445,19 @@ async function runCycle(): Promise<void> {
   await runJob('weekly_digest', 'Weekly Exec Digest', async () => {
     await runDigestJob();
   });
+
+  // AI anomaly detection (risk scoring), once a day. Until this it ran only
+  // when an admin pressed Analyse. STARTED, NOT AWAITED, like the other model
+  // side jobs, so a slow model call never holds up the cycle; runJob records
+  // the real outcome. Dynamic import: lib/anthropic/ai.ts imports queueAiCall
+  // from this module. It skips itself when every risk alert type is off.
+  if (await claimAnomalyDetectionRun()) {
+    void runJob('anomaly_detection', 'Anomaly detection', async () => {
+      const { runAnomalyDetection } = await import('@/lib/anthropic/ai');
+      const alerts = await runAnomalyDetection();
+      if (alerts.length) console.log(`[Scheduler] Anomaly detection: ${alerts.length} alert(s) raised`);
+    }).finally(() => { anomalyRunInFlight = false; });
+  }
 
   // System-health alerts — hourly, from job_runs (key rejected, job failing,
   // retention stale). Runs before the Slack sweep so a new alert goes out in

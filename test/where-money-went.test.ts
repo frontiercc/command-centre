@@ -3,7 +3,7 @@
 
 // Where the money went: the split rules, no database.
 import { describe, it, expect } from 'vitest';
-import { SpendSplitAcc, hasBreakdown } from '@/lib/finance/where-money-went';
+import { SpendSplitAcc, hasBreakdown, onlyModel } from '@/lib/finance/where-money-went';
 
 describe('SpendSplitAcc', () => {
   it('splits main conversation, subagents and unrecorded calls', () => {
@@ -52,5 +52,25 @@ describe('SpendSplitAcc', () => {
     a.add({ model: 'opus', subagent: null, skill: null, sourceRecorded: true, usd: 1, calls: 1 });
     expect(hasBreakdown(a.result())).toBe(false);
     expect(hasBreakdown(null)).toBe(false);
+  });
+});
+
+describe('onlyModel', () => {
+  it('names the one model a split ran on, and nothing for none or several', () => {
+    const one = new SpendSplitAcc();
+    one.add({ model: 'gpt-5', subagent: null, skill: null, sourceRecorded: true, usd: 0.7, calls: 2 });
+    one.add({ model: 'gpt-5', subagent: null, skill: null, sourceRecorded: true, usd: 0.5, calls: 1 });
+    expect(onlyModel(one.result())).toBe('gpt-5');
+
+    const unpriced = new SpendSplitAcc();
+    unpriced.add({ model: 'gpt-mystery', subagent: null, skill: null, sourceRecorded: true, usd: null, calls: 1 });
+    expect(onlyModel(unpriced.result())).toBe('gpt-mystery');
+
+    const two = new SpendSplitAcc();
+    two.add({ model: 'gpt-5', subagent: null, skill: null, sourceRecorded: true, usd: 1, calls: 1 });
+    two.add({ model: 'gpt-5-mini', subagent: null, skill: null, sourceRecorded: true, usd: 1, calls: 1 });
+    expect(onlyModel(two.result())).toBeNull();
+    expect(onlyModel(new SpendSplitAcc().result())).toBeNull();
+    expect(onlyModel(null)).toBeNull();
   });
 });

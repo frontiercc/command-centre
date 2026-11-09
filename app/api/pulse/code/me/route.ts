@@ -20,6 +20,7 @@ import { getAllConfig } from '@/lib/config';
 import { canViewSpendReview } from '@/lib/finance/spend-review-access';
 import { hasCodexData, readCodeMetrics, trendVendor, codeSessionVendor } from '@/lib/pulse/code/vendor-view';
 import { codexActionCounts } from '@/lib/pulse/code/aggregator';
+import { githubRepoBasis, githubBasisColumn, type GithubRepoBasis } from '@/lib/pulse/code/github-tool-match';
 
 export const dynamic = 'force-dynamic';
 
@@ -96,7 +97,10 @@ export async function GET(request: NextRequest) {
   // Per-user GitHub repos: 35d window rows scoped to
   // currently-mapped repos. null = no window rows at all ("Not captured"
   // rendering); count7d: 0 = window rows exist but none in the last 7 days.
-  let githubRepos: { count7d: number; names7d: string[] } | null = null;
+  // Claude and Codex tabs count only repos with commits matched to that tool;
+  // All (and a hub without Codex, which has no tabs) counts every repo.
+  const githubBasis = githubRepoBasis(vendor, codexPresent);
+  let githubRepos: { count7d: number; names7d: string[]; basis: GithubRepoBasis } | null = null;
   if (userId) {
     const grm = schema.githubRepoMap;
     const gurs = schema.githubUserRepoStats;
@@ -106,12 +110,16 @@ export async function GET(request: NextRequest) {
       const since35 = new Date((now - 35 * 24 * 3600) * 1000).toISOString().slice(0, 10);
       const since7 = new Date((now - 7 * 24 * 3600) * 1000).toISOString().slice(0, 10);
       const rows = await client
-        .select({ repo: gurs.repo, date: gurs.date, c: gurs.commit_count })
+        .select({ repo: gurs.repo, date: gurs.date, c: githubBasisColumn(gurs, githubBasis) })
         .from(gurs)
         .where(and(eq(gurs.user_id, userId), gte(gurs.date, since35), inArray(gurs.repo, mappedRepos)));
-      if (rows.length > 0) {
-        const repos7 = [...new Set(rows.filter(r => r.date >= since7 && Number(r.c) > 0).map(r => r.repo))].sort();
-        githubRepos = { count7d: repos7.length, names7d: repos7.slice(0, 3) };
+      // A tool's count is not measured on days synced before commits were
+      // matched to tools (null), so with no matched day in the last 7 the card
+      // stays empty rather than reading 0.
+      const measured7 = rows.some(r => r.date >= since7 && r.c != null);
+      if (rows.length > 0 && (githubBasis === 'all' || measured7)) {
+        const repos7 = [...new Set(rows.filter(r => r.date >= since7 && Number(r.c ?? 0) > 0).map(r => r.repo))].sort();
+        githubRepos = { count7d: repos7.length, names7d: repos7.slice(0, 3), basis: githubBasis };
       }
     }
   }

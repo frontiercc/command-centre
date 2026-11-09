@@ -7,7 +7,7 @@
 // leave content stripped/deleted from some tables but not others, which is
 // exactly the all-or-nothing guarantee the original single `db.transaction`
 // gave), row counts via the rowsAffected() helper.
-import { and, eq, gt, inArray, isNotNull, isNull, lt, ne, or } from 'drizzle-orm';
+import { and, eq, gt, inArray, isNotNull, isNull, lt, ne, or, sql } from 'drizzle-orm';
 import { getTypedClient } from '@/lib/db/client';
 import { schema } from '@/lib/db/schema';
 import { withTx } from '@/lib/db/with-tx';
@@ -34,6 +34,8 @@ export interface CleanupResult {
   chat_rows_affected: number;
   alerts_rows_affected: number;
   analytics_rows_affected: number;
+  /** Sessions whose attached file names were cleared (past their window). */
+  session_files_cleared?: number;
   duration_ms: number;
   mode: 'strip' | 'purge';
   archived?: {
@@ -44,6 +46,8 @@ export interface CleanupResult {
     chat_rows: number;
     chat_meta_rows: number;
     error_rows: number;
+    /** ChatGPT and Codex rows from the OpenAI-only tables. */
+    openai_rows: number;
     destination: string;
   };
   archive_error?: string;
@@ -110,6 +114,7 @@ export async function runRetentionCleanup(): Promise<CleanupResult> {
   let codeMetricsAffected = 0;
   let alertsAffected = 0;
   let analyticsAffected = 0;
+  let sessionFilesCleared = 0;
   let archiveResult: CleanupResult['archived'] | undefined;
 
   // ── Archive step (runs BEFORE cleanup) ──────────────────────────────
@@ -143,6 +148,21 @@ export async function runRetentionCleanup(): Promise<CleanupResult> {
       const chatRows = await client.select().from(schema.coworkMessages).where(and(lt(schema.coworkMessages.occurred_at, chatCutoff), eq(schema.coworkMessages.surface, 'chat'))) as { occurred_at: number; [key: string]: unknown }[];
       const chatMetaRows = await client.select().from(schema.chatAssistantMeta).where(lt(schema.chatAssistantMeta.occurred_at, chatCutoff)) as { occurred_at: number; [key: string]: unknown }[];
       const errorRows = await client.select().from(schema.errorEvents).where(lt(schema.errorEvents.occurred_at, errorCutoff)) as { occurred_at: number; [key: string]: unknown }[];
+      // OpenAI-only tables, on the same cutoffs the cleanup below deletes them
+      // by: ChatGPT on the Cowork window, Codex on the Code window. Tables
+      // without an occurred_at column carry their own time column across as
+      // occurred_at, which the archive key and file are built from.
+      type Row = { occurred_at: number; [key: string]: unknown };
+      const asArchiveRows = (rows: Record<string, unknown>[], timeCol: string): Row[] =>
+        rows.map((r) => ({ ...r, occurred_at: Number(r[timeCol]) }));
+      const openaiRepliesRows = asArchiveRows(await client.select().from(schema.openaiReplies).where(lt(schema.openaiReplies.occurred_at, coworkCutoff)), 'occurred_at');
+      const codexActionsRows = asArchiveRows(await client.select().from(schema.codexActions).where(lt(schema.codexActions.occurred_at, codeCutoff)), 'occurred_at');
+      const codexTurnsRows = asArchiveRows(await client.select().from(schema.codexTurns).where(lt(schema.codexTurns.started_at, codeCutoff)), 'started_at');
+      const openaiCostsRows = asArchiveRows(await client.select().from(schema.openaiCosts).where(and(ne(schema.openaiCosts.product, 'codex'), lt(schema.openaiCosts.hour_start, coworkCutoff))), 'hour_start');
+      const openaiCostsCodexRows = asArchiveRows(await client.select().from(schema.openaiCosts).where(and(eq(schema.openaiCosts.product, 'codex'), lt(schema.openaiCosts.hour_start, codeCutoff))), 'hour_start');
+      const chatgptSessionTimeRows = asArchiveRows(await client.select().from(schema.chatgptSessionTime).where(lt(schema.chatgptSessionTime.last_at, coworkCutoff)), 'last_at');
+      const openaiRowCount = openaiRepliesRows.length + codexActionsRows.length + codexTurnsRows.length
+        + openaiCostsRows.length + openaiCostsCodexRows.length + chatgptSessionTimeRows.length;
 
       const tableResults: Record<string, { rows: number; file: string | null }> = {};
 
@@ -154,6 +174,12 @@ export async function runRetentionCleanup(): Promise<CleanupResult> {
         ['cowork_messages_chat', chatRows, chatCutoff],
         ['chat_assistant_meta', chatMetaRows, chatCutoff],
         ['error_events', errorRows, errorCutoff],
+        ['openai_replies', openaiRepliesRows, coworkCutoff],
+        ['codex_actions', codexActionsRows, codeCutoff],
+        ['codex_turns', codexTurnsRows, codeCutoff],
+        ['openai_costs', openaiCostsRows, coworkCutoff],
+        ['openai_costs_codex', openaiCostsCodexRows, codeCutoff],
+        ['chatgpt_session_time', chatgptSessionTimeRows, coworkCutoff],
       ] as [string, { occurred_at: number; [key: string]: unknown }[], number][]) {
         if (rows.length > 0) {
           const key = buildArchiveKey(name, rows, cutoff);
@@ -190,13 +216,14 @@ export async function runRetentionCleanup(): Promise<CleanupResult> {
         chat_rows: chatRows.length,
         chat_meta_rows: chatMetaRows.length,
         error_rows: errorRows.length,
+        openai_rows: openaiRowCount,
         destination: `${providerConfig.provider}://${providerConfig.bucket}/ccc-archive/`,
       };
 
       await insertErrorEvents([{
         severity: 'info',
         source: 'archive',
-        message: `Archived ${coworkRows.length} cowork, ${codeRows.length} code, ${otelRows.length} otel, ${complianceRows.length} compliance, ${chatRows.length} chat, ${chatMetaRows.length} chat_meta, ${errorRows.length} error rows`,
+        message: `Archived ${coworkRows.length} cowork, ${codeRows.length} code, ${otelRows.length} otel, ${complianceRows.length} compliance, ${chatRows.length} chat, ${chatMetaRows.length} chat_meta, ${errorRows.length} error, ${openaiRowCount} openai rows`,
         context_json: JSON.stringify(tableResults),
       }]);
 
@@ -283,6 +310,26 @@ export async function runRetentionCleanup(): Promise<CleanupResult> {
     const j = schema.useCaseSessionJudgements;
     await tx.delete(j).where(and(eq(j.surface, 'cowork'), lt(j.last_event_at, coworkCutoff)));
     await tx.delete(j).where(and(eq(j.surface, 'code'), lt(j.last_event_at, codeCutoff)));
+
+    // Attached file names on a session (Claude Cowork, ChatGPT, Claude Chat)
+    // are content-derived, so once the session's LAST activity is past its
+    // window they are cleared in BOTH modes. The session row stays:
+    // cowork_session_stats and the figures built on it hang off it.
+    // cowork_sessions has no last-activity column of its own (started_at is
+    // the earliest prompt, ended_at is rarely set), so the session counts as
+    // still active while any of its prompts, or its stats row, is inside the
+    // window. Claude Chat sessions (source 'compliance') follow the Chat
+    // window, as their prompts do; every other session the Cowork window.
+    const cs = schema.coworkSessions;
+    const pastWindow = (cutoff: number) => sql`COALESCE(${cs.ended_at}, ${cs.started_at}, ${cs.created_at}, 0) < ${cutoff}
+      AND NOT EXISTS (SELECT 1 FROM cowork_messages m WHERE m.session_id = ${cs.id} AND m.occurred_at >= ${cutoff})
+      AND NOT EXISTS (SELECT 1 FROM cowork_session_stats st WHERE st.session_id = ${cs.id} AND st.last_event_at >= ${cutoff})`;
+    sessionFilesCleared += rowsAffected(await tx.update(cs).set({ files_uploaded: null }).where(and(
+      isNotNull(cs.files_uploaded), ne(cs.source, 'compliance'), pastWindow(coworkCutoff),
+    )));
+    sessionFilesCleared += rowsAffected(await tx.update(cs).set({ files_uploaded: null }).where(and(
+      isNotNull(cs.files_uploaded), eq(cs.source, 'compliance'), pastWindow(chatCutoff),
+    )));
 
     if (mode === 'strip') {
       // cowork_messages — strip content columns (surface='cowork' only; the
@@ -579,6 +626,7 @@ export async function runRetentionCleanup(): Promise<CleanupResult> {
     chat_rows_affected: chatAffected + chatMetaAffected,
     alerts_rows_affected: alertsAffected,
     analytics_rows_affected: analyticsAffected,
+    session_files_cleared: sessionFilesCleared,
     duration_ms: Date.now() - start,
     mode,
     ...(archiveResult ? { archived: archiveResult } : {}),
@@ -589,7 +637,7 @@ export async function runRetentionCleanup(): Promise<CleanupResult> {
   await setConfigValue('retentionLastRun', now);
   await setConfigValue('retentionLastResult', JSON.stringify(result));
 
-  console.log(`[Retention] Cleanup complete (${mode}): cowork=${coworkAffected}, code=${codeAffected}, otel=${otelAffected}, compliance=${complianceAffected}, error=${errorAffected}, chat=${chatAffected}(+${chatMetaAffected} meta), code_metrics=${codeMetricsAffected}, alerts=${alertsAffected}, analytics=${analyticsAffected} in ${result.duration_ms}ms`);
+  console.log(`[Retention] Cleanup complete (${mode}): cowork=${coworkAffected}, code=${codeAffected}, otel=${otelAffected}, compliance=${complianceAffected}, error=${errorAffected}, chat=${chatAffected}(+${chatMetaAffected} meta), code_metrics=${codeMetricsAffected}, alerts=${alertsAffected}, analytics=${analyticsAffected}, session_files=${sessionFilesCleared} in ${result.duration_ms}ms`);
 
   return result;
 }

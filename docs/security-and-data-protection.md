@@ -138,12 +138,12 @@ Command Centre processes personal data about your employees to measure how teams
 
 | Category | Examples | Default retention | Can it be switched off |
 |---|---|---|---|
-| People and accounts | Email, display name, department, role, Claude user identifier | Until erased | No |
+| People and accounts | Email, display name, department, role, Claude user identifier, OpenAI account identifier | Until erased | No |
 | Prompts from Claude Cowork, Claude in Office/Google, Claude Code, ChatGPT and Codex | Text a person typed: first 4,000 characters plus a 250-character preview | 90 days on each product's window (Claude in Office/Google and ChatGPT follow Claude Cowork, Codex follows Claude Code), then content removed | Claude Code in its telemetry settings; ChatGPT and Codex by not configuring the OpenAI Admin API key |
 | Claude Chat prompts (Enterprise plan) | Text typed in Claude.ai, in full | 90 days, then content removed | Yes, by not configuring the Compliance Access Key |
 | Claude Chat reply metadata | Model, counts of artifacts and generated files | 90 days, then deleted | Yes, with Claude Chat capture |
 | ChatGPT and Codex reply records and spend | ChatGPT reply model and time (never the text); skill and connector names; Codex turns (model, tokens, OpenAI's cost figures); Codex tool calls (tool name, whether it failed, whether it was a commit; never the command); hourly cost per person, model and product | Same windows as the prompts, then deleted | Yes, with ChatGPT and Codex capture |
-| Activity metadata | Session timing, active time, model, tokens, cost, tool names and outcomes, connector and skill names, uploaded and produced file names | Message rows for the same period as prompts; Claude Cowork and ChatGPT session summaries, which hold the names of files attached, until erased | Claude Code tool detail depends on client settings |
+| Activity metadata | Session timing, active time, model, tokens, cost, tool names and outcomes, connector and skill names, uploaded and produced file names | Message rows for the same period as prompts; Claude Cowork, Claude Chat and ChatGPT session summaries until erased, with the names of files attached cleared once the session is past its window | Claude Code tool detail depends on client settings |
 | Code metrics | Lines added and removed, commits, pull requests, edit decisions | 90 days; weekly aggregates 400 days | Yes, client metrics setting |
 | AI-judged results | Delegation tier and kind of work, session descriptions, use case matches, hand-work time estimates, briefings, drafted skills | Mostly for the same period as the prompts they came from; briefings, Claude Cowork session estimates, use cases and skill drafts until deleted | Yes, per AI feature |
 | Alerts | PII, intent, cost and system alerts | Resolved and dismissed 90 days; open kept | Per alert type |
@@ -232,11 +232,11 @@ A retention job runs daily in a single database transaction, so a run either com
 
 In **strip** mode, the default, rows keep their metadata but lose their content: prompt text is replaced with a fixed marker, and full text, tool previews, PII dismissal reasons and output file names are cleared. In **purge** mode the rows are deleted. In both modes, AI-derived records tied to expired messages (classifications, capability events, session descriptions, use case judgements) and metadata-only tables such as chat reply metadata are deleted.
 
-People and accounts, Claude Cowork session summaries and the matching ChatGPT conversation records (including uploaded and attached file names), the use case register, drafted skills, coaching acknowledgements, Skills and Connectors Board entries and both logs are not time-limited. Records tied to a person among them are removed by erasure; the register, drafted skills and Board entries are removed by an administrator or manager; the two logs are kept. The chat pull never imports messages older than the chat retention window, so content removed by retention is not re-imported. The OpenAI sync likewise never imports a record older than the Claude Cowork window (ChatGPT) or the Claude Code window (Codex).
+People and accounts, Claude Cowork, Claude Chat and ChatGPT session summaries (whose attached file names are cleared once the session is past its window, in both modes), the use case register, drafted skills, coaching acknowledgements, Skills and Connectors Board entries and both logs are not time-limited. Records tied to a person among them are removed by erasure; the register, drafted skills and Board entries are removed by an administrator or manager; the two logs are kept. The chat pull never imports messages older than the chat retention window, so content removed by retention is not re-imported. The OpenAI sync likewise never imports a record older than the Claude Cowork window (ChatGPT) or the Claude Code window (Codex).
 
 ### Archive before purge
 
-Archiving to your Amazon S3 bucket is off by default; Azure Blob Storage and Google Cloud Storage are not yet supported. When enabled, rows due for removal from the message, raw telemetry, Compliance activity, chat and error tables are written as compressed JSON Lines with a manifest before anything is deleted, and a failed archive stops that day's run. The archive authenticates with credentials that you create, stored encrypted. Apply your own encryption, access policy and lifecycle to the bucket.
+Archiving to your Amazon S3 bucket is off by default; Azure Blob Storage and Google Cloud Storage are not yet supported. When enabled, rows due for removal from the message, raw telemetry, Compliance activity, chat and error tables, and from the ChatGPT and Codex reply, turn, action, spend and conversation-time tables, are written as compressed JSON Lines with a manifest before anything is deleted, and a failed archive stops that day's run. The archive authenticates with credentials that you create, stored encrypted. Apply your own encryption, access policy and lifecycle to the bucket.
 
 ### Erasure and export of a person's data
 
@@ -254,7 +254,7 @@ The **authentication event log** records sign-ins and failures, lockouts, MFA fa
 
 The Hub and Collector write their logs to standard output and standard error; with Docker Compose, `docker compose logs` shows them. Keeping those logs, alerting on them and forwarding them to your monitoring or SIEM are yours to set up.
 
-Within the application, failures of scheduled jobs and ingest, rejected integration keys and unreadable secrets are recorded and shown on the System health page. Optional alerts cover job failures, unreadable secrets and telemetry silence (no data from Claude Cowork, Claude Code, Claude Code metrics, or ChatGPT and Codex together, for three working hours by default). Any high or critical alert can be forwarded to a Slack channel you nominate within the hour.
+Within the application, failures of scheduled jobs and ingest, rejected integration keys and unreadable secrets are recorded and shown on the System health page. Optional alerts cover job failures, unreadable secrets and telemetry silence (no data from Claude Cowork, Claude Code, Claude Code metrics, ChatGPT or Codex, each watched on its own, for three working hours by default; ChatGPT and Codex are not watched while the OpenAI sync is paused). Any high or critical alert can be forwarded to a Slack channel you nominate within the hour.
 
 ## Vulnerability management and secure development
 
