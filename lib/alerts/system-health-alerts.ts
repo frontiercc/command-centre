@@ -48,8 +48,8 @@ export const COMBINE_AT = 4;
 
 /** Jobs whose failure can mean a rejected key, and the integration named. */
 export const KEY_JOBS: Record<string, string> = {
-  compliance_sync: 'Compliance API',
-  analytics_ingest: 'Analytics API',
+  compliance_sync: 'Anthropic Compliance API',
+  analytics_ingest: 'Anthropic Analytics API',
   github_sync: 'GitHub',
   pulse_classifier: 'Anthropic API',
   code_classifier: 'Anthropic API',

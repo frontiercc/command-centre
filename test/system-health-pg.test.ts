@@ -141,7 +141,7 @@ describe('getSystemHealth (postgres)', () => {
     const h = await health.getSystemHealth(NOW);
     expect(h.integrations).toEqual([
       { key: 'anthropicAiApiKey', label: 'Anthropic API (AI features)', status: 'ok', lastSucceededAt: NOW - 100, lastFailedAt: null, lastError: null },
-      { key: 'complianceAccessKey', label: 'Compliance API', status: 'failing', lastSucceededAt: null, lastFailedAt: NOW - 30, lastError: 'Compliance sync errors: HTTP 401' },
+      { key: 'complianceAccessKey', label: 'Anthropic Compliance API', status: 'failing', lastSucceededAt: null, lastFailedAt: NOW - 30, lastError: 'Compliance sync errors: HTTP 401' },
       { key: 'githubToken', label: 'GitHub', status: 'not_run', lastSucceededAt: null, lastFailedAt: null, lastError: null },
       { key: 'smtpHost', label: 'Email (SMTP)', status: 'untracked', lastSucceededAt: null, lastFailedAt: null, lastError: null },
     ]);

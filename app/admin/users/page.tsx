@@ -36,8 +36,8 @@ type Tab = 'active' | 'deactivated';
 
 function captureBadge(source: string | null): { label: string; title: string } {
   if (source === 'otel') return { label: 'OTel', title: 'Monitored via OpenTelemetry' };
-  if (source === 'compliance') return { label: 'Compliance API', title: 'Synced via the Anthropic Compliance API' };
-  if (source === 'openai') return { label: 'Compliance API', title: "First seen through OpenAI's Compliance API (ChatGPT or Codex)" };
+  if (source === 'compliance') return { label: 'Anthropic Compliance API', title: 'Synced via the Anthropic Compliance API' };
+  if (source === 'openai') return { label: 'OpenAI Compliance API', title: "First seen through OpenAI's Compliance API (ChatGPT or Codex)" };
   // People first seen by the retired local agent say so, as the Audit Log does.
   if (source === 'agent' || source === 'local-agent') return { label: 'Agent', title: 'First seen by the retired local agent' };
   return { label: 'Telemetry', title: 'Monitored via telemetry' };

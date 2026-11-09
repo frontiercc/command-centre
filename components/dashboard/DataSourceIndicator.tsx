@@ -25,12 +25,12 @@ export function DataSourceIndicator({ status }: { status: DataSourceStatus }) {
     <div className="flex flex-wrap items-center justify-end gap-2" aria-label="Data sources">
       {!openaiOnly && (
         <>
-          <SourceChip label="OTel" active={Boolean(status.otelCowork)} />
-          <SourceChip label="Compliance API" active={status.complianceApi} />
-          <SourceChip label="Analytics API" active={status.analyticsApi} />
+          <SourceChip label="OpenTelemetry" active={Boolean(status.otelCowork)} />
+          <SourceChip label="Anthropic Compliance API" active={status.complianceApi} />
+          <SourceChip label="Anthropic Analytics API" active={status.analyticsApi} />
         </>
       )}
-      {(status.openai || openaiOnly) && <SourceChip label="OpenAI" active />}
+      {(status.openai || openaiOnly) && <SourceChip label="OpenAI Compliance API" active />}
     </div>
   );
 }

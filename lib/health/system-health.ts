@@ -76,8 +76,8 @@ const num = (v: unknown): number | null => (v === null || v === undefined ? null
  */
 const INTEGRATIONS: { key: 'complianceAccessKey' | 'anthropicAiApiKey' | 'anthropicAnalyticsApiKey' | 'anthropicAdminApiKey' | 'githubToken' | 'smtpHost' | 'openaiAdminApiKey'; label: string; jobs: string[] }[] = [
   { key: 'anthropicAiApiKey', label: 'Anthropic API (AI features)', jobs: ['pulse_classifier', 'code_classifier'] },
-  { key: 'complianceAccessKey', label: 'Compliance API', jobs: ['compliance_sync'] },
-  { key: 'anthropicAnalyticsApiKey', label: 'Analytics API', jobs: ['analytics_ingest'] },
+  { key: 'complianceAccessKey', label: 'Anthropic Compliance API', jobs: ['compliance_sync'] },
+  { key: 'anthropicAnalyticsApiKey', label: 'Anthropic Analytics API', jobs: ['analytics_ingest'] },
   { key: 'anthropicAdminApiKey', label: 'Admin API', jobs: [] },
   { key: 'githubToken', label: 'GitHub', jobs: ['github_sync'] },
   { key: 'openaiAdminApiKey', label: 'OpenAI (ChatGPT and Codex)', jobs: ['openai_sync'] },
