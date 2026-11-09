@@ -611,9 +611,9 @@ export default function AuditPage() {
         <Notice tone="info">
           <div className="flex flex-col gap-0.5 text-[13px]">
             <span><span className="font-semibold">Claude Code:</span> Prompts, models, cost and tool use.</span>
-            <span><span className="font-semibold">Cowork:</span> Prompts, models, cost and tool use.</span>
+            <span><span className="font-semibold">Claude Cowork:</span> Prompts, models, cost and tool use.</span>
             <span><span className="font-semibold">Claude in Office and Claude in Google:</span> Prompts, models and tool use. No cost, and never the document&apos;s content.</span>
-            <span><span className="font-semibold">Chat:</span> Prompts, through the Compliance API (Enterprise plan).</span>
+            <span><span className="font-semibold">Claude Chat:</span> Prompts, through Anthropic&apos;s Compliance API (Claude for Enterprise).</span>
             <span><span className="font-semibold">ChatGPT and Codex:</span> Prompts, through OpenAI&apos;s Compliance API (ChatGPT Enterprise or Edu).</span>
             <span>Replies from Claude, ChatGPT and Codex are never stored.</span>
           </div>
