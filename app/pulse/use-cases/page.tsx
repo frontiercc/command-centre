@@ -97,12 +97,22 @@ function sessionsSplit(p: PlatformSessions | undefined, parts: VendorParts): str
   return out.length > 0 ? out.join(' · ') : null;
 }
 
-/** "Claude 12.5h · OpenAI 3.0h"; a vendor with no measured time reads "not measured". */
-function hoursSplit(h: { claude: number | null; openai: number | null } | undefined, parts: VendorParts): string | null {
+/**
+ * "Claude 12.5h · OpenAI 3.0h". A vendor with no matched sessions had no time
+ * on the work, a real 0h; one with sessions but no measured time reads
+ * "not measured".
+ */
+function hoursSplit(
+  h: { claude: number | null; openai: number | null } | undefined,
+  s: { claude: number; openai: number | null } | undefined,
+  parts: VendorParts,
+): string | null {
   if (!h) return null;
+  const one = (label: string, hours: number | null, sessions: number | null | undefined) =>
+    hours !== null ? `${label} ${fmtSplitHours(hours)}` : sessions === 0 ? `${label} ${fmtSplitHours(0)}` : `${label} not measured`;
   const out: string[] = [];
-  if (parts.claude) out.push(h.claude !== null ? `Claude ${fmtSplitHours(h.claude)}` : 'Claude not measured');
-  if (parts.openai) out.push(h.openai !== null ? `OpenAI ${fmtSplitHours(h.openai)}` : 'OpenAI not measured');
+  if (parts.claude) out.push(one('Claude', h.claude, s?.claude));
+  if (parts.openai) out.push(one('OpenAI', h.openai, s?.openai));
   return out.length > 0 ? out.join(' · ') : null;
 }
 
@@ -180,8 +190,8 @@ function BetsPanel({ bets, minutesPerSession, parts }: { bets: GovernanceBet[]; 
                       {bet.measured.hours != null
                         ? <span className="text-[#05073F]">{fmtHours(bet.measured.hours)} h</span>
                         : <span className="text-[#8F8F8F]">Not measured</span>}
-                      {split && hoursSplit(bet.measured.platformHours, parts) && (
-                        <div className="text-[13px] tabular-nums text-[#05073F] mt-0.5">{hoursSplit(bet.measured.platformHours, parts)}</div>
+                      {split && hoursSplit(bet.measured.platformHours, bet.measured.platformSessions, parts) && (
+                        <div className="text-[13px] tabular-nums text-[#05073F] mt-0.5">{hoursSplit(bet.measured.platformHours, bet.measured.platformSessions, parts)}</div>
                       )}
                     </td>
                     <td className={cx(T.tdRight, 'whitespace-nowrap text-[#2451F3]')}>

@@ -784,7 +784,7 @@ async function storeSpend(tx: TypedClient, s: SpendRow, userId: string | null, s
 function raiseAlerts(alerts: PendingAlert[]): void {
   for (const a of alerts) {
     if (a.pii.length > 0) {
-      createPiiAlertsWithDedup(a.userId, a.pii, a.text, a.messageId, a.surface, `${OPENAI_SOURCE_LABELS[a.source]} (Compliance API)`).catch((e: Error) => {
+      createPiiAlertsWithDedup(a.userId, a.pii, a.text, a.messageId, a.surface, `${OPENAI_SOURCE_LABELS[a.source]} (OpenAI Compliance API)`).catch((e: Error) => {
         console.error('[openai-sync] pii alert error:', e.message);
         void recordPiiAlertFailure(a.surface, a.messageId, e);
       });

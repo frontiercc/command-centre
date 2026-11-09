@@ -139,7 +139,7 @@ export async function getSystemHealth(nowS: number = Math.floor(Date.now() / 100
   const chatLast = num(chatRows[0]?.v);
   const complianceKey = await getConfigValue('complianceAccessKey');
   if (complianceKey || chatLast !== null) {
-    surfaces.push({ key: 'chat', label: 'Chat (Compliance API)', lastEventAt: chatLast });
+    surfaces.push({ key: 'chat', label: 'Claude Chat (Anthropic Compliance API)', lastEventAt: chatLast });
   }
   // ChatGPT and Codex as two sources, each from everything the sync writes for
   // it (prompts, replies or turns and actions, spend), by when it arrived: the

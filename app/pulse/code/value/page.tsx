@@ -131,7 +131,7 @@ export default function CodeValuePage() {
                   </p>
                   <p className="m-0 text-[13px] leading-[1.6] text-[#666666]">
                     Comparing AI-assisted commits/week across the {data.observedLift.highWeeks} highest vs {data.observedLift.lowWeeks} lowest AI-engaged-time weeks of the last 8 completed weeks, org-wide.
-                    {data.split?.codex ? ' Claude Code only: Codex reports no engaged time to compare against.' : ''}
+                    {data.split?.codex ? ' Claude Code only: Codex reports no engaged time to compare against. ' : ' '}
                     This is a <span className="font-semibold">correlation, not causation</span>: shown separately from the benchmark estimate above, never mixed into it.
                   </p>
                 </div>

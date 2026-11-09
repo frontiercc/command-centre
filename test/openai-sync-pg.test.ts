@@ -241,12 +241,12 @@ describe('OpenAI sync against the stand-in export', () => {
       expect(piiText.length).toBeGreaterThan(0);
       for (const a of piiText) {
         expect(a.explanation).not.toContain('via OTel');
-        expect(a.explanation).toMatch(/via (ChatGPT Chat|ChatGPT Work|Codex) \(Compliance API\)/);
+        expect(a.explanation).toMatch(/via (ChatGPT Chat|ChatGPT Work|Codex) \(OpenAI Compliance API\)/);
       }
       const chatPii = await sql.all<{ n: number }>(
         `SELECT COUNT(*) AS n FROM cowork_messages WHERE source = 'chatgpt_chat' AND flag_reason LIKE 'PII detected:%'`,
       );
-      if (chatPii[0].n > 0) expect(piiText.some(a => a.explanation.includes('via ChatGPT Chat (Compliance API)'))).toBe(true);
+      if (chatPii[0].n > 0) expect(piiText.some(a => a.explanation.includes('via ChatGPT Chat (OpenAI Compliance API)'))).toBe(true);
       // Intent alerts name the product too, in the title and in the evidence,
       // and it is the product the prompt really came from.
       const intentAlerts = await sql.all<{ title: string; raw_evidence: string }>(`SELECT title, raw_evidence::text AS raw_evidence FROM alerts WHERE alert_type = 'intent'`);
