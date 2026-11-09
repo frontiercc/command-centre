@@ -1,7 +1,7 @@
 // Copyright 2026 Lee James
 // SPDX-License-Identifier: Apache-2.0
 
-// The dashboard's vendor switch (All / Claude / OpenAI) and the three kinds of
+// The vendor switch (All / Claude / ChatGPT on every page) and the three kinds of
 // work its boxes and charts show. Client-safe: no server imports.
 //
 // Every prompt lives in cowork_messages; the kind of work comes from its
@@ -16,13 +16,10 @@ export type Vendor = (typeof VENDORS)[number];
 export const VENDOR_LABELS: Record<Vendor, string> = {
   all: 'All',
   claude: 'Claude',
-  openai: 'OpenAI',
+  openai: 'ChatGPT',
 };
 
-/**
- * Work Pulse's labels for the same switch. Codex is not in Work Pulse, so on
- * its pages OpenAI only ever means ChatGPT and the switch says so.
- */
+/** Work Pulse's labels for the same switch: one wording on every page. */
 export const WORK_PULSE_VENDOR_LABELS: Record<Vendor, string> = {
   all: 'All',
   claude: 'Claude',
@@ -30,13 +27,13 @@ export const WORK_PULSE_VENDOR_LABELS: Record<Vendor, string> = {
 };
 
 /**
- * Developer Pulse's labels for the same switch. Codex is its only OpenAI
- * product, so on its pages the OpenAI view is named Codex.
+ * Developer Pulse's labels for the same switch: one wording on every page.
+ * Codex, its OpenAI product, is still named inside the page.
  */
 export const DEVELOPER_PULSE_VENDOR_LABELS: Record<Vendor, string> = {
   all: 'All',
   claude: 'Claude',
-  openai: 'Codex',
+  openai: 'ChatGPT',
 };
 
 export type WorkKind = 'chat' | 'work' | 'code';

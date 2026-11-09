@@ -3,7 +3,7 @@
 
 'use client';
 
-// The All / Claude / OpenAI switch shared by the dashboard, Work Pulse and
+// The All / Claude / ChatGPT switch shared by the dashboard, Work Pulse and
 // Developer Pulse. One remembered choice per browser, so a view picked on one
 // page carries to the others. An install with only OpenAI connected has no
 // switch: every page shows the OpenAI view.
@@ -84,7 +84,7 @@ export function VendorSwitch({ vendor, onChange, openaiPresent, labels = VENDOR_
   vendor: Vendor;
   onChange: (v: Vendor) => void;
   openaiPresent: boolean;
-  /** Work Pulse passes WORK_PULSE_VENDOR_LABELS (All / Claude / ChatGPT). */
+  /** All / Claude / ChatGPT on every page. */
   labels?: Record<Vendor, string>;
 }) {
   const openaiOnly = useOpenAiOnly();

@@ -8,7 +8,7 @@ import { useRouter } from 'next/navigation';
 import Link from 'next/link';
 import TopBar from '@/components/layout/TopBar';
 import LoadingSpinner from '@/components/shared/LoadingSpinner';
-import { formatSuggestionEvidenceLine } from '@/lib/usecases/suggestion-format';
+import { formatSuggestionEvidenceLine, formatSuggestionProducts, type SuggestionProducts } from '@/lib/usecases/suggestion-format';
 import DeptProcessBoxes from '@/components/usecases/DeptProcessBoxes';
 import ProcessCanvasCard from '@/components/usecases/ProcessCanvasCard';
 import type { ProcessCanvas } from '@/lib/usecases/suggestion-store';
@@ -42,6 +42,8 @@ interface SuggestionDraft {
   department: string | null;
   canvas: ProcessCanvas | null;
   surface?: 'cowork' | 'code' | null;
+  /** Sessions by product; null while ChatGPT and Codex are hidden or on older rows. */
+  products?: SuggestionProducts | null;
 }
 
 const STATUS_ORDER: UseCase['status'][] = ['confirmed', 'candidate', 'archived'];
@@ -321,6 +323,9 @@ export default function UseCasesRegisterPage() {
                           )}
                         </button>
                         <span className="text-[13px] text-[#05073F] tabular-nums">{formatSuggestionEvidenceLine(s)}</span>
+                        {s.products && formatSuggestionProducts(s.products) && (
+                          <span className="text-[13px] text-[#05073F] tabular-nums">Found in {formatSuggestionProducts(s.products)}</span>
+                        )}
                         <div className="flex items-center gap-2 pt-1">
                           <button
                             type="button"

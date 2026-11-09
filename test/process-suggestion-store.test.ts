@@ -50,6 +50,20 @@ describe('dept process suggestion storage (migration 077/0018)', () => {
     expect(boxes).toEqual([expect.objectContaining({ department: 'Finance', count: 1 })]);
   });
 
+  it('counts the sessions behind a suggestion by product, from the sessions it was found in', async () => {
+    await store.upsertOpenSuggestion({
+      signalKey: 'k-dept-products', title: 'Pipeline forecast workbook build', description: null,
+      matchingRule: { skills: [], connectors: [], taskTypes: [], departments: ['Sales'] },
+      evidence: { distinctUsers: 2, sessionCount: 4, departments: ['Sales'] },
+      nowS: 1000, department: 'Sales', canvas: { ...CANVAS, sessions: 4 }, surface: 'cowork',
+      citedSessions: ['chatgpt:a', 'cw-1', 'chatgpt:b', 'codex:c'],
+    });
+    const all = await store.listOpenSuggestions();
+    expect(all.find(s => s.signalKey === 'k-dept-products')!.products).toEqual({ claude: 1, chatgpt: 2, codex: 1 });
+    // Stored without its sessions (older rows): no product line, never a guess.
+    expect(all.find(s => s.signalKey === 'k-dept-1')!.products).toBeNull();
+  });
+
   it('round-trips use_cases canvas fields', async () => {
     const uc = await queries.createUseCase({ title: 'T', painPoint: 'p', valueHypothesis: 'v', baselineNote: 'b', kpiNote: 'k' });
     const back = (await queries.getUseCase(uc.id))!;
