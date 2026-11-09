@@ -10,7 +10,7 @@ import LoadingSpinner from '@/components/shared/LoadingSpinner';
 import { useToast } from '@/components/shared/ToastProvider';
 import IdentityConflictsCard from '@/components/admin/IdentityConflictsCard';
 import CollectorConnection from '@/components/setup/CollectorConnection';
-import { PageBody, Panel, Muted, T, B, C, cx } from '@/components/precision/ui';
+import { PageBody, Panel, Muted, T, B, C, Tag, cx } from '@/components/precision/ui';
 import { firstSeenLabel } from '@/lib/sources/first-seen';
 
 interface OtelStatus {
@@ -207,7 +207,7 @@ export default function IngestionPage() {
             </Panel>
 
             {/* Connect ChatGPT and Codex: what OpenAI's Compliance API needs, where to enter it, then its status */}
-            <Panel title="Connect ChatGPT and Codex" subtitle="OpenAI's Compliance API, read with an admin key. Nothing is set on people's computers.">
+            <Panel title="Connect ChatGPT and Codex" badge={<Tag tone="neutral" title="ChatGPT and Codex support is in preview">Preview</Tag>} subtitle="OpenAI's Compliance API, read with an admin key. Nothing is set on people's computers.">
               <p className="m-0 text-[13px] text-[#4D4D4D]">
                 ChatGPT Chat and ChatGPT Work prompts join Work Pulse, Codex prompts join Developer Pulse, and their spend joins FinOps,
                 a few hours behind. It needs ChatGPT Enterprise or Edu, and three things from OpenAI&apos;s admin console:

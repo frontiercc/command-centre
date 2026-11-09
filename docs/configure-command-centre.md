@@ -45,6 +45,8 @@ The sync runs every two minutes, up to 200 changed chats per run. The first run 
 
 ## Connect ChatGPT and Codex
 
+> **Preview.** ChatGPT and Codex support is in preview. We are looking for organisations on ChatGPT Enterprise or Edu to test it; to take part, say hello in [Discussions](https://github.com/frontiercc/command-centre/discussions).
+
 Command Centre reads ChatGPT and Codex activity from OpenAI's Compliance API, which needs ChatGPT Enterprise or Edu. ChatGPT Chat and ChatGPT Work prompts are measured and graded in Work Pulse beside Claude's everyday work, Codex prompts in Developer Pulse beside Claude Code, and their spend appears in FinOps and Spend Review. Command Centre only reads from OpenAI. It stores people's prompts and the names of files they attach in ChatGPT. It never stores ChatGPT's or Codex's replies. [The OpenAI Compliance API pull](ai-data-flow.md#the-openai-compliance-api-pull) lists everything it stores.
 
 Command Centre's own AI features run on Claude, so add your Claude API key first, even if ChatGPT and Codex are your only products.
