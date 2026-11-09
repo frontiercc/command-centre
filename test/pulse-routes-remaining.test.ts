@@ -15,6 +15,7 @@ import { NextRequest } from 'next/server';
 import { createTestDatabase } from './helpers/db';
 import { getClient } from '@/lib/db/client';
 import { schema } from '@/lib/db/schema';
+import { eq } from 'drizzle-orm';
 
 const mockSession: { authenticated: boolean; role?: string; email?: string; userId?: string; department?: string | null } = {
   authenticated: true,
@@ -147,6 +148,25 @@ describe('GET /api/pulse/depts', () => {
     expect(typeof eng.member_count).toBe('number');
     // u1's latest dds=2.8 (not the stale 1.0 row) averaged with u2's 2.2 => 2.5
     expect(eng.avg_dds).toBeCloseTo(2.5, 6);
+  });
+
+  it('reads resilience from the department row, not the never-filled team grouping', async () => {
+    await client.insert(schema.pulseMetrics).values([
+      { scope_type: 'function', scope_id: 'Engineering', period_start: NOW - 30 * DAY, period_end: NOW - 20 * DAY, ors: 0.2, granularity: 'rolling', computed_at: NOW - 20 * DAY },
+      { scope_type: 'function', scope_id: 'Engineering', period_start: NOW - 7 * DAY, period_end: NOW - 60, ors: 0.6, granularity: 'rolling', computed_at: NOW - 60 },
+      // The daily run's newer department row carries no ORS; it must not blank the column.
+      { scope_type: 'function', scope_id: 'Engineering', period_start: NOW - 7 * DAY, period_end: NOW, dds: 2.0, ors: null, granularity: 'rolling', computed_at: NOW },
+    ]);
+    try {
+      const { GET } = await import('../app/api/pulse/depts/route');
+      const body = await (await GET(makeRequest('/api/pulse/depts'))).json();
+      const eng = body.depts.find((d: { department: string }) => d.department === 'Engineering');
+      const sales = body.depts.find((d: { department: string }) => d.department === 'Sales');
+      expect(eng.avg_ors).toBeCloseTo(0.6, 6); // latest row that carries ORS
+      expect(sales.avg_ors).toBeNull(); // no department row, and the team row is never read
+    } finally {
+      await client.delete(schema.pulseMetrics).where(eq(schema.pulseMetrics.scope_type, 'function'));
+    }
   });
 });
 

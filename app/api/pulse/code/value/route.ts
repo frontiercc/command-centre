@@ -16,7 +16,11 @@ import { getCodeModelRates, priceTokens } from '@/lib/pulse/code/rates';
 import { ORG_SCOPE_ID } from '@/lib/pulse/code/aggregator';
 import { resolveCalibrations, calibrationValues, computeValueEstimate } from '@/lib/pulse/code/value';
 import { computeObservedLift } from '@/lib/pulse/code/lift';
+import { hasCodexData, readCodeMetrics } from '@/lib/pulse/code/vendor-view';
+import { vendorClause } from '@/lib/dashboard/product-sql';
 import { resolveTimeSavedAssumptions, computeTimeSaved } from '@/lib/pulse/code/time-saved';
+import { codexSpend } from '@/lib/openai/spend';
+import { visibleOpenAi } from '@/lib/sources/openai-visibility';
 
 export const dynamic = 'force-dynamic';
 
@@ -30,9 +34,7 @@ export async function GET(request: NextRequest) {
 
   const client = await getTypedClient();
   const cam = schema.codeAssistantMeta;
-  const cm = schema.codeMetrics;
   const cwMsg = schema.coworkMessages;
-  const chat = schema.chatMessages;
 
   const now = Math.floor(Date.now() / 1000);
   const d30 = now - 30 * 24 * 3600;
@@ -60,20 +62,52 @@ export async function GET(request: NextRequest) {
     }, rates);
     if (usd !== null) spend30d += usd;
   }
-  const annualSpendFromData = spend30d * (365 / 30);
+
+  // Codex beside Claude Code once Codex data exists and ChatGPT and Codex are
+  // shown: its turns priced from the same rates table (lib/openai/spend.ts),
+  // and its commits from Developer Pulse's Codex view (code_metrics_vendor).
+  const codexPresent = await hasCodexData();
+  const codexShown = await visibleOpenAi(codexPresent);
+  const codex = codexShown ? await codexSpend({ since: d30 }, rates) : null;
+  const codexSpend30d = codex ? (codex.turns === 0 ? 0 : codex.usd) : null;
+  const totalSpend30d = spend30d + (codexSpend30d ?? 0);
+  const annualSpendFromData = totalSpend30d * (365 / 30);
+  // The from-data team covers the same tools as the spend: people with a
+  // Claude Code model call or a Codex turn in the same 30 days, each counted once.
+  const claudeCodeUsers = users.size;
+  let codexUsers: number | null = null;
+  if (codexShown) {
+    const ct = schema.codexTurns;
+    const codexUserRows = await client
+      .selectDistinct({ user_id: ct.user_id })
+      .from(ct)
+      .where(and(gte(ct.started_at, d30), ne(ct.user_id, '')));
+    for (const r of codexUserRows) users.add(r.user_id);
+    codexUsers = codexUserRows.length;
+  }
 
   // Measured productivity numbers from the latest org code_metrics row (same source as Overview).
-  const mRows = await client
+  // Unit economics stay Claude Code's: once Codex data exists they read Claude Code's own row.
+  const mRows = await readCodeMetrics('claude', codexPresent, (t, only) => client
     .select({
-      spend_usd: cm.spend_usd, commit_count: cm.commit_count, pr_count: cm.pr_count, session_count: cm.session_count,
-      active_time_user_s: cm.active_time_user_s, active_time_cli_s: cm.active_time_cli_s,
-      period_start: cm.period_start, period_end: cm.period_end,
+      spend_usd: t.spend_usd, commit_count: t.commit_count, pr_count: t.pr_count, session_count: t.session_count,
+      active_time_user_s: t.active_time_user_s, active_time_cli_s: t.active_time_cli_s,
+      period_start: t.period_start, period_end: t.period_end,
     })
-    .from(cm)
-    .where(and(eq(cm.scope_type, 'organisation'), eq(cm.scope_id, ORG_SCOPE_ID), eq(cm.granularity, 'rolling')))
-    .orderBy(desc(cm.computed_at))
-    .limit(1);
+    .from(t)
+    .where(and(eq(t.scope_type, 'organisation'), eq(t.scope_id, ORG_SCOPE_ID), eq(t.granularity, 'rolling'), only))
+    .orderBy(desc(t.computed_at))
+    .limit(1));
   const m = mRows[0];
+  const codexRows = codexShown
+    ? await readCodeMetrics('openai', true, (t, only) => client
+        .select({ commit_count: t.commit_count, period_start: t.period_start, period_end: t.period_end })
+        .from(t)
+        .where(and(eq(t.scope_type, 'organisation'), eq(t.scope_id, ORG_SCOPE_ID), eq(t.granularity, 'rolling'), only))
+        .orderBy(desc(t.computed_at))
+        .limit(1))
+    : [];
+  const codexCommitCount = codexShown ? (codexRows[0]?.commit_count ?? 0) : null;
 
   const commitCount = m?.commit_count ?? 0;
   const prCount = m?.pr_count ?? 0;
@@ -91,7 +125,10 @@ export async function GET(request: NextRequest) {
   };
   const calibrations = resolveCalibrations(rawCfg, { activeUsers: users.size, annualSpend: annualSpendFromData });
   const estimate = computeValueEstimate(calibrationValues(calibrations));
-  const observedLift = await computeObservedLift();
+  // Observed signal and Time saved count commits on the same basis as the Commits figure (Codex's when shown).
+  // Claude Code only: the signal compares Claude Code's engaged time with its
+  // commits, and Codex reports no engaged time to compare against.
+  const observedLift = await computeObservedLift(codexPresent, false);
 
   // Bottom-up Time Saved: measured 30d output counts × admin-editable minutes-per-task assumptions.
   const coworkSessionRows = await client
@@ -99,14 +136,16 @@ export async function GET(request: NextRequest) {
     .from(cwMsg)
     .where(and(
       sql`(${cwMsg.surface} = 'cowork' OR ${cwMsg.surface} IS NULL)`,
+      // Claude Cowork only: ChatGPT prompts are stored as surface 'cowork' too.
+      sql.raw(vendorClause('claude', 'cowork_messages.')),
       ne(cwMsg.session_id, ''), gte(cwMsg.occurred_at, d30),
     ));
   const coworkSessions = Number(coworkSessionRows[0]?.c ?? 0);
 
   const chatConversationRows = await client
-    .select({ c: sql<number | string>`COUNT(DISTINCT ${chat.conversation_id})` })
-    .from(chat)
-    .where(and(isNotNull(chat.conversation_id), ne(chat.conversation_id, ''), gte(chat.occurred_at, d30)));
+    .select({ c: sql<number | string>`COUNT(DISTINCT ${cwMsg.session_id})` })
+    .from(cwMsg)
+    .where(and(eq(cwMsg.surface, 'chat'), sql.raw(vendorClause('claude', 'cowork_messages.')), ne(cwMsg.session_id, ''), gte(cwMsg.occurred_at, d30)));
   const chatConversations = Number(chatConversationRows[0]?.c ?? 0);
 
   const timeSavedAssumptions = resolveTimeSavedAssumptions({
@@ -115,7 +154,8 @@ export async function GET(request: NextRequest) {
     timeSavedMinPerCoworkSession: await getConfigValue('timeSavedMinPerCoworkSession'),
     timeSavedMinPerChatConversation: await getConfigValue('timeSavedMinPerChatConversation'),
   });
-  const timeSavedResult = computeTimeSaved({ prCount, commitCount, coworkSessions, chatConversations }, timeSavedAssumptions);
+  const allCommitCount = commitCount + (codexCommitCount ?? 0);
+  const timeSavedResult = computeTimeSaved({ prCount, commitCount: allCommitCount, coworkSessions, chatConversations }, timeSavedAssumptions);
   // Each row's count is drawn from a different measurement window: PR/commit counts come from the
   // rolling code_metrics row (metricsWindowDays, typically 7d), while cowork/chat counts are always
   // queried over a fixed 30d window (see d30 above). Attach the correct window per row rather than
@@ -135,15 +175,23 @@ export async function GET(request: NextRequest) {
 
   return NextResponse.json({
     enabled: true,
+    // Claude Code and Codex apart, for the measured strip; null while Codex is absent or hidden.
+    split: codexShown ? {
+      claudeCode: { spend30d, commitCount, activeUsers: claudeCodeUsers },
+      // People active in each tool; someone using both counts in each, once in measured.activeUsers.
+      codex: { spend30d: codexSpend30d, commitCount: codexCommitCount, activeUsers: codexUsers, unpricedModels: codex?.unpricedModels ?? [] },
+    } : null,
     calibrations,
     estimate,
     observedLift,
     timeSaved,
     measured: {
-      spend30d,
+      // Claude Code plus Codex (when shown); unit economics below stay Claude Code's.
+      spend30d: totalSpend30d,
       annualSpend: calibrations.annualSpend.value,
       activeUsers: users.size,
-      commitCount, prCount, sessionCount, engagedHours,
+      commitCount: allCommitCount,
+      prCount, sessionCount, engagedHours,
       costPerCommit: rowSpend != null && commitCount > 0 ? rowSpend / commitCount : null,
       costPerPr: rowSpend != null && prCount > 0 ? rowSpend / prCount : null,
       costPerSession: rowSpend != null && sessionCount > 0 ? rowSpend / sessionCount : null,

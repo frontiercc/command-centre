@@ -19,6 +19,10 @@ import {
   WORKING_HOURS_PER_YEAR, type BetCalibration,
 } from '@/lib/usecases/value';
 import { getWindowDistinctUsers, type WeekActivity } from '@/lib/usecases/weeks';
+import {
+  getUseCasePlatformSessions, getUseCasePlatformHours, type PlatformSessions, type PlatformHours,
+} from '@/lib/usecases/platform-sessions';
+import { openaiShown } from '@/lib/sources/openai-visibility';
 
 const WEEK = 7 * 86400;
 const WINDOW_WEEKS = 13;
@@ -31,7 +35,15 @@ export interface GovernanceBet {
   departments: string[];
   lifecycle: string;
   weeksInLifecycle: number | null;
-  measured: { distinctUsers: number; sessions: number; hours: number | null };
+  /** Completed weeks in a row, up to the last one, with no matching activity (measured weeks only). */
+  quietWeeks: number;
+  measured: {
+    distinctUsers: number; sessions: number; hours: number | null;
+    /** Matched sessions per vendor, 13 completed weeks (lib/usecases/platform-sessions.ts); openai null while hidden. */
+    platformSessions: PlatformSessions;
+    /** Measured hours per vendor over the same sessions; null = not measured (openai also null while hidden). */
+    platformHours: PlatformHours;
+  };
   estimated: { hoursRecovered: number };
   series: Array<number | null>;
 }
@@ -50,6 +62,8 @@ export interface GovernanceWorkflow {
   series: Array<number | null>;
   measuredHours: number | null;
   distinctUsers: number;
+  /** Matched sessions per vendor, 13 completed weeks; openai null while ChatGPT and Codex are hidden. */
+  platformSessions: PlatformSessions;
 }
 
 export interface GovernanceRollup {
@@ -155,15 +169,44 @@ export function buildGovernanceNarrative(bets: GovernanceBet[]): string {
   if (atRisk.length > 0) {
     const b = atRisk[0];
     const owner = b.ownerDisplayName ? `, owner ${b.ownerDisplayName}` : '';
-    const wk = b.weeksInLifecycle != null ? ` for ${b.weeksInLifecycle} ${b.weeksInLifecycle === 1 ? 'week' : 'weeks'}` : '';
-    parts.push(`${atRisk.length} at-risk ${atRisk.length === 1 ? 'bet' : 'bets'}: ${b.title} has been quiet${wk}${owner}.`);
+    // Quiet time is the run of completed weeks with no matching activity, not
+    // the time since the lifecycle changed (that read "quiet for 0 weeks").
+    const quiet = b.quietWeeks > 0
+      ? `has had no matching activity for ${b.quietWeeks} completed ${b.quietWeeks === 1 ? 'week' : 'weeks'}`
+      : 'is at risk';
+    parts.push(`${atRisk.length} at-risk ${atRisk.length === 1 ? 'bet' : 'bets'}: ${b.title} ${quiet}${owner}.`);
   }
   return parts.join(' ') || `${bets.length} declared ${bets.length === 1 ? 'bet' : 'bets'}, all in early stages.`;
 }
 
-export async function buildGovernanceRollup(nowS: number, cal: BetCalibration): Promise<GovernanceRollup> {
+/**
+ * Completed weeks in a row, counting back from the last, with a measured zero.
+ * An absent week (null) is unmeasured, never quiet, so it ends the run.
+ */
+export function trailingQuietWeeks(series: Array<number | null>): number {
+  let n = 0;
+  for (let i = series.length - 1; i >= 0 && series[i] === 0; i--) n++;
+  return n;
+}
+
+export async function buildGovernanceRollup(
+  nowS: number,
+  cal: BetCalibration,
+  opts: { openaiShown?: boolean } = {},
+): Promise<GovernanceRollup> {
   const windowStarts = weekStarts(nowS - WEEK, WINDOW_WEEKS); // 13 completed weeks, ascending
   const endsWeekStart = windowStarts[windowStarts.length - 1];
+
+  // Per-vendor split (Claude / OpenAI), same window and session rules as the
+  // register column and the use case page's Workflow Impact panel.
+  const shown = opts.openaiShown ?? await openaiShown();
+  const [platformSessions, platformHours] = await Promise.all([
+    getUseCasePlatformSessions(nowS, { openaiShown: shown }),
+    getUseCasePlatformHours(nowS, { openaiShown: shown }),
+  ]);
+  const sessionsFor = (id: string): PlatformSessions =>
+    platformSessions.get(id) ?? { claude: 0, openai: shown ? 0 : null };
+  const hoursFor = (id: string): PlatformHours => platformHours.get(id) ?? { claude: null, openai: null };
 
   const confirmed = await listUseCases({ status: 'confirmed' });
   const betsRaw = confirmed.filter(u => u.strategic === 1);
@@ -185,7 +228,8 @@ export async function buildGovernanceRollup(nowS: number, cal: BetCalibration): 
       departments: uc.departments,
       lifecycle: uc.lifecycle,
       weeksInLifecycle,
-      measured: { distinctUsers, sessions, hours },
+      quietWeeks: trailingQuietWeeks(series),
+      measured: { distinctUsers, sessions, hours, platformSessions: sessionsFor(uc.id), platformHours: hoursFor(uc.id) },
       estimated: { hoursRecovered },
       series,
     };
@@ -198,7 +242,10 @@ export async function buildGovernanceRollup(nowS: number, cal: BetCalibration): 
     // frictionCount removed: a raw 13-week count
     // with no rate/baseline invited unsupported conclusions; the weekly
     // friction columns are still collected.
-    return { id: uc.id, title: uc.title, lifecycle: uc.lifecycle, series, measuredHours, distinctUsers };
+    return {
+      id: uc.id, title: uc.title, lifecycle: uc.lifecycle, series, measuredHours, distinctUsers,
+      platformSessions: sessionsFor(uc.id),
+    };
   }));
 
   // Ranked measuredHours desc; null-measured rows always sort last (unmeasured

@@ -12,7 +12,7 @@ export const CATEGORY_LABELS: Record<AlertCategory, string> = {
 
 export const ALERT_CATEGORIES: Record<Exclude<AlertCategory, 'other'>, string[]> = {
   'security-compliance': ['policy', 'intent', 'code_repo_exposure', 'code_model_policy', 'risk', 'anomaly'],
-  'cost-efficiency': ['code_cost_spike', 'code_friction', 'finance_reconciliation_drift'],
+  'cost-efficiency': ['code_cost_spike', 'codex_cost_spike', 'code_friction', 'finance_reconciliation_drift'],
   'adoption-usage': ['adoption', 'pulse_capability', 'use_case_at_risk'],
 };
 

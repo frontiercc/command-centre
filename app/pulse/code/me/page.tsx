@@ -16,6 +16,8 @@ import Sparkline from '@/components/pulse/Sparkline';
 import WeeklyDeltaBadge from '@/components/pulse/WeeklyDeltaBadge';
 import HumanTimeCard, { type HumanTimeSummary } from '@/components/pulse/HumanTimeCard';
 import { PageBody, Toolbar, Panel, Tag, Empty, Muted, B } from '@/components/precision/ui';
+import { useVendor, useOpenAiOnly, VendorSwitch } from '@/components/shared/VendorSwitch';
+import { DEVELOPER_PULSE_VENDOR_LABELS, type Vendor } from '@/lib/dashboard/vendor';
 
 interface SessionRow {
   session_id: string;
@@ -44,6 +46,9 @@ interface WeeklyTrend {
 }
 
 interface MeData {
+  vendor?: Vendor;
+  codexPresent?: boolean;
+  metricsSplit?: { claude: CodeMetricsRow | null; openai: CodeMetricsRow | null } | null;
   humanTime?: HumanTimeSummary | null;
   canSeeSpendReview?: boolean;
   userId: string | null;
@@ -111,7 +116,7 @@ function RecentSessions({ sessions }: { sessions: SessionRow[] }) {
                 <span className="text-[13px] text-[#8F8F8F] tabular-nums">
                   {formatTokens(s.input_tokens + s.output_tokens)} tokens
                 </span>
-                <Tag>{s.source === 'otel' ? 'OTel' : 'Agent'}</Tag>
+                <Tag>{s.source === 'codex' ? 'Codex' : s.source === 'otel' ? 'OTel' : 'Agent'}</Tag>
               </div>
             </li>
           ))}
@@ -130,15 +135,21 @@ function MyCodePulseContent() {
 
   const [data, setData] = useState<MeData | null>(null);
   const [loading, setLoading] = useState(true);
+  const [vendor, setVendor, vendorReady] = useVendor();
+  const openaiOnly = useOpenAiOnly();
+  // The view: Codex's own when it is the only coding tool connected.
+  const codexView = !!data?.codexPresent || openaiOnly;
 
   useEffect(() => {
-    const qs = viewUserId ? `?userId=${encodeURIComponent(viewUserId)}` : '';
-    fetch(`/api/pulse/code/me${qs}`)
+    if (!vendorReady) return; // the saved view is read after the page loads
+    const qs = new URLSearchParams({ vendor });
+    if (viewUserId) qs.set('userId', viewUserId);
+    fetch(`/api/pulse/code/me?${qs.toString()}`)
       .then(r => r.json())
       .then(setData)
       .catch(() => {})
       .finally(() => setLoading(false));
-  }, [viewUserId]);
+  }, [viewUserId, vendor, vendorReady]);
 
   if (loading) return <LoadingSpinner />;
 
@@ -146,30 +157,49 @@ function MyCodePulseContent() {
     <>
       <TopBar
         title={viewUserId ? `Developer Pulse: ${viewName || viewUserId}` : 'My Developer Pulse'}
-        subtitle={viewUserId ? 'Per-user Claude Code activity' : 'Your Claude Code activity, spend, and autonomy'}
+        subtitle={openaiOnly
+          ? (viewUserId ? 'Per-user Codex activity' : 'Your Codex activity, spend, and autonomy')
+          : data?.codexPresent
+            ? (viewUserId ? 'Per-user coding activity: Claude Code and Codex' : 'Your coding activity, spend, and autonomy: Claude Code and Codex')
+            : (viewUserId ? 'Per-user Claude Code activity' : 'Your Claude Code activity, spend, and autonomy')}
       />
       <PageBody>
         {!data?.userId ? (
-          <Empty title="No Claude Code activity linked to your account yet">
-            Ask an admin to link your sign-in to your Claude identity on the Access & Keys page, or start a Claude Code session with telemetry on.
-          </Empty>
+          openaiOnly ? (
+            <Empty title="No Codex activity linked to your account yet">
+              Codex activity is matched to your sign-in by email. It arrives from OpenAI&apos;s Compliance API a few hours after you use Codex.
+            </Empty>
+          ) : (
+            <Empty title="No Claude Code activity linked to your account yet">
+              Ask an admin to link your sign-in to your Claude identity on the Access & Keys page, or start a Claude Code session with telemetry on.
+            </Empty>
+          )
         ) : (
           <>
-            {data.canSeeSpendReview && (
+            {(data.canSeeSpendReview || data.codexPresent) && (
               <Toolbar>
-                <Link href={`/finops/spend-review/${encodeURIComponent(data.userId)}`} className={B.link}>
-                  {viewUserId ? 'Spend review' : 'Your spend review'}
-                </Link>
+                <span className="flex flex-wrap items-center gap-3">
+                  <VendorSwitch vendor={vendor} onChange={setVendor} openaiPresent={data.codexPresent ?? false} labels={DEVELOPER_PULSE_VENDOR_LABELS} />
+                  {data.canSeeSpendReview && (
+                    <Link href={`/finops/spend-review/${encodeURIComponent(data.userId)}`} className={B.link}>
+                      {viewUserId ? 'Spend review' : 'Your spend review'}
+                    </Link>
+                  )}
+                </span>
               </Toolbar>
             )}
 
-            <CodeStatStrip metrics={data.metrics} githubRepos={data.githubRepos} />
+            <CodeStatStrip metrics={data.metrics} githubRepos={data.githubRepos} view={codexView ? vendor : 'claude'} split={data.metricsSplit} />
 
-            <CodeProductivityStrip metrics={data.metrics} />
+            {openaiOnly ? null : data.codexPresent && vendor === 'openai'
+              ? <Muted>Engaged time, lines of code, pull requests and edit acceptance come from Claude Code&apos;s own telemetry. Codex doesn&apos;t send them.</Muted>
+              : <CodeProductivityStrip metrics={data.codexPresent && vendor === 'all' && data.metricsSplit?.claude && data.metrics
+                  ? { ...data.metricsSplit.claude, commit_count: data.metrics.commit_count }
+                  : data.metrics} />}
 
-            <HumanTimeCard summary={data.humanTime} surface="code" scope="Personal" />
+            <HumanTimeCard summary={data.humanTime} surface="code" scope="Personal" view={codexView ? vendor : 'claude'} />
 
-            {data.trends && (
+            {data.trends && !openaiOnly && (
               <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                 <TrendCard label="Engaged time" trend={data.trends.engagedTime} />
                 <TrendCard label="Code output" trend={data.trends.codeOutput} />

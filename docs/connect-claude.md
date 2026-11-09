@@ -1,6 +1,6 @@
 # Frontier Command Centre: Connect Claude
 
-How to send Claude Code, Claude Cowork and Claude in Office telemetry to Command Centre, for any installation: Docker on one machine, or a deployment on AWS or Azure. Claude Chat needs no client settings: on Claude for Enterprise, Command Centre reads its conversations from Anthropic's Compliance API, using the Compliance Access Key entered under **Admin → Access & Keys**.
+How to send Claude Code, Claude Cowork and Claude in Office/Google telemetry to Command Centre, for any installation: Docker on one machine, or a deployment on AWS or Azure. Claude Chat needs no client settings: on Claude for Enterprise, Command Centre reads its conversations from Anthropic's Compliance API, using the Compliance Access Key entered under **Admin → Access & Keys**. To connect ChatGPT and Codex, see [Connect ChatGPT and Codex](configure-command-centre.md#connect-chatgpt-and-codex).
 
 **The quickest way:** open **Admin → Ingestion** in Command Centre. The page's **Connect Claude** panel shows the collector address and, with Docker, the bearer token, and copies the Claude Code settings for you, filled in. The rest of this guide explains each setting and the other ways to distribute them.
 
@@ -57,9 +57,9 @@ Set delta explicitly, even where it is already the client's default, so that no 
 
 `OTEL_LOG_TOOL_DETAILS` sends tool parameters and the names of your organisation's own skills. Command Centre keeps from the parameters only a connector's name and the name of the connector tool used, and the fact of a commit (never its identifier); it never stores the content of tool inputs. You can leave it unset at the cost of connector and organisation skill names in Claude Code and AI-assisted commit counts.
 
-Command Centre stores none of Claude's reply text: it skips reply events at ingest. Do not turn on tool-content logging or tracing; Command Centre has no trace pipeline.
+Command Centre stores none of Claude's reply text: it skips reply events at ingest. Do not turn on tool-content logging or tracing for Claude Code; Command Centre reads traces only from Claude in Office/Google and ignores Claude Code's.
 
-Command Centre reads a `department` attribute when a Claude Code client sends one, which is an alternative to loading departments by CSV. Add it to the same `env` block with the `OTEL_RESOURCE_ATTRIBUTES` variable, for example `"OTEL_RESOURCE_ATTRIBUTES": "department=Finance"`; Claude Code attaches the value to every event and metric it exports. The variable takes comma-separated `key=value` pairs, and a value may not contain spaces, commas, semicolons, double quotes or backslashes. Anthropic's guidance is to percent-encode such characters (a space as `%20`), so for a department name with a space, check on one machine that the name appears in Command Centre as intended before rollout. Command Centre takes the value when it first sees a person and never overwrites a department already recorded for them. Because the value differs by group, deliver it through a managed settings file or MDM profile per group: the managed settings in Claude's Organization settings apply identically to everyone in the organisation. Claude Cowork's telemetry settings carry no custom attributes, so load departments by CSV for people who use only Claude Cowork: under **Admin → Ingestion → Pre-populate OTel users**, one line per person in the form `email,display_name,department`.
+Command Centre reads a `department` attribute when a Claude Code client sends one, which is an alternative to loading departments by CSV. Add it to the same `env` block with the `OTEL_RESOURCE_ATTRIBUTES` variable, for example `"OTEL_RESOURCE_ATTRIBUTES": "department=Finance"`; Claude Code attaches the value to every event and metric it exports. The variable takes comma-separated `key=value` pairs, and a value may not contain spaces, commas, semicolons, double quotes or backslashes. Anthropic's guidance is to percent-encode such characters (a space as `%20`), so for a department name with a space, check on one machine that the name appears in Command Centre as intended before rollout. Command Centre takes the value when it first sees a person and never overwrites a department already recorded for them. Because the value differs by group, deliver it through a managed settings file or MDM profile per group: the managed settings in Claude's Organization settings apply identically to everyone in the organisation. Claude Cowork's telemetry settings carry no custom attributes, so load departments by CSV for people who use only Claude Cowork: under **Admin → Ingestion → Pre-populate users**, one line per person in the form `email,display_name,department`.
 
 ## Distributing the settings centrally
 
@@ -92,11 +92,13 @@ Claude Cowork loads these settings when a session starts, so sessions already op
 
 On Anthropic's standard deployment of Claude desktop, Claude Cowork events carry prompt text and tool details unless the device setting `otlpContentCapture` says otherwise. Command Centre needs both, so if your device management sets that key, include `userPrompts` and `toolDetails` in it. If Claude Cowork prompts show as `<REDACTED>`, see [Troubleshooting and FAQ](troubleshooting.md#connecting-claude). Events that carry prompt text also carry Claude's reply text; Command Centre discards reply events at ingest and stores none of their text. Claude Cowork events are told apart from Claude Code events by the service name each client reports, and both travel through the same collector.
 
-**Check:** **Admin → Ingestion → Collector status** reads "Collector active, OTel events flowing", with the time of the last event.
+**Check:** **Admin → Ingestion → Claude collector (OpenTelemetry)** reads "Collector active, OTel events flowing", with the time of the last event.
 
 ## Claude in Office
 
-Claude in Excel, Word, PowerPoint and Outlook is configured once, for the whole organisation, in Claude's Organization settings, under **Office agents → Monitoring**. Fill in the same three fields as for Claude Cowork (**Copy settings from Cowork** fills them in) and save.
+Claude in Excel, Word, PowerPoint, Outlook and Google Sheets, Docs and Slides is configured once, for the whole organisation, in Claude's Organization settings, under **Office agents → Monitoring**. Fill in the same three fields as for Claude Cowork (**Copy settings from Cowork** fills them in) and save.
+
+Claude in Google Sheets, Docs and Slides needs no setting of its own: the Claude add-on for Google Workspace reports through the same **Office agents → Monitoring** setting. Command Centre tells the two apart from the vendor each event carries and shows them as Claude in Office and Claude in Google. Google sends no document name, so Google work lists no file names.
 
 | Field | Value |
 |---|---|
@@ -104,9 +106,9 @@ Claude in Excel, Word, PowerPoint and Outlook is configured once, for the whole 
 | **OTLP protocol** | `http/json` |
 | **OTLP headers** | `Authorization=Bearer <your bearer token>` |
 
-Claude in Office sends its activity from each person's browser, so the collector must accept requests from `https://pivot.claude.ai`. The bundled collector and the AWS and Azure collector configurations already do. A managed OTLP endpoint that does not answer the browser's cross-origin check will not work directly. The bearer token in the headers field reaches every user's browser.
+Claude in Office/Google sends its activity from each person's browser, so the collector must accept requests from `https://pivot.claude.ai`. The bundled collector and the AWS and Azure collector configurations already do. A managed OTLP endpoint that does not answer the browser's cross-origin check will not work directly. The bearer token in the headers field reaches every user's browser.
 
-Command Centre stores each prompt, the model and tokens of each model call, and the name and outcome of each tool call, beside Claude Cowork on Work Pulse, marked with the app it came from. It never stores the tool input or output, which hold document content, or the document's address: only the file name, on calls that changed the document. Claude in Office sends no cost, so its spend is priced from the model rates on **Admin → Developer Pulse** and shown as an estimate, never added to any Cowork total. To hide the Office panels on an installation that does not use Claude in Office, switch off **Show Claude in Office** under **Admin → Work Pulse**.
+Command Centre stores each prompt, the model and tokens of each model call, and the name and outcome of each tool call, beside Claude Cowork on Work Pulse, marked with the app it came from. It never stores the tool input or output, which hold document content, or the document's address: only the file name, on calls that changed the document. Claude in Office/Google sends no cost, so its spend is priced from the model rates on **Admin → Developer Pulse** and shown as an estimate, never added to any Cowork total. To hide the Office panels on an installation that does not use Claude in Office/Google, switch off **Show Claude in Office and Google** under **Admin → Work Pulse**.
 
 **Check:** open a document, ask Claude something in the add-in, and within a few minutes the **By product** panel on the Work Pulse overview shows the app.
 
@@ -119,9 +121,9 @@ Claude Chat sends no telemetry. On Claude for Enterprise, Command Centre reads e
 3. Copy the key straight away: Anthropic shows it only once.
 4. In Command Centre, open **Admin → Access & Keys**, enter it in the **Compliance Access Key** field, use its test button, then select **Save settings**.
 
-Command Centre checks for new Claude Chat prompts every two minutes, and its first check brings in the last 30 days. Command Centre stores people's prompts in full, the model and the connectors used, and how many files were attached and how many artifacts and files Claude made. It never stores the text of Claude's replies.
+Command Centre checks for new Claude Chat prompts every two minutes, and its first check brings in the last 30 days. Command Centre stores people's prompts in full, the names of files they attach, the model and the connectors used, and how many artifacts and files Claude made. It never stores the text of Claude's replies.
 
-## Why OpenTelemetry for Claude Cowork and Claude Code, and the Compliance API for Claude Chat
+## Why OpenTelemetry for Claude Cowork and Claude Code, and Anthropic's Compliance API for Claude Chat
 
 Claude Cowork and Claude Code send their activity through OpenTelemetry to a collector you run. OpenTelemetry is the only route that carries what each session cost and which models it used, and the engineering measures: lines of code, commits, pull requests and edits accepted. OpenTelemetry has no Anthropic rate limit, and it works on Claude for Teams and Claude for Enterprise.
 

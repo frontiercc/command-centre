@@ -13,6 +13,7 @@
 
 import type { ProcessCanvas } from '@/lib/usecases/suggestion-store';
 import { SubHead, Tag, B, cx } from '@/components/precision/ui';
+import { formatSuggestionProducts, type SuggestionProducts } from '@/lib/usecases/suggestion-format';
 
 // Kept local (not imported from app/use-cases/page.tsx) so this component has
 // no dependency on the page module — see suggestion-store for ProcessCanvas.
@@ -25,6 +26,8 @@ export interface SuggestionDraft {
   evidence: { distinctUsers: number; sessionCount: number; departments: string[] };
   department: string | null;
   canvas: ProcessCanvas | null;
+  /** Sessions by product; null while ChatGPT and Codex are hidden or on older rows. */
+  products?: SuggestionProducts | null;
 }
 
 interface Fact {
@@ -33,7 +36,7 @@ interface Fact {
   sub?: string;
 }
 
-function buildFacts(canvas: ProcessCanvas): Fact[] {
+function buildFacts(canvas: ProcessCanvas, products: SuggestionProducts | null | undefined): Fact[] {
   const facts: Fact[] = [
     ...(canvas.departments?.length ? [{ label: 'Departments', value: canvas.departments.join(', ') }] : []),
     {
@@ -45,6 +48,7 @@ function buildFacts(canvas: ProcessCanvas): Fact[] {
       value: `${canvas.sessions}`,
       sub: `in ${canvas.windowDays} days`,
     },
+    ...(products && formatSuggestionProducts(products) ? [{ label: 'Found in', value: formatSuggestionProducts(products) }] : []),
     { label: 'Rhythm', value: canvas.rhythm.display },
   ];
   if (canvas.systems.length > 0) {
@@ -83,7 +87,7 @@ export default function ProcessCanvasCard({
   onNext?: () => void;
 }) {
   const canvas = suggestion.canvas;
-  const facts = canvas ? buildFacts(canvas) : [];
+  const facts = canvas ? buildFacts(canvas, suggestion.products) : [];
 
   return (
     <div

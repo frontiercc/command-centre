@@ -9,6 +9,9 @@ import TopBar from '@/components/layout/TopBar';
 import LoadingSpinner from '@/components/shared/LoadingSpinner';
 import { useToast } from '@/components/shared/ToastProvider';
 import { PageBody, Panel, Strip, Figure, Pill, Dot, SEVERITY_COLOR, Notice, Empty, Muted, SubHead, T, B, cx } from '@/components/precision/ui';
+import { useConnectedProducts } from '@/components/shared/VendorSwitch';
+import { isOpenAiOnly, openAiConnected } from '@/lib/sources/connected-shared';
+import { PRODUCTS, type ProductCounts } from '@/lib/dashboard/vendor';
 
 /** Adoption health as a status pill (active / shallow / inactive). */
 function healthTone(value: string): 'good' | 'warn' | 'neutral' {
@@ -42,13 +45,8 @@ interface UserDetail {
     status: string;
     generated_at: number;
   }>;
-  snapshots_30d: Array<{
-    snapshot_date: string;
-    messages_sent: number;
-    surface_chat: number;
-    surface_code: number;
-    surface_cowork: number;
-  }>;
+  /** Events per product per UTC day, last 30 days. */
+  product_days: Array<{ date: string; total: number; counts: ProductCounts }>;
   source: string | null;
   coworkActivity?: {
     projects: Array<{ project_name: string; session_count: number; files: string[] }>;
@@ -63,6 +61,8 @@ export default function UserDetailPage() {
   const params = useParams();
   const userId = decodeURIComponent(params.id as string);
   const [user, setUser] = useState<UserDetail | null>(null);
+  const connected = useConnectedProducts();
+  const openaiOnly = isOpenAiOnly(connected);
   const [loading, setLoading] = useState(true);
   const [editing, setEditing] = useState(false);
   const [alias, setAlias] = useState('');
@@ -83,8 +83,11 @@ export default function UserDetailPage() {
 
   useEffect(() => {
     fetch(`/api/users?id=${userId}`)
-      .then(r => r.json())
+      // A refusal or a missing person ({ error }) is not a user: the page
+      // says "User not found" rather than reading fields that aren't there.
+      .then(r => (r.ok ? r.json() : null))
       .then(data => {
+        if (!data || data.error) return;
         setUser(data);
         setAlias(data.display_name || '');
         setDepartment(data.department || '');
@@ -358,7 +361,7 @@ export default function UserDetailPage() {
               label="Adoption health"
               value={<Pill tone={healthTone(user.adoption_health)}>{user.adoption_health}</Pill>}
             />
-            <Figure label="Primary surface" value={user.primary_surface} />
+            <Figure label="Main product" value={user.primary_surface} />
             <Figure label="Messages (7d)" value={user.messages_7d} />
             <Figure
               label="Last active"
@@ -370,36 +373,41 @@ export default function UserDetailPage() {
         )}
 
         {/* 30-day activity */}
-        <Panel title="30-day activity" subtitle={user.snapshots_30d.length > 0 ? 'Latest 14 days' : undefined} flush>
-          {user.snapshots_30d.length === 0 ? (
-            <div className="p-4"><Muted>No activity data available.</Muted></div>
-          ) : (
-            <div className="overflow-x-auto">
-              <table className={T.table}>
-                <thead>
-                  <tr className={T.headRow}>
-                    <th className={T.th}>Date</th>
-                    <th className={T.thRight}>Messages</th>
-                    <th className={T.thRight}>Chat</th>
-                    <th className={T.thRight}>Code</th>
-                    <th className={T.thRight}>Cowork</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {user.snapshots_30d.slice(-14).map(s => (
-                    <tr key={s.snapshot_date} className={T.row}>
-                      <td className={cx(T.td, 'tabular-nums')}>{s.snapshot_date}</td>
-                      <td className={cx(T.tdRight, 'font-medium')}>{s.messages_sent}</td>
-                      <td className={cx(T.tdRight, 'text-[#4D4D4D]')}>{s.surface_chat}</td>
-                      <td className={cx(T.tdRight, 'text-[#4D4D4D]')}>{s.surface_code}</td>
-                      <td className={cx(T.tdRight, 'text-[#4D4D4D]')}>{s.surface_cowork}</td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
-            </div>
-          )}
-        </Panel>
+        {(() => {
+          const days = user.product_days ?? [];
+          // A connected vendor's products, plus any product this person has events for.
+          const columns = PRODUCTS.filter(p =>
+            (p.vendor === 'openai' ? openAiConnected(connected) : !openaiOnly)
+            || days.some(d => d.counts[p.id] > 0));
+          return (
+            <Panel title="30-day activity" subtitle={days.length > 0 ? 'Latest 14 days' : undefined} flush>
+              {days.length === 0 ? (
+                <div className="p-4"><Muted>No activity data available.</Muted></div>
+              ) : (
+                <div className="overflow-x-auto">
+                  <table className={T.table}>
+                    <thead>
+                      <tr className={T.headRow}>
+                        <th className={T.th}>Date</th>
+                        <th className={T.thRight}>Messages</th>
+                        {columns.map(p => <th key={p.id} className={T.thRight}>{p.label}</th>)}
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {days.slice(-14).map(d => (
+                        <tr key={d.date} className={T.row}>
+                          <td className={cx(T.td, 'tabular-nums')}>{d.date}</td>
+                          <td className={cx(T.tdRight, 'font-medium')}>{d.total}</td>
+                          {columns.map(p => <td key={p.id} className={cx(T.tdRight, 'text-[#4D4D4D]')}>{d.counts[p.id]}</td>)}
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              )}
+            </Panel>
+          );
+        })()}
 
         {/* User alerts */}
         <Panel title="Associated alerts" flush>
@@ -425,8 +433,9 @@ export default function UserDetailPage() {
           )}
         </Panel>
 
-        {/* Cowork Activity */}
-        <Panel title="Cowork activity" subtitle="30 days">
+        {/* Claude Cowork projects (the retired agent's project tracking; Claude only) */}
+        {!openaiOnly && (
+        <Panel title="Claude Cowork activity" subtitle="30 days">
           {!user.coworkActivity || user.coworkActivity.projects.length === 0 ? (
             <Empty title="No cowork project data yet">
               Project and file tracking will appear here once cowork sessions are captured.
@@ -476,6 +485,7 @@ export default function UserDetailPage() {
             </div>
           )}
         </Panel>
+        )}
       </PageBody>
     </>
   );

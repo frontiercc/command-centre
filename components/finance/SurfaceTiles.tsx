@@ -5,6 +5,9 @@
  * FinOps headline "by surface" row — Chat (dormant) / Code (estimate) /
  * Cowork (actual) / Total. Purely presentational; all numbers come straight
  * from the already-fetched ChargebackReport.surfaces — no new data fetch.
+ *
+ * With OpenAI data the row adds ChatGPT and Codex and names each Claude tile
+ * as Claude's; with only OpenAI connected it shows ChatGPT, Codex and Total.
  */
 import { Strip, Figure } from '@/components/precision/ui';
 
@@ -15,7 +18,7 @@ interface CodeTokens {
   cacheRead: number;
 }
 
-export type SurfaceBasis = 'actual' | 'estimate' | 'dormant';
+export type SurfaceBasis = 'actual' | 'estimate' | 'dormant' | 'openai_rates';
 
 export interface SurfaceSpend {
   usd: number | null;
@@ -27,6 +30,8 @@ export interface SurfaceSummary {
   chat: SurfaceSpend;
   code: SurfaceSpend;
   cowork: SurfaceSpend;
+  chatgpt?: SurfaceSpend;
+  codex?: SurfaceSpend;
   total: { usd: number; tokens: CodeTokens };
 }
 
@@ -44,6 +49,7 @@ const BASIS_TEXT: Record<SurfaceBasis, string> = {
   dormant: 'dormant',
   estimate: 'estimated at list rates',
   actual: 'actual, per request',
+  openai_rates: "at OpenAI's USD token rates",
 };
 
 function shareOf(usd: number | null, totalUsd: number): string | null {
@@ -62,6 +68,9 @@ function SurfaceFigure({ label, spend, totalUsd }: { label: string; spend: Surfa
     );
   }
   const total = tokensTotal(spend.tokens);
+  if (spend.usd === null && spend.basis === 'openai_rates') {
+    return <Figure label={label} value={<span className="text-[#B3B3B3]">—</span>} sub="No cost records from OpenAI yet." />;
+  }
   const share = shareOf(spend.usd, totalUsd);
   const parts = [
     share,
@@ -72,13 +81,25 @@ function SurfaceFigure({ label, spend, totalUsd }: { label: string; spend: Surfa
   return <Figure label={label} value={spend.usd === null ? '—' : fmtUsd(spend.usd)} sub={parts.join(' · ')} />;
 }
 
-export default function SurfaceTiles({ surfaces }: { surfaces: SurfaceSummary }) {
+export default function SurfaceTiles({ surfaces, openaiOnly = false }: { surfaces: SurfaceSummary; openaiOnly?: boolean }) {
   const totalTokens = tokensTotal(surfaces.total.tokens);
+  const openai = surfaces.chatgpt && surfaces.codex ? { chatgpt: surfaces.chatgpt, codex: surfaces.codex } : null;
+  const claude = !openai || !openaiOnly;
   return (
-    <Strip cols={4}>
-      <SurfaceFigure label="Cowork" spend={surfaces.cowork} totalUsd={surfaces.total.usd} />
-      <SurfaceFigure label="Code" spend={surfaces.code} totalUsd={surfaces.total.usd} />
-      <SurfaceFigure label="Chat" spend={surfaces.chat} totalUsd={surfaces.total.usd} />
+    <Strip cols={!openai ? 4 : claude ? 6 : 3}>
+      {claude && (
+        <>
+          <SurfaceFigure label={openai ? 'Claude Cowork' : 'Cowork'} spend={surfaces.cowork} totalUsd={surfaces.total.usd} />
+          <SurfaceFigure label={openai ? 'Claude Code' : 'Code'} spend={surfaces.code} totalUsd={surfaces.total.usd} />
+          <SurfaceFigure label={openai ? 'Claude Chat' : 'Chat'} spend={surfaces.chat} totalUsd={surfaces.total.usd} />
+        </>
+      )}
+      {openai && (
+        <>
+          <SurfaceFigure label="ChatGPT" spend={openai.chatgpt} totalUsd={surfaces.total.usd} />
+          <SurfaceFigure label="Codex" spend={openai.codex} totalUsd={surfaces.total.usd} />
+        </>
+      )}
       <Figure
         label="Total"
         value={fmtUsd(surfaces.total.usd)}

@@ -14,10 +14,12 @@ import { buildSpendReviewIndex, buildSpendReview, priorPeriod, EFFICIENCY_MIN_SE
 import { getSpendLimits, indexByEmail, primaryRow, shareUsed, NEAR_LIMIT_SHARE, type SpendLimitsSnapshot } from '@/lib/anthropic/spend-limits';
 import { formatModelLabel } from '@/lib/pulse/code/model-label';
 import { monthOf, periodMatchesMonth, reportOfficeSpend } from '@/lib/reports/finops-sections';
-import { PRODUCT_LABEL } from '@/lib/pulse/cowork/products';
+import { productFullName } from '@/lib/pulse/cowork/products';
 import type { OfficeSpendSummary } from '@/lib/finance/office-spend';
 import { currentPeriod } from '@/lib/finance/period';
-import { gapPct } from '@/lib/finance/spend-review-format';
+import { gapPct, surfaceName } from '@/lib/finance/spend-review-format';
+import { getConnectedProducts } from '@/lib/sources/connected';
+import { isOpenAiOnly, type ConnectedProducts } from '@/lib/sources/connected-shared';
 
 /** The biggest spenders whose advice is spelled out person by person. */
 export const REPORT_PEOPLE = 10;
@@ -84,20 +86,56 @@ export interface SpendReviewSectionInput {
   limits: SpendLimitsSnapshot | null;
   /** Share of the month gone by (1 for a past month); changes are against last month at this pace. */
   pace?: number;
-  /** The efficiency board shown, and its month: last month's while this month has nobody ranked yet. */
-  board?: { rows: EfficiencyEntry[]; period: string };
+  /**
+   * The efficiency boards shown (chooseEfficiencyBoards), each with its month:
+   * last month's while this month has nobody ranked yet. Absent: this month's
+   * boards from `index`, Claude's always and OpenAI's with OpenAI spend.
+   */
+  boards?: EfficiencyBoard[];
   /** Claude in Office this month: an estimate, never in the totals. Null when none or hidden. */
   office?: OfficeSpendSummary | null;
+}
+
+export type BoardVendor = 'claude' | 'openai';
+/** One "Most efficient" board: one vendor's work only, never mixed. */
+export interface EfficiencyBoard { vendor: BoardVendor; rows: EfficiencyEntry[]; period: string }
+
+const BOARD_NAME: Record<BoardVendor, string> = { claude: 'Claude', openai: 'OpenAI' };
+const BOARD_WORK: Record<BoardVendor, string> = { claude: 'Claude Code and Cowork', openai: 'ChatGPT and Codex' };
+
+type BoardSource = Pick<SpendReviewIndex, 'openai' | 'efficiency'> & { efficiencyOpenai?: EfficiencyEntry[] };
+
+/**
+ * Which boards the section carries, as the Spend Review page and route show
+ * them: Claude's unless only OpenAI is connected; OpenAI's when it is
+ * connected and shown (or its spend shows). Each board falls back to last
+ * month on its own while this month has nobody ranked (`prior` is last
+ * month's index, passed only for the current month).
+ */
+export function chooseEfficiencyBoards(opts: {
+  period: string;
+  index: BoardSource;
+  prior: (BoardSource & { period: string }) | null;
+  connected: ConnectedProducts | null;
+}): EfficiencyBoard[] {
+  const { period, index, prior, connected } = opts;
+  const openaiOnly = isOpenAiOnly(connected);
+  const pick = (vendor: BoardVendor, now: EfficiencyEntry[], before: EfficiencyEntry[] | undefined): EfficiencyBoard =>
+    now.length === 0 && prior && before?.length ? { vendor, rows: before, period: prior.period } : { vendor, rows: now, period };
+  const boards: EfficiencyBoard[] = [];
+  if (!openaiOnly) boards.push(pick('claude', index.efficiency, prior?.efficiency));
+  if (openaiOnly || connected?.openai || index.openai) boards.push(pick('openai', index.efficiencyOpenai ?? [], prior?.efficiencyOpenai));
+  return boards;
 }
 
 /** One line on Claude in Office: priced from the model rates, kept out of every total. */
 export function officeSentence(office: OfficeSpendSummary | null | undefined): string | null {
   if (!office || !office.hasOffice) return null;
   const apps = office.byProduct.filter(p => p.calls > 0)
-    .map(p => `${PRODUCT_LABEL[p.product]} ${p.usd === null ? 'not priced' : `about ${usd(p.usd)}`}`);
+    .map(p => `${productFullName(p.product)} ${p.usd === null ? 'not priced' : `about ${usd(p.usd)}`}`);
   const total = office.total.usd === null ? 'not priced' : `about **${usd(office.total.usd)}**`;
   const unpriced = office.total.unpricedModels.length ? ` Not priced, so left out: ${office.total.unpricedModels.join(', ')}.` : '';
-  return `Claude in Office (an estimate from the model rates, not included above): ${total} across ${office.total.people} ${office.total.people === 1 ? 'person' : 'people'} (${apps.join(', ')}).${unpriced}`;
+  return `Claude in Office and Google (an estimate from the model rates, not included above): ${total} across ${office.total.people} ${office.total.people === 1 ? 'person' : 'people'} (${apps.join(', ')}).${unpriced}`;
 }
 
 /** Pure renderer: everything the section says comes from `input`. */
@@ -105,12 +143,15 @@ export function renderSpendReviewSection(input: SpendReviewSectionInput): string
   const { index, reviews, period } = input;
   const s = index.summary;
   const pace = input.pace ?? 1;
-  const board = input.board ?? { rows: index.efficiency, period };
+  const boards = input.boards ?? chooseEfficiencyBoards({ period, index, prior: null, connected: null });
   const out: string[] = [];
   out.push(`### Spend Review: ${monthName(period)}`);
+  const sources = index.openai
+    ? "Measured by Command Centre from Claude Code and Cowork telemetry, plus ChatGPT and Codex from OpenAI's Compliance API priced at OpenAI's USD token rates (Claude Chat is not included; ChatGPT spend per conversation is an estimate, since OpenAI reports cost per hour)."
+    : 'Measured by Command Centre from Code and Cowork telemetry (Chat is not included).';
   out.push(periodMatchesMonth(input.periodStart, input.periodEnd)
-    ? `Figures cover ${monthName(period)}, measured by Command Centre from Code and Cowork telemetry (Chat is not included). Kind of work is AI-judged; savings are estimates at list price.`
-    : `Spend Review works by calendar month, so these figures cover ${monthName(period)}, the month containing the report's end date, not the full report window. Measured by Command Centre from Code and Cowork telemetry (Chat is not included). Kind of work is AI-judged; savings are estimates at list price.`);
+    ? `Figures cover ${monthName(period)}. ${sources} Kind of work is AI-judged; savings are estimates at list price.`
+    : `Spend Review works by calendar month, so these figures cover ${monthName(period)}, the month containing the report's end date, not the full report window. ${sources} Kind of work is AI-judged; savings are estimates at list price.`);
 
   const officeLine = officeSentence(input.office);
   if (index.people.length === 0) {
@@ -123,7 +164,7 @@ export function renderSpendReviewSection(input: SpendReviewSectionInput): string
   const bullets = [
     `Total measured spend: **${usd(s.totalUsd)}**, ${change(s.totalUsd, s.priorTotalUsd, pace)}, across ${s.people} people.`,
     s.halfSpendPeople !== null ? `${s.halfSpendPeople} ${s.halfSpendPeople === 1 ? 'person accounts' : 'people account'} for half of it.` : null,
-    s.topWork.length ? `Biggest kinds of work: ${s.topWork.map(w => `${w.label} (${w.surface === 'code' ? 'Code' : 'Cowork'}, ${pct(w.share)})`).join(', ')}.` : null,
+    s.topWork.length ? `Biggest kinds of work: ${s.topWork.map(w => `${w.label} (${surfaceName(w.surface, index.openai)}, ${pct(w.share)})`).join(', ')}.` : null,
     s.orgRereadShare !== null ? `${pct(s.orgRereadShare)} of the month's cost is Claude re-reading earlier conversation on every message.` : null,
     officeLine,
   ].filter(Boolean) as string[];
@@ -161,10 +202,13 @@ export function renderSpendReviewSection(input: SpendReviewSectionInput): string
     out.push(lines.map(l => `- ${l}`).join('\n'));
   }
 
-  if (board.rows.length) {
-    out.push(`#### Most efficient in ${monthName(board.period)}`);
-    if (board.period !== period) out.push(`Showing ${monthName(board.period)}: nobody has ${EFFICIENCY_MIN_SESSIONS} sessions in ${monthName(period)} yet, which the comparison needs to be fair.`);
-    out.push('Typical session cost against colleagues doing the same kinds of work, weighted by where each person\'s money goes; ranked only when their share of Tier 3 work is within 10 points of colleagues\'.');
+  // One board per vendor, Claude's then OpenAI's; a board with nobody ranked is left out.
+  for (const board of boards) {
+    if (!board.rows.length) continue;
+    const name = BOARD_NAME[board.vendor];
+    out.push(`#### Most efficient on ${name} in ${monthName(board.period)}`);
+    if (board.period !== period) out.push(`Showing ${monthName(board.period)}: nobody has ${EFFICIENCY_MIN_SESSIONS} sessions of ${name} work in ${monthName(period)} yet, which the comparison needs to be fair.`);
+    out.push(`Scored on ${BOARD_WORK[board.vendor]} work only. Typical session cost against colleagues doing the same kinds of work, weighted by where each person's money goes; ranked only when their share of Tier 3 work is no more than 10 points below colleagues'.`);
     out.push(['| | Person | Department | Cost vs colleagues | Sessions | Tier 3 (vs colleagues) |', '|---|---|---|---|---|---|',
       ...board.rows.map((e, i) => `| ${i + 1} | ${e.displayName} | ${e.department ?? '—'} | ${gapPct(e.vsColleagues)} below | ${e.sessions} | ${pct(e.deepRate)} vs ${pct(e.peerDeepRate)} |`),
     ].join('\n'));
@@ -197,13 +241,15 @@ export async function buildSpendReviewSection(periodStart: string, periodEnd: st
   const nowMs = Date.now();
   const isCurrent = period === currentPeriod(Math.floor(nowMs / 1000));
   const limits = isCurrent ? await getSpendLimits() : null;
-  // As on the page: early in a month nobody has enough sessions to rank, so show last month's board.
-  let board = { rows: index.efficiency, period };
-  if (isCurrent && board.rows.length === 0) {
-    const prior = priorPeriod(period);
-    const priorIndex = await buildSpendReviewIndex(prior);
-    if (priorIndex.efficiency.length) board = { rows: priorIndex.efficiency, period: prior };
+  // As on the page: early in a month nobody has enough sessions to rank, so each
+  // board shows last month's. Last month is built only when a shown board needs it.
+  const connected = await getConnectedProducts().catch(() => null);
+  const shown = chooseEfficiencyBoards({ period, index, prior: null, connected });
+  let prior: (SpendReviewIndex & { period: string }) | null = null;
+  if (isCurrent && shown.some(b => b.rows.length === 0)) {
+    prior = await buildSpendReviewIndex(priorPeriod(period)).catch(() => null);
   }
+  const boards = chooseEfficiencyBoards({ period, index, prior, connected });
   const office = await reportOfficeSpend(period);
-  return renderSpendReviewSection({ period, periodStart, periodEnd, index, reviews, limits, pace: isCurrent ? monthElapsed(period, nowMs) : 1, board, office });
+  return renderSpendReviewSection({ period, periodStart, periodEnd, index, reviews, limits, pace: isCurrent ? monthElapsed(period, nowMs) : 1, boards, office });
 }

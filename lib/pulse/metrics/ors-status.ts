@@ -45,7 +45,7 @@ export function readOrs(ors: number | null): OrsRead {
       return {
         level,
         status: 'Not yet measurable',
-        plain: 'Requires at least two active team members. Will appear once more than one person is using Cowork at meaningful depth.',
+        plain: 'Requires at least two active team members. Will appear once more than one person is using AI at meaningful depth.',
         statusColor: 'text-gray-400',
         dotColor: 'bg-gray-300',
       };

@@ -206,3 +206,38 @@ describe('getCodePulseHealth', () => {
     expect(health.malformedModelsJson).toBe(0);
   });
 });
+
+describe('getCodePulseHealth: Codex rows', () => {
+  beforeEach(async () => {
+    await sql.exec(`DELETE FROM codex_turns; DELETE FROM codex_actions; DELETE FROM cowork_messages;
+      DELETE FROM config WHERE key IN ('openai_admin_api_key', 'openaiAdminApiKey');`);
+  });
+
+  it('has no Codex row while OpenAI is not connected', async () => {
+    const health = await getCodePulseHealth();
+    expect(health.codex).toBeNull();
+  });
+
+  it('reports the latest Codex record received across turns, tool calls and prompts', async () => {
+    await sql.run(`INSERT INTO codex_turns (id, user_id, session_id, started_at, ingested_at) VALUES ('t1', 'user-1', 'codex:a', ?, ?)`, [NOW - DAY, NOW - 3 * DAY]);
+    await sql.run(`INSERT INTO codex_actions (id, user_id, session_id, occurred_at, ingested_at) VALUES ('a1', 'user-1', 'codex:a', ?, ?)`, [NOW - DAY, NOW - DAY]);
+    await sql.run(`INSERT INTO cowork_messages (id, user_id, session_id, message_type, surface, source, occurred_at, ingested_at)
+      VALUES ('p1', 'user-1', 'codex:a', 'code_user_message', 'code', 'codex', ?, ?)`, [NOW - DAY, NOW - 2 * DAY]);
+    // A Claude Code prompt received later is not a Codex record
+    await sql.run(`INSERT INTO cowork_messages (id, user_id, session_id, message_type, surface, occurred_at, ingested_at)
+      VALUES ('p2', 'user-1', 'cc-a', 'code_user_message', 'code', ?, ?)`, [NOW, NOW]);
+    const health = await getCodePulseHealth();
+    expect(health.codex).toEqual({ lastRecordAt: NOW - DAY });
+  });
+
+  it('reads "none yet" as null once OpenAI is connected by key with no Codex record', async () => {
+    const { setConfigValue } = await import('@/lib/config');
+    await setConfigValue('openaiAdminApiKey', 'sk-test-not-real');
+    try {
+      const health = await getCodePulseHealth();
+      expect(health.codex).toEqual({ lastRecordAt: null });
+    } finally {
+      await sql.exec(`DELETE FROM config WHERE key IN ('openai_admin_api_key', 'openaiAdminApiKey');`);
+    }
+  });
+});

@@ -89,7 +89,7 @@ describe('getAlerts({ types })', () => {
     await insertTestAlert('a-friction', 'code_friction');
 
     const types = typesForCategory('cost-efficiency');
-    expect(types).toEqual(['code_cost_spike', 'code_friction', 'finance_reconciliation_drift']);
+    expect(types).toEqual(['code_cost_spike', 'codex_cost_spike', 'code_friction', 'finance_reconciliation_drift']);
 
     const results = await getAlerts({ types });
     expect(results.map((r) => r.id).sort()).toEqual(['a-cost', 'a-friction']);

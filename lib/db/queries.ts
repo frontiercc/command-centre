@@ -14,6 +14,9 @@ import { schema } from './schema';
 import { jsonToText, textToJsonValue } from './json';
 import { withTx } from './with-tx';
 import { savepointEach } from './savepoint';
+import { productExpr } from '@/lib/dashboard/product-sql';
+import { PRODUCTS, zeroCounts, type ProductCounts, type ProductId } from '@/lib/dashboard/vendor';
+import { OPENAI_SOURCES } from '@/lib/openai/sources';
 
 // ─── Phase 3 helpers (shared by converted functions) ───────────────────────
 
@@ -338,18 +341,14 @@ export async function getEventsLast24h(): Promise<number> {
   const dayAgo = Math.floor(Date.now() / 1000) - 24 * 60 * 60;
   const ce = schema.complianceEvents;
   const cm = schema.coworkMessages;
-  const chat = schema.chatMessages;
 
-  // cowork_messages/chat_messages are guaranteed by the schema/migrations
-  // (matches the getActiveUsersThisWeek precedent) — the
-  // legacy "table may not exist" try/catch guard is no longer needed.
-  const [complianceRows, coworkRows, chatRows] = await Promise.all([
+  // cowork_messages holds every prompt, Claude Chat included (surface 'chat').
+  const [complianceRows, coworkRows] = await Promise.all([
     db.select({ count: sql<number | string>`count(*)` }).from(ce).where(gte(ce.ingested_at, dayAgo)),
     db.select({ count: sql<number | string>`count(*)` }).from(cm).where(gte(cm.ingested_at, dayAgo)),
-    db.select({ count: sql<number | string>`count(*)` }).from(chat).where(gte(chat.ingested_at, dayAgo)),
   ]);
 
-  return Number(complianceRows[0]?.count ?? 0) + Number(coworkRows[0]?.count ?? 0) + Number(chatRows[0]?.count ?? 0);
+  return Number(complianceRows[0]?.count ?? 0) + Number(coworkRows[0]?.count ?? 0);
 }
 
 export async function getRecentComplianceEvents(limit: number = 100): Promise<ComplianceEvent[]> {
@@ -375,7 +374,7 @@ export async function getSnapshotsForUser(userId: string, days: number = 30): Pr
     .orderBy(asc(asnap.snapshot_date));
   if (rows.length > 0) return rows as AnalyticsSnapshot[];
 
-  // Fallback: synthesise daily snapshots from chat_messages + cowork_messages.
+  // Fallback: synthesise daily snapshots from cowork_messages (Claude Chat is surface 'chat').
   // The UTC date-bucket fragment is reused across all three UNION
   // ALL branches + the outer GROUP BY; the derived table in FROM is aliased
   // (`AS daily`) — Postgres (ANSI-strict) rejects an unaliased FROM subquery.
@@ -398,7 +397,7 @@ export async function getSnapshotsForUser(userId: string, days: number = 30): Pr
         SUM(cowork) as surface_cowork
       FROM (
         SELECT ${dateExpr} as day, COUNT(*) as chat, 0 as code, 0 as cowork
-        FROM chat_messages WHERE user_id = ${userId} AND occurred_at >= ${cutoffTs} GROUP BY day
+        FROM cowork_messages WHERE user_id = ${userId} AND surface = 'chat' AND occurred_at >= ${cutoffTs} GROUP BY day
         UNION ALL
         SELECT ${dateExpr} as day, 0 as chat, COUNT(*) as code, 0 as cowork
         FROM cowork_messages WHERE user_id = ${userId} AND surface = 'code' AND occurred_at >= ${cutoffTs} GROUP BY day
@@ -485,7 +484,7 @@ export async function getAdoptionTrend(days: number = 7): Promise<Array<{
   // every window day without a snapshot still shows live-derived activity.
   // (Merge behaviour preserved exactly across this conversion.)
 
-  // Fallback: derive from cowork_messages + otel_events + chat_messages (Max mode)
+  // Fallback: derive from cowork_messages + otel_events (Max mode)
   const cutoffUnix = Math.floor(cutoff.getTime() / 1000);
   // The UTC date-bucket fragment is reused in both the SELECT and
   // GROUP BY of each raw query below.
@@ -508,15 +507,12 @@ export async function getAdoptionTrend(days: number = 7): Promise<Array<{
     GROUP BY ${dateExpr}
   `);
 
-  // Get chat activity by day (from chat_messages + otel_events with surface='chat')
-  let chatByDay: Array<{ date: string; cnt: number | string }> = [];
-  try {
-    chatByDay = await rawAll<{ date: string; cnt: number | string }>(db, sql`
-      SELECT ${dateExpr} as date, COUNT(*) as cnt
-      FROM chat_messages WHERE occurred_at >= ${cutoffUnix}
-      GROUP BY ${dateExpr}
-    `);
-  } catch { /* table may not exist */ }
+  // Get chat activity by day (Claude Chat prompts, surface='chat')
+  const chatByDay = await rawAll<{ date: string; cnt: number | string }>(db, sql`
+    SELECT ${dateExpr} as date, COUNT(*) as cnt
+    FROM cowork_messages WHERE occurred_at >= ${cutoffUnix} AND surface = 'chat'
+    GROUP BY ${dateExpr}
+  `);
 
   // Merge all surfaces by date
   const dateMap = new Map<string, { surface_chat: number; surface_code: number; surface_cowork: number }>();
@@ -601,6 +597,15 @@ export async function getCoworkSessionCount(): Promise<number> {
   const oe = schema.otelEvents;
   const rows = await db.select({ count: sql<number | string>`count(distinct ${oe.session_id})` }).from(oe);
   return Number(rows[0]?.count ?? 0);
+}
+
+/**
+ * Leaves out Claude Chat prompts (surface 'chat'), so figures that counted
+ * Cowork and Code rows before Claude Chat moved into cowork_messages
+ * (migration 0041) keep their meaning.
+ */
+function excludeClaudeChat(cm: typeof schema.coworkMessages) {
+  return or(isNull(cm.surface), sql`${cm.surface} <> 'chat'`);
 }
 
 export async function getCoworkSessionCountThisWeek(): Promise<number> {
@@ -948,18 +953,133 @@ export async function getSurfaceBreakdown(): Promise<{ chat: number; code: numbe
     code: Number(otelRows[0]?.code ?? 0),
   };
 
-  // Include chat_messages in the chat count (IndexedDB-sourced prompts)
-  let chatFromAgent = 0;
-  try {
-    const cmsg = schema.chatMessages;
-    const chatRows = await db
-      .select({ count: sql<number | string>`count(*)` })
-      .from(cmsg)
-      .where(gte(cmsg.occurred_at, weekAgo));
-    chatFromAgent = Number(chatRows[0]?.count ?? 0);
-  } catch { /* table may not exist */ }
+  // Include Claude Chat prompts (surface 'chat') in the chat count
+  const chatCm = schema.coworkMessages;
+  const chatMsgRows = await db
+    .select({ count: sql<number | string>`count(*)` })
+    .from(chatCm)
+    .where(and(eq(chatCm.surface, 'chat'), gte(chatCm.occurred_at, weekAgo)));
+  const chatFromAgent = Number(chatMsgRows[0]?.count ?? 0);
 
   return { chat: otel.chat + chatFromAgent, code: otel.code + codeFromAgent, agentCowork, otelCowork };
+}
+
+// ─── Per-person products (User Insights) ──────────────────────────────────
+
+/** Tie-break order for a person's main product (Claude Code first, as before). */
+const MAIN_PRODUCT_ORDER: ProductId[] = ['claude_code', 'claude_cowork', 'claude_chat', 'codex', 'chatgpt_work', 'chatgpt_chat'];
+const OPENAI_PRODUCT_IDS = new Set<ProductId>(['chatgpt_chat', 'chatgpt_work', 'codex']);
+
+/**
+ * Per person, events per product over the last `days`: Claude's three from
+ * the Analytics API snapshots where a person has them, otherwise from the
+ * events; OpenAI's three always from the events (the Analytics API reports
+ * Claude only).
+ */
+async function productCountsByUser(days: number, userId?: string): Promise<Map<string, ProductCounts>> {
+  const db = await getTypedClient();
+  const cutoff = new Date();
+  cutoff.setDate(cutoff.getDate() - days);
+  const cutoffStr = cutoff.toISOString().split('T')[0];
+  const cutoffTs = Math.floor(Date.now() / 1000) - days * 86400;
+  const result = new Map<string, ProductCounts>();
+  const countsFor = (uid: string) => {
+    let c = result.get(uid);
+    if (!c) { c = zeroCounts(); result.set(uid, c); }
+    return c;
+  };
+
+  const asnap = schema.analyticsSnapshots;
+  const snapConds = [gte(asnap.snapshot_date, cutoffStr)];
+  if (userId) snapConds.push(eq(asnap.user_id, userId));
+  const snaps = await db
+    .select({
+      user_id: asnap.user_id,
+      chat: sql<number | string>`sum(${asnap.surface_chat})`,
+      code: sql<number | string>`sum(${asnap.surface_code})`,
+      cowork: sql<number | string>`sum(${asnap.surface_cowork})`,
+    })
+    .from(asnap)
+    .where(and(...snapConds))
+    .groupBy(asnap.user_id);
+  const fromSnapshots = new Set<string>();
+  for (const r of snaps) {
+    const chat = Number(r.chat ?? 0);
+    const code = Number(r.code ?? 0);
+    const cowork = Number(r.cowork ?? 0);
+    if (chat + code + cowork <= 0) continue;
+    const c = countsFor(r.user_id as string);
+    c.claude_chat += chat;
+    c.claude_code += code;
+    c.claude_cowork += cowork;
+    fromSnapshots.add(r.user_id as string);
+  }
+
+  try {
+    const rows = await rawAll<{ user_id: string; product: ProductId; n: number | string }>(db, sql`
+      SELECT user_id, ${sql.raw(productExpr())} AS product, COUNT(*) AS n
+      FROM cowork_messages
+      WHERE occurred_at >= ${cutoffTs} AND user_id IS NOT NULL ${userId ? sql`AND user_id = ${userId}` : sql``}
+      GROUP BY 1, 2`);
+    for (const r of rows) {
+      if (fromSnapshots.has(r.user_id) && !OPENAI_PRODUCT_IDS.has(r.product)) continue;
+      countsFor(r.user_id)[r.product] += Number(r.n);
+    }
+  } catch { /* table might not exist */ }
+  return result;
+}
+
+/** The product a person used most: its label (Claude Cowork, ChatGPT Chat, Codex...), or null. */
+function mainProductLabel(c: ProductCounts): string | null {
+  let best: ProductId | null = null;
+  for (const id of MAIN_PRODUCT_ORDER) if (c[id] > 0 && (best === null || c[id] > c[best])) best = id;
+  return best ? PRODUCTS.find((p) => p.id === best)!.label : null;
+}
+
+/**
+ * One person's events per product per UTC day over the last `days`, on the
+ * same rule as productCountsByUser.
+ */
+export async function getUserProductDays(userId: string, days: number = 30): Promise<Array<{ date: string; total: number; counts: ProductCounts }>> {
+  const db = await getTypedClient();
+  const byDay = new Map<string, ProductCounts>();
+  const countsFor = (d: string) => {
+    let c = byDay.get(d);
+    if (!c) { c = zeroCounts(); byDay.set(d, c); }
+    return c;
+  };
+  const snaps = await getSnapshotsForUser(userId, days);
+  // getSnapshotsForUser falls back to the events; only real snapshot rows carry conversations or commits.
+  const asnap = schema.analyticsSnapshots;
+  const cutoff = new Date();
+  cutoff.setDate(cutoff.getDate() - days);
+  const real = await db.select({ n: sql<number | string>`count(*)` }).from(asnap)
+    .where(and(eq(asnap.user_id, userId), gte(asnap.snapshot_date, cutoff.toISOString().split('T')[0])));
+  const hasSnapshots = Number(real[0]?.n ?? 0) > 0;
+  if (hasSnapshots) {
+    for (const r of snaps) {
+      const c = countsFor(r.snapshot_date);
+      c.claude_chat += r.surface_chat;
+      c.claude_code += r.surface_code;
+      c.claude_cowork += r.surface_cowork;
+    }
+  }
+  try {
+    const cutoffTs = Math.floor(Date.now() / 1000) - days * 86400;
+    const rows = await rawAll<{ day: string; product: ProductId; n: number | string }>(db, sql`
+      SELECT to_char(to_timestamp(occurred_at) AT TIME ZONE 'UTC', 'YYYY-MM-DD') AS day,
+             ${sql.raw(productExpr())} AS product, COUNT(*) AS n
+      FROM cowork_messages
+      WHERE user_id = ${userId} AND occurred_at >= ${cutoffTs}
+      GROUP BY 1, 2`);
+    for (const r of rows) {
+      if (hasSnapshots && !OPENAI_PRODUCT_IDS.has(r.product)) continue;
+      countsFor(r.day)[r.product] += Number(r.n);
+    }
+  } catch { /* table might not exist */ }
+  return [...byDay.entries()]
+    .sort(([a], [b]) => a.localeCompare(b))
+    .map(([date, counts]) => ({ date, counts, total: Object.values(counts).reduce((t, n) => t + n, 0) }));
 }
 
 // ─── User detail enrichment ───────────────────────────────────────────────
@@ -982,7 +1102,7 @@ export async function getUserAdoptionHealth(userId: string): Promise<'active' | 
     const rows = await db
       .select({ count: sql<number | string>`count(*)` })
       .from(cm)
-      .where(and(eq(cm.user_id, userId), gte(cm.occurred_at, weekAgo)));
+      .where(and(eq(cm.user_id, userId), gte(cm.occurred_at, weekAgo), excludeClaudeChat(cm)));
     const count = Number(rows[0]?.count ?? 0);
     if (count >= 5) return 'active';
     if (count > 0) return 'shallow';
@@ -991,58 +1111,8 @@ export async function getUserAdoptionHealth(userId: string): Promise<'active' | 
 }
 
 export async function getUserPrimarySurface(userId: string): Promise<string> {
-  const db = await getTypedClient();
-  const cutoff = new Date();
-  cutoff.setDate(cutoff.getDate() - 7);
-  const cutoffStr = cutoff.toISOString().split('T')[0];
-
-  const asnap = schema.analyticsSnapshots;
-  const rows = await db
-    .select({
-      chat: sql<number | string | null>`sum(${asnap.surface_chat})`,
-      code: sql<number | string | null>`sum(${asnap.surface_code})`,
-      cowork: sql<number | string | null>`sum(${asnap.surface_cowork})`,
-    })
-    .from(asnap)
-    .where(and(eq(asnap.user_id, userId), gte(asnap.snapshot_date, cutoffStr)));
-  const row = rows[0];
-
-  if (row) {
-    const chat = Number(row.chat ?? 0);
-    const code = Number(row.code ?? 0);
-    const cowork = Number(row.cowork ?? 0);
-    const max = Math.max(chat, code, cowork);
-    if (max > 0) {
-      if (max === code) return 'Code';
-      if (max === cowork) return 'Cowork';
-      return 'Chat';
-    }
-  }
-
-  // Fallback: count per surface from cowork_messages + chat_messages
-  try {
-    const weekAgo = Math.floor(Date.now() / 1000) - 7 * 86400;
-    const cm = schema.coworkMessages;
-    const cmsg = schema.chatMessages;
-    const [codeRows, coworkRows, chatRows] = await Promise.all([
-      db.select({ count: sql<number | string>`count(*)` }).from(cm)
-        .where(and(eq(cm.user_id, userId), eq(cm.surface, 'code'), gte(cm.occurred_at, weekAgo))),
-      db.select({ count: sql<number | string>`count(*)` }).from(cm)
-        .where(and(eq(cm.user_id, userId), eq(cm.surface, 'cowork'), gte(cm.occurred_at, weekAgo))),
-      db.select({ count: sql<number | string>`count(*)` }).from(cmsg)
-        .where(and(eq(cmsg.user_id, userId), gte(cmsg.occurred_at, weekAgo))),
-    ]);
-    const codeCount = Number(codeRows[0]?.count ?? 0);
-    const coworkCount = Number(coworkRows[0]?.count ?? 0);
-    const chatCount = Number(chatRows[0]?.count ?? 0);
-    const max = Math.max(chatCount, codeCount, coworkCount);
-    if (max > 0) {
-      if (max === codeCount) return 'Code';
-      if (max === coworkCount) return 'Cowork';
-      return 'Chat';
-    }
-  } catch { /* table might not exist */ }
-  return 'None';
+  const counts = (await productCountsByUser(7, userId)).get(userId);
+  return (counts && mainProductLabel(counts)) || 'None';
 }
 
 export async function getUserMessageCount7d(userId: string): Promise<number> {
@@ -1057,18 +1127,21 @@ export async function getUserMessageCount7d(userId: string): Promise<number> {
     .from(asnap)
     .where(and(eq(asnap.user_id, userId), gte(asnap.snapshot_date, cutoffStr)));
   const total = Number(rows[0]?.total ?? 0);
-  if (total > 0) return total;
 
-  // Fallback: count from cowork_messages
+  // Fallback: count from cowork_messages. The snapshots report Claude only,
+  // so a person who has them still gets their ChatGPT and Codex events.
   try {
     const weekAgo = Math.floor(Date.now() / 1000) - 7 * 86400;
     const cm = schema.coworkMessages;
     const coworkRows = await db
-      .select({ count: sql<number | string>`count(*)` })
+      .select({
+        count: sql<number | string>`count(*)`,
+        openai: sql<number | string>`count(*) FILTER (WHERE ${inArray(cm.source, [...OPENAI_SOURCES])})`,
+      })
       .from(cm)
-      .where(and(eq(cm.user_id, userId), gte(cm.occurred_at, weekAgo)));
-    return Number(coworkRows[0]?.count ?? 0);
-  } catch { return 0; }
+      .where(and(eq(cm.user_id, userId), gte(cm.occurred_at, weekAgo), excludeClaudeChat(cm)));
+    return total > 0 ? total + Number(coworkRows[0]?.openai ?? 0) : Number(coworkRows[0]?.count ?? 0);
+  } catch { return total; }
 }
 
 export async function getUserAlerts(userId: string): Promise<Alert[]> {
@@ -1101,18 +1174,26 @@ export async function getAllUserMessageCounts7d(): Promise<Map<string, number>> 
     if (total > 0) result.set(row.user_id as string, total);
   }
 
-  // Fallback: cowork_messages for users not in analytics
+  // Fallback: cowork_messages for users not in analytics. The snapshots
+  // report Claude only, so a person who has them still gets their ChatGPT and
+  // Codex events.
   try {
     const weekAgo = Math.floor(Date.now() / 1000) - 7 * 86400;
     const cm = schema.coworkMessages;
     const coworkRows = await db
-      .select({ user_id: cm.user_id, count: sql<number | string>`count(*)` })
+      .select({
+        user_id: cm.user_id,
+        count: sql<number | string>`count(*)`,
+        openai: sql<number | string>`count(*) FILTER (WHERE ${inArray(cm.source, [...OPENAI_SOURCES])})`,
+      })
       .from(cm)
-      .where(gte(cm.occurred_at, weekAgo))
+      .where(and(gte(cm.occurred_at, weekAgo), excludeClaudeChat(cm)))
       .groupBy(cm.user_id);
     for (const row of coworkRows) {
       const uid = row.user_id as string;
-      if (!result.has(uid)) result.set(uid, Number(row.count));
+      const fromSnapshots = result.get(uid);
+      if (fromSnapshots === undefined) result.set(uid, Number(row.count));
+      else result.set(uid, fromSnapshots + Number(row.openai));
     }
   } catch { /* table might not exist */ }
 
@@ -1135,84 +1216,11 @@ export async function getAllUserOpenAlertCounts(): Promise<Map<string, number>> 
 }
 
 export async function getAllUserPrimarySurfaces(): Promise<Map<string, string>> {
-  const db = await getTypedClient();
   const result = new Map<string, string>();
-  // App-clock cutoff string, 7 days back.
-  const cutoff = new Date();
-  cutoff.setDate(cutoff.getDate() - 7);
-  const cutoffStr = cutoff.toISOString().split('T')[0];
-
-  // GROUP BY user_id — the only non-aggregated SELECT column IS the group key.
-  const asnap = schema.analyticsSnapshots;
-  const rows = await db
-    .select({
-      user_id: asnap.user_id,
-      chat: sql<number | string>`sum(${asnap.surface_chat})`,
-      code: sql<number | string>`sum(${asnap.surface_code})`,
-      cowork: sql<number | string>`sum(${asnap.surface_cowork})`,
-    })
-    .from(asnap)
-    .where(gte(asnap.snapshot_date, cutoffStr))
-    .groupBy(asnap.user_id);
-
-  for (const row of rows) {
-    const chat = Number(row.chat ?? 0);
-    const code = Number(row.code ?? 0);
-    const cowork = Number(row.cowork ?? 0);
-    const max = Math.max(chat, code, cowork);
-    if (max > 0) {
-      result.set(row.user_id as string, max === code ? 'Code' : max === cowork ? 'Cowork' : 'Chat');
-    }
+  for (const [uid, counts] of await productCountsByUser(7)) {
+    const label = mainProductLabel(counts);
+    if (label) result.set(uid, label);
   }
-
-  // Fallback: for users not in analytics, count per surface from cowork_messages + chat_messages
-  try {
-    const weekAgo = Math.floor(Date.now() / 1000) - 7 * 86400;
-    const cm = schema.coworkMessages;
-
-    // cowork_messages split by surface (code vs cowork). GROUP BY user_id,
-    // surface — both are group keys, both selected bare, compliant.
-    const coworkRows = await db
-      .select({ user_id: cm.user_id, surface: cm.surface, count: sql<number | string>`count(*)` })
-      .from(cm)
-      .where(gte(cm.occurred_at, weekAgo))
-      .groupBy(cm.user_id, cm.surface);
-
-    const fallbackCounts = new Map<string, { code: number; cowork: number; chat: number }>();
-    for (const row of coworkRows) {
-      const uid = row.user_id as string;
-      if (result.has(uid)) continue;
-      const c = fallbackCounts.get(uid) ?? { code: 0, cowork: 0, chat: 0 };
-      const count = Number(row.count);
-      if (row.surface === 'code') c.code += count;
-      else if (row.surface === 'cowork') c.cowork += count;
-      fallbackCounts.set(uid, c);
-    }
-
-    // chat_messages
-    const cmsg = schema.chatMessages;
-    const chatRows = await db
-      .select({ user_id: cmsg.user_id, count: sql<number | string>`count(*)` })
-      .from(cmsg)
-      .where(gte(cmsg.occurred_at, weekAgo))
-      .groupBy(cmsg.user_id);
-    for (const row of chatRows) {
-      const uid = row.user_id as string;
-      if (result.has(uid)) continue;
-      const c = fallbackCounts.get(uid) ?? { code: 0, cowork: 0, chat: 0 };
-      c.chat += Number(row.count);
-      fallbackCounts.set(uid, c);
-    }
-
-    // Pick the winning surface per user
-    for (const [uid, counts] of fallbackCounts) {
-      const max = Math.max(counts.code, counts.cowork, counts.chat);
-      if (max > 0) {
-        result.set(uid, max === counts.code ? 'Code' : max === counts.cowork ? 'Cowork' : 'Chat');
-      }
-    }
-  } catch { /* table might not exist */ }
-
   return result;
 }
 
@@ -1254,7 +1262,7 @@ export async function getAllUserAdoptionHealth(): Promise<Map<string, 'active' |
     const coworkRows = await db
       .select({ user_id: cm.user_id, count: sql<number | string>`count(*)` })
       .from(cm)
-      .where(gte(cm.occurred_at, twoWeeksAgo))
+      .where(and(gte(cm.occurred_at, twoWeeksAgo), excludeClaudeChat(cm)))
       .groupBy(cm.user_id);
     for (const row of coworkRows) {
       const uid = row.user_id as string;
@@ -1302,7 +1310,7 @@ export async function getDepartmentBreakdown(): Promise<DepartmentStats[]> {
       COUNT(DISTINCT cowork.user_id) as surface_cowork
     FROM users u
     LEFT JOIN (
-      SELECT DISTINCT user_id FROM chat_messages WHERE occurred_at >= ${weekAgo}
+      SELECT DISTINCT user_id FROM cowork_messages WHERE surface = 'chat' AND occurred_at >= ${weekAgo}
     ) chat ON u.id = chat.user_id
     LEFT JOIN (
       SELECT DISTINCT user_id FROM cowork_messages WHERE surface = 'code' AND occurred_at >= ${weekAgo}
@@ -1398,7 +1406,7 @@ export async function getTopUsers(limit: number = 5): Promise<TopUser[]> {
         COALESCE(cowork.cnt, 0) as surface_cowork
       FROM users u
       LEFT JOIN (
-        SELECT user_id, COUNT(*) as cnt FROM chat_messages WHERE occurred_at >= ${weekAgo} GROUP BY user_id
+        SELECT user_id, COUNT(*) as cnt FROM cowork_messages WHERE surface = 'chat' AND occurred_at >= ${weekAgo} GROUP BY user_id
       ) chat ON u.id = chat.user_id
       LEFT JOIN (
         SELECT user_id, COUNT(*) as cnt FROM cowork_messages WHERE surface = 'code' AND occurred_at >= ${weekAgo} GROUP BY user_id
@@ -1710,7 +1718,7 @@ export async function getRecentCoworkSessions(limit: number = 20): Promise<Cowor
 export async function getCoworkMessageCount(): Promise<number> {
   const db = await getTypedClient();
   const t = schema.coworkMessages;
-  const rows = await db.select({ count: sql<number | string>`count(*)` }).from(t);
+  const rows = await db.select({ count: sql<number | string>`count(*)` }).from(t).where(excludeClaudeChat(t));
   return Number(rows[0]?.count ?? 0);
 }
 
@@ -1730,12 +1738,19 @@ export async function exportUserData(userId: string): Promise<{
   export_date: string;
   user: User;
   cowork_messages: CoworkMessage[];
-  chat_messages: (typeof schema.chatMessages.$inferSelect)[];
   chat_reply_metadata: (typeof schema.chatAssistantMeta.$inferSelect)[];
   otel_events: OtelEvent[];
   compliance_events: ComplianceEvent[];
   analytics_snapshots: AnalyticsSnapshot[];
   alerts: Alert[];
+  /** ChatGPT and Codex (OpenAI's Compliance API): reply model and time, conversation times, Codex turns and actions, hourly costs. Never reply text. */
+  openai: {
+    chatgpt_replies: (typeof schema.openaiReplies.$inferSelect)[];
+    chatgpt_conversation_times: (typeof schema.chatgptSessionTime.$inferSelect)[];
+    codex_turns: (typeof schema.codexTurns.$inferSelect)[];
+    codex_actions: (typeof schema.codexActions.$inferSelect)[];
+    hourly_costs: (typeof schema.openaiCosts.$inferSelect)[];
+  };
 } | null> {
   const db = await getTypedClient();
   const u = schema.users;
@@ -1749,20 +1764,25 @@ export async function exportUserData(userId: string): Promise<{
   const ce = schema.complianceEvents;
   const asnap = schema.analyticsSnapshots;
   const al = schema.alerts;
-  const chm = schema.chatMessages;
   const cam = schema.chatAssistantMeta;
 
-  // Claude Chat prompts and the metadata kept for Claude's replies (never the reply text).
-  const [chatMessages, chatReplyMeta] = await Promise.all([
-    db.select().from(chm).where(eq(chm.user_id, userId)).orderBy(desc(chm.occurred_at)),
-    db.select().from(cam).where(eq(cam.user_id, userId)).orderBy(desc(cam.occurred_at)),
-  ]);
+  // Claude Chat prompts are in cowork_messages (surface 'chat'); this is the
+  // metadata kept for Claude's replies (never the reply text).
+  const chatReplyMeta = await db.select().from(cam).where(eq(cam.user_id, userId)).orderBy(desc(cam.occurred_at));
   const [coworkMessages, otelEvents, complianceEvents, analyticsSnapshots, alerts] = await Promise.all([
     db.select().from(cm).where(eq(cm.user_id, userId)).orderBy(desc(cm.occurred_at)),
     db.select().from(oe).where(eq(oe.user_id, userId)).orderBy(desc(oe.occurred_at)),
     db.select().from(ce).where(eq(ce.user_id, userId)).orderBy(desc(ce.occurred_at)),
     db.select().from(asnap).where(eq(asnap.user_id, userId)).orderBy(desc(asnap.snapshot_date)),
     db.select().from(al).where(eq(al.user_id, userId)).orderBy(desc(al.generated_at)),
+  ]);
+  // The person's ChatGPT and Codex records beyond their prompts (which are in cowork_messages).
+  const [gptReplies, gptTimes, cxTurns, cxActions, oaCosts] = await Promise.all([
+    db.select().from(schema.openaiReplies).where(eq(schema.openaiReplies.user_id, userId)).orderBy(desc(schema.openaiReplies.occurred_at)),
+    db.select().from(schema.chatgptSessionTime).where(eq(schema.chatgptSessionTime.user_id, userId)).orderBy(desc(schema.chatgptSessionTime.first_at)),
+    db.select().from(schema.codexTurns).where(eq(schema.codexTurns.user_id, userId)).orderBy(desc(schema.codexTurns.started_at)),
+    db.select().from(schema.codexActions).where(eq(schema.codexActions.user_id, userId)).orderBy(desc(schema.codexActions.occurred_at)),
+    db.select().from(schema.openaiCosts).where(eq(schema.openaiCosts.user_id, userId)).orderBy(desc(schema.openaiCosts.hour_start)),
   ]);
 
   return {
@@ -1771,7 +1791,6 @@ export async function exportUserData(userId: string): Promise<{
     // Policy A: every jsonb column normalised to a JSON string, matching the app's pre-existing `string | null` contract for
     // these fields (getCoworkMessages/getRecentComplianceEvents/getAlerts).
     cowork_messages: coworkMessages.map((r) => ({ ...r, token_usage: jsonToText(r.token_usage) })) as CoworkMessage[],
-    chat_messages: chatMessages,
     chat_reply_metadata: chatReplyMeta,
     otel_events: otelEvents.map((r) => ({
       ...r,
@@ -1782,6 +1801,7 @@ export async function exportUserData(userId: string): Promise<{
     compliance_events: complianceEvents.map((r) => ({ ...r, metadata: jsonToText(r.metadata) })) as ComplianceEvent[],
     analytics_snapshots: analyticsSnapshots as AnalyticsSnapshot[],
     alerts: alerts.map((r) => ({ ...r, raw_evidence: jsonToText(r.raw_evidence) })) as Alert[],
+    openai: { chatgpt_replies: gptReplies, chatgpt_conversation_times: gptTimes, codex_turns: cxTurns, codex_actions: cxActions, hourly_costs: oaCosts },
   };
 }
 
@@ -1807,7 +1827,7 @@ export async function deleteUserData(userId: string): Promise<{
   if (userRows.length === 0) return null;
   const personLabel = userRows[0].display_name || userRows[0].email || userId;
 
-  const counts = { chat_messages: 0, cowork_messages: 0, cowork_sessions: 0, otel_events: 0, compliance_events: 0, analytics_snapshots: 0, alerts: 0 };
+  const counts = { cowork_messages: 0, cowork_sessions: 0, otel_events: 0, compliance_events: 0, analytics_snapshots: 0, alerts: 0 };
 
   // SAVEPOINT ISOLATION on Postgres (compliance-critical). The ~9 DELETEs/UPDATEs below tolerate a
   // per-statement failure without aborting the whole erasure. On Postgres the
@@ -1865,7 +1885,7 @@ export async function deleteUserData(userId: string): Promise<{
       async (h) => { await h.delete(schema.pulseTeamAssessments).where(eq(schema.pulseTeamAssessments.assessed_by, userId)); },
       async (h) => { await h.delete(schema.pulseBaselines).where(eq(schema.pulseBaselines.set_by, userId)); },
       async (h) => { await h.delete(schema.pulseMetrics).where(and(eq(schema.pulseMetrics.scope_type, 'user'), eq(schema.pulseMetrics.scope_id, userId))); },
-      async (h) => { counts.chat_messages = rowsAffected(await h.delete(schema.chatMessages).where(eq(schema.chatMessages.user_id, userId))); },
+      async (h) => { await h.delete(schema.pulseMetricsVendor).where(and(eq(schema.pulseMetricsVendor.scope_type, 'user'), eq(schema.pulseMetricsVendor.scope_id, userId))); },
       // Blocker-class NO ACTION FKs: these must go
       // before the users row or the whole erasure fails on the constraint.
       // NOTE: these load-bearing deletes are tolerated (savepointEach) by
@@ -1885,9 +1905,16 @@ export async function deleteUserData(userId: string): Promise<{
       async (h) => { await h.delete(schema.codeSessionClassifications).where(eq(schema.codeSessionClassifications.user_id, userId)); },
       async (h) => { await h.delete(schema.codeSessionStats).where(eq(schema.codeSessionStats.user_id, userId)); },
       async (h) => { await h.delete(schema.codeAssistantMeta).where(eq(schema.codeAssistantMeta.user_id, userId)); },
+      // OpenAI spend (migration 0043): hourly costs, ChatGPT reply times, Codex turns.
+      async (h) => { await h.delete(schema.openaiCosts).where(eq(schema.openaiCosts.user_id, userId)); },
+      async (h) => { await h.delete(schema.openaiReplies).where(eq(schema.openaiReplies.user_id, userId)); },
+      async (h) => { await h.delete(schema.codexTurns).where(eq(schema.codexTurns.user_id, userId)); },
+      async (h) => { await h.delete(schema.codexActions).where(eq(schema.codexActions.user_id, userId)); },
+      async (h) => { await h.delete(schema.chatgptSessionTime).where(eq(schema.chatgptSessionTime.user_id, userId)); },
       async (h) => { await h.delete(schema.codeOtelMetrics).where(eq(schema.codeOtelMetrics.user_id, userId)); },
       // user-scope metric rows only — org/dept aggregates are not personal data
       async (h) => { await h.delete(schema.codeMetrics).where(and(eq(schema.codeMetrics.scope_type, 'user'), eq(schema.codeMetrics.scope_id, userId))); },
+      async (h) => { await h.delete(schema.codeMetricsVendor).where(and(eq(schema.codeMetricsVendor.scope_type, 'user'), eq(schema.codeMetricsVendor.scope_id, userId))); },
       // GDPR: user-scope weekly briefing prose (contains the
       // person's display name, generated by lib/pulse/briefings/weekly.ts) —
       // org/dept-scope briefings are not personal data and survive.
@@ -1906,6 +1933,8 @@ export async function deleteUserData(userId: string): Promise<{
       // keyed by their own email (an email is personal data too).
       async (h) => { await h.delete(schema.otelIdentityConflicts).where(or(eq(schema.otelIdentityConflicts.existing_user_id, userId), eq(schema.otelIdentityConflicts.new_user_id, userId))); },
       async (h) => { await h.delete(schema.otelIdentityAliases).where(eq(schema.otelIdentityAliases.user_id, userId)); },
+      // The OpenAI accounts this person resolved to (migration 0048).
+      async (h) => { await h.delete(schema.openaiIdentityUsers).where(eq(schema.openaiIdentityUsers.user_id, userId)); },
       async (h) => { if (userRows[0].email) await h.delete(schema.otelIdentityAliases).where(eq(schema.otelIdentityAliases.email, String(userRows[0].email).toLowerCase())); },
     ];
     const preResult = await savepointEach(tx, preOps, async (h, op) => { await op(h); });
@@ -1955,6 +1984,10 @@ export async function getDbStats(): Promise<{
   coworkCount: number;
   codeCount: number;
   coworkOnlyCount: number;
+  /** ChatGPT Chat and Work prompts (cowork_messages, surface 'cowork'); not in coworkOnlyCount. */
+  chatgptCount: number;
+  /** Codex prompts (cowork_messages, surface 'code'); not in codeCount. */
+  codexCount: number;
   otelCount: number;
   complianceCount: number;
   chatCount: number;
@@ -1971,18 +2004,25 @@ export async function getDbStats(): Promise<{
   const oe = schema.otelEvents;
   const ce = schema.complianceEvents;
   const u = schema.users;
-  const chat = schema.chatMessages;
 
-  const [coworkRows, otelRows, complianceRows, userRows, chatRows, codeRows, coworkOnlyRows, latestOtelRows, latestCoworkOtelRows] = await Promise.all([
-    db.select({ count: sql<number | string>`count(*)` }).from(cm),
+  // Claude Chat prompts share cowork_messages (surface 'chat'); counted apart.
+  // So do ChatGPT (surface 'cowork') and Codex (surface 'code') prompts: the
+  // Code and Cowork counts are Claude's alone, OpenAI's are their own lines.
+  // coworkCount stays the combined non-Chat total, for API compatibility.
+  const notChat = or(isNull(cm.surface), sql`${cm.surface} <> 'chat'`);
+  const notOpenAi = notInArray(cm.source, [...OPENAI_SOURCES]);
+  const [coworkRows, otelRows, complianceRows, userRows, chatRows, codeRows, coworkOnlyRows, latestOtelRows, latestCoworkOtelRows, chatgptRows, codexRows] = await Promise.all([
+    db.select({ count: sql<number | string>`count(*)` }).from(cm).where(notChat),
     db.select({ count: sql<number | string>`count(*)` }).from(oe),
     db.select({ count: sql<number | string>`count(*)` }).from(ce),
     db.select({ count: sql<number | string>`count(*)` }).from(u),
-    db.select({ count: sql<number | string>`count(*)` }).from(chat),
-    db.select({ count: sql<number | string>`count(*)` }).from(cm).where(eq(cm.surface, 'code')),
-    db.select({ count: sql<number | string>`count(*)` }).from(cm).where(eq(cm.surface, 'cowork')),
+    db.select({ count: sql<number | string>`count(*)` }).from(cm).where(eq(cm.surface, 'chat')),
+    db.select({ count: sql<number | string>`count(*)` }).from(cm).where(and(eq(cm.surface, 'code'), notOpenAi)),
+    db.select({ count: sql<number | string>`count(*)` }).from(cm).where(and(eq(cm.surface, 'cowork'), notOpenAi)),
     db.select({ ts: sql<number | string | null>`max(${oe.occurred_at})` }).from(oe),
     db.select({ ts: sql<number | string | null>`max(${cm.occurred_at})` }).from(cm).where(eq(cm.source, 'otel')),
+    db.select({ count: sql<number | string>`count(*)` }).from(cm).where(inArray(cm.source, ['chatgpt_chat', 'chatgpt_work'])),
+    db.select({ count: sql<number | string>`count(*)` }).from(cm).where(eq(cm.source, 'codex')),
   ]);
 
   const tsA = latestOtelRows[0]?.ts != null ? Number(latestOtelRows[0].ts) : null;
@@ -1995,6 +2035,8 @@ export async function getDbStats(): Promise<{
     coworkCount: Number(coworkRows[0]?.count ?? 0),
     codeCount: Number(codeRows[0]?.count ?? 0),
     coworkOnlyCount: Number(coworkOnlyRows[0]?.count ?? 0),
+    chatgptCount: Number(chatgptRows[0]?.count ?? 0),
+    codexCount: Number(codexRows[0]?.count ?? 0),
     otelCount: Number(otelRows[0]?.count ?? 0),
     complianceCount: Number(complianceRows[0]?.count ?? 0),
     chatCount: Number(chatRows[0]?.count ?? 0),
@@ -2005,19 +2047,28 @@ export async function getDbStats(): Promise<{
 
 // ─── Chat Messages ──────────────────────────────────────────────────────
 
+// Claude Chat prompts are stored in cowork_messages with surface 'chat'
+// (one session per conversation), so Work Pulse classifies them like any
+// other prompt. These helpers read them back in the Chat shape.
+
 export interface ChatMessage {
   id: string;
   conversation_id: string | null;
   user_id: string | null;
   prompt_text: string;
   prompt_length: number;
-  attachments_count: number;
-  files_count: number;
   flagged: number;
   flag_reason: string | null;
   occurred_at: number;
   ingested_at: number;
   agent_id: string | null;
+  source: string;
+}
+
+/** The Claude Chat prompt rows: surface 'chat' in cowork_messages. */
+function chatPromptWhere() {
+  const cm = schema.coworkMessages;
+  return and(eq(cm.surface, 'chat'), eq(cm.message_type, 'cowork_user_message'));
 }
 
 export async function getChatMessages(filters: {
@@ -2030,22 +2081,35 @@ export async function getChatMessages(filters: {
   offset?: number;
 } = {}): Promise<ChatMessage[]> {
   const db = await getTypedClient();
-  const cm = schema.chatMessages;
+  const cm = schema.coworkMessages;
   const u = schema.users;
 
-  const conditions = [];
+  const conditions = [chatPromptWhere()];
   if (filters.userId) conditions.push(eq(cm.user_id, filters.userId));
-  if (filters.conversationId) conditions.push(eq(cm.conversation_id, filters.conversationId));
+  if (filters.conversationId) conditions.push(eq(cm.session_id, filters.conversationId));
   if (filters.flaggedOnly) conditions.push(eq(cm.flagged, 1));
   if (filters.dateFrom) conditions.push(gte(cm.occurred_at, filters.dateFrom));
   if (filters.dateTo) conditions.push(lte(cm.occurred_at, filters.dateTo));
-  const where = conditions.length > 0 ? and(...conditions) : undefined;
+  const where = and(...conditions);
 
   const limit = filters.limit || 100;
   const offset = filters.offset || 0;
 
   const rows = await db
-    .select({ message: cm, user_display_name: u.display_name })
+    .select({
+      id: cm.id,
+      conversation_id: cm.session_id,
+      user_id: cm.user_id,
+      prompt_text: sql<string>`coalesce(${cm.content_full}, ${cm.content_preview}, '')`,
+      prompt_length: sql<number | string>`char_length(coalesce(${cm.content_full}, ''))`,
+      flagged: cm.flagged,
+      flag_reason: cm.flag_reason,
+      occurred_at: cm.occurred_at,
+      ingested_at: cm.ingested_at,
+      agent_id: cm.agent_id,
+      source: cm.source,
+      user_display_name: u.display_name,
+    })
     .from(cm)
     .leftJoin(u, eq(cm.user_id, u.id))
     .where(where)
@@ -2053,21 +2117,23 @@ export async function getChatMessages(filters: {
     .limit(limit)
     .offset(offset);
 
-  return rows.map((r) => ({ ...r.message, user_display_name: r.user_display_name })) as ChatMessage[];
+  return rows.map((r) => ({ ...r, prompt_length: Number(r.prompt_length) })) as ChatMessage[];
 }
 
 export async function getChatMessageCount(): Promise<number> {
   const db = await getTypedClient();
-  const cm = schema.chatMessages;
-  const rows = await db.select({ count: sql<number | string>`count(*)` }).from(cm);
+  const cm = schema.coworkMessages;
+  const rows = await db.select({ count: sql<number | string>`count(*)` }).from(cm).where(chatPromptWhere());
   return Number(rows[0]?.count ?? 0);
 }
 
 /** Flagged chat prompts — all time, or since `sinceUnix` (occurred_at >=) when given. */
 export async function getChatFlaggedCount(sinceUnix?: number): Promise<number> {
   const db = await getTypedClient();
-  const cm = schema.chatMessages;
-  const where = sinceUnix === undefined ? eq(cm.flagged, 1) : and(eq(cm.flagged, 1), gte(cm.occurred_at, sinceUnix));
+  const cm = schema.coworkMessages;
+  const where = sinceUnix === undefined
+    ? and(chatPromptWhere(), eq(cm.flagged, 1))
+    : and(chatPromptWhere(), eq(cm.flagged, 1), gte(cm.occurred_at, sinceUnix));
   const rows = await db.select({ count: sql<number | string>`count(*)` }).from(cm).where(where);
   return Number(rows[0]?.count ?? 0);
 }
@@ -2098,7 +2164,7 @@ export async function getCodeFlaggedCount(): Promise<number> {
  * so a newly-active surface isn't diluted by empty pre-adoption weeks. One-decimal values.
  *   cowork → distinct cowork_messages.session_id (cowork surface)
  *   code   → code_session_stats rows (one row per session)
- *   chat   → distinct chat_messages.conversation_id
+ *   chat   → distinct Claude Chat conversations (cowork_messages surface 'chat')
  */
 export async function getAvgSessionsPerWeek(): Promise<{ cowork: number; code: number; chat: number }> {
   const db = await getTypedClient();
@@ -2114,12 +2180,11 @@ export async function getAvgSessionsPerWeek(): Promise<{ cowork: number; code: n
 
   const cm = schema.coworkMessages;
   const css = schema.codeSessionStats;
-  const chat = schema.chatMessages;
 
   // No date-bucket/table-valued SQL here: plain
   // count()/min() aggregates via the query builder.
   const coworkFilter = and(or(eq(cm.surface, 'cowork'), isNull(cm.surface)), sql`${cm.session_id} != ''`);
-  const chatFilter = and(isNotNull(chat.conversation_id), sql`${chat.conversation_id} != ''`);
+  const chatFilter = and(eq(cm.surface, 'chat'), sql`${cm.session_id} != ''`);
 
   const [
     coworkCountRows, coworkFirstRows,
@@ -2130,8 +2195,8 @@ export async function getAvgSessionsPerWeek(): Promise<{ cowork: number; code: n
     db.select({ f: sql<number | string | null>`min(${cm.occurred_at})` }).from(cm).where(coworkFilter),
     db.select({ c: sql<number | string>`count(*)` }).from(css).where(gte(css.last_at, windowStart)),
     db.select({ f: sql<number | string | null>`min(${css.first_at})` }).from(css),
-    db.select({ c: sql<number | string>`count(distinct ${chat.conversation_id})` }).from(chat).where(and(chatFilter, gte(chat.occurred_at, windowStart))),
-    db.select({ f: sql<number | string | null>`min(${chat.occurred_at})` }).from(chat).where(chatFilter),
+    db.select({ c: sql<number | string>`count(distinct ${cm.session_id})` }).from(cm).where(and(chatFilter, gte(cm.occurred_at, windowStart))),
+    db.select({ f: sql<number | string | null>`min(${cm.occurred_at})` }).from(cm).where(chatFilter),
   ]);
 
   // Policy B: count()/min() come back as strings on pg — coerce.
@@ -2146,6 +2211,8 @@ export async function getAvgSessionsPerWeek(): Promise<{ cowork: number; code: n
 export async function getRecentCoworkMessages(limit: number = 100): Promise<Array<{
   user_id: string | null;
   surface: string;
+  /** Which product the event came from (Claude Cowork, Claude Code, ChatGPT Chat, ChatGPT Work, Codex). */
+  product: string;
   message_type: string;
   flagged: number;
   flag_reason: string | null;
@@ -2157,15 +2224,19 @@ export async function getRecentCoworkMessages(limit: number = 100): Promise<Arra
     .select({
       user_id: cm.user_id,
       surface: sql<string>`coalesce(${cm.surface}, 'cowork')`,
+      product: sql<string>`CASE ${cm.source} WHEN 'chatgpt_chat' THEN 'ChatGPT Chat' WHEN 'chatgpt_work' THEN 'ChatGPT Work' WHEN 'codex' THEN 'Codex'
+        ELSE CASE WHEN ${cm.surface} = 'code' THEN 'Claude Code' ELSE 'Claude Cowork' END END`,
       message_type: cm.message_type,
       flagged: cm.flagged,
       flag_reason: cm.flag_reason,
       occurred_at: cm.occurred_at,
     })
     .from(cm)
+    // Claude Chat prompts (surface 'chat') come through getRecentChatMessages.
+    .where(or(isNull(cm.surface), sql`${cm.surface} <> 'chat'`))
     .orderBy(desc(cm.occurred_at))
     .limit(limit);
-  return rows as Array<{ user_id: string | null; surface: string; message_type: string; flagged: number; flag_reason: string | null; occurred_at: number }>;
+  return rows as Array<{ user_id: string | null; surface: string; product: string; message_type: string; flagged: number; flag_reason: string | null; occurred_at: number }>;
 }
 
 export async function getRecentChatMessages(limit: number = 50): Promise<Array<{
@@ -2176,19 +2247,20 @@ export async function getRecentChatMessages(limit: number = 50): Promise<Array<{
   occurred_at: number;
 }>> {
   const db = await getTypedClient();
-  const chat = schema.chatMessages;
+  const cm = schema.coworkMessages;
   const rows = await db
     .select({
-      user_id: chat.user_id,
-      prompt_length: chat.prompt_length,
-      flagged: chat.flagged,
-      flag_reason: chat.flag_reason,
-      occurred_at: chat.occurred_at,
+      user_id: cm.user_id,
+      prompt_length: sql<number | string>`char_length(coalesce(${cm.content_full}, ''))`,
+      flagged: cm.flagged,
+      flag_reason: cm.flag_reason,
+      occurred_at: cm.occurred_at,
     })
-    .from(chat)
-    .orderBy(desc(chat.occurred_at))
+    .from(cm)
+    .where(chatPromptWhere())
+    .orderBy(desc(cm.occurred_at))
     .limit(limit);
-  return rows as Array<{ user_id: string | null; prompt_length: number; flagged: number; flag_reason: string | null; occurred_at: number }>;
+  return rows.map((r) => ({ ...r, prompt_length: Number(r.prompt_length) })) as Array<{ user_id: string | null; prompt_length: number; flagged: number; flag_reason: string | null; occurred_at: number }>;
 }
 
 export async function getCodeEventCount(): Promise<number> {

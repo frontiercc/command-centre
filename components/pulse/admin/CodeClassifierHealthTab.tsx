@@ -30,6 +30,9 @@ interface ClassifierHealthData {
   confidenceHistogram: number[];
   currentFailures: FailureRow[];
   config?: CodeClassifierConfig;
+  /** Claude Code and Codex, once a Codex session exists. */
+  byProduct?: Array<{ product: 'claude_code' | 'codex'; classified: number; failed: number }>;
+  classifyCodex?: boolean;
 }
 
 function timeAgo(ts: number): string {
@@ -226,6 +229,35 @@ export default function CodeClassifierHealthTab() {
           {retryMsg && <span className="text-[13px] text-[#666666]">{retryMsg}</span>}
         </div>
       </Panel>
+
+      {/* Per product, once Codex sessions exist */}
+      {(data.byProduct?.length ?? 0) > 0 && (
+        <Panel
+          title="By product"
+          subtitle="Sessions classified in 30 days, and failed"
+          right={data.classifyCodex === false ? <Tag tone="neutral">Codex classification off</Tag> : undefined}
+          flush
+        >
+          <table className={T.table}>
+            <thead>
+              <tr className={T.headRow}>
+                <th scope="col" className={T.th}>Product</th>
+                <th scope="col" className={T.thRight}>Classified</th>
+                <th scope="col" className={T.thRight}>Failed</th>
+              </tr>
+            </thead>
+            <tbody>
+              {data.byProduct!.map(r => (
+                <tr key={r.product} className={T.row}>
+                  <td className={T.td}>{r.product === 'codex' ? 'Codex' : 'Claude Code'}</td>
+                  <td className={T.tdRight}>{r.classified.toLocaleString()}</td>
+                  <td className={T.tdRight}>{r.failed.toLocaleString()}</td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </Panel>
+      )}
 
       {/* Tier distribution + confidence histogram */}
       <div className="grid grid-cols-1 md:grid-cols-2 gap-4">

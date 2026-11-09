@@ -131,8 +131,8 @@ export default function StatStrip({ oti, dds, psr, ors, otiDelta, ddsDelta, psrD
       // OTI is a personal trajectory signal, NOT a cross-person governance
       // measure. It tracks each person against their own start; DDS is the
       // absolute depth measure.
-      sublabel: 'Your delegation trajectory vs your own start',
-      formulaHint: 'Median daily output now vs your baseline',
+      sublabel: 'Delegation trajectory against the starting point',
+      formulaHint: 'Median daily output now against the baseline',
       value: oti,
       format: 'multiplier',
       pending: 'Pending data',
@@ -147,7 +147,7 @@ export default function StatStrip({ oti, dds, psr, ors, otiDelta, ddsDelta, psrD
     {
       label: 'DDS',
       fullName: 'Delegation depth',
-      sublabel: 'How deeply you delegate',
+      sublabel: 'How deeply work is delegated',
       formulaHint: 'Weighted avg tier over 14 days',
       value: dds,
       format: 'score',
@@ -158,7 +158,7 @@ export default function StatStrip({ oti, dds, psr, ors, otiDelta, ddsDelta, psrD
     {
       label: 'Capabilities',
       fullName: 'New process automations',
-      sublabel: 'Workflows Claude now handles end-to-end',
+      sublabel: 'Workflows AI now handles end-to-end',
       formulaHint: 'Confirmed capability creation events',
       value: psr,
       format: 'count',

@@ -2,7 +2,9 @@
 // SPDX-License-Identifier: Apache-2.0
 
 // Loads sample data: a fictional organisation and its activity, so every
-// page of Command Centre has something to show.
+// page of Command Centre has something to show: Claude Code, Cowork and Chat,
+// and ChatGPT and Codex (11-chatgpt-codex.ts, written through the OpenAI
+// sync's own code).
 //
 // It adds the organisation's fictional people (Acme Corp UK,
 // acme-people.json) first, then runs the sample scripts in order, each
@@ -50,8 +52,10 @@ const STEPS = [
 ];
 
 // The feature switches the sample data shows (all but single sign-on, which
-// needs an identity provider). Its demo figures for FinOps and Dev Framework Alignment
-// also need CCC_FINOPS_ALLOW_MOCK and CCC_DX_ALLOW_MOCK on the Hub.
+// needs an identity provider). Its demo Dev Framework Alignment scores also
+// need CCC_DX_ALLOW_MOCK on the Hub. The demo FinOps Enterprise figures are
+// left off: they do not match the sample's own spend, so the reconciliation
+// check raised a High alert ("94% drift") on every load.
 const SWITCHES = [
   ['chargeback_enabled', 'true'],
   ['code_alert_cost_spike_enabled', 'true'],
@@ -62,7 +66,6 @@ const SWITCHES = [
   ['code_pulse_enabled', 'true'],
   ['dx_framework_enabled', 'true'],
   ['dx_framework_mock', 'true'],
-  ['finance_enterprise_mock', 'true'],
   ['finance_model_efficiency_enabled', 'true'],
   ['highlights_enabled', 'true'],
   ['human_time_enabled', 'true'],
@@ -97,16 +100,19 @@ const run = (cmd, args) => execFileSync(cmd, args, { stdio: 'inherit', env: proc
   // never sets these, because it writes straight to the tables. Those records
   // can be missing (telemetry from before they existed, or a Compliance key
   // since removed), so any Cowork, Claude Code or Chat message whose id does
-  // not carry a sample prefix also counts as real.
+  // not carry a sample prefix also counts as real. All three live in
+  // cowork_messages (Claude Chat as surface 'chat' since migration 0041).
+  // The OpenAI sync records its first real prompt (setup_first_openai_at); the
+  // sample's ChatGPT and Codex rows go through the sync's code but never set
+  // it, so OpenAI rows count as real only once that record exists.
   const markers = await db.query(
-    "SELECT key FROM config WHERE key IN ('setup_first_code_at', 'setup_first_cowork_at', 'compliance_last_sync_at')");
+    "SELECT key FROM config WHERE key IN ('setup_first_code_at', 'setup_first_cowork_at', 'compliance_last_sync_at', 'setup_first_openai_at')");
   const samplePatterns = STEPS.map(([prefix]) => `${prefix}%`);
   const notSample = samplePatterns.map((_, i) => `id NOT LIKE $${i + 1}`).join(' AND ');
-  let realMessages = 0;
-  for (const table of ['cowork_messages', 'chat_messages']) {
-    const r = await db.query(`SELECT COUNT(*)::int AS n FROM ${table} WHERE ${notSample}`, samplePatterns);
-    realMessages += r.rows[0].n;
-  }
+  const real = await db.query(
+    `SELECT COUNT(*)::int AS n FROM cowork_messages WHERE ${notSample}
+       AND (source IS NULL OR source NOT IN ('chatgpt_chat', 'chatgpt_work', 'codex'))`, samplePatterns);
+  const realMessages = real.rows[0].n;
   if ((markers.rows.length > 0 || realMessages > 0) && process.env.SAMPLE_DATA_FORCE !== '1') {
     console.error('This installation already holds real Claude data, so sample data was not loaded.');
     console.error('Sample data mixes invented activity into existing records. Use it only on an');
@@ -141,11 +147,53 @@ const run = (cmd, args) => execFileSync(cmd, args, { stdio: 'inherit', env: proc
     catch { console.error(`${script} failed; continuing with the rest.`); }
   }
 
+  // ChatGPT and Codex: the same Acme Corp people, through the OpenAI sync's code.
+  console.log('\nAdding ChatGPT and Codex activity...');
+  try { run('npx', ['tsx', path.join(__dirname, '11-chatgpt-codex.ts')]); }
+  catch { console.error('11-chatgpt-codex.ts failed; continuing with the rest.'); }
+
+  // GitHub commits made with Claude Code, with Codex and with no AI tool
+  // recorded, from the sample's own Claude Code and Codex commits.
+  console.log('\nSplitting the sample GitHub commits by tool...');
+  try {
+    const split = await require('./github-tool-split.cjs').fillGithubToolSplit(db);
+    console.log(`${split.claude} made with Claude Code, ${split.codex} with Codex, ${split.none} with no AI tool recorded.`);
+  } catch (e) { console.error(`GitHub tool split failed (${e.message}); continuing with the rest.`); }
+
   // The sample S&C Board entries, use cases (with their weekly figures and
   // matches) and department process suggestions. Nothing in them is tied to
   // anyone outside the fictional organisation.
   console.log('\nAdding the sample S&C Board, use cases and suggestions...');
-  const extra = require('./demo-hub-board-and-use-cases.json');
+  // The bundled file was exported on fixed dates. Move every date forward by
+  // whole weeks so its last week becomes the last completed week before
+  // loading: use cases, their weekly figures and matches, the S&C Board and
+  // the suggestions then look current whenever the sample is loaded, and
+  // every week still starts on a Monday.
+  const raw = require('./demo-hub-board-and-use-cases.json');
+  const WEEK_S = 7 * 86400;
+  const nowS = Math.floor(Date.now() / 1000);
+  const today = new Date(nowS * 1000);
+  const thisWeek = Date.UTC(today.getUTCFullYear(), today.getUTCMonth(), today.getUTCDate()) / 1000
+    - ((today.getUTCDay() + 6) % 7) * 86400;
+  const fileLastWeek = Math.max(...raw.weeks.map((w) => Number(w.week_start)));
+  const shift = (thisWeek - WEEK_S) - fileLastWeek;
+  const isDate = (k) => k === 'week_start' || k.endsWith('_at');
+  const moveRow = (r) => {
+    const out = {};
+    for (const [k, v] of Object.entries(r)) {
+      if (isDate(k) && typeof v === 'number') out[k] = v + shift;
+      else if (k === 'activate_result' && typeof v === 'string') {
+        // The stored activity snapshot carries its own last-seen date.
+        try {
+          const j = JSON.parse(v);
+          if (typeof j.lastSeenAt === 'number') j.lastSeenAt += shift;
+          out[k] = JSON.stringify(j);
+        } catch { out[k] = v; }
+      } else out[k] = v;
+    }
+    return out;
+  };
+  const extra = Object.fromEntries(Object.entries(raw).map(([table, rows]) => [table, rows.map(moveRow)]));
   const asParam = (v) => (v !== null && typeof v === 'object' ? JSON.stringify(v) : v);
   const insertRows = async (table, rows) => {
     let n = 0;
@@ -162,7 +210,8 @@ const run = (cmd, args) => execFileSync(cmd, args, { stdio: 'inherit', env: proc
   const ucN = await insertRows('use_cases', extra.use_cases);
   const weekN = await insertRows('use_case_activation_weeks', extra.weeks);
   const sugN = await insertRows('use_case_suggestions', extra.suggestions);
-  const matches = JSON.parse(zlib.gunzipSync(fs.readFileSync(path.join(__dirname, 'demo-hub-use-case-matches.json.gz'))).toString('utf8'));
+  const matches = JSON.parse(zlib.gunzipSync(fs.readFileSync(path.join(__dirname, 'demo-hub-use-case-matches.json.gz'))).toString('utf8'))
+    .map((m) => [m[0], Number(m[1]) + shift, m[2], m[3]]);
   let matchN = 0;
   for (let i = 0; i < matches.length; i += 5000) {
     const part = matches.slice(i, i + 5000);
@@ -226,5 +275,116 @@ const run = (cmd, args) => execFileSync(cmd, args, { stdio: 'inherit', env: proc
     '  process.exit(0);',
     '}).catch((e) => { console.error(e); process.exit(1); });',
   ].join('\n')]);
+  // The all-products weekly history, worked out now that every prompt is in.
+  console.log('\nWorking out the weekly history...');
+  try { run('node', [path.join(__dirname, '12-weekly-history.cjs')]); }
+  catch { console.error('12-weekly-history.cjs failed; continuing.'); }
+
+  // The Hub sets a person's last-seen time whenever their activity arrives.
+  // The sample writes activity straight to the tables, so set it here from
+  // each person's latest activity; otherwise the dashboard's Users column
+  // counts fewer active people than its product columns.
+  console.log('\nSetting when each person was last seen...');
+  {
+    const db2 = new Client({ connectionString: process.env.DATABASE_URL, ssl });
+    await db2.connect();
+    const seen = await db2.query(`
+      UPDATE users u SET last_seen_at = GREATEST(COALESCE(u.last_seen_at, 0), m.last)
+      FROM (SELECT user_id, MAX(occurred_at) AS last FROM cowork_messages WHERE user_id IS NOT NULL GROUP BY user_id) m
+      WHERE m.user_id = u.id`);
+    // Use case matches and weekly figures, made to agree with this sample's
+    // sessions. The bundled matches came from another installation: most name
+    // sessions this sample doesn't have (its session ids change on each load),
+    // and the rest sit in a week other than the one their session happened in,
+    // so their time could not be measured. A match to a session the sample has
+    // is filed, as the Hub does, under the Monday-UTC week of that session's
+    // first prompt. A match to a session it doesn't have is moved onto a real
+    // session the same person had that week, of the kind of work the use case
+    // covers (Claude Cowork for Work, Claude Code for Code, either when it
+    // names neither), spreading a person's matches across their sessions; with
+    // no such session it goes. Each week's people, sessions, prompts and
+    // last-seen time are then counted from its matches (a week left with none
+    // reads zero), and time and tool figures are worked out from the matched
+    // sessions below (lib/usecases/impact-rollup.ts).
+    await db2.query('BEGIN');
+    await db2.query(`
+      CREATE TEMP TABLE uc_realigned ON COMMIT DROP AS
+      WITH msg AS (
+        SELECT session_id, MIN(occurred_at) AS first_at, MIN(user_id) AS user_id
+        FROM cowork_messages WHERE session_id IS NOT NULL AND user_id IS NOT NULL GROUP BY session_id),
+      known AS (
+        SELECT DISTINCT m.use_case_id,
+               (floor((s.first_at - 345600) / 604800.0) * 604800 + 345600)::bigint AS week_start,
+               s.user_id, m.session_id
+        FROM use_case_week_matches m JOIN msg s ON s.session_id = m.session_id
+        WHERE m.session_id <> ''),
+      cand AS (
+        SELECT st.session_id, msg.user_id, st.first_event_at AS first_at, 'cowork' AS kind
+        FROM cowork_session_stats st JOIN msg ON msg.session_id = st.session_id
+        WHERE st.first_event_at IS NOT NULL
+        UNION ALL
+        SELECT session_id, user_id, first_at, 'code' FROM code_session_stats
+        WHERE session_id NOT LIKE 'codex:%' AND user_id IS NOT NULL AND first_at IS NOT NULL),
+      miss AS (
+        SELECT m.use_case_id, m.week_start, m.user_id, uc.surfaces,
+               ROW_NUMBER() OVER (PARTITION BY m.use_case_id, m.week_start, m.user_id ORDER BY m.session_id) AS k
+        FROM use_case_week_matches m JOIN use_cases uc ON uc.id = m.use_case_id
+        WHERE m.session_id <> '' AND NOT EXISTS (SELECT 1 FROM msg WHERE msg.session_id = m.session_id)),
+      keys AS (SELECT DISTINCT use_case_id, week_start, user_id, surfaces FROM miss),
+      ranked AS (
+        SELECT k.use_case_id, k.week_start, k.user_id, c.session_id,
+               ROW_NUMBER() OVER (PARTITION BY k.use_case_id, k.week_start, k.user_id ORDER BY md5(c.session_id || k.use_case_id)) AS r,
+               COUNT(*) OVER (PARTITION BY k.use_case_id, k.week_start, k.user_id) AS n
+        FROM keys k JOIN cand c ON c.user_id = k.user_id
+         AND (floor((c.first_at - 345600) / 604800.0) * 604800 + 345600)::bigint = k.week_start
+         AND (k.surfaces IS NULL OR k.surfaces::jsonb = '[]'::jsonb OR k.surfaces::jsonb ? c.kind)),
+      remapped AS (
+        SELECT DISTINCT m.use_case_id, m.week_start, m.user_id, r.session_id
+        FROM miss m JOIN ranked r ON r.use_case_id = m.use_case_id AND r.week_start = m.week_start
+         AND r.user_id = m.user_id AND r.r = ((m.k - 1) % r.n) + 1)
+      SELECT * FROM known UNION SELECT * FROM remapped`);
+    await db2.query(`DELETE FROM use_case_week_matches WHERE session_id <> ''`);
+    await db2.query(`INSERT INTO use_case_week_matches (use_case_id, week_start, user_id, session_id)
+      SELECT use_case_id, week_start, user_id, session_id FROM uc_realigned ON CONFLICT DO NOTHING`);
+    await db2.query(`INSERT INTO use_case_activation_weeks (use_case_id, week_start)
+      SELECT DISTINCT use_case_id, week_start FROM uc_realigned ON CONFLICT DO NOTHING`);
+    await db2.query(`
+      WITH s AS (
+        SELECT session_id,
+               COUNT(*) FILTER (WHERE message_type IN ('cowork_user_message', 'code_user_message')) AS prompts,
+               MAX(occurred_at) AS last_at
+        FROM cowork_messages WHERE session_id IS NOT NULL GROUP BY session_id),
+      j AS (
+        SELECT m.use_case_id, m.week_start, COUNT(DISTINCT m.user_id) AS users,
+               COUNT(DISTINCT m.session_id) FILTER (WHERE m.session_id <> '') AS sessions,
+               COALESCE(SUM(s.prompts), 0) AS prompts, MAX(s.last_at) AS last_seen
+        FROM use_case_week_matches m LEFT JOIN s ON s.session_id = m.session_id
+        GROUP BY 1, 2)
+      UPDATE use_case_activation_weeks w
+      SET distinct_users = COALESCE(j.users, 0), session_count = COALESCE(j.sessions, 0),
+          matched_messages = COALESCE(j.prompts, 0), last_seen_at = j.last_seen
+      FROM use_case_activation_weeks w2
+      LEFT JOIN j ON j.use_case_id = w2.use_case_id AND j.week_start = w2.week_start
+      WHERE w.use_case_id = w2.use_case_id AND w.week_start = w2.week_start`);
+    await db2.query('COMMIT');
+    await db2.end();
+    console.log(`${seen.rowCount} people.`);
+  }
+  console.log('\nRecounting use case time from the matched sessions...');
+  run('npx', ['tsx', '-e', [
+    "import('./lib/usecases/impact-rollup.ts').then(async (m) => {",
+    '  const recompute = m.recomputeWeekImpact || m.default.recomputeWeekImpact;',
+    "  const pg = (await import('pg')).default;",
+    "  const ssl = process.env.CCC_PG_SSL && process.env.CCC_PG_SSL !== 'disable' ? { rejectUnauthorized: false } : false;",
+    '  const db = new pg.Client({ connectionString: process.env.DATABASE_URL, ssl });',
+    '  await db.connect();',
+    '  const weeks = (await db.query(`SELECT use_case_id, week_start FROM use_case_activation_weeks`)).rows;',
+    '  await db.end();',
+    '  for (const w of weeks) await recompute(w.use_case_id, Number(w.week_start));',
+    "  console.log(weeks.length + ' weeks.');",
+    '  process.exit(0);',
+    '}).catch((e) => { console.error(e); process.exit(1); });',
+  ].join('\n')]);
+
   console.log('\nSample data loaded. Pages fill in within a few minutes, once the Hub has run its scheduled jobs.');
 })().catch((e) => { console.error(e); process.exit(1); });

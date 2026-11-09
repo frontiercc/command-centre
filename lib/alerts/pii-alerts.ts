@@ -86,6 +86,8 @@ export async function createPiiAlertsWithDedup(
   evidence: string,
   messageId: string,
   surface: string,
+  /** Where the prompt came from, for the alert text: OTel unless another sync says otherwise. */
+  via = 'OTel',
 ): Promise<void> {
   const client = await getTypedClient();
   const a = schema.alerts;
@@ -141,7 +143,8 @@ export async function createPiiAlertsWithDedup(
         alert_type: 'policy',
         severity,
         title,
-        explanation: `${title} detected via OTel. Flagged automatically by PII pattern detection.`,
+        // Every title already ends "detected" (the fallback starts "PII detected").
+        explanation: `${title} via ${via}. Flagged automatically by PII pattern detection.`,
         raw_evidence: JSON.stringify({
           surface,
           message_id: messageId,
@@ -168,7 +171,8 @@ export async function createPiiAlertsWithDedup(
   // never undo an alert that was correctly raised.
   if (verdicts.size > 0) {
     try {
-      const table = surface === 'chat' ? schema.chatMessages : schema.coworkMessages;
+      // Every prompt, Claude Chat included (surface 'chat'), lives in cowork_messages.
+      const table = schema.coworkMessages;
 
       const attemptWrite = async (): Promise<boolean> => {
         const rows = await client
@@ -184,11 +188,8 @@ export async function createPiiAlertsWithDedup(
         // way) — so eq(table.flag_reason, existing) never has to compare
         // against null, which is not valid SQL equality.
         if (existing === null || next === null || next === existing) return true;
-        // chat_messages has no pii_verdict_reason column — the Compliance
-        // path does not run the confirmation check, so the reason is written
-        // only on the cowork/code table.
         const patch: Record<string, unknown> = { flag_reason: next };
-        if (reasons.length > 0 && table === schema.coworkMessages) {
+        if (reasons.length > 0) {
           patch.pii_verdict_reason = reasons.join(' | ').slice(0, 1000);
         }
         const result = await client

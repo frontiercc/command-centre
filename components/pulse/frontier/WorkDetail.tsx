@@ -100,8 +100,8 @@ export default function WorkDetail({ item, showName, canOpenUseCases, compact = 
 
   const systems = [...f.connectors, ...f.skills.map(skillName)];
   const inputs = f.inputs.length
-    ? `${f.inputs.join(' and ')} in`
-    : (f.uploads != null && f.uploads > 0 ? `${plural(f.uploads, 'document', 'documents')} in` : null);
+    ? `${f.inputs.join(' and ')} uploaded`
+    : (f.uploads != null && f.uploads > 0 ? `${plural(f.uploads, 'document', 'documents')} uploaded` : null);
   const used = [systems.length ? systems.join(', ') : null, inputs].filter((x): x is string => !!x);
   const produced = producedParts(item);
 
@@ -121,8 +121,8 @@ export default function WorkDetail({ item, showName, canOpenUseCases, compact = 
     item.othersAtDepth === null || !item.department
       ? null
       : item.othersAtDepth === 0
-        ? `only person in ${item.department} working at this depth`
-        : `${plural(item.othersAtDepth, 'other', 'others')} in ${item.department} work at this depth`,
+        ? `only person in ${item.department} doing this kind of work at this depth in the last 30 days`
+        : `${plural(item.othersAtDepth, 'other', 'others')} in ${item.department} did this kind of work at this depth in the last 30 days`,
   ].filter((x): x is string => !!x);
 
   const line = (label: string | null, parts: string[]) => (

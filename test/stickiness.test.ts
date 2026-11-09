@@ -33,7 +33,6 @@ afterAll(async () => cleanup());
 
 beforeEach(async () => {
   await sql.exec('DELETE FROM cowork_messages');
-  await sql.exec('DELETE FROM chat_messages');
 });
 
 async function insertCoworkMessage(opts: {
@@ -52,11 +51,12 @@ async function insertCoworkMessage(opts: {
   ]);
 }
 
+// A Claude Chat prompt: a cowork_messages row with surface 'chat' (migration 0041).
 async function insertChatMessage(opts: { id: string; userId: string; occurredAt: number }) {
   await sql.run(`
-    INSERT INTO chat_messages (id, user_id, prompt_text, prompt_length, occurred_at)
-    VALUES (?, ?, ?, ?, ?)
-  `, [opts.id, opts.userId, 'test prompt', 100, opts.occurredAt]);
+    INSERT INTO cowork_messages (id, session_id, user_id, message_type, surface, source, content_preview, content_full, occurred_at)
+    VALUES (?, ?, ?, ?, 'chat', 'compliance', ?, ?, ?)
+  `, [opts.id, `conv-${opts.id}`, opts.userId, 'cowork_user_message', 'test prompt', 'test prompt', opts.occurredAt]);
 }
 
 describe('getProductStickiness', () => {
@@ -125,7 +125,7 @@ describe('getProductStickiness', () => {
     expect(result.cowork.mau).toBe(0);
   });
 
-  it('computes chat stickiness from chat_messages', async () => {
+  it('computes chat stickiness from Claude Chat prompts (cowork_messages, surface chat)', async () => {
     const now = Math.floor(Date.now() / 1000);
     await insertChatMessage({ id: 'c-1', userId: 'user-1', occurredAt: now - 2 * DAY });
     await insertChatMessage({ id: 'c-2', userId: 'user-2', occurredAt: now - 2 * DAY });
@@ -135,6 +135,9 @@ describe('getProductStickiness', () => {
     expect(result.chat.mau).toBe(2);
     // 2 distinct-user-days: user-1 on day-2 & day-3, user-2 on day-2 => 3 user-days / 7
     expect(result.chat.avgDau).toBeCloseTo(3 / 7, 5);
+    // Chat prompts share cowork_messages but never count as Cowork or Code.
+    expect(result.cowork.mau).toBe(0);
+    expect(result.code.mau).toBe(0);
   });
 
   it('rounds stickiness to 2dp and derives it as avgDau / mau', async () => {

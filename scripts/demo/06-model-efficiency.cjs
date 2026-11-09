@@ -71,13 +71,13 @@ const GROUPS = [
   //     (claude-opus-4-8). The flag measures the share held by the TOP-RANKED
   //     model; opus-4-6 and opus-4-8 carry identical list rates, so with both
   //     present the ranking tie-breaks arbitrarily and the share splits.
-  { taskType: 'capability_creation', tier: 3, sessions: 6,
+  { taskType: 'capability_creation', tier: 3, everyHours: 28, offsetHours: 1, minThisMonth: 6,
     rows: [{ model: 'claude-opus-4-8', u: BIG_OPUS }, { model: 'claude-sonnet-4-6', u: MED_SONNET }] },
   // Sonnet-led, above volume but low premium share → "Efficient".
-  { taskType: 'research_brief', tier: 2, sessions: 7,
+  { taskType: 'research_brief', tier: 2, everyHours: 28, offsetHours: 15, minThisMonth: 6,
     rows: [{ model: 'claude-sonnet-4-6', u: BIG_SONNET }, { model: 'claude-opus-4-6', u: SM_OPUS }] },
   // Small → "Low volume".
-  { taskType: 'summarisation', tier: 1, sessions: 3,
+  { taskType: 'summarisation', tier: 1, everyHours: 240, offsetHours: 30, minThisMonth: 1,
     rows: [{ model: 'claude-haiku-4-5-20251001', u: SM_HAIKU }] },
 ];
 
@@ -110,29 +110,38 @@ async function main() {
     if (users.length === 0) users = (await c.query(`SELECT id FROM users ORDER BY id LIMIT 4`)).rows.map(r => r.id);
     if (users.length === 0) users = [MARKER + 'user'];
 
-    // Current-month timestamps (calendar-month window the view uses).
+    // Sessions run at a steady rate over the last thirteen weeks (everyHours
+    // apart), so every month carries the same spend per day. Putting them all
+    // in the current month made FinOps and Spend Review compare a full month
+    // of this spend against none last month ("+156% vs last month", people up
+    // twenty times). Early in a month the steady rate may leave fewer sessions
+    // than the Model efficiency view needs (5), so the current month is topped
+    // up to minThisMonth, spread over the part of the month that has passed;
+    // from about day seven the steady rate covers it alone. Never in the future.
+    const HOUR = 3600;
+    const nowS = Math.floor(Date.now() / 1000) - HOUR;
     const now = new Date();
-    const monthStart = Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), 1);
-    // Clamp to NOW — day offsets past today's date must never mint
-    // future-dated telemetry (a future occurred_at stretched the dashboard's
-    // 14-day adoption chart out to the end of the month — found on
-    // a demo install).
-    // Spread across the part of the month that has passed (never the future). Clamping fixed day
-    // offsets to now piled every not-yet-reached session onto one timestamp early in the month,
-    // which looked like a one-day spike and inflated the FinOps run rate.
-    const nowMinus1h = Date.now() - 3600_000;
-    const tsFor = (slot) => Math.floor((monthStart + ((slot + 0.5) / 22) * Math.max(0, nowMinus1h - monthStart)) / 1000);
+    const monthStartS = Math.floor(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), 1) / 1000);
+    const WINDOW_S = 91 * 86400;
+    const timesFor = (g) => {
+      const out = [];
+      for (let t = nowS - g.offsetHours * HOUR; t > nowS - WINDOW_S; t -= g.everyHours * HOUR) out.push(t);
+      const inMonth = out.filter((t) => t >= monthStartS).length;
+      for (let k = 0; k < g.minThisMonth - inMonth; k++) {
+        out.push(Math.floor(monthStartS + ((k + 0.5) / g.minThisMonth) * Math.max(0, nowS - monthStartS)));
+      }
+      return out;
+    };
 
     let sessionN = 0, apiRows = 0, totalUsd = 0;
     const summary = {};
     for (const g of GROUPS) {
       summary[g.taskType] = 0;
-      for (let s = 0; s < g.sessions; s++) {
+      for (const ts of timesFor(g)) {
         sessionN++;
         const sid = `${MARKER}sess-${sessionN}`;
         const umId = `${MARKER}um-${sessionN}`;
         const uid = users[sessionN % users.length];
-        const ts = tsFor(sessionN % 22); // spread across the month so far
 
         // 1) the classified user message — realistic prompt matching the task
         // type (not a "[seed] … session" placeholder), so the audit log reads

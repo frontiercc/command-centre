@@ -46,7 +46,14 @@ export const CLEARED_TABLES = [
   'cowork_mcp_invocations',
   'code_assistant_meta',
   'cowork_messages',
-  'chat_messages',
+  // ChatGPT and Codex: the reply times, turns, actions and spend that go
+  // with the prompts above (no foreign keys). The OpenAI sync keeps its
+  // position, so cleared rows are not fetched again.
+  'openai_replies',
+  'chatgpt_session_time',
+  'codex_actions',
+  'codex_turns',
+  'openai_costs',
   // Alert view
   'alerts',
 ] as const;
@@ -64,7 +71,11 @@ const TABLE_SCHEMA_MAP = {
   cowork_mcp_invocations: schema.coworkMcpInvocations,
   code_assistant_meta: schema.codeAssistantMeta,
   cowork_messages: schema.coworkMessages,
-  chat_messages: schema.chatMessages,
+  openai_replies: schema.openaiReplies,
+  chatgpt_session_time: schema.chatgptSessionTime,
+  codex_actions: schema.codexActions,
+  codex_turns: schema.codexTurns,
+  openai_costs: schema.openaiCosts,
   alerts: schema.alerts,
 } as const;
 

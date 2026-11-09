@@ -29,6 +29,7 @@ import { parseHumanMinutes, tierGetsEstimate, CODE_ESTIMATE_ONLY_SYSTEM, type Hu
 import { humanTimeOn } from '@/lib/pulse/human-time-flags';
 import { fenceUntrusted } from '@/lib/anthropic/untrusted';
 import { redactPii } from '@/lib/pii/detect';
+import { codexActionCounts } from '@/lib/pulse/code/aggregator';
 
 export const WORK_TYPES = [
   'feature', 'bugfix', 'refactor', 'testing',
@@ -53,8 +54,11 @@ export function classifierCandidateWhere(
   css: typeof schema.codeSessionStats,
   csc: typeof schema.codeSessionClassifications,
   now: number,
+  /** Admin → Developer Pulse "Classify Codex sessions"; off leaves 'codex:' sessions alone. */
+  classifyCodex = true,
 ) {
   const cutoff = now - SESSION_QUIET_SECONDS;
+  const codexRule = classifyCodex ? undefined : sql`${css.session_id} NOT LIKE 'codex:%'`;
   // A session qualifies for pass 1/2 when it has no classification row yet
   // (isNull, via the LEFT JOIN) OR its row failed with attempts still under
   // the ceiling — a failure is retried rather than being permanent, matching
@@ -75,6 +79,7 @@ export function classifierCandidateWhere(
       notYetClassified,
       lt(css.last_at, cutoff),
       or(gt(css.assistant_turns, 0), gt(css.user_msg_count, 0)),
+      codexRule,
     ),
     // Pass 2 — provisional: still active but long-running (≥ 2h), never
     // classified (or retryable-failed).
@@ -83,6 +88,7 @@ export function classifierCandidateWhere(
       gte(css.last_at, cutoff),
       lt(css.first_at, now - PROVISIONAL_MIN_AGE_SECONDS),
       or(gt(css.assistant_turns, 0), gt(css.user_msg_count, 0)),
+      codexRule,
     ),
     // Pass 3 — finalise: has a provisional classification and has gone idle
     // with new activity since it was provisionally classified.
@@ -90,6 +96,7 @@ export function classifierCandidateWhere(
       eq(csc.provisional, 1),
       lt(css.last_at, cutoff),
       gt(css.last_at, csc.classified_at),
+      codexRule,
     ),
   };
 }
@@ -110,7 +117,7 @@ export async function getClassifierQueueDepth(nowS?: number): Promise<{
   const client = await getTypedClient();
   const css = schema.codeSessionStats;
   const csc = schema.codeSessionClassifications;
-  const w = classifierCandidateWhere(css, csc, now);
+  const w = classifierCandidateWhere(css, csc, now, (await getConfigValue('codeClassifyCodex')) !== 'false');
 
   const countWith = async (join: 'left' | 'inner', where: ReturnType<typeof and>) => {
     const q = client.select({ c: sql<number | string>`COUNT(*)` }).from(css);
@@ -144,6 +151,52 @@ export interface SessionDigestRow {
   skills_json: string | null;
   mcp_json: string | null;
   models_json: string | null;
+}
+
+/**
+ * A Codex session's own counts, put on its digest row. code_session_stats
+ * carries no tool, failure, commit or model figures for a Codex session (they
+ * are Claude Code's columns; Codex's live in codex_actions and codex_turns),
+ * so without this the classifier was told a Codex session made no tool
+ * actions, no commits and no model calls. Tool actions, failures and commits
+ * come from the same codexActionCounts the per-product figures use; model
+ * calls are the session's Codex turns, and models the turns' model names.
+ * Claude Code rows are returned untouched, so their digests do not change.
+ */
+export async function withCodexCounts<T extends SessionDigestRow>(
+  client: Awaited<ReturnType<typeof getTypedClient>>,
+  rows: T[],
+): Promise<T[]> {
+  const codexIds = rows.filter(r => r.session_id.startsWith('codex:')).map(r => r.session_id);
+  if (codexIds.length === 0) return rows;
+  const actions = await codexActionCounts(client, codexIds);
+  const ct = schema.codexTurns;
+  const turnRows = await client
+    .select({ session_id: ct.session_id, model: ct.model, turns: sql<number | string>`COUNT(*)` })
+    .from(ct)
+    .where(inArray(ct.session_id, codexIds))
+    .groupBy(ct.session_id, ct.model);
+  const turns = new Map<string, { calls: number; models: Record<string, number> }>();
+  for (const t of turnRows) {
+    const e = turns.get(t.session_id) ?? { calls: 0, models: {} };
+    const n = Number(t.turns) || 0;
+    e.calls += n;
+    if (t.model) e.models[t.model] = (e.models[t.model] ?? 0) + n;
+    turns.set(t.session_id, e);
+  }
+  return rows.map(r => {
+    if (!r.session_id.startsWith('codex:')) return r;
+    const a = actions.get(r.session_id);
+    const t = turns.get(r.session_id);
+    return {
+      ...r,
+      tool_use_count: a?.tools ?? 0,
+      error_count: a?.errors ?? 0,
+      commit_count: a?.commits ?? 0,
+      assistant_turns: t?.calls ?? 0,
+      models_json: JSON.stringify(t?.models ?? {}),
+    };
+  });
 }
 
 // ─── Digest + prompt builders (pure, unit-tested) ───────────────────────────
@@ -254,7 +307,7 @@ export async function runCodeClassifierJob(): Promise<{ selected: number; classi
   const css = schema.codeSessionStats;
   const csc = schema.codeSessionClassifications;
   const cutoff = now - SESSION_QUIET_SECONDS;
-  const candidateWhere = classifierCandidateWhere(css, csc, now);
+  const candidateWhere = classifierCandidateWhere(css, csc, now, (await getConfigValue('codeClassifyCodex')) !== 'false');
 
   const digestCols = {
     session_id: css.session_id,
@@ -351,11 +404,11 @@ export async function runCodeClassifierJob(): Promise<{ selected: number; classi
   // resolves provisional=0 — the right outcome once a session has gone
   // idle, whichever pass "claims" it here.
   const seenSessionIds = new Set<string>();
-  const rows: SessionDigestRow[] = [...finalRows, ...provisionalRows, ...finaliseRows].filter(r => {
+  const rows: SessionDigestRow[] = await withCodexCounts(client, [...finalRows, ...provisionalRows, ...finaliseRows].filter(r => {
     if (seenSessionIds.has(r.session_id)) return false;
     seenSessionIds.add(r.session_id);
     return true;
-  });
+  }));
   const provisionalSessionIds = new Set(provisionalRows.map(r => r.session_id));
 
   if (rows.length === 0) return { selected: 0, classified: 0, failed: 0 };
@@ -529,10 +582,12 @@ export async function estimateClassifiedCodeSessions(
     .from(css)
     .innerJoin(csc, eq(csc.session_id, css.session_id))
     .where(and(eq(csc.status, 'classified'), inArray(csc.tier, [2, 3]), isNull(csc.human_minutes_likely),
-      lt(csc.human_minutes_attempts, 3), ...(opts.sinceS ? [gte(css.first_at, opts.sinceS)] : [])))
+      lt(csc.human_minutes_attempts, 3), ...(opts.sinceS ? [gte(css.first_at, opts.sinceS)] : []),
+      // Classify Codex sessions off: Codex sessions are not sent for estimates either.
+      ...((await getConfigValue('codeClassifyCodex')) === 'false' ? [sql`${css.session_id} NOT LIKE 'codex:%'`] : [])))
     .orderBy(desc(css.last_at))
     .limit(BATCH_SIZE + skip.size)) as SessionDigestRow[];
-  const rows = candidates.filter(r => !skip.has(r.session_id)).slice(0, BATCH_SIZE);
+  const rows = await withCodexCounts(client, candidates.filter(r => !skip.has(r.session_id)).slice(0, BATCH_SIZE));
   if (rows.length === 0) return { attempted: [], written: 0 };
 
   const includePrompt = (await getConfigValue('codeClassifierIncludePrompt')) !== 'false';

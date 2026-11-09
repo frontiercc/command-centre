@@ -66,6 +66,10 @@ services:
       # the Secure flag off. Remove both once the hub is served over HTTPS.
       - CCC_INSECURE_COOKIES=${CCC_INSECURE_COOKIES:-}
       - CCC_ALLOW_INSECURE_COOKIES=${CCC_ALLOW_INSECURE_COOKIES:-}
+      # Testing only: points the OpenAI sync (ChatGPT and Codex) at the localhost
+      # stand-in for OpenAI's export (scripts/openai-mock), for example
+      # http://host.docker.internal:4010/v1. Empty means OpenAI's own address.
+      - CCC_OPENAI_API_BASE_URL=${CCC_OPENAI_API_BASE_URL:-}
       # Sample data only: allow the DEMO-badged FinOps Enterprise figures and Dev
       # Framework Alignment scores. Empty by default, so a real installation never
       # shows demo data; set both to 1 in .env only for exploring with sample data.

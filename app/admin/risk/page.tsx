@@ -9,6 +9,8 @@ import TopBar from '@/components/layout/TopBar';
 import LoadingSpinner from '@/components/shared/LoadingSpinner';
 import { useToast } from '@/components/shared/ToastProvider';
 import SecretRemoveButton from '@/components/admin/SecretRemoveButton';
+import { useConnectedProducts } from '@/components/shared/VendorSwitch';
+import { isOpenAiOnly, openAiConnected } from '@/lib/sources/connected-shared';
 import { PageBody, Panel, Notice, SubHead, Dot, SEVERITY_COLOR, B, cx } from '@/components/precision/ui';
 
 
@@ -61,6 +63,9 @@ const DEFAULT_SEVERITY: Record<string, string> = {
 export default function AdminRiskPage() {
   // Threshold state
   const [tokenMultiplier, setTokenMultiplier] = useState('3');
+  const connectedProducts = useConnectedProducts();
+  const openaiConnected = openAiConnected(connectedProducts);
+  const openaiOnly = isOpenAiOnly(connectedProducts);
   const [fileAccessLimit, setFileAccessLimit] = useState('50');
   const [inactivityDays, setInactivityDays] = useState('14');
   const [sensitivity, setSensitivity] = useState('balanced');
@@ -91,6 +96,8 @@ export default function AdminRiskPage() {
 
   // Developer Pulse alert thresholds
   const [codeCostFloor, setCodeCostFloor] = useState('100');
+  const [codexSpendEnabled, setCodexSpendEnabled] = useState(true);
+  const [codexSpendLimit, setCodexSpendLimit] = useState('500');
   const [codeFrictionPct, setCodeFrictionPct] = useState('25');
   const [codeModelAllowlist, setCodeModelAllowlist] = useState('');
   const [codeRepoPatterns, setCodeRepoPatterns] = useState('');
@@ -130,6 +137,8 @@ export default function AdminRiskPage() {
         if (data.codeAlertRepoExposureEnabled !== undefined) setCodeRepoExposureEnabled(data.codeAlertRepoExposureEnabled);
         if (data.codeAlertFrictionEnabled !== undefined) setCodeFrictionEnabled(data.codeAlertFrictionEnabled);
         if (data.codeCostSpikeFloorUsd) setCodeCostFloor(String(data.codeCostSpikeFloorUsd));
+        if (data.codexAlertSpendEnabled !== undefined) setCodexSpendEnabled(data.codexAlertSpendEnabled);
+        if (data.codexDailySpendLimitUsd) setCodexSpendLimit(String(data.codexDailySpendLimitUsd));
         if (data.codeFrictionThreshold) setCodeFrictionPct(String(Math.round(data.codeFrictionThreshold * 100)));
         try { if (data.codeModelAllowlist) setCodeModelAllowlist((JSON.parse(data.codeModelAllowlist) as string[]).join(', ')); } catch { /* leave blank */ }
         try { if (data.codeSensitiveRepoPatterns) setCodeRepoPatterns((JSON.parse(data.codeSensitiveRepoPatterns) as string[]).join(', ')); } catch { /* leave blank */ }
@@ -172,6 +181,8 @@ export default function AdminRiskPage() {
           codeAlertRepoExposureEnabled: String(codeRepoExposureEnabled),
           codeAlertFrictionEnabled: String(codeFrictionEnabled),
           codeCostSpikeFloorUsd: codeCostFloor,
+          codexAlertSpendEnabled: String(codexSpendEnabled),
+          codexDailySpendLimitUsd: codexSpendLimit,
           codeFrictionThreshold: String((parseFloat(codeFrictionPct) || 25) / 100),
           codeModelAllowlist: JSON.stringify(codeModelAllowlist.split(',').map(s => s.trim()).filter(Boolean)),
           codeSensitiveRepoPatterns: JSON.stringify(codeRepoPatterns.split(',').map(s => s.trim()).filter(Boolean)),
@@ -304,8 +315,9 @@ export default function AdminRiskPage() {
               { label: 'Finance reconciliation drift', desc: 'Command Centre\'s own spend estimate diverges from Anthropic\'s reported cost by more than the configured threshold (FinOps). Deterministic, no AI judgement.', value: financeDriftEnabled, setter: setFinanceDriftEnabled },
               { label: 'Use case at-risk', desc: 'A tracked use case that was piloting or adopted has gone quiet for several weeks (Use Cases lifecycle tracker). Deterministic, no AI judgement.', value: useCaseAlertEnabled, setter: setUseCaseAlertEnabled },
               { label: 'Developer Pulse: daily spend limit', desc: 'A user\'s Claude Code spend in the last 24 hours is over the daily limit below. Over twice the limit is high and goes to Slack. Deterministic, no AI judgement.', value: codeCostSpikeEnabled, setter: setCodeCostSpikeEnabled },
-              { label: 'Developer Pulse: model policy', desc: 'A model not on the approved list was used in Claude Code. Requires an allowlist in config (code_model_allowlist). Off by default.', value: codeModelPolicyEnabled, setter: setCodeModelPolicyEnabled },
-              { label: 'Developer Pulse: sensitive repo', desc: 'Claude Code activity in a repo matching a sensitive-path pattern (code_sensitive_repo_patterns). Off by default.', value: codeRepoExposureEnabled, setter: setCodeRepoExposureEnabled },
+              ...(openaiConnected ? [{ label: 'Developer Pulse: Codex daily spend limit', desc: 'A user\'s Codex spend in the last 24 hours is over the Codex daily limit below. Over twice the limit is high and goes to Slack. Deterministic, no AI judgement.', value: codexSpendEnabled, setter: setCodexSpendEnabled }] : []),
+              { label: 'Developer Pulse: model policy', desc: `A model not on the approved list was used in ${openaiConnected ? 'Claude Code or Codex' : 'Claude Code'}. Requires an allowlist in config (code_model_allowlist). Off by default.`, value: codeModelPolicyEnabled, setter: setCodeModelPolicyEnabled },
+              { label: 'Developer Pulse: sensitive repo', desc: `Claude Code activity in a repo matching a sensitive-path pattern (code_sensitive_repo_patterns). Off by default.${openaiConnected ? ' Claude Code only: Codex does not report which repository it worked in.' : ''}`, value: codeRepoExposureEnabled, setter: setCodeRepoExposureEnabled },
               { label: 'Developer Pulse: high friction', desc: 'Over a quarter of tool actions failed in a session: a coaching signal. Off by default; visible on the Developer Pulse Overview regardless.', value: codeFrictionEnabled, setter: setCodeFrictionEnabled },
             ].map(item => (
               <div key={item.label} className="flex items-start gap-4 px-4 py-3 border-t border-[#F2F2F2] first:border-t-0">
@@ -322,13 +334,22 @@ export default function AdminRiskPage() {
         {/* Section 3b: Developer Pulse Alert Settings */}
         <Panel title="Developer Pulse alert settings" subtitle="Thresholds for the deterministic Developer Pulse alerts. Evaluated hourly. Changes take effect on the next cycle, no restart needed.">
           <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mb-4">
-            <Field label="Daily spend limit ($)" hint="Alert when someone's Claude Code spend in the last 24 hours is over this. Over twice this is high and goes to Slack">
+            <Field label={openaiConnected ? 'Claude Code daily spend limit ($)' : 'Daily spend limit ($)'} hint="Alert when someone's Claude Code spend in the last 24 hours is over this. Over twice this is high and goes to Slack">
               <input
                 type="number" min="0" step="1" value={codeCostFloor}
                 onChange={e => setCodeCostFloor(e.target.value)}
                 className={cx(B.input, 'w-full')}
               />
             </Field>
+            {openaiConnected && (
+              <Field label="Codex daily spend limit ($)" hint="Alert when someone's Codex spend in the last 24 hours is over this. Over twice this is high and goes to Slack">
+                <input
+                  type="number" min="0" step="1" value={codexSpendLimit}
+                  onChange={e => setCodexSpendLimit(e.target.value)}
+                  className={cx(B.input, 'w-full')}
+                />
+              </Field>
+            )}
             <Field label="Friction threshold (%)" hint={<>Alert when more than this share of a session&apos;s tool actions fail</>}>
               <input
                 type="number" min="1" max="100" step="1" value={codeFrictionPct}
@@ -358,7 +379,7 @@ export default function AdminRiskPage() {
         {/* Section 3c: File Upload Alert Settings */}
         <Panel title="File upload alert settings">
           <p className="m-0 mb-4 text-[13px] text-[#666666] leading-5">
-            Alert when a user uploads a file to a Cowork session whose name matches a glob pattern.
+            Alert when a user {openaiOnly ? 'attaches a file to a ChatGPT conversation' : openaiConnected ? 'uploads a file to a Claude Cowork session or attaches one to a ChatGPT conversation' : 'uploads a file to a Claude Cowork session'} whose name matches a glob pattern.
             Built-in patterns below are always active. Add org-specific patterns (e.g. <code className="bg-[#F2F2F2] px-1 rounded-[6px] text-[12px] font-mono">*.xlsx</code>, <code className="bg-[#F2F2F2] px-1 rounded-[6px] text-[12px] font-mono">*payroll*</code>) to extend coverage.
           </p>
 
@@ -430,6 +451,7 @@ export default function AdminRiskPage() {
                 <input
                   id="alerts-slack-webhook"
                   type="password"
+                  autoComplete="new-password"
                   value={alertsSlackWebhookUrl}
                   onChange={(e) => setAlertsSlackWebhookUrl(e.target.value)}
                   className={cx(B.input, 'flex-1 min-w-0 font-mono')}

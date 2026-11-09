@@ -102,10 +102,10 @@ describe('OTel identity conflicts (postgres)', () => {
 
       const open = await openConflicts();
       expect(open).toHaveLength(1);
-      expect(open[0]).toMatchObject({ installation_id: INSTALL, existing_user_id: INSTALL, new_email: B, surface: 'cowork' });
+      expect(open[0]).toMatchObject({ installation_id: INSTALL, existing_user_id: INSTALL, new_email: B, surface: 'cowork', product: 'claude' });
 
-      const alert = (await q(`SELECT severity, user_id FROM alerts WHERE alert_type = 'identity_conflict'`))[0];
-      expect(alert).toMatchObject({ severity: 'medium', user_id: resolver.derivedUserId(B) });
+      const alert = (await q(`SELECT severity, user_id, title FROM alerts WHERE alert_type = 'identity_conflict'`))[0];
+      expect(alert).toMatchObject({ severity: 'medium', user_id: resolver.derivedUserId(B), title: 'Two Claude accounts are sending from one machine' });
       expect(await msgsFor(resolver.derivedUserId(B))).toBe(1);
     });
 
@@ -215,7 +215,7 @@ describe('OTel identity conflicts (postgres)', () => {
       await setup();
       const list = await conflicts.listIdentityConflicts();
       expect(list).toHaveLength(1);
-      expect(list[0]).toMatchObject({ existingEmail: A, newEmail: B, status: 'open', eventCount: 1 });
+      expect(list[0]).toMatchObject({ existingEmail: A, newEmail: B, status: 'open', eventCount: 1, product: 'claude', installationShort: INSTALL.slice(0, 8) });
     });
   });
 

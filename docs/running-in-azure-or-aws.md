@@ -12,9 +12,9 @@ This is a deployment reference, not a supported infrastructure template. Cloud s
 | **An image registry** | To hold the two images you build |
 | **A secret store** | To hold the four secrets below and pass them to the containers |
 | **PostgreSQL 16** | Reachable only from the Hub, with a database for Command Centre. The Hub must connect directly: a transaction pooler in between stops the scheduled jobs running |
-| **HTTPS** | Two addresses with valid certificates: one where people sign in (the Hub) and one where Claude sends its activity (the collector). Claude in Office sends from people's browsers, so the load balancer in front of the collector must pass the browser's cross-origin check (`OPTIONS` requests) through to the collector, which answers it |
+| **HTTPS** | Two addresses with valid certificates: one where people sign in (the Hub) and one where Claude sends its activity (the collector). Claude in Office/Google sends from people's browsers, so the load balancer in front of the collector must pass the browser's cross-origin check (`OPTIONS` requests) through to the collector, which answers it |
 | **Persistent storage for the collector's queue** | So telemetry waiting to be delivered survives a restart |
-| **Outbound access** | HTTPS from the Hub to `api.anthropic.com`, and to any service you switch on, such as Slack or your identity provider |
+| **Outbound access** | HTTPS from the Hub to `api.anthropic.com`, and to any service you switch on, such as Slack or your identity provider. For ChatGPT and Codex, also to `api.chatgpt.com` and the download links it returns, whose host OpenAI chooses |
 
 | Container | Port | Health check | Settings |
 |---|---|---|---|
@@ -79,7 +79,7 @@ These show one way to build each, for reference. You do not need to follow them.
 1. **Check it is running.** `https://<hub address>/api/health` returns `{"status":"ok"}`.
 2. **Create your admin account** straight away. Search the Hub's log for `setup token`, open the Hub's address and enter the token. The token works once, and only until the first admin exists. If you lose it, wait ten minutes and restart the Hub for a new one.
 3. **Add your Claude API key** under **Admin → Access & Keys**.
-4. **Connect Claude.** On **Admin → Ingestion**, select **Edit** beside the collector address and enter the collector's HTTPS address. In the cloud the page does not show the bearer token: use `OTEL_ENDPOINT_SECRET` from your secret store. Then follow [Connect Claude](connect-claude.md).
+4. **Connect Claude, ChatGPT or both.** For Claude, select **Edit** beside the collector address on **Admin → Ingestion** and enter the collector's HTTPS address; in the cloud the page does not show the bearer token, so use `OTEL_ENDPOINT_SECRET` from your secret store. Then follow [Connect Claude](connect-claude.md). For ChatGPT and Codex, follow [Connect ChatGPT and Codex](configure-command-centre.md#connect-chatgpt-and-codex).
 5. **Set up the rest** by following [Configure Command Centre](configure-command-centre.md): single sign-on, email, retention, alerts and each feature.
 
 ## Troubleshooting
@@ -91,7 +91,7 @@ These show one way to build each, for reference. You do not need to follow them.
 | The Hub cannot connect to the database over TLS | The Hub does not trust the database's certificate authority | With Amazon RDS, the extra image layer and `NODE_EXTRA_CA_CERTS` |
 | People cannot stay signed in | The Hub reached over plain HTTP; its cookies are secure-only | Use the HTTPS address |
 | No setup token in the log | An admin already exists, or another copy of the Hub issued one in the last ten minutes | Search every Hub log stream for `setup token` |
-| One product sends nothing | Its Claude settings changed or were not distributed | For Claude Code, the managed settings; for Claude Cowork, Organization settings → Data and Privacy → Monitoring in claude.ai |
+| One product sends nothing | Its Claude settings changed or were not distributed | For Claude Code, the managed settings; for Claude Cowork, Organization settings → Data and Privacy → Monitoring in claude.ai; for Claude in Office/Google, Office agents → Monitoring, and that the load balancer passes OPTIONS requests through to the collector |
 | Nothing arrives at all | The collector is down, the bearer token is wrong, or the collector cannot reach the Hub (`HUB_HOST`) | The collector's log |
 | A collector copy will not start | No free queue slot | Its log for `no free queue slot`; raise `OTEL_QUEUE_SLOTS` |
 | Claude Code figures too high | Clients sending cumulative metrics | The managed settings: temporality must be `delta` |

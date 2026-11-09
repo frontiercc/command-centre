@@ -30,7 +30,30 @@ export interface TierConfig {
   frontierPushCriteria: string;
   capabilityCreationCriteria: string;
   confidenceThreshold: number;
+  /**
+   * How connector and skill use counts towards a tier, sent after the tier
+   * descriptions. Editable on the Tiers tab; empty sends no such rules.
+   * Absent on a config saved before it existed, which reads the default.
+   */
+  evidenceRules?: string;
 }
+
+/** The connector and skill evidence rules the classifier has always received. */
+export const DEFAULT_EVIDENCE_RULES = `Each event may include mcp_connectors_used (a list of external MCP tools invoked
+in the session) and skills_invoked (a list of specialised skills used). Treat
+these as structural evidence when assigning tiers. They are objective signals
+captured from the session, not inferred from message content.
+
+- Any connector or skill use is qualifying evidence for Tier 2 or above.
+  A session with connector or skill use should not be classified as Tier 1
+  unless the message content is unambiguously trivial regardless.
+- Connector orchestration (multiple connectors, or a connector used across
+  multi-step reasoning) combined with genuine complexity is qualifying
+  evidence for Tier 3.
+- Skill invocation as a load-bearing part of complex work is qualifying
+  evidence for Tier 3.
+- If connectors or skills were used but the work is simple or single-step,
+  classify as Tier 2.`;
 
 // ─── Defaults (mirror the original hardcoded prompt) ─────────────────────────
 
@@ -51,7 +74,7 @@ export const DEFAULT_TIER_CONFIG: TierConfig = {
         'judgement, OR sessions where an external connector (MCP tool) or ' +
         'specialised skill was invoked. Connector or skill use is objective ' +
         'evidence that the work extended beyond what the person could do in ' +
-        'Claude alone. Reversible with effort. The human applies judgement to ' +
+        'the AI assistant alone. Reversible with effort. The human applies judgement to ' +
         'the AI output before delivery.',
     },
     tier3: {
@@ -108,6 +131,7 @@ export const DEFAULT_TIER_CONFIG: TierConfig = {
     'Do not mark capability creation simply because the work is new to this\n' +
     'user. The framework is specific: capability creation means new to the ORGANISATION.',
   confidenceThreshold: 0.7,
+  evidenceRules: DEFAULT_EVIDENCE_RULES,
 };
 
 // ─── Reader ───────────────────────────────────────────────────────────────────
@@ -116,7 +140,9 @@ export async function getTierConfig(): Promise<TierConfig> {
   try {
     const raw = await getConfigValue('pulseClassifierConfig');
     if (!raw) return { ...DEFAULT_TIER_CONFIG };
-    return JSON.parse(raw) as TierConfig;
+    const parsed = JSON.parse(raw) as TierConfig;
+    // A config saved before the evidence rules were editable keeps the rules it always had.
+    return { ...parsed, evidenceRules: parsed.evidenceRules ?? DEFAULT_EVIDENCE_RULES };
   } catch {
     return { ...DEFAULT_TIER_CONFIG };
   }
@@ -132,6 +158,12 @@ export async function getTierConfig(): Promise<TierConfig> {
 // on the implicit default in a context where a `getTierConfig()` fetch
 // wasn't already available.
 
+/** The evidence section as it sits in the prompt, or nothing when the rules are cleared. */
+function evidenceSection(rules: string): string {
+  const text = rules.trim();
+  return text ? `\nCONNECTOR AND SKILL EVIDENCE\n\n${text}\n` : '';
+}
+
 export function buildClassifierSystemMessage(config: TierConfig): string {
   const c = config;
 
@@ -141,9 +173,9 @@ export function buildClassifierSystemMessage(config: TierConfig): string {
   const taxonomyLines = (defs: TaskTypeDef[]) =>
     defs.map(d => `  ${(d.name + ':').padEnd(23)} ${d.description}`).join('\n');
 
-  return `You are a classification engine for the Cowork Operating System framework.
+  return `You are a classification engine that grades how deeply people hand work to an AI assistant (Claude or ChatGPT).
 
-For each Cowork task event provided, output one classification with:
+For each work event provided, output one classification with:
 - tier: integer 1, 2, or 3
 - task_type: one of the labels in the taxonomy below
 - frontier_push_candidate: boolean
@@ -157,25 +189,7 @@ Tier 1 (${tier1.name}): ${tier1.description}
 Tier 2 (${tier2.name}): ${tier2.description}
 
 Tier 3 (${tier3.name}): ${tier3.description}
-
-CONNECTOR AND SKILL EVIDENCE
-
-Each event may include mcp_connectors_used (a list of external MCP tools invoked
-in the session) and skills_invoked (a list of specialised skills used). Treat
-these as structural evidence when assigning tiers. They are objective signals
-captured from the session, not inferred from message content.
-
-- Any connector or skill use is qualifying evidence for Tier 2 or above.
-  A session with connector or skill use should not be classified as Tier 1
-  unless the message content is unambiguously trivial regardless.
-- Connector orchestration (multiple connectors, or a connector used across
-  multi-step reasoning) combined with genuine complexity is qualifying
-  evidence for Tier 3.
-- Skill invocation as a load-bearing part of complex work is qualifying
-  evidence for Tier 3.
-- If connectors or skills were used but the work is simple or single-step,
-  classify as Tier 2.
-
+${evidenceSection(c.evidenceRules ?? DEFAULT_EVIDENCE_RULES)}
 THE TASK TYPE TAXONOMY
 
 The task_type names the WORK the person asked for, never the tool used to

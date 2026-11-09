@@ -10,7 +10,7 @@
 // storage-engine stats are not collected on Postgres.
 import archiver from 'archiver';
 import { Writable } from 'node:stream';
-import { sql } from 'drizzle-orm';
+import { inArray, sql } from 'drizzle-orm';
 import { getTypedClient } from '@/lib/db/client';
 import { schema } from '@/lib/db/schema';
 import { queryErrorEvents } from '@/lib/db/error-queries';
@@ -33,6 +33,21 @@ const TABLE_SCHEMAS = {
   compliance_events: schema.complianceEvents,
   error_events: schema.errorEvents,
   config: schema.config,
+  // OpenAI-only tables (ChatGPT and Codex, from OpenAI's Compliance API).
+  openai_replies: schema.openaiReplies,
+  openai_costs: schema.openaiCosts,
+  chatgpt_session_time: schema.chatgptSessionTime,
+  codex_turns: schema.codexTurns,
+  codex_actions: schema.codexActions,
+} as const;
+
+/**
+ * cowork_messages rows from OpenAI, each on its own line: inside the
+ * cowork_messages total they would read as Claude Cowork and Claude Code.
+ */
+const OPENAI_MESSAGE_COUNTS = {
+  cowork_messages_chatgpt: ['chatgpt_chat', 'chatgpt_work'],
+  cowork_messages_codex: ['codex'],
 } as const;
 
 export async function generateSupportBundle(): Promise<Buffer> {
@@ -71,6 +86,15 @@ export async function generateSupportBundle(): Promise<Buffer> {
       tableCounts[table] = Number(rows[0]?.count ?? 0);
     } catch {
       tableCounts[table] = -1;
+    }
+  }
+  for (const [line, sources] of Object.entries(OPENAI_MESSAGE_COUNTS)) {
+    try {
+      const rows = await client.select({ count: sql<number | string>`count(*)` }).from(schema.coworkMessages)
+        .where(inArray(schema.coworkMessages.source, [...sources]));
+      tableCounts[line] = Number(rows[0]?.count ?? 0);
+    } catch {
+      tableCounts[line] = -1;
     }
   }
 

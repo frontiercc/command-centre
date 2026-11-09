@@ -22,8 +22,9 @@ const fmt = (n: number) => n.toLocaleString('en-GB');
 
 export function renderHighlightsPost(input: HighlightsInput, composed: ComposedHighlights): string {
   const lines: string[] = [];
+  const a = input.assistant ?? 'Claude';
 
-  lines.push(':rocket: What a week of Claude actually produced :bar_chart:');
+  lines.push(`:rocket: What a week of ${a} actually produced :bar_chart:`);
   lines.push('');
   lines.push(
     'This week produced work we would normally scope, staff and plan for. '
@@ -31,9 +32,9 @@ export function renderHighlightsPost(input: HighlightsInput, composed: ComposedH
     + ' Seven days. None of it existed last week. :fire:'
   );
   lines.push('');
-  lines.push(`${fmt(input.headcount)} of our people used Claude this week. Here is what that looked like:`);
+  lines.push(`${fmt(input.headcount)} of our people used ${a} this week. Here is what that looked like:`);
   lines.push('');
-  lines.push(`:briefcase: The team put Claude on ${composed.subject}`);
+  lines.push(`:briefcase: The team put ${a} on ${composed.subject}`);
 
   if (input.engineeringMix.length > 0) {
     const total = input.engineeringMix.reduce((s, m) => s + m.sessions, 0);
@@ -43,30 +44,32 @@ export function renderHighlightsPost(input: HighlightsInput, composed: ComposedH
 
   if (input.systems.totalCalls > 0) {
     const top = input.systems.top.slice(0, 4).map(t => t.server).join(', ');
-    lines.push(`:electric_plug: Claude worked inside our own systems ${fmt(input.systems.totalCalls)} times, across ${fmt(input.systems.distinctSystems)} different systems, led by ${top}`);
+    lines.push(`:electric_plug: ${a} worked inside our own systems ${fmt(input.systems.totalCalls)} times, across ${fmt(input.systems.distinctSystems)} different systems, led by ${top}`);
   }
 
   if (input.codeOutput) {
     const c = input.codeOutput;
-    const prefix = c.basis === 'rolling' ? 'Over the last 30 days, ' : '';
+    const prefix = c.claudeCodeLabel
+      ? (c.basis === 'rolling' ? 'Over the last 30 days in Claude Code, ' : 'In Claude Code, ')
+      : (c.basis === 'rolling' ? 'Over the last 30 days, ' : '');
     lines.push(`:computer: ${prefix}${fmt(c.linesChanged)} lines of code changed from ${fmt(c.handsOnHours)} hours at the keyboard, and ${fmt(c.changesKept)} of the ${fmt(c.changesProposed)} changes Claude proposed were kept`);
   }
 
   if (input.humanTime) {
     const h = input.humanTime;
-    lines.push(`:hourglass_flowing_sand: About ${formatHours(h.humanMinutes)} hours of work by hand (AI estimate), done in ${formatHours(h.claudeMinutes)} hours with Claude, across ${fmt(h.sessions)} sessions`);
+    lines.push(`:hourglass_flowing_sand: About ${formatHours(h.humanMinutes)} hours of work by hand (AI estimate), done in ${formatHours(h.claudeMinutes)} hours with ${a}, across ${fmt(h.sessions)} sessions`);
   }
 
   if (input.tier3Count > 0) {
-    lines.push(`:dart: ${fmt(input.tier3Count)} pieces of work where Claude ran the whole process across several systems, with the person just setting the parameters`);
+    lines.push(`:dart: ${fmt(input.tier3Count)} pieces of work where ${a} ran the whole process across several systems, with the person just setting the parameters`);
   }
 
   if (input.shoutouts && (input.shoutouts.systems || input.shoutouts.skills)) {
     const parts: string[] = [];
     const sys = input.shoutouts.systems;
     const sk = input.shoutouts.skills;
-    if (sys) parts.push(`@${sys.person}, who put Claude into ${fmt(sys.distinct)} different systems ${fmt(sys.count)} times`);
-    if (sk) parts.push(`@${sk.person}, who used ${fmt(sk.distinct)} different Claude skills`);
+    if (sys) parts.push(`@${sys.person}, who put ${a} into ${fmt(sys.distinct)} different systems ${fmt(sys.count)} times`);
+    if (sk) parts.push(`@${sk.person}, who used ${fmt(sk.distinct)} different ${a === 'AI' ? 'AI' : 'Claude'} skills`);
     lines.push('');
     lines.push(`Special mention to ${parts.join(', and ')}. :clap:`);
   }

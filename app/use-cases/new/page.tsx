@@ -9,12 +9,11 @@ import Link from 'next/link';
 import TopBar from '@/components/layout/TopBar';
 import LoadingSpinner from '@/components/shared/LoadingSpinner';
 import { PageBody, Toolbar, Panel, B, Notice, cx } from '@/components/precision/ui';
+import { useConnectedProducts } from '@/components/shared/VendorSwitch';
+import { labelForUseCaseSurface } from '@/lib/usecases/dept-boxes';
 
-const SURFACES = [
-  { value: 'cowork', label: 'Cowork' },
-  { value: 'code', label: 'Code' },
-  { value: 'chat', label: 'Chat' },
-];
+// Labelled by what is connected: with OpenAI, Work and Code take in ChatGPT and Codex.
+const SURFACE_VALUES = ['cowork', 'code', 'chat'] as const;
 
 function toList(input: string): string[] {
   return input
@@ -30,6 +29,7 @@ const hintCls = 'm-0 mt-1 text-[13px] text-[#8F8F8F]';
 export default function NewUseCasePage() {
   const router = useRouter();
   const [checked, setChecked] = useState(false);
+  const connected = useConnectedProducts();
 
   const [title, setTitle] = useState('');
   const [description, setDescription] = useState('');
@@ -149,7 +149,7 @@ export default function NewUseCasePage() {
               <fieldset className="m-0 p-0 border-0">
                 <legend className={labelCls}>Surface(s)</legend>
                 <div className="flex items-center gap-4">
-                  {SURFACES.map(s => (
+                  {SURFACE_VALUES.filter(v => v !== 'chat' || !connected || connected.claude || !connected.openai).map(v => ({ value: v, label: labelForUseCaseSurface(v, connected) })).map(s => (
                     <label key={s.value} className="flex items-center gap-1.5 text-[14px] text-[#333333] cursor-pointer">
                       <input
                         type="checkbox"

@@ -18,14 +18,15 @@
  * 'week' rows are upserted via onConflictDoUpdate with
  * `targetWhere: sql\`granularity = 'week'\`` as the partial index arbiter.
  */
-import { and, desc, eq, gte, inArray, isNotNull, ne, sql } from 'drizzle-orm';
+import { and, desc, eq, gte, inArray, isNotNull, lt, ne, sql } from 'drizzle-orm';
 import { getTypedClient } from '@/lib/db/client';
 import { schema } from '@/lib/db/schema';
 import { getConfigValue, setConfigValue } from '@/lib/config';
 import { getCodeModelRates, priceTokens, type ModelRates } from '@/lib/pulse/code/rates';
 import { runCodePulseAlerts } from '@/lib/alerts/code-pulse-alerts';
-import { weekStart } from '@/lib/pulse/period';
+import { weekStart, weekStarts } from '@/lib/pulse/period';
 import { activeSecondsFromTimestamps } from '@/lib/pulse/session-active-time';
+import { codexSpend } from '@/lib/openai/spend';
 
 const SEVEN_DAYS = 7 * 24 * 60 * 60;
 export const ORG_SCOPE_ID = 'org';
@@ -70,13 +71,15 @@ export async function rollupCodeSessionStats(): Promise<number> {
   const lastRunIso = await getConfigValue('codeAggregatorLastRun');
   const since = lastRunIso ? Math.floor(new Date(lastRunIso).getTime() / 1000) : 0;
 
-  // Sessions with new assistant metadata or new code user messages. A UNION
-  // of two differently-shaped tables — kept as raw SQL (Rule 2).
+  // Sessions with new assistant metadata, new code user messages or new Codex
+  // actions. A UNION of differently-shaped tables — kept as raw SQL (Rule 2).
   const dirty = await rawAll<{ session_id: string }>(client, sql`
      SELECT session_id FROM code_assistant_meta WHERE ingested_at >= ${since}
      UNION
      SELECT session_id FROM cowork_messages
      WHERE surface = 'code' AND message_type = 'code_user_message' AND ingested_at >= ${since}
+     UNION
+     SELECT session_id FROM codex_actions WHERE ingested_at >= ${since}
   `);
 
   const cam = schema.codeAssistantMeta;
@@ -176,8 +179,16 @@ export async function rollupCodeSessionStats(): Promise<number> {
       .from(cmi)
       .where(eq(cmi.session_id, session_id));
 
-    const firstAt = Math.min(metaFirstAt ?? Infinity, userFirstAt ?? Infinity);
-    const lastAt = Math.max(metaLastAt ?? 0, userLastAt ?? 0);
+    // A Codex session's actions (codex_actions) mark when it was working,
+    // as Claude Code's assistant rows do. Their counts stay out of this row:
+    // per-product figures read them apart (code_metrics_vendor).
+    const codexActionTs = session_id.startsWith('codex:')
+      ? (await client.select({ occurred_at: schema.codexActions.occurred_at })
+          .from(schema.codexActions).where(eq(schema.codexActions.session_id, session_id)))
+          .map(r => Number(r.occurred_at))
+      : [];
+    const firstAt = Math.min(metaFirstAt ?? Infinity, userFirstAt ?? Infinity, ...codexActionTs);
+    const lastAt = Math.max(metaLastAt ?? 0, userLastAt ?? 0, ...codexActionTs);
     if (!isFinite(firstAt) || lastAt === 0) continue; // nothing real to roll up
 
     // Gap-based active time — raw event timestamps from
@@ -195,6 +206,7 @@ export async function rollupCodeSessionStats(): Promise<number> {
     const activeSecs = activeSecondsFromTimestamps([
       ...camTimestampRows.map(r => Number(r.occurred_at)),
       ...userMsgTimestampRows.map(r => Number(r.occurred_at)),
+      ...codexActionTs,
     ]);
 
     const values = {
@@ -316,7 +328,7 @@ const EMPTY_OTEL_AGG: OtelMetricAgg = {
  * function cannot tell the two apart. Verify the fleet's temporality before
  * trusting these numbers.
  */
-export async function otelMetricsForUsers(userIds: string[], windowStart: number): Promise<OtelMetricAgg> {
+export async function otelMetricsForUsers(userIds: string[], windowStart: number, windowEnd?: number): Promise<OtelMetricAgg> {
   if (userIds.length === 0) return { ...EMPTY_OTEL_AGG };
   const client = await getTypedClient();
   const t = schema.codeOtelMetrics;
@@ -331,7 +343,7 @@ export async function otelMetricsForUsers(userIds: string[], windowStart: number
       er: sql<number | string>`COALESCE(SUM(CASE WHEN ${t.metric_name}='claude_code.code_edit_tool.decision' AND ${t.type}='reject' THEN ${t.value} END),0)`,
     })
     .from(t)
-    .where(and(inArray(t.user_id, userIds), gte(t.occurred_at, windowStart)));
+    .where(and(inArray(t.user_id, userIds), gte(t.occurred_at, windowStart), windowEnd !== undefined ? lt(t.occurred_at, windowEnd) : undefined));
   const row = rows[0];
   return {
     activeTimeUserS: Math.round(Number(row?.atu ?? 0)),
@@ -344,7 +356,7 @@ export async function otelMetricsForUsers(userIds: string[], windowStart: number
   };
 }
 
-async function skillLeverageForUsers(client: TypedClient, userIds: string[], windowStart: number): Promise<number | null> {
+async function skillLeverageForUsers(client: TypedClient, userIds: string[], windowStart: number, windowEnd?: number): Promise<number | null> {
   if (userIds.length === 0) return null;
   const csi = schema.coworkSkillInvocations;
   const css = schema.codeSessionStats;
@@ -356,18 +368,27 @@ async function skillLeverageForUsers(client: TypedClient, userIds: string[], win
     })
     .from(csi)
     .innerJoin(css, eq(css.session_id, csi.session_id))
-    .where(and(inArray(csi.user_id, userIds), gte(csi.occurred_at, windowStart)));
+    .where(and(inArray(csi.user_id, userIds), gte(csi.occurred_at, windowStart), windowEnd !== undefined ? lt(csi.occurred_at, windowEnd) : undefined));
   const row = rows[0];
   const total = Number(row?.total ?? 0);
   if (!total) return null;
   return Number(row?.chained ?? 0) / total;
 }
 
+/** Completed weeks the per-product weekly rows are kept up to date over. */
+const PAST_VENDOR_WEEKS = 13;
+const WEEK = 7 * 24 * 60 * 60;
+
+/** The three per-product views code_metrics_vendor holds. */
+export type CodeVendor = 'all' | 'claude' | 'openai';
+
 async function writeCodeMetric(
   client: TypedClient, scopeType: string, scopeId: string, periodStart: number, periodEnd: number,
   m: ReturnType<typeof computeScopeMetrics>, skillLeverage: number | null, otel: OtelMetricAgg,
   granularity: 'rolling' | 'week' = 'rolling',
+  vendor?: CodeVendor,
 ): Promise<void> {
+  if (vendor) return writeVendorMetric(client, vendor, scopeType, scopeId, periodStart, periodEnd, m, skillLeverage, otel, granularity);
   const t = schema.codeMetrics;
   const computedAt = Math.floor(Date.now() / 1000);
 
@@ -441,6 +462,73 @@ async function writeCodeMetric(
     });
 }
 
+/** Same row as writeCodeMetric, into code_metrics_vendor for one product view. */
+async function writeVendorMetric(
+  client: TypedClient, vendor: CodeVendor, scopeType: string, scopeId: string, periodStart: number, periodEnd: number,
+  m: ReturnType<typeof computeScopeMetrics>, skillLeverage: number | null, otel: OtelMetricAgg,
+  granularity: 'rolling' | 'week',
+): Promise<void> {
+  const t = schema.codeMetricsVendor;
+  const set = {
+    period_end: periodEnd,
+    spend_usd: m.spendUsd !== null ? String(m.spendUsd) : null,
+    input_tokens: m.inputTokens,
+    output_tokens: m.outputTokens,
+    cache_hit_ratio: m.cacheHitRatio,
+    autonomy_ratio: m.autonomyRatio,
+    session_count: m.sessionCount,
+    repo_count: m.repoCount,
+    commit_count: m.commitCount,
+    skill_leverage: skillLeverage,
+    friction_index: m.frictionIndex,
+    active_time_user_s: otel.activeTimeUserS,
+    active_time_cli_s: otel.activeTimeCliS,
+    lines_added: otel.linesAdded,
+    lines_removed: otel.linesRemoved,
+    pr_count: otel.prCount,
+    edit_accept_count: otel.editAccept,
+    edit_reject_count: otel.editReject,
+    computed_at: Math.floor(Date.now() / 1000),
+  };
+  const values = { vendor, scope_type: scopeType, scope_id: scopeId, period_start: periodStart, ...set, granularity };
+  if (granularity === 'rolling') {
+    await client.insert(t).values(values);
+    return;
+  }
+  await client.insert(t).values(values).onConflictDoUpdate({
+    target: [t.vendor, t.scope_type, t.scope_id, t.period_start],
+    targetWhere: sql`granularity = 'week'`,
+    set,
+  });
+}
+
+const isCodexSession = (s: { session_id: string }) => s.session_id.startsWith('codex:');
+
+/**
+ * Codex actions, failures and commits per session, from codex_actions, so a
+ * Codex session's row in the per-product figures counts them the way a Claude
+ * Code session counts its tool calls and commits.
+ */
+/** Actions, failed actions and commits per Codex session, from codex_actions. */
+export async function codexActionCounts(client: TypedClient, sessionIds: string[]): Promise<Map<string, { tools: number; errors: number; commits: number }>> {
+  const out = new Map<string, { tools: number; errors: number; commits: number }>();
+  const ca = schema.codexActions;
+  for (let i = 0; i < sessionIds.length; i += 500) {
+    const rows = await client
+      .select({
+        session_id: ca.session_id,
+        tools: sql<number | string>`COUNT(*)`,
+        errors: sql<number | string>`COALESCE(SUM(${ca.failed}), 0)`,
+        commits: sql<number | string>`COALESCE(SUM(${ca.commit_count}), 0)`,
+      })
+      .from(ca)
+      .where(inArray(ca.session_id, sessionIds.slice(i, i + 500)))
+      .groupBy(ca.session_id);
+    for (const r of rows) out.set(r.session_id, { tools: Number(r.tools), errors: Number(r.errors), commits: Number(r.commits) });
+  }
+  return out;
+}
+
 export async function runCodeHourlyAggregation(): Promise<void> {
   const client = await getTypedClient();
   console.log('[CodePulse] Running hourly aggregation...');
@@ -501,19 +589,22 @@ async function runCodeHourlyAggregationInner(client: TypedClient): Promise<void>
    * Shared by both the rolling (7-day) and weekly (calendar-week) writes so
    * the team/department member-resolution logic exists exactly once.
    */
-  async function writeScopes(sessions: SessionRow[], periodStart: number, granularity: 'rolling' | 'week'): Promise<void> {
+  type ScopeWriter = (scopeType: string, scopeId: string, scopeSessions: SessionRow[], memberIds: string[], isOrg: boolean) => Promise<void>;
+
+  async function writeScopes(sessions: SessionRow[], periodStart: number, granularity: 'rolling' | 'week', writer?: ScopeWriter): Promise<void> {
+    const write: ScopeWriter = writer ?? (async (scopeType, scopeId, scopeSessions, memberIds) => {
+      await writeCodeMetric(client, scopeType, scopeId, periodStart, now,
+        computeScopeMetrics(scopeSessions, rates), await skillLeverageForUsers(client, memberIds, periodStart),
+        await otelMetricsForUsers(memberIds, periodStart), granularity);
+    });
+
     // Organisation scope
     const orgUserIds = [...new Set(sessions.map(s => s.user_id).filter((u): u is string => !!u))];
-    await writeCodeMetric(client, 'organisation', ORG_SCOPE_ID, periodStart, now,
-      computeScopeMetrics(sessions, rates), await skillLeverageForUsers(client, orgUserIds, periodStart),
-      await otelMetricsForUsers(orgUserIds, periodStart), granularity);
+    await write('organisation', ORG_SCOPE_ID, sessions, orgUserIds, true);
 
     // User scope
     for (const userId of orgUserIds) {
-      const userSessions = sessions.filter(s => s.user_id === userId);
-      await writeCodeMetric(client, 'user', userId, periodStart, now,
-        computeScopeMetrics(userSessions, rates), await skillLeverageForUsers(client, [userId], periodStart),
-        await otelMetricsForUsers([userId], periodStart), granularity);
+      await write('user', userId, sessions.filter(s => s.user_id === userId), [userId], false);
     }
 
     // Team scope (users.team_id)
@@ -531,9 +622,7 @@ async function runCodeHourlyAggregationInner(client: TypedClient): Promise<void>
       const memberSet = new Set(memberIds);
       const teamSessions = sessions.filter(s => s.user_id && memberSet.has(s.user_id));
       if (teamSessions.length === 0) continue;
-      await writeCodeMetric(client, 'team', team_id, periodStart, now,
-        computeScopeMetrics(teamSessions, rates), await skillLeverageForUsers(client, memberIds, periodStart),
-        await otelMetricsForUsers(memberIds, periodStart), granularity);
+      await write('team', team_id, teamSessions, memberIds, false);
     }
 
     // Department scope — members come from BOTH resolution paths the Cowork
@@ -566,9 +655,7 @@ async function runCodeHourlyAggregationInner(client: TypedClient): Promise<void>
       const deptSessions = sessions.filter(s => s.user_id && memberSet.has(s.user_id));
       if (deptSessions.length === 0) continue;
       const memberIds = [...memberSet];
-      await writeCodeMetric(client, 'function', department, periodStart, now,
-        computeScopeMetrics(deptSessions, rates), await skillLeverageForUsers(client, memberIds, periodStart),
-        await otelMetricsForUsers(memberIds, periodStart), granularity);
+      await write('function', department, deptSessions, memberIds, false);
     }
   }
 
@@ -585,6 +672,108 @@ async function runCodeHourlyAggregationInner(client: TypedClient): Promise<void>
   const weeklyPeriodStart = weekStart(now);
   const weeklySessions = allSessions.filter(s => s.last_at >= weeklyPeriodStart);
   await writeScopes(weeklySessions, weeklyPeriodStart, 'week');
+
+  // Per-product figures (code_metrics_vendor), once Codex data exists: all
+  // products, Claude Code only and Codex only. A Codex session counts its
+  // actions, failures and commits from codex_actions; Codex spend and tokens
+  // come from its turns, priced from the rates table. Claude Code's telemetry
+  // columns are Claude Code's alone, so the Codex view carries none.
+  const codexPresent = (await rawAll<{ x: number }>(client, sql`SELECT 1 AS x FROM cowork_messages WHERE source = 'codex' LIMIT 1`)).length > 0;
+  if (codexPresent) {
+    const counts = await codexActionCounts(client, allSessions.filter(isCodexSession).map(s => s.session_id));
+    const augmented: Array<SessionRow & { last_at: number }> = allSessions.map(s => {
+      const c = isCodexSession(s) ? counts.get(s.session_id) : undefined;
+      return isCodexSession(s)
+        ? { ...s, tool_use_count: c?.tools ?? 0, error_count: c?.errors ?? 0, commit_count: c?.commits ?? 0 }
+        : s;
+    });
+    // periodEnd is now for the current windows; a past week (below) passes its end, which also bounds every query.
+    const vendorWriter = (vendor: CodeVendor, periodStart: number, granularity: 'rolling' | 'week', periodEnd?: number): ScopeWriter =>
+      async (scopeType, scopeId, scopeSessions, memberIds, isOrg) => {
+        const end = periodEnd ?? now;
+        const base = computeScopeMetrics(scopeSessions, rates);
+        const skill = vendor === 'openai' ? null : await skillLeverageForUsers(client, memberIds, periodStart, periodEnd);
+        if (vendor === 'claude') {
+          await writeCodeMetric(client, scopeType, scopeId, periodStart, end, base, skill,
+            await otelMetricsForUsers(memberIds, periodStart, periodEnd), granularity, vendor);
+          return;
+        }
+        const codex = await codexSpend({ since: periodStart, until: periodEnd, userIds: isOrg ? undefined : memberIds }, rates);
+        const codexUsd = codex.turns === 0 ? 0 : codex.usd;
+        if (vendor === 'openai') {
+          const m = {
+            ...base,
+            spendUsd: codexUsd,
+            inputTokens: codex.inputTokens + codex.cachedTokens,
+            outputTokens: codex.outputTokens,
+            cacheHitRatio: codex.inputTokens + codex.cachedTokens > 0 ? codex.cachedTokens / (codex.inputTokens + codex.cachedTokens) : null,
+          };
+          await writeCodeMetric(client, scopeType, scopeId, periodStart, end, m, skill, { ...EMPTY_OTEL_AGG }, granularity, vendor);
+          return;
+        }
+        // All products: Claude Code's figures plus Codex's.
+        const claude = scopeSessions.filter(s => !isCodexSession(s));
+        const claudeInp = claude.reduce((n, s) => n + s.input_tokens, 0);
+        const claudeCr = claude.reduce((n, s) => n + s.cache_read_tokens, 0);
+        const cacheDen = claudeInp + claudeCr + codex.inputTokens + codex.cachedTokens;
+        const m = {
+          ...base,
+          spendUsd: base.spendUsd === null && codexUsd === null ? null : (base.spendUsd ?? 0) + (codexUsd ?? 0),
+          inputTokens: base.inputTokens + codex.inputTokens + codex.cachedTokens,
+          outputTokens: base.outputTokens + codex.outputTokens,
+          cacheHitRatio: cacheDen > 0 ? (claudeCr + codex.cachedTokens) / cacheDen : null,
+        };
+        await writeCodeMetric(client, scopeType, scopeId, periodStart, end, m, skill,
+          await otelMetricsForUsers(memberIds, periodStart, periodEnd), granularity, vendor);
+      };
+    for (const vendor of ['all', 'claude', 'openai'] as const) {
+      const pick = (rows: typeof augmented) => vendor === 'all' ? rows : rows.filter(s => isCodexSession(s) === (vendor === 'openai'));
+      await writeScopes(pick(augmented.filter(s => s.last_at >= rollingPeriodStart)), rollingPeriodStart, 'rolling', vendorWriter(vendor, rollingPeriodStart, 'rolling'));
+      await writeScopes(pick(augmented.filter(s => s.last_at >= weeklyPeriodStart)), weeklyPeriodStart, 'week', vendorWriter(vendor, weeklyPeriodStart, 'week'));
+    }
+
+    // Completed weeks whose sessions changed since the last run (every week
+    // the first time) are recounted from the session stats, each bounded to
+    // its week: the table only gains a week while this runs with Codex data
+    // present, and a week written before a late session (a Codex backfill)
+    // arrived would otherwise stay short. Weeks with no changed session are
+    // left exactly as they are. Five minutes of overlap, as in Work Pulse.
+    const changedSince = Number(await getConfigValue('codeVendorWeeksChangedSince')) || 0;
+    const runStart = Math.floor(Date.now() / 1000);
+    const pastFrom = weekStarts(weeklyPeriodStart - 1, PAST_VENDOR_WEEKS)[0];
+    const lastAtWeek = sql<number | string>`(${css.last_at} - (((${css.last_at} / 86400) + 3) % 7) * 86400 - (${css.last_at} % 86400))`;
+    const changedWeeks = (await client
+      .selectDistinct({ week: lastAtWeek })
+      .from(css)
+      .where(and(gte(css.last_at, pastFrom), lt(css.last_at, weeklyPeriodStart), gte(css.computed_at, changedSince))))
+      .map(r => Number(r.week))
+      .sort((a, b) => b - a);
+    for (const week of changedWeeks) {
+      const weekEnd = week + WEEK;
+      const sessions = await client
+        .select({
+          session_id: css.session_id, user_id: css.user_id, repo: css.repo,
+          user_msg_count: css.user_msg_count, tool_use_count: css.tool_use_count, error_count: css.error_count,
+          commit_count: css.commit_count, input_tokens: css.input_tokens, output_tokens: css.output_tokens,
+          cache_creation_tokens: css.cache_creation_tokens, cache_read_tokens: css.cache_read_tokens,
+          models_json: css.models_json, last_at: css.last_at,
+        })
+        .from(css)
+        .where(and(gte(css.last_at, week), lt(css.last_at, weekEnd)));
+      const weekCounts = await codexActionCounts(client, sessions.filter(isCodexSession).map(s => s.session_id));
+      const weekSessions: Array<SessionRow & { last_at: number }> = sessions.map(s => {
+        const c = isCodexSession(s) ? weekCounts.get(s.session_id) : undefined;
+        return isCodexSession(s)
+          ? { ...s, tool_use_count: c?.tools ?? 0, error_count: c?.errors ?? 0, commit_count: c?.commits ?? 0 }
+          : s;
+      });
+      for (const vendor of ['all', 'claude', 'openai'] as const) {
+        const rows = vendor === 'all' ? weekSessions : weekSessions.filter(s => isCodexSession(s) === (vendor === 'openai'));
+        await writeScopes(rows, week, 'week', vendorWriter(vendor, week, 'week', weekEnd));
+      }
+    }
+    await setConfigValue('codeVendorWeeksChangedSince', String(runStart - 300));
+  }
 
   // Deterministic alert evaluation — runs after rollups so it sees fresh stats
   await runCodePulseAlerts();

@@ -125,7 +125,7 @@ async function main() {
 
     // ── 1. Every admin login except the demo hub's own account ────────────
     const admins = (await c.query(
-      `SELECT email, linked_cowork_user_id FROM admin_users WHERE password_hash != '__otel_pending__' AND email != 'sam.taylor@example.com'`
+      `SELECT email, display_name, linked_cowork_user_id FROM admin_users WHERE password_hash != '__otel_pending__' AND email != 'sam.taylor@example.com'`
     )).rows;
     console.log(`[fullflow-v5] ${admins.length} teammate admin accounts to provision.`);
 
@@ -134,7 +134,8 @@ async function main() {
       const admin = admins[idx];
       const userId = admin.email; // same convention as sam.taylor@example.com
       const dept = DEPARTMENTS[idx % DEPARTMENTS.length];
-      const displayName = displayNameFromEmail(admin.email);
+      // The account's own name where it has one, so it reads the same on every page.
+      const displayName = (admin.display_name || '').trim() || displayNameFromEmail(admin.email);
       const repo = REPO_BY_DEPT[dept];
       const intensity = intensityFor(dept);
 
@@ -146,7 +147,7 @@ async function main() {
       // 100% for every department).
       await c.query(
         `INSERT INTO users (id, email, display_name, department, source, first_seen_at, last_seen_at)
-         VALUES ($1,$2,$3,$4,'agent',$5,$5)
+         VALUES ($1,$2,$3,$4,'otel',$5,$5)
          ON CONFLICT (id) DO UPDATE SET department = COALESCE(users.department, EXCLUDED.department)`,
         [userId, admin.email, displayName, dept, now - N_COMPLETED_WEEKS * WEEK]);
       await c.query(
@@ -330,7 +331,7 @@ async function main() {
       await c.query(
         `INSERT INTO pulse_events (user_id, event_type, status, title, body, cowork_message_id, tier, detected_at)
          VALUES ($1,'capability_creation','candidate',$2,$3,$4,3,$5)`,
-        [userId, `New capability — ${taskLabel.replace(/\b\w/g, ch => ch.toUpperCase())}`, `Tier 3 session flagged as a potential new capability. Prompt: "${pick(COWORK_PROMPTS)}"`, anchorId, anchorTs - 1800]);
+        [userId, `New capability — ${taskLabel.replace(/\b\w/g, ch => ch.toUpperCase())}`, `Tier 3 session flagged as a potential new capability. Prompt: "${anchorText}"`, anchorId, anchorTs - 1800]);
       eventN++;
       for (let i = 0; i < rand(1, 3); i++) {
         await c.query(

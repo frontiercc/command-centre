@@ -83,7 +83,7 @@ export default function JourneyGrid({ data, heatmap = false }: JourneyGridProps)
 
   return (
     <Panel
-      title={heatmap ? 'Team delegation journey' : 'Your delegation journey'}
+      title={heatmap ? 'Team delegation journey' : 'Delegation journey'}
       subtitle="6 weeks"
       right={<Tag tone="judged">AI-judged</Tag>}
       flush

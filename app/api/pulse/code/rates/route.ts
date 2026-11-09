@@ -5,7 +5,7 @@
 // standard pattern: getTypedClient() + schema.<table>. No
 // aggregates here (plain DISTINCT read), so no Number()-coercion is needed.
 import { NextRequest, NextResponse } from 'next/server';
-import { ne } from 'drizzle-orm';
+import { and, eq, ne } from 'drizzle-orm';
 import { getAdminSession } from '@/lib/auth/admin-auth';
 import { getTypedClient } from '@/lib/db/client';
 import { schema } from '@/lib/db/schema';
@@ -32,6 +32,18 @@ export async function GET(request: NextRequest) {
     .selectDistinct({ model: cam.model })
     .from(cam)
     .where(ne(cam.model, ''));
+  // Codex models (OpenAI Compliance API) are priced from this same table.
+  const codexModels = await client
+    .selectDistinct({ model: schema.codexTurns.model })
+    .from(schema.codexTurns)
+    .where(ne(schema.codexTurns.model, ''));
+  seenModels.push(...codexModels.filter(m => !seenModels.some(s => s.model === m.model)));
+  // ChatGPT models from OpenAI's cost records, priced from this table as well.
+  const chatgptModels = await client
+    .selectDistinct({ model: schema.openaiCosts.model })
+    .from(schema.openaiCosts)
+    .where(and(eq(schema.openaiCosts.product, 'chatgpt'), ne(schema.openaiCosts.model, '')));
+  seenModels.push(...chatgptModels.filter(m => !seenModels.some(s => s.model === m.model)));
   // Same rule as health.ts: a provider id priced via the normalised fallback is estimated, not unpriced.
   const unpricedModels = seenModels.map(m => m.model).filter((m): m is string => !!m && !rates[m] && !isEstimatedPricing(m, rates));
 

@@ -73,6 +73,7 @@ function makeSuggestion(overrides: Partial<SuggestionDraft> = {}): SuggestionDra
     status: 'open',
     generatedAt: 1,
     department: null,
+    products: null,
     canvas: null,
     surface: null,
     ...overrides,

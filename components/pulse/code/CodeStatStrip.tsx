@@ -93,14 +93,44 @@ export function formatDuration(seconds: number): string {
   return `${seconds}s`;
 }
 
-export default function CodeStatStrip({ metrics, githubRepos }: { metrics: CodeMetricsRow | null; githubRepos?: { count7d: number; names7d: string[] } | null }) {
+export default function CodeStatStrip({ metrics, githubRepos, view = 'claude', split }: {
+  metrics: CodeMetricsRow | null;
+  /** basis: which commits were counted (Claude and Codex tabs: commits matched to that tool). */
+  githubRepos?: { count7d: number; names7d: string[]; basis?: 'all' | 'claude' | 'openai' } | null;
+  /** Developer Pulse's switch, 'claude' until Codex data exists. */
+  view?: 'all' | 'claude' | 'openai';
+  /** All view: Claude Code's and Codex's own figures, for the line under each value. */
+  split?: { claude: CodeMetricsRow | null; openai: CodeMetricsRow | null } | null;
+}) {
+  const part = (pick: (r: CodeMetricsRow) => number | null, fmt: (v: number) => string) => {
+    if (!split) return null;
+    const c = split.claude ? pick(split.claude) : null;
+    const o = split.openai ? pick(split.openai) : null;
+    // Shown only when both products have a figure, never as "n/a".
+    if (c == null || o == null) return null;
+    return `Claude Code ${fmt(c)} · Codex ${fmt(o)}`;
+  };
+  const actor = view === 'openai' ? 'Codex' : view === 'all' ? 'the AI' : 'Claude';
+  // The spend caption names the product the figure is from. In the All view a
+  // person or department with only one product's spend gets that product's caption.
+  const spendCaption = (): string => {
+    const codex = "Codex tokens at OpenAI's USD token rates";
+    const claude = 'API cost of Claude Code work';
+    if (view === 'openai') return codex;
+    if (view === 'claude') return claude;
+    const c = split?.claude?.spend_usd ?? null;
+    const o = split?.openai?.spend_usd ?? null;
+    if (o != null && c == null) return codex;
+    if (c != null && o == null) return claude;
+    return 'API cost of Claude Code and Codex work';
+  };
   const signals: CodeSignal[] = [
     {
-      label: 'Claude spend · 7 days',
+      label: view === 'openai' ? 'Codex spend · 7 days' : view === 'all' ? 'Spend · 7 days' : 'Claude Code spend · 7 days',
       value: metrics === null ? null : metrics.spend_usd === null
         ? null
         : formatCurrency(metrics.spend_usd),
-      sublabel: 'API cost of Claude Code work',
+      sublabel: part(r => r.spend_usd, formatCurrency) ?? spendCaption(),
       hint: metrics?.spend_usd === null && (metrics.input_tokens + metrics.output_tokens) > 0
         ? 'Models seen have no price set, see rates config'
         : `${formatTokens(metrics?.input_tokens ?? 0)} in · ${formatTokens(metrics?.output_tokens ?? 0)} out`,
@@ -109,7 +139,7 @@ export default function CodeStatStrip({ metrics, githubRepos }: { metrics: CodeM
     {
       label: 'Automation',
       value: metrics?.autonomy_ratio == null ? null : `${metrics.autonomy_ratio.toFixed(1)}×`,
-      sublabel: 'Actions Claude takes per instruction given',
+      sublabel: part(r => r.autonomy_ratio, v => `${v.toFixed(1)}×`) ?? `Actions ${actor} takes per instruction given`,
       hint: 'Tool actions ÷ human prompts, per session',
     },
     // GitHub takes precedence even where a session-derived repo_count also
@@ -122,23 +152,28 @@ export default function CodeStatStrip({ metrics, githubRepos }: { metrics: CodeM
             ? (githubRepos.count7d > githubRepos.names7d.length
                 ? `${githubRepos.names7d.join(' · ')} · +${githubRepos.count7d - githubRepos.names7d.length} more`
                 : githubRepos.names7d.join(' · '))
-            : 'Repos with your GitHub commits',
-          hint: githubRepos.count7d === 0
-            ? 'From GitHub commit-author matching; a zero can also mean unmapped commits'
-            : 'From GitHub commit-author matching',
+            : githubRepos.basis === 'claude' ? 'Repos with GitHub commits made with Claude Code'
+              : githubRepos.basis === 'openai' ? 'Repos with GitHub commits made with Codex'
+                : 'Repos with your GitHub commits',
+          hint: (githubRepos.basis === 'claude'
+            ? 'Counts GitHub commits matched to Claude Code by author and time'
+            : githubRepos.basis === 'openai'
+              ? 'Counts GitHub commits matched to Codex by author and time'
+              : 'Counts all GitHub commits, from commit-author matching')
+            + (githubRepos.count7d === 0 ? '; a zero can also mean unmapped commits' : ''),
         }
       : metrics !== null && metrics.repo_count === 0
         ? {
             label: 'Repos active · 7 days',
             value: null,
             pending: 'Not captured',
-            sublabel: 'Codebases with Claude activity',
+            sublabel: 'Codebases with coding activity',
             hint: `${metrics.session_count} session${metrics.session_count === 1 ? '' : 's'} · no repo attribution in these sessions`,
           }
         : {
             label: 'Repos active · 7 days',
             value: metrics == null ? null : String(metrics.repo_count),
-            sublabel: 'Codebases with Claude activity',
+            sublabel: 'Codebases with coding activity',
             hint: `${metrics?.session_count ?? 0} session${(metrics?.session_count ?? 0) === 1 ? '' : 's'} · ${metrics?.commit_count ?? 0} AI-assisted commit${(metrics?.commit_count ?? 0) === 1 ? '' : 's'}`,
           },
     {

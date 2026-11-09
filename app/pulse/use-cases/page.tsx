@@ -10,6 +10,8 @@ import LoadingSpinner from '@/components/shared/LoadingSpinner';
 import {
   PageBody, Toolbar, Panel, PanelFoot, Strip, Figure, T, Tag, Pill, Notice, Empty, Spark, cx,
 } from '@/components/precision/ui';
+import { useConnectedProducts } from '@/components/shared/VendorSwitch';
+import { isOpenAiOnly } from '@/lib/sources/connected-shared';
 
 interface GovernanceBet {
   id: string;
@@ -18,10 +20,20 @@ interface GovernanceBet {
   departments: string[];
   lifecycle: string;
   weeksInLifecycle: number | null;
-  measured: { distinctUsers: number; sessions: number; hours: number | null };
+  measured: {
+    distinctUsers: number; sessions: number; hours: number | null;
+    platformSessions?: PlatformSessions;
+    platformHours?: { claude: number | null; openai: number | null };
+  };
   estimated: { hoursRecovered: number };
   series: Array<number | null>;
 }
+
+/** Matched sessions per vendor, 13 completed weeks; openai null while ChatGPT and Codex are hidden. */
+interface PlatformSessions { claude: number; openai: number | null }
+
+/** Which vendor parts to show: Claude unless OpenAI-only, OpenAI only when connected and shown. */
+interface VendorParts { claude: boolean; openai: boolean }
 
 interface GovernanceWorkflow {
   id: string;
@@ -30,6 +42,7 @@ interface GovernanceWorkflow {
   series: Array<number | null>;
   measuredHours: number | null;
   distinctUsers: number;
+  platformSessions?: PlatformSessions;
 }
 
 interface GovernanceRollup {
@@ -71,6 +84,38 @@ function fmtHours(n: number): string {
   return n.toLocaleString('en-US', { maximumFractionDigits: 1 });
 }
 
+function fmtSplitHours(n: number): string {
+  return `${n.toLocaleString('en-GB', { minimumFractionDigits: 1, maximumFractionDigits: 1 })}h`;
+}
+
+/** "Claude 12 · OpenAI 4", the register's column wording; null when no part shows. */
+function sessionsSplit(p: PlatformSessions | undefined, parts: VendorParts): string | null {
+  if (!p) return null;
+  const out: string[] = [];
+  if (parts.claude) out.push(`Claude ${p.claude.toLocaleString('en-GB')}`);
+  if (parts.openai && p.openai !== null) out.push(`OpenAI ${p.openai.toLocaleString('en-GB')}`);
+  return out.length > 0 ? out.join(' · ') : null;
+}
+
+/**
+ * "Claude 12.5h · OpenAI 3.0h". A vendor with no matched sessions had no time
+ * on the work, a real 0h; one with sessions but no measured time reads
+ * "not measured".
+ */
+function hoursSplit(
+  h: { claude: number | null; openai: number | null } | undefined,
+  s: { claude: number; openai: number | null } | undefined,
+  parts: VendorParts,
+): string | null {
+  if (!h) return null;
+  const one = (label: string, hours: number | null, sessions: number | null | undefined) =>
+    hours !== null ? `${label} ${fmtSplitHours(hours)}` : sessions === 0 ? `${label} ${fmtSplitHours(0)}` : `${label} not measured`;
+  const out: string[] = [];
+  if (parts.claude) out.push(one('Claude', h.claude, s?.claude));
+  if (parts.openai) out.push(one('OpenAI', h.openai, s?.openai));
+  return out.length > 0 ? out.join(' · ') : null;
+}
+
 function LifecyclePill({ lifecycle }: { lifecycle: string }) {
   return <Pill tone={LIFECYCLE_TONE[lifecycle] ?? 'neutral'}>{LIFECYCLE_LABEL[lifecycle] ?? lifecycle}</Pill>;
 }
@@ -85,7 +130,9 @@ function GroupRow({ lifecycle, count, colSpan }: { lifecycle: string; count: num
   );
 }
 
-function BetsPanel({ bets, minutesPerSession }: { bets: GovernanceBet[]; minutesPerSession: number }) {
+function BetsPanel({ bets, minutesPerSession, parts }: { bets: GovernanceBet[]; minutesPerSession: number; parts: VendorParts }) {
+  // The per-vendor lines show once OpenAI is connected and shown; a Claude-only hub keeps the single figures.
+  const split = parts.openai;
   const groups = LIFECYCLE_ORDER
     .map(lifecycle => ({ lifecycle, bets: bets.filter(b => b.lifecycle === lifecycle) }))
     .filter(g => g.bets.length > 0);
@@ -135,11 +182,17 @@ function BetsPanel({ bets, minutesPerSession }: { bets: GovernanceBet[]; minutes
                     </td>
                     <td className={cx(T.tdRight, 'text-[#05073F] whitespace-nowrap')}>
                       {bet.measured.sessions} {bet.measured.sessions === 1 ? 'session' : 'sessions'} · {bet.measured.distinctUsers} {bet.measured.distinctUsers === 1 ? 'user' : 'users'}
+                      {split && sessionsSplit(bet.measured.platformSessions, parts) && (
+                        <div className="text-[13px] tabular-nums mt-0.5">{sessionsSplit(bet.measured.platformSessions, parts)}</div>
+                      )}
                     </td>
                     <td className={cx(T.tdRight, 'whitespace-nowrap')}>
                       {bet.measured.hours != null
                         ? <span className="text-[#05073F]">{fmtHours(bet.measured.hours)} h</span>
                         : <span className="text-[#8F8F8F]">Not measured</span>}
+                      {split && hoursSplit(bet.measured.platformHours, bet.measured.platformSessions, parts) && (
+                        <div className="text-[13px] tabular-nums text-[#05073F] mt-0.5">{hoursSplit(bet.measured.platformHours, bet.measured.platformSessions, parts)}</div>
+                      )}
                     </td>
                     <td className={cx(T.tdRight, 'whitespace-nowrap text-[#2451F3]')}>
                       ≈ {fmtHours(bet.estimated.hoursRecovered)} hrs
@@ -156,7 +209,7 @@ function BetsPanel({ bets, minutesPerSession }: { bets: GovernanceBet[]; minutes
   );
 }
 
-function WorkflowsByLifecycle({ workflows, total }: { workflows: GovernanceWorkflow[]; total: number }) {
+function WorkflowsByLifecycle({ workflows, total, parts }: { workflows: GovernanceWorkflow[]; total: number; parts: VendorParts }) {
   if (workflows.length === 0) return null;
   const groups = LIFECYCLE_ORDER
     .map(lifecycle => ({ lifecycle, workflows: workflows.filter(wf => wf.lifecycle === lifecycle) }))
@@ -175,13 +228,14 @@ function WorkflowsByLifecycle({ workflows, total }: { workflows: GovernanceWorkf
               <th scope="col" className={T.th}>Title</th>
               <th scope="col" className={T.th}>Lifecycle</th>
               <th scope="col" className={T.th}>13-week trend</th>
+              <th scope="col" className={T.th} title="Matched sessions in the last 13 completed weeks, by vendor">Sessions, 13 weeks</th>
               <th scope="col" className={T.thRight}>Measured hours</th>
               <th scope="col" className={T.thRight}>Users</th>
             </tr>
           </thead>
           {groups.map(group => (
             <tbody key={group.lifecycle}>
-              <GroupRow lifecycle={group.lifecycle} count={group.workflows.length} colSpan={5} />
+              <GroupRow lifecycle={group.lifecycle} count={group.workflows.length} colSpan={6} />
               {group.workflows.map(wf => (
                 <tr key={wf.id} className={T.row}>
                   <td className={cx(T.td, 'max-w-[280px]')}>
@@ -192,6 +246,9 @@ function WorkflowsByLifecycle({ workflows, total }: { workflows: GovernanceWorkf
                   <td className={T.td}><LifecyclePill lifecycle={wf.lifecycle} /></td>
                   <td className={T.td}>
                     <span role="img" aria-label={`${wf.title} weekly sessions`}><Spark data={wf.series} width={96} /></span>
+                  </td>
+                  <td className={cx(T.td, 'text-[13px] tabular-nums whitespace-nowrap')}>
+                    {sessionsSplit(wf.platformSessions, parts) ?? <span className="text-[#8F8F8F]">—</span>}
                   </td>
                   <td className={cx(T.tdRight, 'whitespace-nowrap')}>
                     {wf.measuredHours != null ? (
@@ -221,6 +278,8 @@ export default function UseCaseGovernancePage() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [notEnabled, setNotEnabled] = useState(false);
+  const connected = useConnectedProducts();
+  const parts: VendorParts = { claude: !isOpenAiOnly(connected), openai: !!connected?.openai };
 
   useEffect(() => {
     fetch('/api/use-cases/governance')
@@ -274,7 +333,7 @@ export default function UseCaseGovernancePage() {
               Use Cases register
             </Link>.
           </Empty>
-          <WorkflowsByLifecycle workflows={data.allWorkflows} total={data.allWorkflowsTotal} />
+          <WorkflowsByLifecycle workflows={data.allWorkflows} total={data.allWorkflowsTotal} parts={parts} />
         </PageBody>
       </>
     );
@@ -311,9 +370,9 @@ export default function UseCaseGovernancePage() {
           <p className="m-0 text-[14px] leading-6 text-[#333333]">{data.narrative}</p>
         </Panel>
 
-        <BetsPanel bets={data.bets} minutesPerSession={value.calibration.minutesPerSession} />
+        <BetsPanel bets={data.bets} minutesPerSession={value.calibration.minutesPerSession} parts={parts} />
 
-        <WorkflowsByLifecycle workflows={data.allWorkflows} total={data.allWorkflowsTotal} />
+        <WorkflowsByLifecycle workflows={data.allWorkflows} total={data.allWorkflowsTotal} parts={parts} />
       </PageBody>
     </>
   );

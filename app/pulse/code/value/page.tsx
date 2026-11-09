@@ -21,6 +21,11 @@ interface ValueData {
   measured?: { spend30d: number; annualSpend: number; activeUsers: number; commitCount: number; prCount: number; sessionCount: number; engagedHours: number; costPerCommit: number | null; costPerPr: number | null; costPerSession: number | null; costPerEngagedHour: number | null; metricsWindowDays: number | null };
   observedLift?: ObservedLift | null;
   timeSaved?: TimeSaved | null;
+  /** Claude Code and Codex apart; null while Codex is absent or hidden. */
+  split?: {
+    claudeCode: { spend30d: number; commitCount: number; activeUsers: number };
+    codex: { spend30d: number | null; commitCount: number | null; activeUsers: number | null; unpricedModels: string[] };
+  } | null;
 }
 
 const PROV_LABEL: Record<ResolvedField['provenance'], string> = { from_data: 'from your data', default: 'default', edited: 'edited' };
@@ -126,26 +131,40 @@ export default function CodeValuePage() {
                   </p>
                   <p className="m-0 text-[13px] leading-[1.6] text-[#666666]">
                     Comparing AI-assisted commits/week across the {data.observedLift.highWeeks} highest vs {data.observedLift.lowWeeks} lowest AI-engaged-time weeks of the last 8 completed weeks, org-wide.
+                    {data.split?.codex ? ' Claude Code only: Codex reports no engaged time to compare against. ' : ' '}
                     This is a <span className="font-semibold">correlation, not causation</span>: shown separately from the benchmark estimate above, never mixed into it.
                   </p>
                 </div>
               </Panel>
             )}
 
-            {/* Measured anchor — blue */}
+            {/* Measured anchor — blue (Claude Code plus Codex when shown, each part under the figure) */}
             <Panel title="Measured, not estimated" right={<Tag tone="measured">Measured</Tag>} flush>
               <div className="px-4 pt-3">
-                <Muted>The hard numbers behind the estimate. Spend is a 30-day priced total{me!.metricsWindowDays ? `; productivity over the latest ${me!.metricsWindowDays}-day window` : ''}.</Muted>
+                <Muted>The hard numbers behind the estimate. Spend is a 30-day priced total{data?.split ? ' across Claude Code and Codex' : ''}{me!.metricsWindowDays ? `; productivity over the latest ${me!.metricsWindowDays}-day window` : ''}.</Muted>
               </div>
               <FigureGrid cols={5}>
                 {[
-                  { label: 'Spend · 30 days', value: formatCurrency(me!.spend30d) },
+                  {
+                    label: 'Spend · 30 days', value: formatCurrency(me!.spend30d),
+                    sub: data?.split
+                      ? `Claude Code ${formatCurrency(data.split.claudeCode.spend30d)} · Codex ${data.split.codex.spend30d === null ? 'not priced' : formatCurrency(data.split.codex.spend30d)}`
+                      : undefined,
+                  },
                   { label: 'Active Code users', value: String(me!.activeUsers) },
-                  { label: 'Commits', value: String(me!.commitCount) },
+                  {
+                    label: 'Commits', value: String(me!.commitCount),
+                    sub: data?.split
+                      ? `Claude Code ${data.split.claudeCode.commitCount.toLocaleString('en-GB')} · Codex ${data.split.codex.commitCount === null ? 'not measured' : data.split.codex.commitCount.toLocaleString('en-GB')}`
+                      : undefined,
+                  },
                   { label: 'PRs', value: String(me!.prCount) },
                   { label: 'Engaged hours', value: fmtHours(me!.engagedHours) },
-                ].map(c => <Figure key={c.label} label={c.label} value={c.value} tone="measured" />)}
+                ].map(c => <Figure key={c.label} label={c.label} value={c.value} sub={c.sub} tone="measured" />)}
               </FigureGrid>
+              {data?.split && data.split.codex.unpricedModels.length > 0 && (
+                <PanelFoot>Codex spend leaves out models with no rate: {data.split.codex.unpricedModels.join(', ')}.</PanelFoot>
+              )}
             </Panel>
 
             {/* §5c: Unit economics — the language finance speaks, fully measured (blue). */}

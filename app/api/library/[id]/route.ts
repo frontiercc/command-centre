@@ -15,6 +15,8 @@
 // NOTE: the GET handler spreads `...entry` (all columns, including
 // author_user_id) into the response alongside the server-computed
 // `is_author` flag.
+import { entryProducts } from '@/lib/library/products';
+import { boardUses } from '@/lib/library/visible-uses';
 import { NextRequest, NextResponse } from 'next/server';
 import { normaliseSourceUrl, SOURCE_URL_ERROR } from '@/lib/library/source-url';
 import { isEntryAuthor } from '@/lib/library/author';
@@ -47,14 +49,17 @@ export async function GET(
   if (!session.authenticated) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
 
   const { id: idStr } = await params;
-  const client = await getTypedClient();
   const id = parseInt(idStr, 10);
+  if (!Number.isInteger(id)) return NextResponse.json({ error: 'Not found' }, { status: 404 });
+  const client = await getTypedClient();
   const userId = session.userId ?? '';
   const now = Math.floor(Date.now() / 1000);
   const weekAgo = now - 7 * 86400;
 
   const e = schema.skillLibraryEntries;
   const u = schema.users;
+  // ChatGPT and Codex hidden (the OpenAI panel): Claude's uses only.
+  const uses = await boardUses();
   const csi = schema.coworkSkillInvocations;
   const cmi = schema.coworkMcpInvocations;
 
@@ -142,7 +147,7 @@ export async function GET(
   const dayExpr = sql`to_char(to_timestamp(occurred_at) AT TIME ZONE 'UTC', 'YYYY-MM-DD')`;
   const dailyRowsRaw = await rawAll<{ day: string; cnt: number | string }>(client, sql`
     SELECT ${dayExpr} AS day, COUNT(*) AS cnt
-    FROM cowork_skill_invocations
+    FROM ${uses.skills}
     WHERE skill_name = ${name} AND occurred_at >= ${weekAgo}
     GROUP BY ${dayExpr}
     ORDER BY day ASC
@@ -154,7 +159,7 @@ export async function GET(
     .select({ user_id: csi.user_id, display_name: u.display_name, cnt: sql<number | string>`COUNT(*)` })
     .from(csi)
     .leftJoin(u, eq(u.id, csi.user_id))
-    .where(eq(csi.skill_name, name))
+    .where(and(eq(csi.skill_name, name), uses.claudeOnly))
     .groupBy(csi.user_id, u.display_name)
     .orderBy(desc(sql`COUNT(*)`))
     .limit(10);
@@ -164,20 +169,20 @@ export async function GET(
   const typeSplitRaw = await client
     .select({ invocation_type: csi.invocation_type, cnt: sql<number | string>`COUNT(*)` })
     .from(csi)
-    .where(and(eq(csi.skill_name, name), isNotNull(csi.invocation_type)))
+    .where(and(eq(csi.skill_name, name), isNotNull(csi.invocation_type), uses.claudeOnly))
     .groupBy(csi.invocation_type);
   const typeSplit = typeSplitRaw.map(r => ({ ...r, cnt: Number(r.cnt) }));
 
   const totalInvocationsRows = await client
     .select({ cnt: sql<number | string>`COUNT(*)` })
     .from(csi)
-    .where(eq(csi.skill_name, name));
+    .where(and(eq(csi.skill_name, name), uses.claudeOnly));
   const totalInvocations = Number(totalInvocationsRows[0]?.cnt ?? 0);
 
   const distinctUsersRows = await client
     .select({ cnt: sql<number | string>`COUNT(DISTINCT ${csi.user_id})` })
     .from(csi)
-    .where(eq(csi.skill_name, name));
+    .where(and(eq(csi.skill_name, name), uses.claudeOnly));
   const distinctUsers = Number(distinctUsersRows[0]?.cnt ?? 0);
 
   const weekCountRows = await client
@@ -220,8 +225,12 @@ export async function GET(
       }
     : undefined;
 
+  // Which products it is used in (Claude, ChatGPT, Codex).
+  const products = (await entryProducts([{ name, type: entry.type }], uses.shown)).get(name) ?? [];
+
   return NextResponse.json({
     ...entry,
+    products,
     is_author: await isEntryAuthor(session, entry.author_user_id),
     stats: {
       total_invocations: totalInvocations,
@@ -256,6 +265,7 @@ export async function DELETE(
   if (!session.authenticated) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
   const { id: idStr } = await params;
   const id = parseInt(idStr, 10);
+  if (!Number.isInteger(id)) return NextResponse.json({ error: 'Not found' }, { status: 404 });
   const audit = (outcome: 'success' | 'denied' | 'failure', detail: string) =>
     logAccess({ actorId: session.userId ?? '', actorEmail: session.email ?? '', resource: 'library', action: 'DELETE', outcome, detail });
 
@@ -294,8 +304,9 @@ export async function PATCH(
   if (!session.authenticated) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
 
   const { id: idStr } = await params;
-  const client = await getTypedClient();
   const id = parseInt(idStr, 10);
+  if (!Number.isInteger(id)) return NextResponse.json({ error: 'Not found' }, { status: 404 });
+  const client = await getTypedClient();
   const e = schema.skillLibraryEntries;
 
   const entryRows = await client

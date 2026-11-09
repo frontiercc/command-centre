@@ -11,12 +11,20 @@ import { ToggleRow, Field, Modal } from '@/components/admin/precision-admin';
 import LoadingSpinner from '@/components/shared/LoadingSpinner';
 import { useToast } from '@/components/shared/ToastProvider';
 import SecretRemoveButton from '@/components/admin/SecretRemoveButton';
+import { useConnectedProducts } from '@/components/shared/VendorSwitch';
+import { isOpenAiOnly, openAiConnected } from '@/lib/sources/connected-shared';
+import { PRODUCTS } from '@/lib/dashboard/vendor';
 
 export default function AdminDataPage() {
   // Export state
   const [exportDateFrom, setExportDateFrom] = useState('');
   const [exportDateTo, setExportDateTo] = useState('');
-  const [exportSurface, setExportSurface] = useState('all');
+  const [exportProduct, setExportProduct] = useState('all');
+  const connected = useConnectedProducts();
+  const openaiOnly = isOpenAiOnly(connected);
+  const openaiConnected = openAiConnected(connected);
+  // The connected vendors' products (Claude's alone until OpenAI is connected).
+  const exportProducts = PRODUCTS.filter(p => (p.vendor === 'openai' ? openaiConnected : !openaiOnly));
   const [exporting, setExporting] = useState(false);
 
   // Retention state
@@ -125,7 +133,7 @@ export default function AdminDataPage() {
         {/* Export data */}
         <Panel
           title="Export data"
-          subtitle="Download audit log data as CSV for any date range. Includes all surfaces unless filtered."
+          subtitle="Download audit log data as CSV for any date range. Includes every product unless filtered."
           flush
         >
           <div className="px-4 py-3 grid grid-cols-1 sm:grid-cols-3 gap-4">
@@ -145,16 +153,14 @@ export default function AdminDataPage() {
                 className={cx(B.input, 'w-full')}
               />
             </Field>
-            <Field label="Surface">
+            <Field label="Product">
               <select
-                value={exportSurface}
-                onChange={e => setExportSurface(e.target.value)}
+                value={exportProduct}
+                onChange={e => setExportProduct(e.target.value)}
                 className={cx(B.select, 'w-full text-[14px]')}
               >
-                <option value="all">All surfaces</option>
-                <option value="code">Code</option>
-                <option value="cowork">Cowork</option>
-                <option value="chat">Chat</option>
+                <option value="all">All products</option>
+                {exportProducts.map(p => <option key={p.id} value={p.id}>{p.label}</option>)}
               </select>
             </Field>
           </div>
@@ -164,7 +170,7 @@ export default function AdminDataPage() {
               onClick={async () => {
                 setExporting(true);
                 try {
-                  const p = new URLSearchParams({ surface: exportSurface });
+                  const p = new URLSearchParams(exportProduct === 'all' ? { surface: 'all' } : { product: exportProduct });
                   if (exportDateFrom) p.set('dateFrom', String(Math.floor(new Date(exportDateFrom).getTime() / 1000)));
                   if (exportDateTo) p.set('dateTo', String(Math.floor(new Date(exportDateTo + 'T23:59:59').getTime() / 1000)));
                   const res = await fetch(`/api/admin/export?${p}`);
@@ -201,7 +207,12 @@ export default function AdminDataPage() {
           flush
         >
           <div className="px-4 py-3 grid grid-cols-1 md:grid-cols-2 gap-x-6 gap-y-4">
-            <Field label="Cowork content retention (days)">
+            <Field
+              label={openaiOnly ? 'ChatGPT retention (days)' : 'Cowork content retention (days)'}
+              hint={openaiConnected ? (openaiOnly
+                ? 'ChatGPT Chat and ChatGPT Work prompts, attached file names, reply times and spend. No replies are stored, only your prompts and metadata.'
+                : 'Claude Cowork prompts and attached file names, plus ChatGPT Chat and ChatGPT Work prompts, attached file names, reply times and spend.') : 'Claude Cowork prompts and attached file names.'}
+            >
               <input
                 type="number"
                 min={7}
@@ -212,8 +223,10 @@ export default function AdminDataPage() {
             </Field>
 
             <Field
-              label="Code retention (days)"
-              hint="Code prompts, session metrics, and classifications. Code holds no assistant output, only your prompts and metadata."
+              label={openaiOnly ? 'Codex retention (days)' : 'Code retention (days)'}
+              hint={openaiOnly
+                ? 'Codex prompts, turns, actions and spend. No assistant output is stored, only your prompts and metadata.'
+                : `Code prompts, session metrics, and classifications${openaiConnected ? ', plus Codex prompts, turns, actions and spend' : ''}. Code holds no assistant output, only your prompts and metadata.`}
             >
               <input
                 type="number"
@@ -224,6 +237,8 @@ export default function AdminDataPage() {
               />
             </Field>
 
+            {/* Claude-only stores: hidden while only OpenAI is connected. */}
+            {!openaiOnly && (<>
             <Field label="OTel events retention (days)">
               <input
                 type="number"
@@ -246,7 +261,7 @@ export default function AdminDataPage() {
 
             <Field
               label="Chat retention (days)"
-              hint="Covers Compliance-API-synced chat prompts (chat_messages) and assistant metadata (chat_assistant_meta)."
+              hint="Covers Compliance-API-synced Claude Chat prompts and assistant metadata (chat_assistant_meta)."
             >
               <input
                 type="number"
@@ -256,6 +271,7 @@ export default function AdminDataPage() {
                 className={cx(B.input, 'w-32')}
               />
             </Field>
+            </>)}
 
             <Field
               label="Error events retention (days)"
@@ -283,6 +299,7 @@ export default function AdminDataPage() {
               />
             </Field>
 
+            {!openaiOnly && (
             <Field
               label="Adoption analytics retention (days)"
               hint="Per-user daily engagement snapshots older than this are deleted."
@@ -295,6 +312,7 @@ export default function AdminDataPage() {
                 className={cx(B.input, 'w-32')}
               />
             </Field>
+            )}
           </div>
 
           <fieldset className="px-4 py-3 border-t border-[#F2F2F2] m-0 min-w-0">
@@ -402,7 +420,9 @@ export default function AdminDataPage() {
         {/* Cloud archive */}
         <Panel
           title="Cloud archive"
-          subtitle="Archives cowork, OTel, compliance, chat and error rows to cloud storage before retention cleanup runs."
+          subtitle={openaiOnly
+            ? 'Archives ChatGPT and Codex prompts, reply times, turns, actions and spend, and error rows, to cloud storage before retention cleanup runs.'
+            : `Archives cowork, OTel, compliance, chat and error rows to cloud storage before retention cleanup runs.${openaiConnected ? ' ChatGPT and Codex prompts, reply times, turns, actions and spend are included.' : ''}`}
           flush
         >
           <ToggleRow
@@ -471,6 +491,7 @@ export default function AdminDataPage() {
                         <input
                           id="archive-secret-access-key"
                           type="password"
+                          autoComplete="new-password"
                           value={archiveSecretAccessKey}
                           onChange={(e) => setArchiveSecretAccessKey(e.target.value)}
                           className={cx(B.input, 'w-full min-w-0 font-mono')}
@@ -579,7 +600,7 @@ export default function AdminDataPage() {
             Permanently wipe the <strong>Audit Log</strong> and <strong>Alerts</strong>. This cannot be undone.
           </p>
           <p className="mt-1.5 mb-0 text-[13px] text-[#666666] leading-5">
-            Clears the audit event feed (Cowork, Code &amp; Chat messages, skill/connector events) and all alerts.
+            Clears the audit event feed ({openaiOnly ? 'ChatGPT and Codex prompts with their reply times, turns, actions and spend' : openaiConnected ? 'Cowork, Code & Chat messages, ChatGPT and Codex prompts with their reply times, turns, actions and spend' : 'Cowork, Code & Chat messages'}, skill/connector events) and all alerts.
             <strong> Keeps</strong> the security/compliance audit trail, accounts, config and settings. Note: Code &amp;
             Work Pulse recompute to empty afterward (they derive from the same events).
           </p>
@@ -594,7 +615,8 @@ export default function AdminDataPage() {
               <div>
                 <p className="m-0 mb-1.5 text-[14px] text-[#333333]">This permanently deletes:</p>
                 <ul className="m-0 text-[13px] text-[#4D4D4D] list-disc pl-5 space-y-0.5">
-                  <li>The Audit Log event feed: Cowork, Code &amp; Chat messages, skill/connector events</li>
+                  <li>The Audit Log event feed: {openaiOnly ? 'ChatGPT and Codex prompts' : openaiConnected ? 'Cowork, Code & Chat messages, ChatGPT and Codex prompts' : 'Cowork, Code & Chat messages'}, skill/connector events</li>
+                  {openaiConnected && <li>ChatGPT reply times and Codex turns, actions and spend</li>}
                   <li>All alerts</li>
                 </ul>
               </div>

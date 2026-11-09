@@ -24,7 +24,7 @@
  * flag's estimated ceiling; a row with no parseable tokens still counts its
  * real cost_usd toward spend (see `parseCoworkTokenUsage`).
  */
-import { and, eq, gte, inArray, isNull, lt } from 'drizzle-orm';
+import { and, eq, gte, inArray, isNull, lt, sql } from 'drizzle-orm';
 import { getCodeWorkTypeLabeller } from '@/lib/pulse/code/tier-config';
 import { getTypedClient } from '@/lib/db/client';
 import { schema } from '@/lib/db/schema';
@@ -32,8 +32,14 @@ import { getCodeModelRates, priceTokens, normalizeModelId, type ModelRates, type
 import { monthBounds } from '@/lib/finance/period';
 import { rankModelsByPrice, nextCheaperInUse, estimateCeilingUsd } from '@/lib/finance/model-tiering';
 import { jsonToText } from '@/lib/db/json';
+import { chatgptSessionShares } from '@/lib/finance/spend-review-openai';
 
-export type Surface = 'code' | 'cowork';
+/**
+ * Claude Code and Claude Cowork, plus Codex (priced per turn, judged on Claude
+ * Code's kinds of work) and ChatGPT (each hour's cost shared across that
+ * hour's replies, judged on Cowork's kinds of work) when OpenAI is connected.
+ */
+export type Surface = 'code' | 'cowork' | 'chatgpt' | 'codex';
 
 export interface ModelSpend {
   model: string;
@@ -421,7 +427,7 @@ export function computeCostByType(
   return costByType;
 }
 
-async function buildCodeModelEfficiency(period: string): Promise<ModelEfficiencyReport> {
+async function buildCodeModelEfficiency(period: string, surface: 'code' | 'codex' = 'code'): Promise<ModelEfficiencyReport> {
   const client = await getTypedClient();
   const { start, end } = monthBounds(period);
   const rates: ModelRates = await getCodeModelRates();
@@ -429,8 +435,26 @@ async function buildCodeModelEfficiency(period: string): Promise<ModelEfficiency
   const cam = schema.codeAssistantMeta;
   const csc = schema.codeSessionClassifications;
   const css = schema.codeSessionStats;
+  const ct = schema.codexTurns;
 
-  const rows = (await client
+  // Codex: each turn's tokens (OpenAI sends no cache-write tokens, and no
+  // skill, subagent or effort per turn).
+  const rows = surface === 'codex' ? (await client
+    .select({
+      session_id: ct.session_id,
+      work_type: csc.work_type,
+      model: ct.model,
+      input_tokens: ct.uncached_input_tokens,
+      output_tokens: ct.output_tokens,
+      cache_creation_tokens: sql<number>`0`,
+      cache_read_tokens: ct.cached_input_tokens,
+      skill_name: sql<string | null>`NULL`,
+      agent_name: sql<string | null>`NULL`,
+      effort: sql<string | null>`NULL`,
+    })
+    .from(ct)
+    .leftJoin(csc, eq(csc.session_id, ct.session_id))
+    .where(and(gte(ct.started_at, start), lt(ct.started_at, end)))) as CodeRow[] : (await client
     .select({
       session_id: cam.session_id,
       work_type: csc.work_type,
@@ -580,7 +604,7 @@ async function buildCodeModelEfficiency(period: string): Promise<ModelEfficiency
   const costByType = computeCostByType(spendByModel, foldUsageByModel(activities), rates);
 
   return {
-    surface: 'code',
+    surface,
     enabled: true,
     hasData: rows.length > 0,
     period: { start, end },
@@ -764,14 +788,27 @@ export async function buildSessionTaskTypeMap(
   return sessionTaskType;
 }
 
-async function buildCoworkModelEfficiency(period: string): Promise<ModelEfficiencyReport> {
+async function buildCoworkModelEfficiency(period: string, surface: 'cowork' | 'chatgpt' = 'cowork'): Promise<ModelEfficiencyReport> {
   const client = await getTypedClient();
   const { start, end } = monthBounds(period);
   const rates: ModelRates = await getCodeModelRates();
 
   const cm = schema.coworkMessages;
 
-  const rows = (await client
+  // ChatGPT: each conversation's share of its hours' costs, as Spend Review
+  // splits them (lib/finance/spend-review-openai.ts). One row per share, in
+  // the shape of a Cowork model call; a share on a model with no rate has no
+  // cost and its model is listed as unpriced.
+  const chatgptUnpriced = new Set<string>();
+  const rows = surface === 'chatgpt' ? await (async () => {
+    const shared = await chatgptSessionShares(client, rates, start, end, { all: true });
+    for (const m of shared.unpricedModels) chatgptUnpriced.add(m);
+    const out: CoworkSpendRow[] = [];
+    for (const [sid, e] of shared.bySession) {
+      for (const p of e.parts) out.push({ session_id: sid, model: p.model, cost_usd: p.usd, token_usage: p.usage });
+    }
+    return out;
+  })() : (await client
     .select({
       session_id: cm.session_id,
       model: cm.model,
@@ -867,7 +904,7 @@ async function buildCoworkModelEfficiency(period: string): Promise<ModelEfficien
 
   const activityRows: ActivityRow[] = [];
   const belowVolume: { key: string; label: string; totalSpendUsd: number }[] = [];
-  const unpricedModels = new Set<string>();
+  const unpricedModels = new Set<string>(chatgptUnpriced);
   let totalSpendUsd = 0;
   let totalTokens = 0;
 
@@ -941,7 +978,7 @@ async function buildCoworkModelEfficiency(period: string): Promise<ModelEfficien
   const costByType = computeCostByType(spendByModel, foldUsageByModel(activities), rates);
 
   return {
-    surface: 'cowork',
+    surface,
     enabled: true,
     hasData: rows.length > 0,
     period: { start, end },
@@ -967,8 +1004,8 @@ export async function buildModelEfficiency(
   nowS: number = Math.floor(Date.now() / 1000),
 ): Promise<ModelEfficiencyReport> {
   void nowS;
-  if (surface === 'cowork') {
-    return buildCoworkModelEfficiency(period);
+  if (surface === 'cowork' || surface === 'chatgpt') {
+    return buildCoworkModelEfficiency(period, surface);
   }
-  return buildCodeModelEfficiency(period);
+  return buildCodeModelEfficiency(period, surface);
 }

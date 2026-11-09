@@ -84,7 +84,7 @@ describe('GET /api/pulse/code/me — githubRepos', () => {
     const res = await route.GET(makeRequest('/api/pulse/code/me?userId=u1'));
     expect(res.status).toBe(200);
     const data = await res.json();
-    expect(data.githubRepos).toEqual({ count7d: 2, names7d: ['org/a', 'org/b'] });
+    expect(data.githubRepos).toEqual({ count7d: 2, names7d: ['org/a', 'org/b'], basis: 'all' });
   });
 
   it('returns null when the resolved user has no github_user_repo_stats rows', async () => {
@@ -104,6 +104,94 @@ describe('GET /api/pulse/code/me — githubRepos', () => {
     const res = await route.GET(makeRequest('/api/pulse/code/me?userId=u3'));
     expect(res.status).toBe(200);
     const data = await res.json();
-    expect(data.githubRepos).toEqual({ count7d: 0, names7d: [] });
+    expect(data.githubRepos).toEqual({ count7d: 0, names7d: [], basis: 'all' });
+  });
+
+  it('on the Claude and Codex tabs counts only repos with commits matched to that tool; All counts every repo', async () => {
+    // Codex data present, so the tabs exist.
+    await sql.run(
+      `INSERT INTO cowork_messages (id, session_id, user_id, message_type, surface, source, occurred_at)
+       VALUES ('codex:gh-me-1', 'codex:s1', 'u1', 'code_user_message', 'code', 'codex', ?) ON CONFLICT DO NOTHING`, [NOW]
+    );
+    const insertSplit = (...params: unknown[]) => sql.run(
+      `INSERT INTO github_user_repo_stats (user_id, repo, date, commit_count, synced_at, claude_commit_count, codex_commit_count, no_tool_commit_count)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?)`, params
+    );
+    await insertSplit('u1', 'org/a', TODAY, 3, NOW, 2, 0, 1);       // Claude Code only
+    await insertSplit('u1', 'org/b', THREE_DAYS_AGO, 2, NOW, 0, 1, 1); // Codex only
+    await insertSplit('u1', 'org/c', TODAY, 1, NOW, 0, 0, 1);       // no AI tool recorded
+    try {
+      const route = await import('../app/api/pulse/code/me/route');
+      const read = async (vendor: string) => (await (await route.GET(makeRequest(`/api/pulse/code/me?userId=u1&vendor=${vendor}`))).json()).githubRepos;
+      expect(await read('claude')).toEqual({ count7d: 1, names7d: ['org/a'], basis: 'claude' });
+      expect(await read('openai')).toEqual({ count7d: 1, names7d: ['org/b'], basis: 'openai' });
+      expect(await read('all')).toEqual({ count7d: 3, names7d: ['org/a', 'org/b', 'org/c'], basis: 'all' });
+    } finally {
+      await sql.exec(`DELETE FROM cowork_messages WHERE id = 'codex:gh-me-1'`);
+    }
+  });
+
+  it('a row synced before the tool split counts on the All tab only; the tool tabs stay not measured', async () => {
+    await sql.run(
+      `INSERT INTO cowork_messages (id, session_id, user_id, message_type, surface, source, occurred_at)
+       VALUES ('codex:gh-me-2', 'codex:s2', 'u1', 'code_user_message', 'code', 'codex', ?) ON CONFLICT DO NOTHING`, [NOW]
+    );
+    await sql.run(
+      `INSERT INTO github_user_repo_stats (user_id, repo, date, commit_count, synced_at) VALUES (?, ?, ?, ?, ?)`, ['u1', 'org/a', TODAY, 4, NOW]
+    );
+    try {
+      const route = await import('../app/api/pulse/code/me/route');
+      const read = async (vendor: string) => (await (await route.GET(makeRequest(`/api/pulse/code/me?userId=u1&vendor=${vendor}`))).json()).githubRepos;
+      // No row in the last 7 days carries a tool count: not measured, not 0.
+      expect(await read('claude')).toBeNull();
+      expect(await read('openai')).toBeNull();
+      expect(await read('all')).toEqual({ count7d: 1, names7d: ['org/a'], basis: 'all' });
+    } finally {
+      await sql.exec(`DELETE FROM cowork_messages WHERE id = 'codex:gh-me-2'`);
+    }
+  });
+
+  it('on the tool tabs, a matched row older than 7 days does not make pre-split recent rows read as 0', async () => {
+    await sql.run(
+      `INSERT INTO cowork_messages (id, session_id, user_id, message_type, surface, source, occurred_at)
+       VALUES ('codex:gh-me-3', 'codex:s3', 'u1', 'code_user_message', 'code', 'codex', ?) ON CONFLICT DO NOTHING`, [NOW]
+    );
+    // Recent day synced before the split; an older day (inside 35, outside 7) with the split.
+    await sql.run(
+      `INSERT INTO github_user_repo_stats (user_id, repo, date, commit_count, synced_at) VALUES (?, ?, ?, ?, ?)`, ['u1', 'org/a', TODAY, 4, NOW]
+    );
+    await sql.run(
+      `INSERT INTO github_user_repo_stats (user_id, repo, date, commit_count, synced_at, claude_commit_count, codex_commit_count, no_tool_commit_count)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?)`, ['u1', 'org/b', TWENTY_DAYS_AGO, 2, NOW, 1, 1, 0]
+    );
+    try {
+      const route = await import('../app/api/pulse/code/me/route');
+      const read = async (vendor: string) => (await (await route.GET(makeRequest(`/api/pulse/code/me?userId=u1&vendor=${vendor}`))).json()).githubRepos;
+      expect(await read('claude')).toBeNull();
+      expect(await read('openai')).toBeNull();
+      expect(await read('all')).toEqual({ count7d: 1, names7d: ['org/a'], basis: 'all' });
+    } finally {
+      await sql.exec(`DELETE FROM cowork_messages WHERE id = 'codex:gh-me-3'`);
+    }
+  });
+
+  it('on the tool tabs, a recent row matched to no tool is a measured 0', async () => {
+    await sql.run(
+      `INSERT INTO cowork_messages (id, session_id, user_id, message_type, surface, source, occurred_at)
+       VALUES ('codex:gh-me-4', 'codex:s4', 'u1', 'code_user_message', 'code', 'codex', ?) ON CONFLICT DO NOTHING`, [NOW]
+    );
+    await sql.run(
+      `INSERT INTO github_user_repo_stats (user_id, repo, date, commit_count, synced_at, claude_commit_count, codex_commit_count, no_tool_commit_count)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?)`, ['u1', 'org/a', THREE_DAYS_AGO, 2, NOW, 0, 0, 2]
+    );
+    try {
+      const route = await import('../app/api/pulse/code/me/route');
+      const read = async (vendor: string) => (await (await route.GET(makeRequest(`/api/pulse/code/me?userId=u1&vendor=${vendor}`))).json()).githubRepos;
+      expect(await read('claude')).toEqual({ count7d: 0, names7d: [], basis: 'claude' });
+      expect(await read('openai')).toEqual({ count7d: 0, names7d: [], basis: 'openai' });
+      expect(await read('all')).toEqual({ count7d: 1, names7d: ['org/a'], basis: 'all' });
+    } finally {
+      await sql.exec(`DELETE FROM cowork_messages WHERE id = 'codex:gh-me-4'`);
+    }
   });
 });

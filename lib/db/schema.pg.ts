@@ -178,28 +178,8 @@ export const chargebackPeriods = pgTable('chargeback_periods', {
     estimated: integer().notNull().default(0),
 });
 
-export const chatMessages = pgTable('chat_messages', {
-    id: text().primaryKey(),
-    conversation_id: text(),
-    user_id: text(),
-    prompt_text: text().notNull(),
-    prompt_length: integer().notNull(),
-    attachments_count: integer().default(0),
-    files_count: integer().default(0),
-    flagged: integer().default(0),
-    flag_reason: text(),
-    occurred_at: bigint({ mode: 'number' }).notNull(),
-    ingested_at: bigint({ mode: 'number' }).default(sql`extract(epoch from now())`),
-    agent_id: text(),
-    source: text().notNull().default('agent'),
-}, (t) => [
-    foreignKey({ columns: [t.user_id], foreignColumns: [users.id], name: 'chat_messages_user_id_fk' }),
-    index('idx_chat_messages_ingested_at').on(t.ingested_at),
-    index('idx_chat_messages_flagged').on(t.flagged),
-    index('idx_chat_messages_conversation').on(t.conversation_id, t.occurred_at),
-    index('idx_chat_messages_user').on(t.user_id, t.occurred_at),
-    index('idx_chat_messages_source').on(t.source),
-]);
+// Claude Chat prompts live in cowork_messages with surface 'chat'
+// (migration 0041 moved them there and dropped chat_messages).
 
 export const codeAssistantMeta = pgTable('code_assistant_meta', {
     id: text().primaryKey(),
@@ -231,6 +211,97 @@ export const codeAssistantMeta = pgTable('code_assistant_meta', {
     index('idx_cam_session').on(t.session_id),
     index('idx_cam_user_time').on(t.user_id, t.occurred_at),
     index('idx_cam_agent_name').on(t.agent_name, t.occurred_at).where(sql`agent_name IS NOT NULL`),
+]);
+
+// ChatGPT and Codex spend from OpenAI's Compliance API (migration 0043), kept apart
+// from Claude's spend so no page shows it under a Claude label.
+
+/** One OpenAI COSTS record: a person's cost for one model, product and app in one UTC hour. */
+export const openaiCosts = pgTable('openai_costs', {
+    id: text().primaryKey(),
+    user_id: text(),
+    agent_name: text(),
+    hour_start: bigint({ mode: 'number' }).notNull(),
+    product: text().notNull(),
+    client: text(),
+    model: text(),
+    input_tokens: bigint({ mode: 'number' }).notNull().default(0),
+    cached_input_tokens: bigint({ mode: 'number' }).notNull().default(0),
+    output_tokens: bigint({ mode: 'number' }).notNull().default(0),
+    cost_usd: numeric(),
+    credits: numeric(),
+    billed_in: text().notNull(),
+    ingested_at: bigint({ mode: 'number' }).notNull().default(sql`extract(epoch from now())`),
+}, (t) => [
+    index('idx_openai_costs_hour').on(t.product, t.hour_start),
+    index('idx_openai_costs_user_hour').on(t.user_id, t.hour_start),
+]);
+
+/** A ChatGPT reply's model and time, never its text. */
+export const openaiReplies = pgTable('openai_replies', {
+    id: text().primaryKey(),
+    user_id: text().notNull(),
+    session_id: text().notNull(),
+    source: text().notNull(),
+    model: text(),
+    occurred_at: bigint({ mode: 'number' }).notNull(),
+    ingested_at: bigint({ mode: 'number' }).notNull().default(sql`extract(epoch from now())`),
+}, (t) => [
+    index('idx_openai_replies_user_time').on(t.user_id, t.occurred_at),
+    index('idx_openai_replies_session').on(t.session_id),
+]);
+
+/** Working time and by-hand estimates for a ChatGPT conversation (migration 0046). */
+export const chatgptSessionTime = pgTable('chatgpt_session_time', {
+    session_id: text().primaryKey(),
+    user_id: text().notNull(),
+    source: text().notNull(),
+    first_at: bigint({ mode: 'number' }).notNull(),
+    last_at: bigint({ mode: 'number' }).notNull(),
+    active_secs: integer().notNull().default(0),
+    human_minutes_low: integer(),
+    human_minutes_likely: integer(),
+    human_minutes_high: integer(),
+    human_minutes_attempts: integer().notNull().default(0),
+    computed_at: bigint({ mode: 'number' }).notNull(),
+}, (t) => [
+    index('idx_chatgpt_session_time_user').on(t.user_id, t.first_at),
+    index('idx_chatgpt_session_time_first').on(t.first_at),
+]);
+
+/** One Codex tool call: failed or not, and whether it was a commit. No command text (migration 0044). */
+export const codexActions = pgTable('codex_actions', {
+    id: text().primaryKey(),
+    user_id: text().notNull(),
+    session_id: text().notNull(),
+    tool_name: text(),
+    failed: integer().notNull().default(0),
+    commit_count: integer().notNull().default(0),
+    occurred_at: bigint({ mode: 'number' }).notNull(),
+    ingested_at: bigint({ mode: 'number' }).notNull().default(sql`extract(epoch from now())`),
+}, (t) => [
+    index('idx_codex_actions_session').on(t.session_id),
+    index('idx_codex_actions_user_time').on(t.user_id, t.occurred_at),
+]);
+
+/** One Codex turn: tokens priced from the rates table, OpenAI's own estimate beside them. */
+export const codexTurns = pgTable('codex_turns', {
+    id: text().primaryKey(),
+    user_id: text().notNull(),
+    session_id: text().notNull(),
+    model: text(),
+    started_at: bigint({ mode: 'number' }).notNull(),
+    completed_at: bigint({ mode: 'number' }),
+    uncached_input_tokens: bigint({ mode: 'number' }).notNull().default(0),
+    cached_input_tokens: bigint({ mode: 'number' }).notNull().default(0),
+    output_tokens: bigint({ mode: 'number' }).notNull().default(0),
+    credits: numeric(),
+    openai_cost_usd: numeric(),
+    automation: integer().notNull().default(0),
+    ingested_at: bigint({ mode: 'number' }).notNull().default(sql`extract(epoch from now())`),
+}, (t) => [
+    index('idx_codex_turns_user_time').on(t.user_id, t.started_at),
+    index('idx_codex_turns_session').on(t.session_id),
 ]);
 
 export const chatAssistantMeta = pgTable('chat_assistant_meta', {
@@ -279,6 +350,42 @@ export const codeMetrics = pgTable('code_metrics', {
 }, (t) => [
     uniqueIndex('idx_code_metrics_week').on(t.scope_type, t.scope_id, t.period_start).where(sql`granularity = 'week'`),
     index('idx_code_metrics_scope').on(t.scope_type, t.scope_id, t.period_end),
+]);
+
+/**
+ * Developer Pulse figures for one product view at a time ('all', 'claude',
+ * 'openai'), beside code_metrics, which is unchanged (migration 0045). Same
+ * columns and meaning as code_metrics; written only once Codex data exists.
+ */
+export const codeMetricsVendor = pgTable('code_metrics_vendor', {
+    id: integer().generatedByDefaultAsIdentity().primaryKey(),
+    vendor: text().notNull(),
+    scope_type: text().notNull(),
+    scope_id: text().notNull(),
+    period_start: bigint({ mode: 'number' }).notNull(),
+    period_end: bigint({ mode: 'number' }).notNull(),
+    spend_usd: numeric(),
+    input_tokens: bigint({ mode: 'number' }).notNull().default(0),
+    output_tokens: bigint({ mode: 'number' }).notNull().default(0),
+    cache_hit_ratio: doublePrecision(),
+    autonomy_ratio: doublePrecision(),
+    session_count: integer().notNull().default(0),
+    repo_count: integer().notNull().default(0),
+    skill_leverage: doublePrecision(),
+    friction_index: doublePrecision(),
+    computed_at: bigint({ mode: 'number' }).notNull(),
+    commit_count: integer().notNull().default(0),
+    active_time_user_s: bigint({ mode: 'number' }).notNull().default(0),
+    active_time_cli_s: bigint({ mode: 'number' }).notNull().default(0),
+    lines_added: integer().notNull().default(0),
+    lines_removed: integer().notNull().default(0),
+    pr_count: integer().notNull().default(0),
+    edit_accept_count: integer().notNull().default(0),
+    edit_reject_count: integer().notNull().default(0),
+    granularity: text().notNull().default('rolling'),
+}, (t) => [
+    uniqueIndex('idx_code_metrics_vendor_week').on(t.vendor, t.scope_type, t.scope_id, t.period_start).where(sql`granularity = 'week'`),
+    index('idx_code_metrics_vendor_scope').on(t.vendor, t.scope_type, t.scope_id, t.period_end),
 ]);
 
 export const codeOtelMetrics = pgTable('code_otel_metrics', {
@@ -466,7 +573,8 @@ export const coworkMessages = pgTable('cowork_messages', {
     // that cannot be fixed on the device (migration 0038). NULL = not recorded.
     session_location: text(),
     // Which Office app a row came from (migration 0039): NULL = Cowork,
-    // otherwise excel / word / powerpoint / outlook (Claude in Office).
+    // otherwise excel / word / powerpoint / outlook (Claude in Office) or
+    // sheets / docs / slides (Claude in Google).
     product: text(),
 }, (t) => [
     foreignKey({ columns: [t.user_id], foreignColumns: [users.id], name: 'cowork_messages_user_id_fk' }),
@@ -664,6 +772,10 @@ export const githubRepoStats = pgTable('github_repo_stats', {
     commit_count: integer().notNull().default(0),
     prs_merged: integer().notNull().default(0),
     synced_at: bigint({ mode: 'number' }).notNull(),
+    // Split of commit_count by the tool that made it (migration 0047); NULL = synced before the split.
+    claude_commit_count: integer(),
+    codex_commit_count: integer(),
+    no_tool_commit_count: integer(),
 }, (t) => [
     primaryKey({ columns: [t.repo, t.date] }),
     index('idx_grs_date').on(t.date),
@@ -675,6 +787,9 @@ export const githubUserRepoStats = pgTable('github_user_repo_stats', {
     date: text().notNull(),
     commit_count: integer().notNull().default(0),
     synced_at: bigint({ mode: 'number' }).notNull(),
+    claude_commit_count: integer(),
+    codex_commit_count: integer(),
+    no_tool_commit_count: integer(),
 }, (t) => [
     primaryKey({ columns: [t.user_id, t.repo, t.date] }),
     index('idx_gurs_repo_date').on(t.repo, t.date),
@@ -843,6 +958,36 @@ export const pulseMetrics = pgTable('pulse_metrics', {
 }, (t) => [
     uniqueIndex('idx_pulse_metrics_week').on(t.scope_type, t.scope_id, t.period_start).where(sql`granularity = 'week'`),
     index('idx_pulse_metrics_scope').on(t.scope_type, t.scope_id, t.period_end),
+]);
+
+// Work Pulse figures for one vendor ('claude' or 'openai'), beside the
+// all-products figures in pulse_metrics (migration 0042).
+export const pulseMetricsVendor = pgTable('pulse_metrics_vendor', {
+    id: integer().generatedByDefaultAsIdentity().primaryKey(),
+    vendor: text().notNull(),
+    scope_type: text().notNull(),
+    scope_id: text().notNull(),
+    period_start: bigint({ mode: 'number' }).notNull(),
+    period_end: bigint({ mode: 'number' }).notNull(),
+    oti: doublePrecision(),
+    dds: doublePrecision(),
+    psr: doublePrecision(),
+    ors: doublePrecision(),
+    event_count: integer().notNull().default(0),
+    tier_1_count: integer().notNull().default(0),
+    tier_2_count: integer().notNull().default(0),
+    tier_3_count: integer().notNull().default(0),
+    computed_at: bigint({ mode: 'number' }).notNull(),
+    granularity: text().notNull().default('rolling'),
+    ors_breadth: doublePrecision(),
+    ors_overlap: doublePrecision(),
+    ors_propagation: doublePrecision(),
+    metric_version: integer().notNull().default(2),
+    oti_early_read: integer().notNull().default(0),
+    oti_active_days: integer(),
+}, (t) => [
+    uniqueIndex('idx_pulse_metrics_vendor_week').on(t.vendor, t.scope_type, t.scope_id, t.period_start).where(sql`granularity = 'week'`),
+    index('idx_pulse_metrics_vendor_scope').on(t.vendor, t.scope_type, t.scope_id, t.period_end),
 ]);
 
 export const pulseRubricVersions = pgTable('pulse_rubric_versions', {
@@ -1120,9 +1265,21 @@ export const otelIdentityConflicts = pgTable('otel_identity_conflicts', {
     status: text().notNull().default('open'),
     decided_by: text(),
     decided_at: bigint({ mode: 'number' }),
+    // 'claude' (an installation id shared by two accounts) or 'openai' (one OpenAI account under two emails); migration 0048.
+    product: text().notNull().default('claude'),
 }, (t) => [
     uniqueIndex('otel_identity_conflicts_install_email_uq').on(t.installation_id, t.new_email),
     index('idx_otel_identity_conflicts_status').on(t.status),
+]);
+
+/** The person each OpenAI account (export actor.user_id) resolved to; migration 0048. */
+export const openaiIdentityUsers = pgTable('openai_identity_users', {
+    openai_user_id: text().primaryKey(),
+    user_id: text().notNull(),
+    first_seen_at: bigint({ mode: 'number' }).notNull(),
+    last_seen_at: bigint({ mode: 'number' }).notNull(),
+}, (t) => [
+    index('idx_openai_identity_users_user').on(t.user_id),
 ]);
 
 export const otelIdentityAliases = pgTable('otel_identity_aliases', {
@@ -1223,7 +1380,6 @@ export const pgSchema = {
   chargebackCostCentres,
   chargebackDeptMap,
   chargebackPeriods,
-  chatMessages,
   chatAssistantMeta,
   coachingAcks,
   codeAssistantMeta,
@@ -1256,6 +1412,13 @@ export const pgSchema = {
   pulseClassifications,
   pulseEvents,
   pulseMetrics,
+  pulseMetricsVendor,
+  openaiCosts,
+  openaiReplies,
+  codexTurns,
+  codexActions,
+  codeMetricsVendor,
+  chatgptSessionTime,
   pulseRubricVersions,
   pulseAuditCycles,
   pulseAuditItems,
@@ -1270,6 +1433,7 @@ export const pgSchema = {
   otelIngestedEvents,
   jobRuns,
   otelIdentityConflicts,
+  openaiIdentityUsers,
   totpConsumedSteps,
   totpRecoveryCodes,
   useCaseActivationWeeks,

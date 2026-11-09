@@ -86,13 +86,15 @@ async function runSpec(): Promise<void> {
       },
     ]);
 
-    // ── Fixtures: live chat_messages ─────────────────────────────────────
+    // ── Fixtures: live Claude Chat prompts ───────────────────────────────
+    // Claude Chat prompts are cowork_messages rows with surface 'chat' (the
+    // shape the Compliance API sync writes; session_id = conversation id).
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    await (client as any).insert(schema.chatMessages).values([
-      { id: 'chm-1', user_id: 'user-1', prompt_text: 'hi', prompt_length: 2, occurred_at: TODAY_TS },
-      { id: 'chm-2', user_id: 'user-1', prompt_text: 'hi again', prompt_length: 8, occurred_at: TODAY_TS },
-      { id: 'chm-3', user_id: 'user-6', prompt_text: 'dept test', prompt_length: 9, occurred_at: TODAY_TS },
-      { id: 'chm-4', user_id: 'user-6', prompt_text: 'dept test 2', prompt_length: 11, occurred_at: TODAY_TS },
+    await (client as any).insert(schema.coworkMessages).values([
+      { id: 'chm-1', session_id: 'chatconv-1', user_id: 'user-1', message_type: 'cowork_user_message', surface: 'chat', source: 'compliance', content_full: 'hi', content_preview: 'hi', occurred_at: TODAY_TS },
+      { id: 'chm-2', session_id: 'chatconv-1', user_id: 'user-1', message_type: 'cowork_user_message', surface: 'chat', source: 'compliance', content_full: 'hi again', content_preview: 'hi again', occurred_at: TODAY_TS },
+      { id: 'chm-3', session_id: 'chatconv-2', user_id: 'user-6', message_type: 'cowork_user_message', surface: 'chat', source: 'compliance', content_full: 'dept test', content_preview: 'dept test', occurred_at: TODAY_TS },
+      { id: 'chm-4', session_id: 'chatconv-2', user_id: 'user-6', message_type: 'cowork_user_message', surface: 'chat', source: 'compliance', content_full: 'dept test 2', content_preview: 'dept test 2', occurred_at: TODAY_TS },
     ]);
 
     // ── Fixtures: live cowork_messages ───────────────────────────────────
@@ -124,7 +126,7 @@ async function runSpec(): Promise<void> {
     expect(typeof snapsUser4[0].messages_sent).toBe('number');
 
     // user-1 has NO analytics_snapshots row -> synthesised fallback from
-    // chat_messages (TODAY, 2 msgs) + cowork_messages surface=cowork
+    // cowork_messages surface=chat (TODAY, 2 msgs) + surface=cowork
     // (LIVE_ONLY_DAY 1, OVERLAY_DAY 1).
     const snapsUser1 = await getSnapshotsForUser('user-1', 30);
     const byDate1 = new Map(snapsUser1.map((s) => [s.snapshot_date, s]));
@@ -176,10 +178,10 @@ async function runSpec(): Promise<void> {
     // ── getUserAdoptionHealth / getUserPrimarySurface / getUserMessageCount7d
     //    PRIMARY path (user-4/5, snapshot-driven) ────────────────────────
     expect(await getUserAdoptionHealth('user-4')).toBe('inactive'); // messages_sent=4 < 5
-    expect(await getUserPrimarySurface('user-4')).toBe('Chat'); // chat=3 is max
+    expect(await getUserPrimarySurface('user-4')).toBe('Claude Chat'); // chat=3 is max
     expect(await getUserMessageCount7d('user-4')).toBe(4);
     expect(await getUserAdoptionHealth('user-5')).toBe('inactive'); // messages_sent=2 < 5
-    expect(await getUserPrimarySurface('user-5')).toBe('Chat');
+    expect(await getUserPrimarySurface('user-5')).toBe('Claude Chat');
     expect(await getUserMessageCount7d('user-5')).toBe(2);
 
     //    FALLBACK path (user-1/2/3, no snapshot rows) ─────────────────────
@@ -196,36 +198,38 @@ async function runSpec(): Promise<void> {
     // implementations (no getSnapshotsForUser dependency) — real fallback:
     // coworkCount=2 (LIVE_ONLY_DAY+OVERLAY_DAY), codeCount=0, chatCount=2
     // (TODAY) -> tie broken toward Cowork (checked before Chat).
-    // messages_7d fallback = cowork_messages count (7d) = 2.
-    expect(await getUserPrimarySurface('user-1')).toBe('Cowork');
+    // messages_7d fallback = cowork_messages count (7d), Claude Chat prompts
+    // (surface 'chat') left out as before they moved into this table: 2.
+    expect(await getUserPrimarySurface('user-1')).toBe('Claude Cowork');
     expect(await getUserMessageCount7d('user-1')).toBe(2);
     // user-2's synthesised messages_sent total = 1(TODAY code) + 1
     // (LIVE_ONLY_DAY cowork) + 1(OVERLAY_DAY cowork) = 3 < 5 -> 'inactive'.
     expect(await getUserAdoptionHealth('user-2')).toBe('inactive');
     // Primary-surface fallback: coworkCount=2, codeCount=1, chatCount=0 -> Cowork.
-    expect(await getUserPrimarySurface('user-2')).toBe('Cowork');
+    expect(await getUserPrimarySurface('user-2')).toBe('Claude Cowork');
     expect(await getUserMessageCount7d('user-2')).toBe(3);
     // user-3's synthesised messages_sent total = 1(OVERLAY_DAY cowork) < 5 -> 'inactive'.
     expect(await getUserAdoptionHealth('user-3')).toBe('inactive');
-    expect(await getUserPrimarySurface('user-3')).toBe('Cowork');
+    expect(await getUserPrimarySurface('user-3')).toBe('Claude Cowork');
     expect(await getUserMessageCount7d('user-3')).toBe(1);
 
     // ── getAllUser*Map builders: mixed primary (user-4/5) + fallback
     //    (user-1/2/3) in ONE call — proves GROUP BY + fallback dedup work
     //    together. ──────────────────────────────────────────────────────
     const msgMap = await getAllUserMessageCounts7d();
-    expect(msgMap.get('user-1')).toBe(2);
+    expect(msgMap.get('user-1')).toBe(2); // 2 cowork; Claude Chat left out, as above
+    expect(msgMap.get('user-6')).toBe(1); // 1 cowork; its 2 Claude Chat prompts left out
     expect(msgMap.get('user-2')).toBe(3);
     expect(msgMap.get('user-3')).toBe(1);
     expect(msgMap.get('user-4')).toBe(4);
     expect(msgMap.get('user-5')).toBe(2);
 
     const surfaceMap = await getAllUserPrimarySurfaces();
-    expect(surfaceMap.get('user-1')).toBe('Cowork');
-    expect(surfaceMap.get('user-2')).toBe('Cowork');
-    expect(surfaceMap.get('user-3')).toBe('Cowork');
-    expect(surfaceMap.get('user-4')).toBe('Chat');
-    expect(surfaceMap.get('user-5')).toBe('Chat');
+    expect(surfaceMap.get('user-1')).toBe('Claude Cowork');
+    expect(surfaceMap.get('user-2')).toBe('Claude Cowork');
+    expect(surfaceMap.get('user-3')).toBe('Claude Cowork');
+    expect(surfaceMap.get('user-4')).toBe('Claude Chat');
+    expect(surfaceMap.get('user-5')).toBe('Claude Chat');
 
     // getAllUserAdoptionHealth does NOT delegate to getSnapshotsForUser — its
     // fallback is a direct raw COUNT(*) over cowork_messages, so user-1/2/3
@@ -254,10 +258,12 @@ async function runSpec(): Promise<void> {
     ]);
 
     // ── getSurfaceBreakdown: FALLBACK path (CASE WHEN aggregates over
-    //    cowork_messages + otel_events + chat_messages) ──────────────────
-    // agentCowork = COUNT of rows with surface IN ('cowork', NULL): cw-1..6 = 6.
+    //    cowork_messages + otel_events) ─────────────────────────────────
+    // agentCowork = COUNT of rows with surface IN ('cowork', NULL): cw-1..6 = 6
+    // (the surface='chat' rows chm-1..4 are not Cowork).
     // codeFromAgent = COUNT of surface='code' cowork_messages: cw-7,cw-8 = 2.
-    // otel.chat=1 (oe-1), otel.code=1 (oe-2). chatFromAgent = 4 (chm-1..4).
+    // otel.chat=1 (oe-1), otel.code=1 (oe-2). chatFromAgent = 4 (chm-1..4,
+    // cowork_messages surface='chat').
     const surfaceFallback = await getSurfaceBreakdown();
     expect(surfaceFallback).toEqual({ chat: 1 + 4, code: 1 + 2, agentCowork: 6, otelCowork: 0 });
     expect(typeof surfaceFallback.agentCowork).toBe('number');

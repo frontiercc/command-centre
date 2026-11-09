@@ -5,6 +5,8 @@
 // period, from every source. Chat used to be counted all-time
 // while Cowork/Code were period-filtered, so a monthly report showed every
 // flagged Chat prompt ever plus that month's Cowork and Code ones.
+// Claude Chat prompts now live in cowork_messages (surface 'chat'), so they
+// are counted once, in the same period-filtered count as Cowork and Code.
 import { describe, it, expect, beforeAll, afterAll, vi } from 'vitest';
 import { createTestDatabase } from './helpers/db';
 import { seedUserSql } from './helpers/seed';
@@ -27,8 +29,8 @@ beforeAll(async () => {
   ({ sql, cleanup } = await createTestDatabase());
   await seedUserSql(sql, 'u1');
   const chat = (id: string, at: number) => sql.run(
-    `INSERT INTO chat_messages (id, user_id, prompt_text, prompt_length, flagged, flag_reason, occurred_at, ingested_at)
-     VALUES (?, 'u1', 'x', 1, 1, 'PII detected: email', ?, ?)`, [id, at, at]);
+    `INSERT INTO cowork_messages (id, session_id, user_id, message_type, surface, source, content_full, content_preview, flagged, flag_reason, occurred_at, ingested_at)
+     VALUES (?, 'conv-1', 'u1', 'cowork_user_message', 'chat', 'compliance', 'x', 'x', 1, 'PII detected: email', ?, ?)`, [id, at, at]);
   const cowork = (id: string, at: number) => sql.run(
     `INSERT INTO cowork_messages (id, session_id, user_id, message_type, role, content_preview, flagged, flag_reason, occurred_at, ingested_at)
      VALUES (?, 's1', 'u1', 'cowork_user_message', 'user', 'x', 1, 'PII detected: email', ?, ?)`, [id, at, at]);

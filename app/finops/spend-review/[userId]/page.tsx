@@ -3,13 +3,14 @@
 
 'use client';
 
-import { Fragment, Suspense, useEffect, useState } from 'react';
+import { Fragment, Suspense, createContext, useContext, useEffect, useState } from 'react';
 import Link from 'next/link';
 import { useParams, useSearchParams } from 'next/navigation';
 import TopBar from '@/components/layout/TopBar';
 import LoadingSpinner from '@/components/shared/LoadingSpinner';
-import { sessionsFact, spansDays } from '@/lib/finance/spend-review-format';
-import { CostDrivers, shadeForModel, prettyModel, type CostDriverFigures } from '@/components/finance/ModelEfficiencySection';
+import { sessionsFact, spansDays, surfaceName, type SpendReviewSurface } from '@/lib/finance/spend-review-format';
+import { useOpenAiOnly } from '@/components/shared/VendorSwitch';
+import { CostDrivers, shadeForModel, prettyModel, modelsByLabel, type CostDriverFigures } from '@/components/finance/ModelEfficiencySection';
 import { MonthPicker, monthOptions, monthName, money, pct, ukDate, duration, LimitsNotice, LimitBar, UpdatedLine, type LimitsStatus } from '@/components/spend-review/shared';
 import { PageBody, Toolbar, Panel, PanelFoot, Strip, Figure, T, B, Tag, Pill, Notice, Muted, SubHead, Bar, cx } from '@/components/precision/ui';
 import { formatModelLabel } from '@/lib/pulse/code/model-label';
@@ -18,7 +19,7 @@ import WhereMoneyWent from '@/components/finance/WhereMoneyWent';
 import OfficeSpendPanel, { type OfficeSpendData } from '@/components/finance/OfficeSpendPanel';
 import { hasBreakdown, type SpendSplit } from '@/lib/finance/where-money-went';
 
-type Surface = 'code' | 'cowork';
+type Surface = SpendReviewSurface;
 
 interface Session {
   surface: Surface;
@@ -117,7 +118,10 @@ interface Review {
   period: string;
   isCurrentMonth: boolean;
   updatedAt?: number;
-  totals: { totalUsd: number; codeUsd: number; coworkUsd: number; sessions: number };
+  /** chatgptUsd includes chatgptUnmatchedUsd. The OpenAI fields are absent on a hub without them. */
+  totals: { totalUsd: number; codeUsd: number; coworkUsd: number; chatgptUsd?: number; codexUsd?: number; chatgptUnmatchedUsd?: number; sessions: number };
+  /** ChatGPT or Codex spend has arrived from OpenAI's Compliance API. */
+  openai?: boolean;
   unpricedModels: string[];
   work: WorkRow[];
   sessions: Session[];
@@ -132,7 +136,12 @@ interface Review {
   office?: OfficeSpendData | null;
 }
 
-const SURFACE_LABEL: Record<Surface, string> = { code: 'Code', cowork: 'Cowork' };
+/** With OpenAI connected, products are named "Claude Code", "ChatGPT" and so on. */
+const OpenAiContext = createContext(false);
+function useSurfaceName(): (s: Surface) => string {
+  const openai = useContext(OpenAiContext);
+  return s => surfaceName(s, openai);
+}
 /** Below this many sessions in the current month, offer last month instead. */
 const EARLY_MONTH_SESSIONS = 5;
 /** Through the first week, a month's shares rest on few sessions and the page says so. */
@@ -151,7 +160,7 @@ const MIN_WORK_SHARE_FOR_ROUTES = 0.1;
 
 /** Surface as a neutral mono tag: on these pages violet means AI-judged and blue means measured. */
 function SurfacePill({ surface }: { surface: Surface }) {
-  return <Tag>{SURFACE_LABEL[surface]}</Tag>;
+  return <Tag>{useSurfaceName()(surface)}</Tag>;
 }
 
 function AnthropicCard({ a, nearShare, email }: { a: Review['anthropic']; nearShare: number; email: string | null }) {
@@ -194,11 +203,12 @@ function routeKind(r: Route): string {
   return r.direction === 'trial' ? 'Trial' : 'Model';
 }
 
-function RouteText({ r, name }: { r: Route; name: string }) {
+function RouteText({ r, name, surface }: { r: Route; name: string; surface: Surface }) {
   if (r.kind === 'context') {
+    const reader = surface === 'chatgpt' ? 'ChatGPT' : surface === 'codex' ? 'Codex' : 'Claude';
     return (
       <span>
-        <span className="font-semibold">Long conversations.</span> {pct(r.rereadShare)} of this cost is Claude re-reading earlier conversation on every message, against {pct(r.peerRereadShare)} for colleagues doing the same work.
+        <span className="font-semibold">Long conversations.</span> {pct(r.rereadShare)} of this cost is {reader} re-reading earlier conversation on every message, against {pct(r.peerRereadShare)} for colleagues doing the same work.
         {' '}Starting a fresh session for each new piece of work cuts that whatever the model, though a fresh session loses the earlier context.
       </span>
     );
@@ -376,7 +386,7 @@ function ModelEfficiency({ data, onShowAll }: { data: Review; onShowAll: () => v
                     {w.label}
                   </button>
                   <span className="mt-0.5 flex items-center gap-1.5 text-[13px] text-[#8F8F8F]">
-                    <span>{SURFACE_LABEL[w.surface]}</span>
+                    <span>{surfaceName(w.surface, !!data.openai)}</span>
                     {w.workKey && (
                       <span className="inline-flex items-center gap-1 text-[#2451F3]"><span className="w-1.5 h-1.5 rounded-full bg-[#699BFB]" />AI-judged</span>
                     )}
@@ -399,7 +409,7 @@ function ModelEfficiency({ data, onShowAll }: { data: Review; onShowAll: () => v
       </div>
       {me.modelOrder.length > 0 && (
         <div className="px-4 py-2.5 border-t border-[#F2F2F2] flex flex-wrap items-center gap-x-4 gap-y-1 text-[13px] text-[#8F8F8F]">
-          {me.modelOrder.map(m => (
+          {modelsByLabel(me.modelOrder).map(m => (
             <span key={m} className="inline-flex items-center gap-1.5">
               <span className="inline-block w-2.5 h-2 rounded-full" style={{ backgroundColor: shadeForModel(m, me.modelOrder) }} />
               {prettyModel(m)}
@@ -478,7 +488,7 @@ function WorkCard({ w, name, peerDays }: { w: WorkRow; name: string; peerDays: n
           {w.routes.map((r, i) => (
             <div key={i} className="flex items-start gap-2.5 text-[14px] leading-5 text-[#0A0A0A]">
               <span className="mt-0.5 shrink-0"><Tag tone="measured">{routeKind(r)}</Tag></span>
-              <RouteText r={r} name={name} />
+              <RouteText r={r} name={name} surface={w.surface} />
             </div>
           ))}
         </div>
@@ -614,10 +624,17 @@ function SpendReviewContent() {
   const classified = data ? data.work.filter(w => w.workKey).reduce((a, w) => a + w.spendUsd, 0) : 0;
   const top = data?.work.find(w => w.workKey && w.spendUsd > 0);
   const share = (part: number) => (data && data.totals.totalUsd > 0 ? `${pct(part / data.totals.totalUsd)} of spend` : undefined);
+  // Only OpenAI connected: no Claude figures.
+  const openaiOnly = useOpenAiOnly();
+  const openai = !!data?.openai;
+  const claudeShown = !openai || !openaiOnly;
+  const unmatched = data?.totals.chatgptUnmatchedUsd ?? 0;
+  const hasChatgpt = !!data && data.work.some(w => w.surface === 'chatgpt');
 
   return (
     <>
       <TopBar title={`Spend Review: ${name}`} subtitle={data?.department ?? undefined} />
+      <OpenAiContext.Provider value={openai}>
       <PageBody>
         <Toolbar
           left={
@@ -636,17 +653,26 @@ function SpendReviewContent() {
 
         {!loading && data && (
           <>
-            {data.isCurrentMonth && <AnthropicCard a={data.anthropic} nearShare={data.nearLimitShare} email={data.email} />}
+            {data.isCurrentMonth && !openaiOnly && <AnthropicCard a={data.anthropic} nearShare={data.nearLimitShare} email={data.email} />}
 
             <div className="flex flex-col gap-2">
-              <Strip cols={4}>
+              <Strip cols={!openai ? 4 : claudeShown ? 6 : 4}>
                 <Figure label="Measured spend" value={money(data.totals.totalUsd)} sub={data.isCurrentMonth ? 'Month to date' : 'Whole month'} />
-                <Figure label="Cowork" value={money(data.totals.coworkUsd)} sub={share(data.totals.coworkUsd)} />
-                <Figure label="Code" value={money(data.totals.codeUsd)} sub={share(data.totals.codeUsd)} />
+                {claudeShown && <Figure label={surfaceName('cowork', openai)} value={money(data.totals.coworkUsd)} sub={share(data.totals.coworkUsd)} />}
+                {claudeShown && <Figure label={surfaceName('code', openai)} value={money(data.totals.codeUsd)} sub={share(data.totals.codeUsd)} />}
+                {openai && <Figure label="ChatGPT" value={money(data.totals.chatgptUsd ?? 0)} sub={share(data.totals.chatgptUsd ?? 0)} />}
+                {openai && <Figure label="Codex" value={money(data.totals.codexUsd ?? 0)} sub={share(data.totals.codexUsd ?? 0)} />}
                 <Figure label="Sessions" value={String(data.totals.sessions)} />
               </Strip>
               <Muted>
-                Measured by Command Centre from telemetry, the same figures as FinOps. Chat isn&apos;t included{data.office ? ', and Claude in Office is shown below as a separate estimate' : ''}.
+                {openaiOnly
+                  ? <>ChatGPT and Codex spend from OpenAI&apos;s Compliance API, priced at OpenAI&apos;s USD token rates: the same figures as FinOps.</>
+                  : openai
+                  ? <>Measured by Command Centre: Claude from telemetry, ChatGPT and Codex from OpenAI&apos;s Compliance API priced at OpenAI&apos;s USD token rates, the same figures as FinOps. Claude Chat isn&apos;t included.</>
+                  : <>Measured by Command Centre from telemetry, the same figures as FinOps. Chat isn&apos;t included.</>}
+                {hasChatgpt && ' ChatGPT spend per conversation is an estimate: OpenAI reports cost per hour, so each hour\'s cost is shared evenly across the replies in that hour.'}
+                {unmatched >= 0.005 && ` ${money(unmatched)} of ChatGPT spend came in hours with no reply on record, so it is in the total but in no conversation.`}
+                {data.office && ' Claude in Office and Google is shown below as a separate estimate.'}
                 {data.unpricedModels.length > 0 && ` Not priced, so left out: ${data.unpricedModels.map(m => formatModelLabel(m).label).join(', ')}.`}
               </Muted>
             </div>
@@ -682,7 +708,7 @@ function SpendReviewContent() {
                 >
                   {top && classified > 0 && (
                     <p className="m-0 px-4 pt-3.5 pb-1 text-[15px] leading-6 text-[#0A0A0A]">
-                      {pct(top.share)} of {firstName}&apos;s spend {data.isCurrentMonth ? 'this month' : `in ${monthName(data.period)}`} went on {SURFACE_LABEL[top.surface]} sessions judged as {lowerFirst(top.label)}.
+                      {pct(top.share)} of {firstName}&apos;s spend {data.isCurrentMonth ? 'this month' : `in ${monthName(data.period)}`} went on {surfaceName(top.surface, !!data.openai)} sessions judged as {lowerFirst(top.label)}.
                       {data.isCurrentMonth && new Date().getUTCDate() <= EARLY_MONTH_DAYS && (
                         <span className="text-[#666666]"> Early in the month: so far {sessionsFact(top)}.</span>
                       )}
@@ -718,6 +744,7 @@ function SpendReviewContent() {
           </>
         )}
       </PageBody>
+      </OpenAiContext.Provider>
     </>
   );
 }

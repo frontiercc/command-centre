@@ -154,3 +154,127 @@ describe('governance rollup', () => {
     expect(rollup.allWorkflowsTotal).toBe(3);
   });
 });
+
+describe('governance rollup: sessions and hours by vendor', () => {
+  async function seedSessions(useCaseId: string, week: number) {
+    const match = (sid: string) => sql.run(
+      `INSERT INTO use_case_week_matches (use_case_id, week_start, user_id, session_id) VALUES (?, ?, 'gu1', ?)`, [useCaseId, week, sid]);
+    await sql.run(`INSERT INTO users (id, email, display_name) VALUES ('gu1', 'gu1@example.com', 'GU1') ON CONFLICT DO NOTHING`);
+    await match('gv-cw-1');
+    await sql.run(`INSERT INTO cowork_sessions (id, conversation_id, user_id) VALUES ('gv-cw-1', 'gv-cw-1', 'gu1') ON CONFLICT DO NOTHING`);
+    await sql.run(`INSERT INTO cowork_session_stats (session_id, user_id, computed_at, active_secs) VALUES ('gv-cw-1', 'gu1', 1, 3600) ON CONFLICT DO NOTHING`);
+    await match('gv-cc-1');
+    await sql.run(`INSERT INTO code_session_stats (session_id, first_at, last_at, computed_at, active_secs) VALUES ('gv-cc-1', 1, 2, 1, 1800) ON CONFLICT DO NOTHING`);
+    await match('chatgpt:gv-a');
+    await sql.run(`INSERT INTO chatgpt_session_time (session_id, user_id, source, first_at, last_at, computed_at, active_secs) VALUES ('chatgpt:gv-a', 'gu1', 'chatgpt_work', 1, 2, 1, 7200) ON CONFLICT DO NOTHING`);
+    await match('codex:gv-b');
+    await sql.run(`INSERT INTO code_session_stats (session_id, first_at, last_at, computed_at, active_secs) VALUES ('codex:gv-b', 1, 2, 1, 3600) ON CONFLICT DO NOTHING`);
+    await match('chatgpt:gv-nostats'); // no session row: not counted, as on the use case page
+  }
+  async function clearSessions() {
+    await sql.exec(`DELETE FROM use_case_week_matches;
+      DELETE FROM cowork_session_stats WHERE session_id = 'gv-cw-1';
+      DELETE FROM cowork_sessions WHERE id = 'gv-cw-1';
+      DELETE FROM code_session_stats WHERE session_id IN ('gv-cc-1', 'codex:gv-b', 'gv-cc-nul');
+      DELETE FROM chatgpt_session_time WHERE session_id = 'chatgpt:gv-a';`);
+  }
+
+  it('splits each bet and each other use case by vendor over the 13-week window', async () => {
+    const weeks = weekStarts(NOW - 7 * 86400, 13);
+    const bet = await createUseCase({ title: 'Vendor bet', status: 'confirmed' });
+    await updateUseCase(bet.id, { strategic: 1 });
+    await seedImpactWeek(bet.id, weeks[12], { sessions: 4, durationSecs: 16200 });
+    await seedSessions(bet.id, weeks[12]);
+    const wf = await createUseCase({ title: 'Vendor workflow', status: 'confirmed' });
+    await seedSessions(wf.id, weeks[11]);
+    // Outside the window: never counted
+    await sql.run(`INSERT INTO use_case_week_matches (use_case_id, week_start, user_id, session_id) VALUES (?, ?, 'gu1', 'gv-cw-1')`, [wf.id, weeks[0] - 7 * 86400]);
+    const quiet = await createUseCase({ title: 'Quiet workflow', status: 'confirmed' });
+
+    try {
+      const rollup = await buildGovernanceRollup(NOW, cal, { openaiShown: true });
+      const b = rollup.bets[0];
+      expect(b.measured.platformSessions).toEqual({ claude: 2, openai: 2 });
+      expect(b.measured.platformHours).toEqual({ claude: 1.5, openai: 3 });
+      expect(b.measured.hours).toBe(4.5); // existing field unchanged
+      const w = rollup.allWorkflows.find(x => x.title === 'Vendor workflow')!;
+      expect(w.platformSessions).toEqual({ claude: 2, openai: 2 });
+      const q = rollup.allWorkflows.find(x => x.title === 'Quiet workflow')!;
+      expect(q.platformSessions).toEqual({ claude: 0, openai: 0 });
+      expect(quiet.id).toBeTruthy();
+    } finally {
+      await clearSessions();
+    }
+  });
+
+  it('leaves OpenAI out while ChatGPT and Codex are hidden, and reads unmeasured time as null', async () => {
+    const weeks = weekStarts(NOW - 7 * 86400, 13);
+    const bet = await createUseCase({ title: 'Hidden bet', status: 'confirmed' });
+    await updateUseCase(bet.id, { strategic: 1 });
+    await seedSessions(bet.id, weeks[12]);
+    const nul = await createUseCase({ title: 'Null-time bet', status: 'confirmed' });
+    await updateUseCase(nul.id, { strategic: 1 });
+    await sql.run(`INSERT INTO use_case_week_matches (use_case_id, week_start, user_id, session_id) VALUES (?, ?, 'gu1', 'gv-cc-nul')`, [nul.id, weeks[12]]);
+    await sql.run(`INSERT INTO code_session_stats (session_id, first_at, last_at, computed_at) VALUES ('gv-cc-nul', 1, 2, 1)`);
+
+    try {
+      const rollup = await buildGovernanceRollup(NOW, cal, { openaiShown: false });
+      const hidden = rollup.bets.find(b => b.title === 'Hidden bet')!;
+      expect(hidden.measured.platformSessions).toEqual({ claude: 2, openai: null });
+      expect(hidden.measured.platformHours).toEqual({ claude: 1.5, openai: null });
+      const n = rollup.bets.find(b => b.title === 'Null-time bet')!;
+      expect(n.measured.platformSessions).toEqual({ claude: 1, openai: null });
+      expect(n.measured.platformHours).toEqual({ claude: null, openai: null });
+    } finally {
+      await clearSessions();
+    }
+  });
+
+  it('counts each session in the hours only in the earliest week it matched', async () => {
+    const { getUseCasePlatformHours } = await import('@/lib/usecases/platform-sessions');
+    const weeks = weekStarts(NOW - 7 * 86400, 13);
+    const uc = await createUseCase({ title: 'Earliest-week workflow', status: 'confirmed' });
+    await sql.run(`INSERT INTO users (id, email, display_name) VALUES ('gu1', 'gu1@example.com', 'GU1') ON CONFLICT DO NOTHING`);
+    const match = (sid: string, week: number) => sql.run(
+      `INSERT INTO use_case_week_matches (use_case_id, week_start, user_id, session_id) VALUES (?, ?, 'gu1', ?)`, [uc.id, week, sid]);
+    // First matched before the window, matched again inside it: left out.
+    await match('gv-early', weeks[0] - 7 * 86400);
+    await match('gv-early', weeks[6]);
+    await sql.run(`INSERT INTO cowork_sessions (id, conversation_id, user_id) VALUES ('gv-early', 'gv-early', 'gu1')`);
+    await sql.run(`INSERT INTO cowork_session_stats (session_id, user_id, computed_at, active_secs) VALUES ('gv-early', 'gu1', 1, 7200)`);
+    // First matched inside the window, matched again later in it: counted once.
+    await match('gv-inside', weeks[3]);
+    await match('gv-inside', weeks[9]);
+    await sql.run(`INSERT INTO code_session_stats (session_id, first_at, last_at, computed_at, active_secs) VALUES ('gv-inside', 1, 2, 1, 1800)`);
+
+    try {
+      const hours = await getUseCasePlatformHours(NOW, { openaiShown: true });
+      expect(hours.get(uc.id)).toEqual({ claude: 0.5, openai: null });
+    } finally {
+      await sql.exec(`DELETE FROM use_case_week_matches;
+        DELETE FROM cowork_session_stats WHERE session_id = 'gv-early';
+        DELETE FROM cowork_sessions WHERE id = 'gv-early';
+        DELETE FROM code_session_stats WHERE session_id = 'gv-inside';`);
+    }
+  });
+
+  it('a use case whose only session was first matched before the window has no hours', async () => {
+    const { getUseCasePlatformHours } = await import('@/lib/usecases/platform-sessions');
+    const weeks = weekStarts(NOW - 7 * 86400, 13);
+    const uc = await createUseCase({ title: 'Old-session workflow', status: 'confirmed' });
+    await sql.run(`INSERT INTO users (id, email, display_name) VALUES ('gu1', 'gu1@example.com', 'GU1') ON CONFLICT DO NOTHING`);
+    const match = (week: number) => sql.run(
+      `INSERT INTO use_case_week_matches (use_case_id, week_start, user_id, session_id) VALUES (?, ?, 'gu1', 'gv-old')`, [uc.id, week]);
+    await match(weeks[0] - 14 * 86400);
+    await match(weeks[12]);
+    await sql.run(`INSERT INTO code_session_stats (session_id, first_at, last_at, computed_at, active_secs) VALUES ('gv-old', 1, 2, 1, 3600)`);
+
+    try {
+      const hours = await getUseCasePlatformHours(NOW, { openaiShown: true });
+      expect(hours.has(uc.id)).toBe(false);
+    } finally {
+      await sql.exec(`DELETE FROM use_case_week_matches;
+        DELETE FROM code_session_stats WHERE session_id = 'gv-old';`);
+    }
+  });
+});

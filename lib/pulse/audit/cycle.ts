@@ -4,11 +4,13 @@
 // Audit cycle engine: stratified draw → blind review →
 // reweighted scoring. Async Drizzle on Postgres (Number()-coerce aggregate
 // reads, Policy B). The scoring maths lives in ./agreement (pure, unit-tested).
-import { and, eq, gte, lt, isNotNull, sql } from 'drizzle-orm';
+import { and, eq, gte, inArray, lt, isNotNull, sql } from 'drizzle-orm';
 import { getTypedClient } from '@/lib/db/client';
 import { schema } from '@/lib/db/schema';
 import { computeStratum, confidenceBand, isOversampledBand, mulberry32 } from './strata';
 import { reweightedAgreement, quadraticWeightedKappa, confusionMatrix, type AuditItem, type TierPair } from './agreement';
+import { isWorkPulseSurface } from '@/lib/pulse/work-surfaces';
+import { vendorExpr } from '@/lib/dashboard/product-sql';
 
 /** Oversample multiplier applied to hard/rare bands when allocating the sample. */
 const OVERSAMPLE_FACTOR = 2;
@@ -120,7 +122,8 @@ export async function drawAuditSample(opts: {
     .innerJoin(cm, eq(cm.id, pc.cowork_message_id))
     .where(and(
       eq(pc.classifier_status, 'classified'),
-      eq(cm.surface, surface),
+      // The Cowork cycle audits the Work Pulse classifier, which also sorts Claude Chat.
+      surface === 'cowork' ? isWorkPulseSurface(cm.surface) : eq(cm.surface, surface),
       gte(cm.occurred_at, start),
       lt(cm.occurred_at, end),
     ));
@@ -204,6 +207,42 @@ export async function getPublishedAgreement(
   }
   if (n === 0) return null;
   return { agreementPct: aAcc / n, kappa: kAcc / n, n, cycles: rows.length };
+}
+
+/**
+ * Reviewer agreement for Claude prompts and for ChatGPT prompts, over the same
+ * last 3 scored cycles as the headline. A plain share of reviewed items that
+ * agree, NOT reweighted to the production mix (the strata are not drawn per
+ * vendor), so it reads as a check on each vendor's prompts, not as a second
+ * headline. Empty when no reviewed item came from a ChatGPT prompt.
+ */
+export async function getAgreementByVendor(
+  surface = 'cowork',
+): Promise<Array<{ vendor: 'claude' | 'openai'; agree: number; n: number }>> {
+  const client = await getTypedClient();
+  const c = schema.pulseAuditCycles;
+  const cycles = (await client
+    .select({ id: c.id })
+    .from(c)
+    .where(and(eq(c.surface, surface), eq(c.status, 'scored')))
+    .orderBy(sql`${c.scored_at} DESC`)
+    .limit(3)).map(r => Number(r.id));
+  if (cycles.length === 0) return [];
+  const ai = schema.pulseAuditItems;
+  const vendor = sql.raw(vendorExpr('cowork_messages.'));
+  const rows = await client
+    .select({
+      vendor: sql<string>`${vendor}`,
+      agree: sql<number | string>`SUM(CASE WHEN ${ai.agrees} = 1 THEN 1 ELSE 0 END)`,
+      n: sql<number | string>`COUNT(*)`,
+    })
+    .from(ai)
+    .innerJoin(schema.pulseClassifications, eq(schema.pulseClassifications.id, ai.classification_id))
+    .innerJoin(schema.coworkMessages, eq(schema.coworkMessages.id, schema.pulseClassifications.cowork_message_id))
+    .where(and(inArray(ai.cycle_id, cycles), isNotNull(ai.human_tier)))
+    .groupBy(vendor);
+  const out = rows.map(r => ({ vendor: r.vendor as 'claude' | 'openai', agree: Number(r.agree), n: Number(r.n) }));
+  return out.some(r => r.vendor === 'openai') ? out.sort((a, b) => a.vendor.localeCompare(b.vendor)) : [];
 }
 
 /**

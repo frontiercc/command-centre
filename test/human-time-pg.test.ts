@@ -229,6 +229,73 @@ describe('spot-check', () => {
   });
 });
 
+describe('spot-check: ChatGPT conversations in the Work draw', () => {
+  it('draws ChatGPT beside Claude Cowork, labels the product, and respects the switches', async () => {
+    const { setConfigValue } = await import('@/lib/config');
+    const { drawChecks, listChecks } = await import('@/lib/pulse/human-time-checks');
+    await setConfigValue('humanTimeEnabled', 'true');
+    await sql.run(`INSERT INTO chatgpt_session_time (session_id, user_id, source, first_at, last_at, active_secs, human_minutes_low, human_minutes_likely, human_minutes_high, computed_at)
+      VALUES ('chatgpt:ht-1', 'u1', 'chatgpt_work', ?, ?, 1200, 30, 60, 120, ?)`, [NOW - DAY - 1200, NOW - DAY, NOW]);
+    await sql.run(`INSERT INTO cowork_messages (id, session_id, user_id, message_type, surface, source, content_preview, occurred_at)
+      VALUES ('chatgpt:ht-1:p1', 'chatgpt:ht-1', 'u1', 'cowork_user_message', 'cowork', 'chatgpt_work', 'Summarise the board pack', ?)`, [NOW - DAY - 1200]);
+    try {
+      // ChatGPT and Codex hidden: Claude Cowork only, as before
+      await setConfigValue('openaiShown', 'false');
+      expect(await drawChecks('cowork', '2026-07', NOW)).toBe(1);
+      // ChatGPT classification off: Claude Cowork only
+      await setConfigValue('openaiShown', 'true');
+      await setConfigValue('pulseClassifyChatgpt', 'false');
+      expect(await drawChecks('cowork', '2026-06', NOW)).toBe(1);
+      // Both on: the conversation joins the sample
+      await setConfigValue('pulseClassifyChatgpt', 'true');
+      expect(await drawChecks('cowork', '2026-08', NOW)).toBe(2);
+      const items = await listChecks('cowork', '2026-08');
+      const gpt = items.find(i => i.sessionId === 'chatgpt:ht-1')!;
+      expect(gpt).toMatchObject({ product: 'chatgpt', firstPrompt: 'Summarise the board pack', prompts: 1, toolCalls: null, claudeMinutes: 20, estimate: { low: 30, likely: 60, high: 120 } });
+      expect(items.find(i => i.sessionId === 'w-t2')!.product).toBe('claude_cowork');
+      // Cowork human time off: no ChatGPT either
+      await setConfigValue('humanTimeEnabled', 'false');
+      expect(await drawChecks('cowork', '2026-05', NOW)).toBe(1);
+    } finally {
+      await setConfigValue('humanTimeEnabled', 'true');
+      await sql.exec(`DELETE FROM human_time_checks WHERE period IN ('2026-05', '2026-06', '2026-07', '2026-08');
+        DELETE FROM cowork_messages WHERE session_id = 'chatgpt:ht-1';
+        DELETE FROM chatgpt_session_time WHERE session_id = 'chatgpt:ht-1';`);
+    }
+  });
+
+  it('the Code draw skips Codex sessions while ChatGPT and Codex are hidden', async () => {
+    const { setConfigValue } = await import('@/lib/config');
+    const { drawChecks, listChecks } = await import('@/lib/pulse/human-time-checks');
+    await codeSession('codex:ht-c', NOW - DAY);
+    await sql.run(`INSERT INTO code_session_classifications (session_id, user_id, work_type, tier, confidence, classifier_model, classified_at, human_minutes_low, human_minutes_likely, human_minutes_high)
+      VALUES ('codex:ht-c', 'u1', 'feature', 2, 0.9, 'haiku', ?, 30, 60, 120)`, [NOW]);
+    try {
+      await setConfigValue('openaiShown', 'false');
+      await drawChecks('code', '2026-04', NOW);
+      expect((await listChecks('code', '2026-04')).map(i => i.sessionId)).not.toContain('codex:ht-c');
+      await setConfigValue('openaiShown', 'true');
+      await drawChecks('code', '2026-03', NOW);
+      const shown = await listChecks('code', '2026-03');
+      expect(shown.find(i => i.sessionId === 'codex:ht-c')?.product).toBe('codex');
+    } finally {
+      await sql.exec(`DELETE FROM human_time_checks WHERE period IN ('2026-03', '2026-04');
+        DELETE FROM code_session_classifications WHERE session_id = 'codex:ht-c';
+        DELETE FROM code_otel_metrics WHERE session_id = 'codex:ht-c';
+        DELETE FROM cowork_messages WHERE session_id = 'codex:ht-c';
+        DELETE FROM code_session_stats WHERE session_id = 'codex:ht-c';`);
+    }
+  });
+
+  it('labels Code items Claude Code or Codex by id', async () => {
+    const { checkProduct } = await import('@/lib/pulse/human-time-checks');
+    expect(checkProduct('code', 'codex:abc')).toBe('codex');
+    expect(checkProduct('code', 'abc')).toBe('claude_code');
+    expect(checkProduct('cowork', 'chatgpt:abc')).toBe('chatgpt');
+    expect(checkProduct('cowork', 'abc')).toBe('claude_cowork');
+  });
+});
+
 describe('zero active time', () => {
   it('a session with 0 measured seconds is not counted', async () => {
     await coworkSession('w-zero', NOW - DAY);

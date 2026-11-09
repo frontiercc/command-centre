@@ -19,7 +19,12 @@ import { getTypedClient } from '@/lib/db/client';
 import { getAdminSession, canAccessAuditLog } from '@/lib/auth/admin-auth';
 import { lacksDepartment, noDepartmentResponse } from '@/lib/auth/content-access';
 import { logAccess } from '@/lib/audit/log';
-import { getCodeModelRates, priceModelsJson } from '@/lib/pulse/code/rates';
+import { getCodeModelRates, priceModelsJson, priceTokens } from '@/lib/pulse/code/rates';
+import { isOpenAiSource, type OpenAiSource } from '@/lib/openai/sources';
+import { isProductId, type ProductId } from '@/lib/dashboard/vendor';
+import { productClause, vendorClause } from '@/lib/dashboard/product-sql';
+import { chatgptSessionShares } from '@/lib/finance/spend-review-openai';
+import { PRODUCT_ORDER, productsIn } from '@/lib/pulse/cowork/products';
 
 // ─── Raw-execution facade (mirrors lib/db/queries.ts's rawAll) ────────────────
 interface RawFacade {
@@ -57,20 +62,23 @@ interface CoworkEventRow {
 
 interface ChatEventRow {
   id: string;
-  conversation_id: string | null;
+  session_id: string;
   user_id: string | null;
-  prompt_text: string;
-  prompt_length: number;
+  content_full: string | null;
+  content_preview: string | null;
   flagged: number;
   flag_reason: string | null;
+  pii_verdict_reason: string | null;
   occurred_at: number;
   ingested_at: number;
-  agent_id: string | null;
   source: string;
 }
 
-/** App filter values the Audit Log accepts: Cowork alone, any Office app, or one Office app. */
-const AUDIT_APPS = new Set(['cowork', 'office', 'excel', 'word', 'powerpoint', 'outlook']);
+/**
+ * App filter values the Audit Log accepts: Cowork alone, any Claude in Office
+ * app, any Claude in Google app, or one app.
+ */
+const AUDIT_APPS = new Set<string>(['cowork', 'office', 'google', ...PRODUCT_ORDER.filter(p => p !== 'cowork')]);
 
 /**
  * Get cowork messages projected into the same shape as compliance events,
@@ -85,9 +93,11 @@ async function getCoworkEventsForAudit(filters: {
   limit?: number;
   offset?: number;
   surface?: string;
+  /** A stored source, or 'openai' for all three OpenAI sources. */
   source?: string;
+  product?: ProductId;
   search?: string;
-  /** Work Pulse app: 'cowork' (Cowork only), 'office' (any Office app) or one Office app. */
+  /** Work Pulse app: 'cowork' (Cowork only), 'office' / 'google' (any app in that group) or one app. */
   app?: string;
 }): Promise<Array<{
   id: string;
@@ -114,9 +124,19 @@ async function getCoworkEventsForAudit(filters: {
     if (filters.dateFrom) conditions.push(sql`cm.occurred_at >= ${filters.dateFrom}`);
     if (filters.dateTo) conditions.push(sql`cm.occurred_at <= ${filters.dateTo}`);
     if (filters.surface) conditions.push(sql`cm.surface = ${filters.surface}`);
-    if (filters.source) conditions.push(sql`cm.source = ${filters.source}`);
-    if (filters.app === 'cowork') conditions.push(sql`cm.product IS NULL`);
-    else if (filters.app === 'office') conditions.push(sql`cm.product IS NOT NULL`);
+    // Claude Chat prompts (surface 'chat') are listed by getChatEventsForAudit.
+    else conditions.push(sql`COALESCE(cm.surface, '') <> 'chat'`);
+    // 'compliance' is Anthropic's Compliance API alone; 'openai' is OpenAI's (all three OpenAI sources).
+    if (filters.source === 'openai') conditions.push(sql.raw(vendorClause('openai', 'cm.')));
+    else if (filters.source) conditions.push(sql`cm.source = ${filters.source}`);
+    if (filters.product) conditions.push(sql.raw(productClause(filters.product, 'cm.')));
+    // App (Work Pulse): Cowork alone (Claude's, never ChatGPT Work), all of
+    // Claude in Office, all of Claude in Google, or one app.
+    if (filters.app === 'cowork') conditions.push(sql.raw(`cm.product IS NULL AND ${vendorClause('claude', 'cm.')}`));
+    else if (filters.app === 'office' || filters.app === 'google') {
+      const apps = productsIn(filters.app);
+      conditions.push(sql`cm.product IN (${sql.join(apps.map(a => sql`${a}`), sql`, `)})`);
+    }
     else if (filters.app) conditions.push(sql`cm.product = ${filters.app}`);
     if (filters.search) {
       // UUID-shaped = exact ID match, otherwise content/user search
@@ -177,6 +197,74 @@ async function getCoworkEventsForAudit(filters: {
     // code_session_stats instead — resolved once per request, not per row.
     const codeRates = await getCodeModelRates();
 
+    // Codex sessions: spend, tokens and models from their turns (priced from the
+    // same rates table), actions from codex_actions. Their code_session_stats
+    // row carries none of these, so reading it would show $0.
+    const codexIds = [...new Set(rows.map(r => r.session_id).filter((id): id is string => !!id && id.startsWith('codex:')))];
+    const codexStats = new Map<string, { cost: number | null; input: number; output: number; models: string[]; actions: number }>();
+    if (codexIds.length > 0) {
+      const idList = sql.join(codexIds.map(id => sql`${id}`), sql`, `);
+      const turns = await rawAll<{ session_id: string; model: string | null; inp: number | string; cached: number | string; outp: number | string }>(client, sql`
+        SELECT session_id, model, SUM(uncached_input_tokens) AS inp, SUM(cached_input_tokens) AS cached, SUM(output_tokens) AS outp
+        FROM codex_turns WHERE session_id IN (${idList}) GROUP BY session_id, model
+      `);
+      const actions = await rawAll<{ session_id: string; n: number | string }>(client, sql`
+        SELECT session_id, COUNT(*) AS n FROM codex_actions WHERE session_id IN (${idList}) GROUP BY session_id
+      `);
+      for (const t of turns) {
+        const e = codexStats.get(t.session_id) ?? { cost: null, input: 0, output: 0, models: [], actions: 0 };
+        e.input += Number(t.inp) + Number(t.cached);
+        e.output += Number(t.outp);
+        if (t.model) {
+          e.models.push(t.model);
+          const usd = priceTokens(t.model, { inputTokens: Number(t.inp), outputTokens: Number(t.outp), cacheReadTokens: Number(t.cached), cacheCreationTokens: 0 }, codeRates);
+          if (usd !== null) e.cost = (e.cost ?? 0) + usd;
+        }
+        codexStats.set(t.session_id, e);
+      }
+      for (const a of actions) {
+        const e = codexStats.get(a.session_id) ?? { cost: null, input: 0, output: 0, models: [], actions: 0 };
+        e.actions = Number(a.n);
+        codexStats.set(a.session_id, e);
+      }
+    }
+
+    // ChatGPT conversations: no cowork_session_stats row, so spend, tokens and
+    // models come from each conversation's share of its hours' costs (an
+    // estimate: OpenAI reports cost per hour), active time from
+    // chatgpt_session_time. Same sharing as FinOps and Spend Review.
+    const chatgptIds = [...new Set(rows.map(r => r.session_id).filter((id): id is string => !!id && id.startsWith('chatgpt:')))];
+    const chatgptStats = new Map<string, { cost: number | null; input: number; output: number; models: string[]; activeSecs: number | null }>();
+    if (chatgptIds.length > 0) {
+      const idList = sql.join(chatgptIds.map(id => sql`${id}`), sql`, `);
+      const span = await rawAll<{ lo: number | string | null; hi: number | string | null }>(client, sql`
+        SELECT MIN(occurred_at) AS lo, MAX(occurred_at) AS hi FROM openai_replies WHERE session_id IN (${idList})
+      `);
+      const lo = Number(span[0]?.lo ?? NaN);
+      const hi = Number(span[0]?.hi ?? NaN);
+      if (Number.isFinite(lo) && Number.isFinite(hi)) {
+        const shared = await chatgptSessionShares(client, codeRates, Math.floor(lo / 3600) * 3600, Math.floor(hi / 3600) * 3600 + 3600, { sessionIds: chatgptIds });
+        for (const [sid, e] of shared.bySession) {
+          const s = { cost: null as number | null, input: 0, output: 0, models: [] as string[], activeSecs: null as number | null };
+          for (const p of e.parts) {
+            s.input += p.usage.inputTokens + p.usage.cacheReadTokens;
+            s.output += p.usage.outputTokens;
+            if (p.model && !s.models.includes(p.model)) s.models.push(p.model);
+            if (p.usd !== null) s.cost = (s.cost ?? 0) + p.usd;
+          }
+          chatgptStats.set(sid, s);
+        }
+      }
+      const times = await rawAll<{ session_id: string; active_secs: number | string }>(client, sql`
+        SELECT session_id, active_secs FROM chatgpt_session_time WHERE session_id IN (${idList})
+      `);
+      for (const t of times) {
+        const s = chatgptStats.get(t.session_id) ?? { cost: null, input: 0, output: 0, models: [], activeSecs: null };
+        s.activeSecs = Number(t.active_secs);
+        chatgptStats.set(t.session_id, s);
+      }
+    }
+
     return rows.map(r => ({
       id: r.id,
       user_id: r.user_display_name || r.user_id || 'unknown',
@@ -196,6 +284,32 @@ async function getCoworkEventsForAudit(filters: {
       prompt_id: r.prompt_id ?? null,
       _source: sourceBadge(r.source),
       session_enrichment: (() => {
+        if (r.session_id?.startsWith('chatgpt:')) {
+          const g = chatgptStats.get(r.session_id);
+          if (!g) return null;
+          return JSON.stringify({
+            cost_usd: g.cost,
+            input_tokens: g.input,
+            output_tokens: g.output,
+            tool_call_count: null,
+            unique_tools: null,
+            models_used: g.models.length > 0 ? JSON.stringify(g.models) : null,
+            duration_secs: g.activeSecs,
+          });
+        }
+        const codex = r.session_id ? codexStats.get(r.session_id) : undefined;
+        if (r.session_id?.startsWith('codex:')) {
+          if (!codex) return null;
+          return JSON.stringify({
+            cost_usd: codex.cost,
+            input_tokens: codex.input,
+            output_tokens: codex.output,
+            tool_call_count: codex.actions,
+            unique_tools: null,
+            models_used: codex.models.length > 0 ? JSON.stringify(codex.models) : null,
+            duration_secs: r.code_active_secs ?? null,
+          });
+        }
         const isCode = r.surface === 'code';
         const { costUsd: codeCostUsd, models: codeModels } = isCode
           ? priceModelsJson(r.code_models_json, codeRates)
@@ -244,13 +358,15 @@ async function getCoworkEventsForAudit(filters: {
  * through, so the display reads the stamp and never assumes it from the
  * surface (Compliance-synced chat connectors, for example, are not OTel).
  * The OTel receivers write 'otel', the Compliance API sync writes
- * 'compliance', the retired local agent (and older seeds) wrote 'agent'.
+ * 'compliance', the OpenAI sync writes 'chatgpt_chat', 'chatgpt_work' or
+ * 'codex', the retired local agent (and older seeds) wrote 'agent'.
  * Anything unrecognised renders as the agent badge, never as one of the two
  * live capture paths.
  */
-function sourceBadge(source: string | null | undefined): 'compliance' | 'otel' | 'local-agent' {
+function sourceBadge(source: string | null | undefined): 'compliance' | 'otel' | 'local-agent' | OpenAiSource {
   if (source === 'compliance') return 'compliance';
   if (source === 'otel') return 'otel';
+  if (isOpenAiSource(source)) return source;
   return 'local-agent';
 }
 
@@ -268,8 +384,10 @@ async function getSkillConnectorEventsForAudit(filters: {
   flaggedOnly?: boolean;
   surface?: string;
   /** Filter on the rows' own `source` column — 'compliance' rows came from
-   *  the Compliance API chat sync, everything else from OTel. */
-  source?: 'compliance' | 'otel';
+   *  Anthropic's Compliance API chat sync, 'openai' rows from OpenAI's Compliance API,
+   *  everything else from OTel. */
+  source?: 'compliance' | 'otel' | 'openai';
+  product?: ProductId;
 }): Promise<Array<{
   id: string;
   user_id: string;
@@ -300,7 +418,9 @@ async function getSkillConnectorEventsForAudit(filters: {
     if (filters.search) skillConds.push(sql`csi.skill_name ${likeKeyword()} ${`%${filters.search}%`}`);
     if (filters.surface) skillConds.push(sql`csi.surface = ${filters.surface}`);
     if (filters.source === 'compliance') skillConds.push(sql`csi.source = 'compliance'`);
-    if (filters.source === 'otel') skillConds.push(sql`COALESCE(csi.source, '') <> 'compliance'`);
+    if (filters.source === 'otel') skillConds.push(sql`csi.source = 'otel'`);
+    if (filters.source === 'openai') skillConds.push(sql.raw(vendorClause('openai', 'csi.')));
+    if (filters.product) skillConds.push(sql.raw(productClause(filters.product, 'csi.')));
     const skillWhere = skillConds.length ? sql`WHERE ${sql.join(skillConds, sql` AND `)}` : sql``;
 
     const skillRows = await rawAll<{
@@ -349,7 +469,9 @@ async function getSkillConnectorEventsForAudit(filters: {
     }
     if (filters.surface) mcpConds.push(sql`cmi.surface = ${filters.surface}`);
     if (filters.source === 'compliance') mcpConds.push(sql`cmi.source = 'compliance'`);
-    if (filters.source === 'otel') mcpConds.push(sql`COALESCE(cmi.source, '') <> 'compliance'`);
+    if (filters.source === 'otel') mcpConds.push(sql`cmi.source = 'otel'`);
+    if (filters.source === 'openai') mcpConds.push(sql.raw(vendorClause('openai', 'cmi.')));
+    if (filters.product) mcpConds.push(sql.raw(productClause(filters.product, 'cmi.')));
     const mcpWhere = sql`WHERE ${sql.join(mcpConds, sql` AND `)}`;
 
     const mcpRows = await rawAll<{
@@ -392,7 +514,8 @@ async function getSkillConnectorEventsForAudit(filters: {
 }
 
 /**
- * Get chat messages projected into audit event shape.
+ * Get Claude Chat prompts (cowork_messages, surface 'chat') projected into
+ * audit event shape.
  */
 async function getChatEventsForAudit(filters: {
   userId?: string;
@@ -421,10 +544,10 @@ async function getChatEventsForAudit(filters: {
 }>> {
   try {
     const client = await getTypedClient();
-    const conditions: SQL[] = [];
+    const conditions: SQL[] = [sql`cm.surface = 'chat'`, sql`cm.message_type = 'cowork_user_message'`];
 
     if (filters.userId) conditions.push(sql`cm.user_id = ${filters.userId}`);
-    if (filters.department) conditions.push(sql`u.department = ${filters.department}`);
+    if (filters.department) conditions.push(sql`COALESCE(au.department, u.department) = ${filters.department}`);
     if (filters.flaggedOnly) conditions.push(sql`cm.flagged = 1`);
     if (filters.dateFrom) conditions.push(sql`cm.occurred_at >= ${filters.dateFrom}`);
     if (filters.dateTo) conditions.push(sql`cm.occurred_at <= ${filters.dateTo}`);
@@ -438,37 +561,46 @@ async function getChatEventsForAudit(filters: {
       } else {
         const like = `%${filters.search}%`;
         const kw = likeKeyword();
-        conditions.push(sql`(cm.prompt_text ${kw} ${like} OR cm.user_id ${kw} ${like})`);
+        conditions.push(sql`(cm.content_full ${kw} ${like} OR cm.user_id ${kw} ${like})`);
       }
     }
 
-    const where = conditions.length > 0 ? sql`WHERE ${sql.join(conditions, sql` AND `)}` : sql``;
+    const where = sql`WHERE ${sql.join(conditions, sql` AND `)}`;
     const limit = filters.limit || 100;
     const offset = filters.offset || 0;
 
     const rows = await rawAll<ChatEventRow & { user_display_name: string | null; user_department: string | null }>(client, sql`
-       SELECT cm.*, u.display_name as user_display_name, u.department as user_department
-       FROM chat_messages cm
+       SELECT cm.id, cm.session_id, cm.user_id, cm.content_full, cm.content_preview, cm.flagged, cm.flag_reason, cm.pii_verdict_reason,
+              cm.occurred_at, cm.ingested_at, cm.source,
+              COALESCE(au.display_name, u.display_name) as user_display_name,
+              COALESCE(au.department, u.department) as user_department
+       FROM cowork_messages cm
        LEFT JOIN users u ON cm.user_id = u.id
+       LEFT JOIN admin_users au ON au.linked_cowork_user_id = cm.user_id
        ${where}
        ORDER BY cm.occurred_at DESC LIMIT ${limit} OFFSET ${offset}
     `);
 
-    return rows.map(r => ({
-      id: r.id,
-      user_id: r.user_display_name || r.user_id || 'unknown',
-      department: r.user_department ?? null,
-      event_type: 'chat_prompt',
-      surface: 'chat',
-      content_preview: r.prompt_text.length > 120 ? r.prompt_text.slice(0, 120) + '...' : r.prompt_text,
-      metadata: JSON.stringify({ conversation_id: r.conversation_id, prompt_length: r.prompt_length }),
-      flagged: r.flagged,
-      flag_reason: r.flag_reason,
-      occurred_at: r.occurred_at,
-      ingested_at: r.ingested_at,
-      session_id: r.conversation_id || '',
-      _source: sourceBadge(r.source),
-    }));
+    return rows.map(r => {
+      // A retention-stripped prompt keeps only the marker in content_preview.
+      const text = r.content_full ?? r.content_preview ?? '';
+      return {
+        id: r.id,
+        user_id: r.user_display_name || r.user_id || 'unknown',
+        department: r.user_department ?? null,
+        event_type: 'chat_prompt',
+        surface: 'chat',
+        content_preview: text.length > 120 ? text.slice(0, 120) + '...' : text,
+        metadata: JSON.stringify({ conversation_id: r.session_id, prompt_length: text.length }),
+        flagged: r.flagged,
+        flag_reason: r.flag_reason,
+        pii_verdict_reason: r.pii_verdict_reason ?? null,
+        occurred_at: r.occurred_at,
+        ingested_at: r.ingested_at,
+        session_id: r.session_id || '',
+        _source: sourceBadge(r.source),
+      };
+    });
   } catch {
     return [];
   }
@@ -503,7 +635,7 @@ export async function GET(request: NextRequest) {
     return NextResponse.json(event);
   }
 
-  const source = params.get('source'); // 'compliance' | 'otel' | 'cowork' | undefined (all)
+  const source = params.get('source'); // 'otel' | 'compliance' | 'openai', or an older value below
   const surface = params.get('surface') || undefined;
   const userId = params.get('userId') || undefined;
   // Admins see all departments; a manager is locked to their own department
@@ -517,20 +649,29 @@ export async function GET(request: NextRequest) {
   const limit = parseInt(params.get('limit') || '100');
   const offset = parseInt(params.get('offset') || '0');
 
-  // App filter (Work Pulse): Cowork alone, Claude in Office, or one Office app.
-  // Prompts only; skill and connector events carry no app. Overrides surface and source.
+  // The page's filters: a product (Claude Chat ... Codex) and how the rows
+  // arrived (OpenTelemetry, Anthropic's Compliance API or OpenAI's Compliance API).
+  const productParam = params.get('product');
+  const product = isProductId(productParam) ? productParam : (isOpenAiSource(source) ? source : undefined);
+  const arrival = source === 'otel' || source === 'compliance' || source === 'openai' ? source : undefined;
+  // The app within Claude Cowork and apps: Cowork alone, Claude in Office,
+  // Claude in Google, or one app. Prompts only: skill and connector events
+  // carry no app.
   const app = params.get('app') || undefined;
+  if (app && !AUDIT_APPS.has(app)) return NextResponse.json({ error: 'Unknown app' }, { status: 400 });
   if (app) {
-    if (!AUDIT_APPS.has(app)) return NextResponse.json({ error: 'Unknown app' }, { status: 400 });
-    const messages = await getCoworkEventsForAudit({ userId, department, flaggedOnly, dateFrom, dateTo, search, limit, offset, surface: 'cowork', app });
+    const messages = await getCoworkEventsForAudit({ userId, department, flaggedOnly, dateFrom, dateTo, search, limit, offset, surface: 'cowork', source: arrival, product, app });
     return NextResponse.json(messages);
   }
-
-  if (source === 'otel') {
-    // OpenTelemetry: all cowork_messages ingested via OTel + skill/connector invocations
-    const messages = await getCoworkEventsForAudit({ userId, department, flaggedOnly, dateFrom, dateTo, search, limit, offset, source: 'otel' });
-    const skillsConnectors = await getSkillConnectorEventsForAudit({ userId, department, flaggedOnly, dateFrom, dateTo, search, limit, source: 'otel' });
-    const merged = [...messages, ...skillsConnectors]
+  if (product || arrival) {
+    const parts = [];
+    // Claude Chat prompts (surface 'chat') come from getChatEventsForAudit; none arrive through OpenTelemetry or OpenAI.
+    if (product !== 'claude_chat') parts.push(getCoworkEventsForAudit({ userId, department, flaggedOnly, dateFrom, dateTo, search, limit, offset, source: arrival, product }));
+    if ((!product || product === 'claude_chat') && (!arrival || arrival === 'compliance')) {
+      parts.push(getChatEventsForAudit({ userId, department, flaggedOnly, dateFrom, dateTo, search, limit, offset, source: arrival }));
+    }
+    parts.push(getSkillConnectorEventsForAudit({ userId, department, flaggedOnly, dateFrom, dateTo, search, limit, source: arrival, product }));
+    const merged = (await Promise.all(parts)).flat()
       .sort((a, b) => b.occurred_at - a.occurred_at)
       .slice(0, limit);
     return NextResponse.json(merged);
@@ -541,17 +682,6 @@ export async function GET(request: NextRequest) {
     const messages = await getCoworkEventsForAudit({ userId, department, flaggedOnly, dateFrom, dateTo, search, limit, offset, source: 'agent' });
     const chatEvents = await getChatEventsForAudit({ userId, department, flaggedOnly, dateFrom, dateTo, search, limit, offset, source: 'agent' });
     const merged = [...messages, ...chatEvents]
-      .sort((a, b) => b.occurred_at - a.occurred_at)
-      .slice(0, limit);
-    return NextResponse.json(merged);
-  }
-
-  if (source === 'compliance') {
-    // Compliance API: chat events synced server-side (agent_id NULL), plus
-    // the chat connector invocations the same sync writes (source='compliance').
-    const events = await getChatEventsForAudit({ userId, department, flaggedOnly, dateFrom, dateTo, search, limit, offset, source: 'compliance' });
-    const connectors = await getSkillConnectorEventsForAudit({ userId, department, flaggedOnly, dateFrom, dateTo, search, limit, source: 'compliance' });
-    const merged = [...events, ...connectors]
       .sort((a, b) => b.occurred_at - a.occurred_at)
       .slice(0, limit);
     return NextResponse.json(merged);

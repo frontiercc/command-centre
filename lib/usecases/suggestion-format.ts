@@ -31,3 +31,27 @@ export function formatSuggestionEvidenceLine(draft: SuggestionDraftEvidenceLine)
   // A cross-department suggestion can carry no tools at all; no trailing "·".
   return signals ? `${userLabel} · ${deptLabel} · ${signals}` : `${userLabel} · ${deptLabel}`;
 }
+
+/** Sessions behind a suggestion by product, read from the session ids it was found in. */
+export interface SuggestionProducts { claude: number; chatgpt: number; codex: number }
+
+/** `chatgpt:` ids are ChatGPT, `codex:` ids Codex, every other id Claude (the OpenAI sync's prefixes). */
+export function productsOfSessions(ids: string[]): SuggestionProducts {
+  const out: SuggestionProducts = { claude: 0, chatgpt: 0, codex: 0 };
+  for (const id of new Set(ids)) {
+    if (id.startsWith('chatgpt:')) out.chatgpt += 1;
+    else if (id.startsWith('codex:')) out.codex += 1;
+    else out.claude += 1;
+  }
+  return out;
+}
+
+/** "Claude 3 sessions · ChatGPT 2 sessions": each product with sessions, Claude first. */
+export function formatSuggestionProducts(p: SuggestionProducts): string {
+  const n = (k: number) => `${k} session${k === 1 ? '' : 's'}`;
+  const parts: string[] = [];
+  if (p.claude > 0) parts.push(`Claude ${n(p.claude)}`);
+  if (p.chatgpt > 0) parts.push(`ChatGPT ${n(p.chatgpt)}`);
+  if (p.codex > 0) parts.push(`Codex ${n(p.codex)}`);
+  return parts.join(' · ');
+}

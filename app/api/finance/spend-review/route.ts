@@ -55,14 +55,22 @@ export async function GET(request: NextRequest) {
     const index = built.value;
     // Early in a month nobody has enough sessions for the efficiency board yet: show the
     // previous month's, labelled as such, rather than an empty board.
+    // Two boards, Claude's and OpenAI's, each falling back on its own.
     let efficiency = index.efficiency;
     let efficiencyPeriod = period;
-    if (isCurrent && efficiency.length === 0) {
+    let efficiencyOpenai = index.efficiencyOpenai ?? [];
+    let efficiencyOpenaiPeriod = period;
+    // The OpenAI board only falls back where OpenAI spend shows, so a Claude-only hub builds no extra month.
+    if (isCurrent && (efficiency.length === 0 || (index.openai && efficiencyOpenai.length === 0))) {
       const prior = priorPeriod(period);
       const priorBuilt = await cached(`index:${prior}`, PAST_MONTH_FRESH_MS, () => buildSpendReviewIndex(prior, nowS));
-      if (priorBuilt.value.efficiency.length) {
+      if (efficiency.length === 0 && priorBuilt.value.efficiency.length) {
         efficiency = priorBuilt.value.efficiency;
         efficiencyPeriod = prior;
+      }
+      if (efficiencyOpenai.length === 0 && index.openai && priorBuilt.value.efficiencyOpenai?.length) {
+        efficiencyOpenai = priorBuilt.value.efficiencyOpenai;
+        efficiencyOpenaiPeriod = prior;
       }
     }
     const limits = await getSpendLimits();
@@ -111,10 +119,13 @@ export async function GET(request: NextRequest) {
     return NextResponse.json({
       period,
       isCurrentMonth: isCurrent,
+      openai: index.openai,
       updatedAt: Math.floor(built.computedAt / 1000),
       people: rows,
       efficiency,
       efficiencyPeriod,
+      efficiencyOpenai,
+      efficiencyOpenaiPeriod,
       summary: index.summary,
       unpricedModels: index.unpricedModels,
       limits: { status: limits.status, fetchedAt: limits.fetchedAt, pendingCount: limits.pendingRequests.length },

@@ -14,6 +14,7 @@ import {
   getUserMessageCount7d,
   getUserAlerts,
   getSnapshotsForUser,
+  getUserProductDays,
   deleteUserData,
   getAllUserAdoptionHealth,
   getAllUserPrimarySurfaces,
@@ -74,7 +75,7 @@ export async function GET(request: NextRequest) {
 
     const [
       coworkProjects, coworkRecentSessions, userAlerts,
-      adoptionHealth, primarySurface, messages7d, snapshots30d,
+      adoptionHealth, primarySurface, messages7d, snapshots30d, productDays,
     ] = await Promise.all([
       getCoworkUserProjects(id, thirtyDaysAgo),
       getCoworkUserSessions(id, thirtyDaysAgo),
@@ -83,6 +84,7 @@ export async function GET(request: NextRequest) {
       getUserPrimarySurface(id),
       getUserMessageCount7d(id),
       getSnapshotsForUser(id, 30),
+      getUserProductDays(id, 30),
     ]);
 
     const detail = {
@@ -92,6 +94,7 @@ export async function GET(request: NextRequest) {
       messages_7d: messages7d,
       alerts: userAlerts,
       snapshots_30d: snapshots30d,
+      product_days: productDays,
       coworkActivity: {
         projects: coworkProjects,
         recentSessions: coworkRecentSessions,

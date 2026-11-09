@@ -7,11 +7,12 @@
 // through `and()`. `files_uploaded` is a plain TEXT column (not jsonb), so it
 // is read with JSON.parse(...).
 import { NextRequest, NextResponse } from 'next/server';
-import { and, desc, eq, isNotNull, ne, gte, type SQL } from 'drizzle-orm';
+import { and, desc, eq, isNotNull, ne, gte, sql, type SQL } from 'drizzle-orm';
 import { requireAdmin } from '@/lib/auth/admin-auth';
 import { getTypedClient } from '@/lib/db/client';
 import { schema } from '@/lib/db/schema';
 import { getFileCategoryMix } from '@/lib/pulse/cowork/file-categories';
+import { FILE_PRODUCTS, fileProductExpr, fileProductLabel, fileProductOf, isFileProduct, type FileProduct } from '@/lib/sources/file-product';
 
 export const dynamic = 'force-dynamic';
 
@@ -24,6 +25,10 @@ export interface FileUploadRow {
   display_name: string | null;
   email: string | null;
   department: string | null;
+  /** The product the file was attached in (lib/sources/file-product.ts). */
+  product: FileProduct;
+  /** Its name on screen: Claude Cowork, Claude in Excel, Claude Chat, ChatGPT Chat or ChatGPT Work. */
+  product_label: string;
 }
 
 export async function GET(request: NextRequest) {
@@ -37,6 +42,9 @@ export async function GET(request: NextRequest) {
   const userId = searchParams.get('userId') ?? null;
   const days = parseInt(searchParams.get('days') ?? '30', 10);
   const search = searchParams.get('search')?.toLowerCase() ?? null;
+  // ChatGPT files are listed even while "Show ChatGPT and Codex" is off, as the Audit Log lists their prompts.
+  const productParam = searchParams.get('product');
+  const product = isFileProduct(productParam) ? productParam : null;
 
   const since = Math.floor(Date.now() / 1000) - days * 24 * 3600;
 
@@ -50,6 +58,7 @@ export async function GET(request: NextRequest) {
   ];
   if (dept) conditions.push(eq(u.department, dept));
   if (userId) conditions.push(eq(cs.user_id, userId));
+  if (product) conditions.push(sql`${sql.raw(fileProductExpr('cowork_sessions.'))} = ${product}`);
 
   const rows = await client
     .select({
@@ -57,6 +66,8 @@ export async function GET(request: NextRequest) {
       started_at: cs.started_at,
       files_uploaded: cs.files_uploaded,
       project_name: cs.project_name,
+      source: cs.source,
+      app: cs.product,
       user_id: cs.user_id,
       display_name: u.display_name,
       email: u.email,
@@ -84,6 +95,8 @@ export async function GET(request: NextRequest) {
         display_name: row.display_name,
         email: row.email,
         department: row.department,
+        product: fileProductOf(row.source),
+        product_label: fileProductLabel(fileProductOf(row.source), row.app),
       });
     }
   }
@@ -96,6 +109,14 @@ export async function GET(request: NextRequest) {
     .where(and(isNotNull(cs.files_uploaded), ne(cs.files_uploaded, '[]'), isNotNull(u.department)));
   const depts = deptRows.map(r => r.department as string);
 
+  // Products with any attached file, for the filter dropdown (in a fixed order).
+  const productRows = await client
+    .selectDistinct({ product: sql<string>`${sql.raw(fileProductExpr('cowork_sessions.'))}` })
+    .from(cs)
+    .where(and(isNotNull(cs.files_uploaded), ne(cs.files_uploaded, '[]')));
+  const seen = new Set(productRows.map(r => r.product));
+  const products = FILE_PRODUCTS.filter(id => seen.has(id)).map(id => ({ id, label: fileProductLabel(id, null) }));
+
   // Files by category describes the file estate, so it sits beside the file
   // list it summarises. Reuses the existing engine rather than a second query,
   // and honours the page's own day filter. Its own try/catch: a failure
@@ -107,5 +128,5 @@ export async function GET(request: NextRequest) {
     console.error('[admin/files] file category mix failed', e);
   }
 
-  return NextResponse.json({ files, depts, total: files.length, fileCategoryMix });
+  return NextResponse.json({ files, depts, products, total: files.length, fileCategoryMix });
 }

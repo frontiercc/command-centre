@@ -30,7 +30,7 @@
  */
 import { and, desc, eq, gte, ne } from 'drizzle-orm';
 import { getTypedClient } from '@/lib/db/client';
-import { schema } from '@/lib/db/schema';
+import { readCodeMetrics } from '@/lib/pulse/code/vendor-view';
 import { weekStart, weekStarts } from '@/lib/pulse/period';
 import { ORG_SCOPE_ID } from '@/lib/pulse/code/aggregator';
 
@@ -49,7 +49,13 @@ interface WeekRow {
   commit_count: number;
 }
 
-export async function computeObservedLift(): Promise<ObservedLift | null> {
+/**
+ * `includeCodex` (Codex data present and shown): each week's commits add
+ * Codex's weekly commits (code_metrics_vendor 'openai' rows), the same basis
+ * as the Value page's Commits figure. Engaged time stays Claude Code's: Codex
+ * reports none, so a week with only Codex activity counts as zero engaged time.
+ */
+export async function computeObservedLift(codexPresent = false, includeCodex = false): Promise<ObservedLift | null> {
   const client = await getTypedClient();
   const now = Math.floor(Date.now() / 1000);
   const currentWeek = weekStart(now);
@@ -57,8 +63,8 @@ export async function computeObservedLift(): Promise<ObservedLift | null> {
   const candidateWeeks = weekStarts(now, LOOKBACK_WEEKS + 4);
   const rangeStart = candidateWeeks[0];
 
-  const t = schema.codeMetrics;
-  const rows = await client
+  // Claude Code's own weekly rows once Codex data exists (lib/pulse/code/vendor-view.ts).
+  const rows = await readCodeMetrics('claude', codexPresent, (t, only) => client
     .select({
       period_start: t.period_start,
       active_time_user_s: t.active_time_user_s,
@@ -71,10 +77,31 @@ export async function computeObservedLift(): Promise<ObservedLift | null> {
       eq(t.scope_id, ORG_SCOPE_ID),
       gte(t.period_start, rangeStart),
       ne(t.period_start, currentWeek),
+      only,
     ))
-    .orderBy(desc(t.period_start));
+    .orderBy(desc(t.period_start)));
 
-  return computeFromRows(rows as WeekRow[]);
+  if (!includeCodex) return computeFromRows(rows as WeekRow[]);
+
+  const codexRows = await readCodeMetrics('openai', true, (t, only) => client
+    .select({ period_start: t.period_start, commit_count: t.commit_count })
+    .from(t)
+    .where(and(
+      eq(t.granularity, 'week'),
+      eq(t.scope_type, 'organisation'),
+      eq(t.scope_id, ORG_SCOPE_ID),
+      gte(t.period_start, rangeStart),
+      ne(t.period_start, currentWeek),
+      only,
+    )));
+  const byWeek = new Map<number, WeekRow>();
+  for (const r of rows as WeekRow[]) byWeek.set(r.period_start, { ...r });
+  for (const r of codexRows) {
+    const w = byWeek.get(r.period_start);
+    if (w) w.commit_count += r.commit_count;
+    else byWeek.set(r.period_start, { period_start: r.period_start, active_time_user_s: 0, commit_count: r.commit_count });
+  }
+  return computeFromRows([...byWeek.values()].sort((a, b) => b.period_start - a.period_start));
 }
 
 function computeFromRows(rows: WeekRow[]): ObservedLift | null {

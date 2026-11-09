@@ -13,7 +13,9 @@ import { randomUUID } from 'node:crypto';
 import { and, desc, eq, inArray, isNotNull, isNull, sql } from 'drizzle-orm';
 import { getTypedClient } from '@/lib/db/client';
 import { schema } from '@/lib/db/schema';
-import { groupDeptBoxes, type DeptBox, type SuggestionSurface } from '@/lib/usecases/dept-boxes';
+import { groupDeptBoxes, surfaceLabels, type DeptBox, type SuggestionSurface } from '@/lib/usecases/dept-boxes';
+import { getConnectedProducts } from '@/lib/sources/connected';
+import { productsOfSessions, type SuggestionProducts } from '@/lib/usecases/suggestion-format';
 
 export interface SignalSet { skills: string[]; connectors: string[]; taskTypes: string[] }
 export interface SuggestionEvidence { distinctUsers: number; sessionCount: number; departments: string[] }
@@ -24,6 +26,8 @@ export interface SuggestionDraft {
   department: string | null; canvas: ProcessCanvas | null;
   /** Where a mined suggestion was found; null on older rows, all from Cowork. */
   surface: SuggestionSurface | null;
+  /** Its sessions by product (Claude, ChatGPT, Codex); null on rows stored without their sessions. */
+  products: SuggestionProducts | null;
 }
 
 /** Department Process Transformation (migration 077/0018) — a content-first
@@ -64,6 +68,15 @@ function parseCanvas(raw: string | null): ProcessCanvas | null {
     return null;
   }
 }
+function parseProducts(raw: string | null): SuggestionProducts | null {
+  if (!raw) return null;
+  try {
+    const ids = JSON.parse(raw);
+    return Array.isArray(ids) ? productsOfSessions(ids.filter((x): x is string => typeof x === 'string')) : null;
+  } catch {
+    return null;
+  }
+}
 function toDraft(r: Row): SuggestionDraft {
   return {
     id: r.id, signalKey: r.signal_key, title: r.title, description: r.description,
@@ -71,6 +84,7 @@ function toDraft(r: Row): SuggestionDraft {
     status: r.status as SuggestionDraft['status'], generatedAt: r.generated_at,
     department: r.department, canvas: parseCanvas(r.canvas_json),
     surface: r.surface === 'code' ? 'code' : r.surface === 'cowork' ? 'cowork' : null,
+    products: parseProducts(r.cited_sessions),
   };
 }
 
@@ -229,5 +243,5 @@ export async function listSuggestionTitlesByDepartment(department: string): Prom
 /** Open department suggestions, one box per department, alphabetical; Cowork and Claude Code
  *  suggestions are separate lists inside it, each ranked by people then sessions. */
 export async function listOpenDeptBoxes(): Promise<DeptProcessBox[]> {
-  return groupDeptBoxes(await listOpenSuggestions());
+  return groupDeptBoxes(await listOpenSuggestions(), surfaceLabels(await getConnectedProducts()));
 }

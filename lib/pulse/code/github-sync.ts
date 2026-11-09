@@ -11,9 +11,15 @@
  * per-user DAILY COUNTS (github_user_repo_stats). Unresolved authors land in
  * github_unmatched_authors — an admin-only queue, wiped and rewritten every
  * sync, capped at UNMATCHED_CAP rows. What is NEVER stored: commit SHAs,
- * messages, per-commit rows, or GitHub display names. The full sync window is
- * rewritten every run, so adding a mapping re-attributes the whole window on
- * the next sync.
+ * messages, per-commit rows, or GitHub display names; commit messages are
+ * never read at all. The full sync window is rewritten every run, so adding a
+ * mapping re-attributes the whole window on the next sync.
+ *
+ * Tool split (migration 0047): each commit is matched in memory to a commit
+ * the same person recorded through Claude Code or Codex at about the same
+ * time (lib/pulse/code/github-tool-match.ts), and only the per-day counts are
+ * stored beside commit_count: made with Claude Code, made with Codex, no AI
+ * tool recorded.
  *
  * Works unauthenticated for public repos (60 req/h); set `github_token`
  * (read-only fine-grained PAT) for private repos and normal rate limits.
@@ -24,6 +30,7 @@ import { getTypedClient } from '@/lib/db/client';
 import { schema } from '@/lib/db/schema';
 import { getConfigValue, setConfigValue } from '@/lib/config';
 import { identityCandidates, bestUnmatchedIdentity, type CommitAuthor } from '@/lib/pulse/code/github-identity';
+import { matchCommitsToTools, loadToolCommitTimes, emptyToolCounts, addTool, type CommitTool, type ToolCounts } from '@/lib/pulse/code/github-tool-match';
 
 const SYNC_WINDOW_DAYS = 35;   // covers the 30-day UI windows with margin
 const MAX_PAGES = 5;           // 500 commits per repo per sync — log if truncated
@@ -64,7 +71,8 @@ async function githubGet(path: string, token: string): Promise<{ ok: boolean; st
   return { ok: res.ok, status: res.status, json, linkNext };
 }
 
-interface CommitDatum { date: string; email: string | null; login: string | null }
+/** Only these fields are read from GitHub's commit list: never the message or SHA. */
+interface CommitDatum { date: string; authorDate: string | null; email: string | null; login: string | null }
 
 async function fetchCommitData(githubRepo: string, sinceIso: string, token: string, errors: string[]): Promise<CommitDatum[] | null> {
   const out: CommitDatum[] = [];
@@ -79,12 +87,13 @@ async function fetchCommitData(githubRepo: string, sinceIso: string, token: stri
       return null;
     }
     const items = Array.isArray(r.json)
-      ? r.json as Array<{ commit?: { committer?: { date?: string }; author?: { email?: string } }; author?: { login?: string } | null }>
+      ? r.json as Array<{ commit?: { committer?: { date?: string }; author?: { email?: string; date?: string } }; author?: { login?: string } | null }>
       : [];
     for (const c of items) {
       if (c.commit?.committer?.date) {
         out.push({
           date: c.commit.committer.date,
+          authorDate: c.commit.author?.date ?? null,
           email: c.commit.author?.email ?? null,
           login: c.author?.login ?? null,
         });
@@ -179,49 +188,81 @@ export async function runGithubSync(): Promise<{ synced: number; failed: number;
   let synced = 0;
   let failed = 0;
   const errors: string[] = [];
+  // 1. Fetch every repo first (commits, then merged PRs, repo by repo), so
+  // each person's commits across all tracked repos can be matched together:
+  // a tool commit records no repo.
+  const fetched: Array<{ m: RepoMapping; commits: CommitDatum[]; prDates: string[] }> = [];
+  // A network failure on one repo (fetch throws, unlike an HTTP error, which
+  // returns null) marks that repo failed and the rest are still written, as
+  // when each repo was written straight after its own fetch.
   for (const m of mappings) {
-    const commitData = await fetchCommitData(m.github_repo, sinceIso, token, errors);
-    if (commitData === null) { failed++; continue; }
+    try {
+      const commitData = await fetchCommitData(m.github_repo, sinceIso, token, errors);
+      if (commitData === null) { failed++; continue; }
+      const prDates = (await fetchMergedPrDates(m.github_repo, sinceIso, token, errors)) ?? [];
+      fetched.push({ m, commits: commitData, prDates });
+    } catch (err) {
+      failed++;
+      errors.push(`${m.github_repo}: ${err instanceof Error ? err.message : String(err)}`);
+    }
+  }
+
+  // 2. Resolve each commit's author, then match each person's commits to the
+  // commits Claude Code and Codex recorded for them (in memory, counts only).
+  // The author time is used for matching (a rebase or merge changes the
+  // committer time, not the time the person made the commit).
+  interface Resolved { userId: string | null; at: number | null }
+  const resolvedByRepo = fetched.map(f => f.commits.map((c): Resolved => {
+    const t = new Date(c.authorDate ?? c.date).getTime();
+    return { userId: resolveAuthor({ email: c.email, login: c.login }), at: isNaN(t) ? null : Math.floor(t / 1000) };
+  }));
+  const toolByRepo: CommitTool[][] = fetched.map(f => f.commits.map(() => null));
+  const perUserCommits = new Map<string, Array<{ repoIdx: number; commitIdx: number; at: number }>>();
+  resolvedByRepo.forEach((list, repoIdx) => list.forEach((r, commitIdx) => {
+    if (!r.userId || r.at === null) return;
+    if (!perUserCommits.has(r.userId)) perUserCommits.set(r.userId, []);
+    perUserCommits.get(r.userId)!.push({ repoIdx, commitIdx, at: r.at });
+  }));
+  if (perUserCommits.size > 0) {
+    let minAt = Infinity, maxAt = -Infinity;
+    for (const list of perUserCommits.values()) for (const c of list) { minAt = Math.min(minAt, c.at); maxAt = Math.max(maxAt, c.at); }
+    const toolTimes = await loadToolCommitTimes(client, minAt, maxAt);
+    for (const [userId, list] of perUserCommits) {
+      const times = toolTimes.get(userId);
+      if (!times) continue;
+      const tags = matchCommitsToTools(list.map(c => c.at), times);
+      list.forEach((c, i) => { toolByRepo[c.repoIdx][c.commitIdx] = tags[i]; });
+    }
+  }
+
+  // 3. Write each repo's window.
+  for (let repoIdx = 0; repoIdx < fetched.length; repoIdx++) {
+    const { m, commits: commitData, prDates } = fetched[repoIdx];
     const commitDates = commitData.map(c => c.date);
-    const prDates = (await fetchMergedPrDates(m.github_repo, sinceIso, token, errors)) ?? [];
 
     const commits = bucketByUtcDate(commitDates);
     const prs = bucketByUtcDate(prDates);
     const allDates = new Set([...commits.keys(), ...prs.keys()]);
 
-    // Full-window refresh: clear then rewrite so force-pushed/removed history
-    // doesn't leave stale counts behind
-    await client.delete(t).where(and(eq(t.repo, m.repo), gte(t.date, sinceDateStr)));
-    for (const date of allDates) {
-      await client
-        .insert(t)
-        .values({
-          repo: m.repo,
-          date,
-          commit_count: commits.get(date) ?? 0,
-          prs_merged: prs.get(date) ?? 0,
-          synced_at: now,
-        })
-        .onConflictDoUpdate({
-          target: [t.repo, t.date],
-          set: {
-            commit_count: sql`excluded.commit_count`,
-            prs_merged: sql`excluded.prs_merged`,
-            synced_at: sql`excluded.synced_at`,
-          },
-        });
-    }
-
-    // Per-user attribution: map → email → unmatched.
+    // Per-day and per-person-per-day tool split, bucketed on the same
+    // (committer) day as commit_count so the three always add up to it.
+    const repoSplit = new Map<string, ToolCounts>();
     const perUserDay = new Map<string, number>(); // `${userId}\u0000${date}` -> count (NUL escape - cannot occur in a user_id)
-    for (const c of commitData) {
+    const perUserDaySplit = new Map<string, ToolCounts>();
+    commitData.forEach((c, commitIdx) => {
       const day = new Date(c.date);
-      if (isNaN(day.getTime())) continue;
+      if (isNaN(day.getTime())) return;
       const dateKey = day.toISOString().slice(0, 10);
-      const userId = resolveAuthor({ email: c.email, login: c.login });
+      const tool = toolByRepo[repoIdx][commitIdx];
+      if (!repoSplit.has(dateKey)) repoSplit.set(dateKey, emptyToolCounts());
+      addTool(repoSplit.get(dateKey)!, tool);
+      // Per-user attribution: map → email → unmatched.
+      const userId = resolvedByRepo[repoIdx][commitIdx].userId;
       if (userId) {
         const key = `${userId}\u0000${dateKey}`;
         perUserDay.set(key, (perUserDay.get(key) ?? 0) + 1);
+        if (!perUserDaySplit.has(key)) perUserDaySplit.set(key, emptyToolCounts());
+        addTool(perUserDaySplit.get(key)!, tool);
       } else {
         const identity = bestUnmatchedIdentity({ email: c.email, login: c.login });
         // Bots can never be mapped to a person -- never queue them. Also skip
@@ -231,16 +272,56 @@ export async function runGithubSync(): Promise<{ synced: number; failed: number;
           unmatchedCounts.set(identity, (unmatchedCounts.get(identity) ?? 0) + 1);
         }
       }
+    });
+
+    // Full-window refresh: clear then rewrite so force-pushed/removed history
+    // doesn't leave stale counts behind
+    await client.delete(t).where(and(eq(t.repo, m.repo), gte(t.date, sinceDateStr)));
+    for (const date of allDates) {
+      const split = repoSplit.get(date) ?? emptyToolCounts();
+      await client
+        .insert(t)
+        .values({
+          repo: m.repo,
+          date,
+          commit_count: commits.get(date) ?? 0,
+          prs_merged: prs.get(date) ?? 0,
+          synced_at: now,
+          claude_commit_count: split.claude,
+          codex_commit_count: split.codex,
+          no_tool_commit_count: split.none,
+        })
+        .onConflictDoUpdate({
+          target: [t.repo, t.date],
+          set: {
+            commit_count: sql`excluded.commit_count`,
+            prs_merged: sql`excluded.prs_merged`,
+            synced_at: sql`excluded.synced_at`,
+            claude_commit_count: sql`excluded.claude_commit_count`,
+            codex_commit_count: sql`excluded.codex_commit_count`,
+            no_tool_commit_count: sql`excluded.no_tool_commit_count`,
+          },
+        });
     }
+
     await client.delete(gurs).where(and(eq(gurs.repo, m.repo), gte(gurs.date, sinceDateStr)));
     for (const [key, count] of perUserDay) {
       const [userId, dateKey] = key.split('\u0000');
+      const split = perUserDaySplit.get(key) ?? emptyToolCounts();
       await client
         .insert(gurs)
-        .values({ user_id: userId, repo: m.repo, date: dateKey, commit_count: count, synced_at: now })
+        .values({
+          user_id: userId, repo: m.repo, date: dateKey, commit_count: count, synced_at: now,
+          claude_commit_count: split.claude, codex_commit_count: split.codex, no_tool_commit_count: split.none,
+        })
         .onConflictDoUpdate({
           target: [gurs.user_id, gurs.repo, gurs.date],
-          set: { commit_count: sql`excluded.commit_count`, synced_at: sql`excluded.synced_at` },
+          set: {
+            commit_count: sql`excluded.commit_count`, synced_at: sql`excluded.synced_at`,
+            claude_commit_count: sql`excluded.claude_commit_count`,
+            codex_commit_count: sql`excluded.codex_commit_count`,
+            no_tool_commit_count: sql`excluded.no_tool_commit_count`,
+          },
         });
     }
 

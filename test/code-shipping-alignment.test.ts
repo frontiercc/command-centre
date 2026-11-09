@@ -7,6 +7,8 @@ import {
   buildShippingSeries,
   buildRepoCards,
   countReposActive7d,
+  hasToolSplit,
+  buildCodexRepoReach,
   type GhDailyRow,
 } from '@/lib/pulse/code/shipping-alignment';
 
@@ -33,10 +35,11 @@ describe('buildShippingSeries', () => {
 
   it('zero-fills days with no data on either side', () => {
     const series = buildShippingSeries(days, {}, []);
+    const zero = { aiCommits: 0, ghCommits: 0, ghPrs: 0, ghClaude: 0, ghCodex: 0, ghNone: 0 };
     expect(series).toEqual([
-      { date: '2026-08-01', aiCommits: 0, ghCommits: 0, ghPrs: 0 },
-      { date: '2026-08-02', aiCommits: 0, ghCommits: 0, ghPrs: 0 },
-      { date: '2026-08-03', aiCommits: 0, ghCommits: 0, ghPrs: 0 },
+      { date: '2026-08-01', ...zero },
+      { date: '2026-08-02', ...zero },
+      { date: '2026-08-03', ...zero },
     ]);
   });
 
@@ -46,8 +49,21 @@ describe('buildShippingSeries', () => {
       { '2026-08-02': 4 },
       [gh('a/x', '2026-08-02', 3, 1), gh('a/y', '2026-08-02', 2), gh('a/x', '2026-08-03', 5, 2)],
     );
-    expect(series[1]).toEqual({ date: '2026-08-02', aiCommits: 4, ghCommits: 5, ghPrs: 1 });
-    expect(series[2]).toEqual({ date: '2026-08-03', aiCommits: 0, ghCommits: 5, ghPrs: 2 });
+    // Rows synced before the tool split: the day shows the total only.
+    expect(series[1]).toEqual({ date: '2026-08-02', aiCommits: 4, ghCommits: 5, ghPrs: 1, ghClaude: null, ghCodex: null, ghNone: null });
+    expect(series[2]).toEqual({ date: '2026-08-03', aiCommits: 0, ghCommits: 5, ghPrs: 2, ghClaude: null, ghCodex: null, ghNone: null });
+  });
+
+  it('sums the tool split across repos; a day with any row synced before the split shows the total only', () => {
+    const split = (repo: string, date: string, claude: number, codex: number, none: number): GhDailyRow =>
+      ({ repo, date, commit_count: claude + codex + none, prs_merged: 0, claude, codex, none });
+    const series = buildShippingSeries(days, {}, [
+      split('a/x', '2026-08-01', 2, 1, 1), split('a/y', '2026-08-01', 1, 0, 3),
+      split('a/x', '2026-08-02', 1, 1, 0), gh('a/y', '2026-08-02', 4),
+    ]);
+    expect(series[0]).toMatchObject({ ghCommits: 8, ghClaude: 3, ghCodex: 1, ghNone: 4 });
+    expect(series[1]).toMatchObject({ ghCommits: 6, ghClaude: null, ghCodex: null, ghNone: null });
+    expect(series[2]).toMatchObject({ ghCommits: 0, ghClaude: 0, ghCodex: 0, ghNone: 0 });
   });
 
   it('ignores GitHub rows outside the window', () => {
@@ -93,5 +109,25 @@ describe('countReposActive7d', () => {
       gh('a/w', '2026-08-01', 0),   // zero-commit row is NOT active
     ];
     expect(countReposActive7d(days, rows)).toBe(2);
+  });
+});
+
+describe('buildCodexRepoReach', () => {
+  const days = buildDailyWindow('2026-08-03', 30);
+  const split = (repo: string, date: string, codex: number): GhDailyRow =>
+    ({ repo, date, commit_count: codex + 1, prs_merged: 0, claude: 0, codex, none: 1 });
+
+  it('is null until a sync has written the tool split', () => {
+    expect(hasToolSplit([gh('a/x', '2026-08-03', 2)])).toBe(false);
+    expect(buildCodexRepoReach(days, [gh('a/x', '2026-08-03', 2)], ['a/x'])).toBeNull();
+  });
+
+  it('counts tracked repos with Codex-matched commits this week, and tracked repos with none in 30 days', () => {
+    const reach = buildCodexRepoReach(days, [
+      split('a/now', '2026-08-02', 2),     // last 7 days
+      split('a/earlier', '2026-07-15', 1), // in the 30 days, not this week
+      split('a/never', '2026-08-03', 0),   // commits, none with Codex
+    ], ['a/now', 'a/earlier', 'a/never', 'a/silent']);
+    expect(reach).toEqual({ activeRepos7d: 1, quietRepos30d: 2, trackedRepos: 4 });
   });
 });

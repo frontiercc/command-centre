@@ -5,6 +5,7 @@
 
 import { useEffect, useState } from 'react';
 import { Panel, Strip, Figure, Muted, Notice, Tag, Pill, B, T, cx } from '@/components/precision/ui';
+import { PRODUCTS } from '@/lib/dashboard/vendor';
 import { SaveMsg } from '@/components/admin/precision-admin';
 
 interface TierDay { day: string; tier: number; cnt: number }
@@ -19,7 +20,10 @@ interface ModelRow {
   classifier_model: string; first_used: number;
   last_used: number; total_classified: number;
 }
+interface ProductRow { product: string; classified: number; waiting: number; failed: number }
 interface HealthData {
+  byProduct?: ProductRow[];
+  classifyChatgpt?: boolean;
   queueDepth: number;
   tierDist: TierDay[];
   confidenceHist: ConfBucket[];
@@ -164,6 +168,40 @@ export default function HealthTab() {
         />
         <Figure label="Models used" value={data.modelLog.length.toLocaleString()} />
       </Strip>
+
+      {/* Per product, once ChatGPT prompts exist */}
+      {(data.byProduct ?? []).some(r => r.product.startsWith('chatgpt')) && (
+        <Panel
+          title="By product"
+          subtitle="Classified in 30 days, waiting and failed"
+          right={data.classifyChatgpt === false ? <Tag tone="neutral">ChatGPT classification off</Tag> : undefined}
+          flush
+        >
+          <table className={T.table}>
+            <thead>
+              <tr className={T.headRow}>
+                <th scope="col" className={T.th}>Product</th>
+                <th scope="col" className={T.thRight}>Classified</th>
+                <th scope="col" className={T.thRight}>Waiting</th>
+                <th scope="col" className={T.thRight}>Failed</th>
+              </tr>
+            </thead>
+            <tbody>
+              {PRODUCTS.filter(p => p.kind !== 'code').map(p => {
+                const r = (data.byProduct ?? []).find(x => x.product === p.id) ?? { classified: 0, waiting: 0, failed: 0 };
+                return (
+                  <tr key={p.id} className={T.row}>
+                    <td className={T.td}>{p.label}</td>
+                    <td className={T.tdRight}>{r.classified.toLocaleString()}</td>
+                    <td className={T.tdRight}>{r.waiting.toLocaleString()}</td>
+                    <td className={T.tdRight}>{r.failed.toLocaleString()}</td>
+                  </tr>
+                );
+              })}
+            </tbody>
+          </table>
+        </Panel>
+      )}
 
       {/* Tier distribution + confidence histogram */}
       <div className="grid grid-cols-1 md:grid-cols-2 gap-4">

@@ -5,12 +5,15 @@
 // standard pattern: getTypedClient() + schema.<table>.
 // `code_metrics.spend_usd` is numeric on pg, so it is coerced.
 import { NextRequest, NextResponse } from 'next/server';
+import { visibleVendor, visibleOpenAi } from '@/lib/sources/openai-visibility';
 import { and, desc, eq, gte, inArray } from 'drizzle-orm';
 import { getAdminSession, isDeptScoped, canAccessCodePulse } from '@/lib/auth/admin-auth';
 import { getTypedClient } from '@/lib/db/client';
 import { schema } from '@/lib/db/schema';
 import { getCodeDeptMembers } from '@/lib/pulse/code/dept';
+import { hasCodexData, readCodeMetrics, pickCodeMetricsSource, codeSessionVendor } from '@/lib/pulse/code/vendor-view';
 import { readHumanTime } from '@/lib/pulse/human-time-summary';
+import { githubRepoBasis, githubBasisColumn, type GithubRepoBasis } from '@/lib/pulse/code/github-tool-match';
 
 export const dynamic = 'force-dynamic';
 
@@ -46,16 +49,19 @@ export async function GET(
   }
 
   const client = await getTypedClient();
-  const cm = schema.codeMetrics;
   const csc = schema.codeSessionClassifications;
   const css = schema.codeSessionStats;
   const u = schema.users;
   const now = Math.floor(Date.now() / 1000);
   const sixWeeksAgo = now - 42 * 24 * 3600;
 
+  // Developer Pulse's All / Claude / Codex switch.
+  const vendor = await visibleVendor(request.nextUrl.searchParams.get('vendor'));
+  const codexPresent = await visibleOpenAi(hasCodexData());
+
   // Latest department-scope rollup — the aggregator writes dept rollups as
   // scope_type='function' (not 'dept'), matching the Cowork dept route.
-  const metricsRows = await client
+  const latestDeptRow = (cm: typeof schema.codeMetrics, only: ReturnType<typeof eq> | undefined) => client
     .select({
       spend_usd: cm.spend_usd, input_tokens: cm.input_tokens, output_tokens: cm.output_tokens,
       cache_hit_ratio: cm.cache_hit_ratio, autonomy_ratio: cm.autonomy_ratio,
@@ -63,25 +69,34 @@ export async function GET(
       skill_leverage: cm.skill_leverage, friction_index: cm.friction_index,
     })
     .from(cm)
-    .where(and(eq(cm.scope_type, 'function'), eq(cm.scope_id, dept), eq(cm.granularity, 'rolling')))
+    .where(and(eq(cm.scope_type, 'function'), eq(cm.scope_id, dept), eq(cm.granularity, 'rolling'), only))
     .orderBy(desc(cm.computed_at))
     .limit(1);
-  const metricsRaw = metricsRows[0] ?? null;
-  const metrics = metricsRaw
-    ? { ...metricsRaw, spend_usd: metricsRaw.spend_usd !== null ? Number(metricsRaw.spend_usd) : null }
+  const toMetrics = <R extends { spend_usd: string | null }>(r: R | undefined) =>
+    r ? { ...r, spend_usd: r.spend_usd !== null ? Number(r.spend_usd) : null } : null;
+  const metrics = toMetrics((await readCodeMetrics(vendor, codexPresent, latestDeptRow))[0]);
+  // All view, once Codex data exists: the department's Claude Code and Codex figures.
+  const metricsSplit = vendor === 'all' && codexPresent
+    ? {
+        claude: toMetrics((await readCodeMetrics('claude', true, latestDeptRow))[0]),
+        openai: toMetrics((await readCodeMetrics('openai', true, latestDeptRow))[0]),
+      }
     : null;
 
   // Members — the full department roster (membership-first), so members without
   // recent Code activity still appear with null/zero metrics. See lib/pulse/code/dept.ts.
-  const members = await getCodeDeptMembers(dept);
+  const members = await getCodeDeptMembers(dept, await pickCodeMetricsSource(vendor, codexPresent));
 
   // Per-user + dept-wide GitHub repo activity (mapped-scoped).
   // Mirrors /api/pulse/code/me's null-semantics: a 35d window
   // pre-check decides null vs count7d:0 — null = NO member rows at all in
   // the 35d window ("Not captured" rendering); count7d:0 = window rows
   // exist but none in the last 7 days (every member's github_repo_count is
-  // then explicitly set to 0, not left undefined).
-  let githubRepos: { count7d: number; names7d: string[] } | null = null;
+  // then explicitly set to 0, not left undefined). Claude and Codex tabs
+  // count only repos with commits matched to that tool; All (and a hub without
+  // Codex, which has no tabs) counts every repo.
+  const githubBasis = githubRepoBasis(vendor, codexPresent);
+  let githubRepos: { count7d: number; names7d: string[]; basis: GithubRepoBasis } | null = null;
   const grm = schema.githubRepoMap;
   const gurs = schema.githubUserRepoStats;
   const mappedRepoRows = await client.select({ repo: grm.repo }).from(grm);
@@ -91,20 +106,24 @@ export async function GET(
     const since35 = new Date((now - 35 * 24 * 3600) * 1000).toISOString().slice(0, 10);
     const since7 = new Date((now - 7 * 24 * 3600) * 1000).toISOString().slice(0, 10);
     const rows = await client
-      .select({ user_id: gurs.user_id, repo: gurs.repo, date: gurs.date, c: gurs.commit_count })
+      .select({ user_id: gurs.user_id, repo: gurs.repo, date: gurs.date, c: githubBasisColumn(gurs, githubBasis) })
       .from(gurs)
       .where(and(gte(gurs.date, since35), inArray(gurs.repo, mappedRepos), inArray(gurs.user_id, memberIds)));
-    if (rows.length > 0) {
+    // A tool's count is not measured on days synced before commits were
+    // matched to tools (null): with no matched day in the last 7, members'
+    // counts and the department card stay not measured rather than 0.
+    const measured7 = rows.some(r => r.date >= since7 && r.c != null);
+    if (rows.length > 0 && (githubBasis === 'all' || measured7)) {
       const byUser = new Map<string, Set<string>>();
       const allRepos = new Set<string>();
       for (const r of rows) {
-        if (r.date < since7 || Number(r.c) <= 0) continue;
+        if (r.date < since7 || Number(r.c ?? 0) <= 0) continue;
         if (!byUser.has(r.user_id)) byUser.set(r.user_id, new Set());
         byUser.get(r.user_id)!.add(r.repo);
         allRepos.add(r.repo);
       }
       for (const m of members) m.github_repo_count = byUser.get(m.user_id)?.size ?? 0;
-      githubRepos = { count7d: allRepos.size, names7d: [...allRepos].sort().slice(0, 3) };
+      githubRepos = { count7d: allRepos.size, names7d: [...allRepos].sort().slice(0, 3), basis: githubBasis };
     }
   }
 
@@ -115,7 +134,7 @@ export async function GET(
     .from(csc)
     .innerJoin(css, eq(css.session_id, csc.session_id))
     .innerJoin(u, eq(u.id, csc.user_id))
-    .where(and(eq(u.department, dept), eq(csc.status, 'classified'), gte(css.last_at, sixWeeksAgo)));
+    .where(and(eq(u.department, dept), eq(csc.status, 'classified'), gte(css.last_at, sixWeeksAgo), codeSessionVendor(css.session_id, vendor)));
 
   const counts = new Map<string, number>();
   const provisionalCounts = new Map<string, number>();
@@ -130,6 +149,6 @@ export async function GET(
     return { week, tier, count, provisionalCount: provisionalCounts.get(k) ?? 0 };
   });
 
-  const humanTime = await readHumanTime('code', memberIds);
-  return NextResponse.json({ dept, metrics, members, journeyGrid, githubRepos, humanTime });
+  const humanTime = await readHumanTime('code', memberIds, vendor);
+  return NextResponse.json({ dept, vendor, codexPresent, metricsSplit, metrics, members, journeyGrid, githubRepos, humanTime });
 }

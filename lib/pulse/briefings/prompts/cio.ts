@@ -1,6 +1,8 @@
 // Copyright 2026 Lee James
 // SPDX-License-Identifier: Apache-2.0
 
+import { productFactsBlock, PRODUCT_NAMING_RULE } from '@/lib/pulse/briefings/product-facts';
+
 export interface CioBriefingContext {
   period_label: string;           // e.g. "May 2026"
   weekly_active_users: number;
@@ -14,7 +16,7 @@ export interface CioBriefingContext {
   concentration_risk_count: number;   // users who are sole runner of 3+ T3 workflows
   /** Measured organisation-wide deep-work lines — never names, summaries or file names. */
   deep_work: string[];
-  /** Measured sessions and people per product (Cowork, Claude in Office apps); empty when no Office activity. */
+  /** Measured sessions and people per product (Cowork, Claude in Office and Google apps); empty when neither was used. */
   work_by_product?: string[];
   teams_with_ors_below_threshold: string[];   // department names with ORS < 0.7
   departments_with_ors_count: number;         // departments with any resilience score in the period
@@ -23,6 +25,8 @@ export interface CioBriefingContext {
   // never invent names or contents for them). Empty when the feature or its
   // content switch is off — the prompt then omits the section entirely.
   dept_process_opportunities: Array<{ department: string; count: number }>;
+  /** Per-product facts (lib/pulse/briefings/product-facts.ts); empty on a Claude-only hub. */
+  products?: string[];
 }
 
 export const CIO_BRIEFING_SYSTEM = `You are a trusted senior advisor writing a monthly AI Intelligence Briefing for a Chief Information Officer or executive sponsor.
@@ -36,7 +40,7 @@ OUTPUT FORMAT (respond with a JSON object only):
   "recommendation": "one directly actionable recommendation"
 }
 
-PARAGRAPH 1: The headline adoption picture. Active users, tier distribution, and what it means for the organisation's AI maturity. If the data says where the work happened, add one sentence on how the work splits between Cowork and the Claude in Office apps (Excel, Word, PowerPoint, Outlook), using those counts.
+PARAGRAPH 1: The headline adoption picture. Active users, tier distribution, and what it means for the organisation's AI maturity. If the data says where the work happened, add one sentence on how the work splits between Cowork, the Claude in Office apps (Excel, Word, PowerPoint, Outlook) and the Claude in Google apps (Sheets, Docs, Slides), using those counts.
 PARAGRAPH 2: The depth and resilience story. Where delegation depth is going. Capability creation events. Concentration risk if present.
 PARAGRAPH 3: What needs attention this month. Name specific teams or patterns. Be direct about gaps. If the data lists open department process opportunities, weave in at most one sentence saying how many are open and where they concentrate, and that they await review on the Use Cases register. The counts and department names are measured; never invent titles or describe their contents.
 NAMED RISK: The single most material risk. Specific, not generic.
@@ -48,7 +52,8 @@ Tone constraints:
 - Never use em dashes
 - Use British spelling throughout
 - Address the reader as "the organisation" not "your organisation"
-- Use only the numbers given, exactly as written. Never calculate new ones (no sums, differences or percentages of your own)`;
+- Use only the numbers given, exactly as written. Never calculate new ones (no sums, differences or percentages of your own)
+- ${PRODUCT_NAMING_RULE}`;
 
 export function buildCioBriefingUserMessage(ctx: CioBriefingContext): string {
   const concentrationNote = ctx.concentration_risk_count > 0
@@ -80,7 +85,7 @@ Average Delegation Depth Score: ${ctx.avg_dds !== null ? ctx.avg_dds.toFixed(2) 
 Average Output Throughput Index: ${ctx.avg_oti !== null ? `${ctx.avg_oti.toFixed(2)}x` : 'no data'}
 Confirmed capability creation events this month: ${ctx.confirmed_capability_creation_count}
 ${ctx.deep_work.join('\n')}
-
+${productFactsBlock(ctx.products ?? [])}
 RESILIENCE
 ${concentrationNote}
 ${orsNote}

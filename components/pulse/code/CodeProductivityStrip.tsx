@@ -52,7 +52,9 @@ export default function CodeProductivityStrip({ metrics }: { metrics: CodeMetric
     },
     {
       label: 'Shipping · 7 days',
-      value: hasAny ? String(commits) : null,
+      // Commits come from session data (Claude Code and Codex), not the
+      // metrics stream, so they show as soon as there are any.
+      value: hasAny || commits > 0 ? String(commits) : null,
       sublabel: 'AI-assisted commits',
       hint: `${prs} pull request${prs === 1 ? '' : 's'} merged`,
     },

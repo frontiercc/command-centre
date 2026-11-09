@@ -16,6 +16,8 @@ import { desc, eq, sql } from 'drizzle-orm';
 import { getAdminSession } from '@/lib/auth/admin-auth';
 import { getTypedClient } from '@/lib/db/client';
 import { schema } from '@/lib/db/schema';
+import { isWorkPulseSurface, classifiableSource, classifyChatgptOn } from '@/lib/pulse/work-surfaces';
+import { productExpr } from '@/lib/dashboard/product-sql';
 
 export const dynamic = 'force-dynamic';
 
@@ -57,8 +59,9 @@ export async function GET(request: NextRequest) {
   // every cowork message here would leave tool/api rows permanently "queued".
   const queueDepthRow = await rawGet<{ cnt: number | string }>(client, sql`
      SELECT COUNT(*) as cnt FROM cowork_messages
-     WHERE surface = 'cowork'
+     WHERE ${isWorkPulseSurface(sql`surface`)}
        AND message_type = 'cowork_user_message'
+       AND ${classifiableSource(sql`source`, await classifyChatgptOn())}
        AND COALESCE(content_full, content_preview, '') <> ${STRIPPED_MARKER}
        AND id NOT IN (
          SELECT cowork_message_id FROM pulse_classifications
@@ -66,6 +69,31 @@ export async function GET(request: NextRequest) {
        )
   `);
   const queueDepth = Number(queueDepthRow?.cnt ?? 0);
+
+  // Per product (Claude Cowork, Claude Chat, ChatGPT Work, ChatGPT Chat):
+  // classified in 30 days, waiting, and failed. The page shows it once any
+  // ChatGPT prompt exists. "Waiting" counts every unjudged prompt, so with
+  // ChatGPT classification off the ChatGPT rows show what is being left alone.
+  const product = sql.raw(productExpr('cm.'));
+  const byProductRaw = await rawAll<{ product: string; classified: number | string; waiting: number | string; failed: number | string }>(client, sql`
+     SELECT ${product} AS product,
+            COUNT(*) FILTER (WHERE pc.classifier_status = 'classified' AND pc.classified_at >= ${thirtyDaysAgo}) AS classified,
+            COUNT(*) FILTER (WHERE pc.id IS NULL OR (pc.classifier_status <> 'classified' AND pc.classifier_attempts < 5)) AS waiting,
+            COUNT(*) FILTER (WHERE pc.classifier_status = 'failed') AS failed
+     FROM cowork_messages cm
+     LEFT JOIN pulse_classifications pc ON pc.cowork_message_id = cm.id
+     WHERE ${isWorkPulseSurface(sql`cm.surface`)}
+       AND cm.message_type = 'cowork_user_message'
+       AND COALESCE(cm.content_full, cm.content_preview, '') <> ${STRIPPED_MARKER}
+     GROUP BY 1
+  `);
+  const byProduct = byProductRaw.map(r => ({
+    product: r.product,
+    classified: Number(r.classified),
+    waiting: Number(r.waiting),
+    failed: Number(r.failed),
+  }));
+  const classifyChatgpt = await classifyChatgptOn();
 
   const dayExpr = sql`to_char(to_timestamp(classified_at) AT TIME ZONE 'UTC', 'YYYY-MM-DD')`;
   const tierDistRaw = await rawAll<{ day: string; tier: number; cnt: number | string }>(client, sql`
@@ -131,7 +159,7 @@ export async function GET(request: NextRequest) {
     total_classified: Number(r.total_classified),
   }));
 
-  return NextResponse.json({ queueDepth, tierDist, confidenceHist, failures, modelLog });
+  return NextResponse.json({ queueDepth, tierDist, confidenceHist, failures, modelLog, byProduct, classifyChatgpt });
 }
 
 export async function POST(request: NextRequest) {

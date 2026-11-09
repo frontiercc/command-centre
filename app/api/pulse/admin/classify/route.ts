@@ -13,6 +13,7 @@ import { getTypedClient } from '@/lib/db/client';
 import { runClassifierJob } from '@/lib/pulse/classifier';
 import { drainJob } from '@/lib/pulse/drain';
 import { getConfigValue } from '@/lib/config';
+import { isWorkPulseSurface, classifiableSource, classifyChatgptOn } from '@/lib/pulse/work-surfaces';
 
 export const dynamic = 'force-dynamic';
 
@@ -36,8 +37,9 @@ async function getQueueDepth(): Promise<number> {
   // Counting all cowork messages left non-user rows permanently "queued".
   const row = await rawGet<{ cnt: number | string }>(client, sql`
      SELECT COUNT(*) as cnt FROM cowork_messages
-     WHERE surface = 'cowork'
+     WHERE ${isWorkPulseSurface(sql`surface`)}
        AND message_type = 'cowork_user_message'
+       AND ${classifiableSource(sql`source`, await classifyChatgptOn())}
        AND id NOT IN (
          SELECT cowork_message_id FROM pulse_classifications
          WHERE classifier_status = 'classified' OR classifier_attempts >= 5

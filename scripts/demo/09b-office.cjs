@@ -1,7 +1,9 @@
 // Copyright 2026 Lee James
 // SPDX-License-Identifier: Apache-2.0
 
-// Sample data: Claude in Office (Excel, Word, PowerPoint, Outlook).
+// Sample data: Claude in Office (Excel, Word, PowerPoint, Outlook) and Claude
+// in Google (Sheets, Docs, Slides). Google rows carry no document file name:
+// the Google add-on sends none.
 //
 // Gives existing sample people realistic Office work over the last 60 days, in
 // the exact shape lib/otel/office-receiver.ts writes from the add-in's spans:
@@ -92,16 +94,44 @@ const WORK = {
       ['Pull every action for me out of this long thread', 'Programme board actions', 2, 'summarisation', false],
     ],
   },
+  sheets: {
+    surface: 'sheet', reads: ['get_cell_ranges'], write: 'execute_apps_script',
+    jobs: [
+      ['Build a weekly summary tab of open support tickets by priority', null, 2, 'structured_report', true],
+      ['Flag any marketing spend rows with no campaign code and total them by channel', null, 3, 'analysis', true],
+      ['Add a running total column to the bookings sheet', null, 1, 'formatting', true],
+      ['Match the event sign-ups against the CRM list and mark who is new', null, 2, 'analysis', true],
+      ['Which region had the highest renewal rate last quarter?', null, 1, 'analysis', false],
+    ],
+  },
+  docs: {
+    surface: 'doc', reads: ['read_doc_section'], write: 'execute_apps_script',
+    jobs: [
+      ['Turn these interview notes into a one-page hiring recommendation', null, 2, 'synthesis', true],
+      ['Rewrite the onboarding guide intro for new starters outside engineering', null, 2, 'structured_report', true],
+      ['Draft a project brief from the kickoff notes, with scope, owners and dates', null, 3, 'synthesis', true],
+      ['Summarise this document in three sentences', null, 1, 'summarisation', false],
+    ],
+  },
+  slides: {
+    surface: 'slide', reads: ['list_slide_shapes', 'verify_slide_visual'], write: 'execute_apps_script',
+    jobs: [
+      ['Build a six-slide customer case study from the outline on slide one', null, 3, 'synthesis', true],
+      ['Tidy the alignment and fonts across the team update deck', null, 1, 'formatting', true],
+      ['Add a timeline slide for the launch plan from the dates in the notes', null, 2, 'structured_report', true],
+    ],
+  },
 };
 
 // Sessions a person has in each app over the window, by department.
+// The Google apps come last, so adding them left every person's Office sessions unchanged.
 const MIX = [
-  [/financ|account|procure/i, { excel: 9, word: 2, powerpoint: 2, outlook: 3 }],
-  [/legal|hr|people|compliance/i, { excel: 1, word: 8, powerpoint: 1, outlook: 3 }],
-  [/sales|marketing|commercial|business dev/i, { excel: 3, word: 3, powerpoint: 7, outlook: 3 }],
-  [/operat|delivery|engineering|product|it\b|technology/i, { excel: 5, word: 3, powerpoint: 3, outlook: 2 }],
+  [/financ|account|procure/i, { excel: 9, word: 2, powerpoint: 2, outlook: 3, sheets: 3, docs: 1, slides: 0 }],
+  [/legal|hr|people|compliance/i, { excel: 1, word: 8, powerpoint: 1, outlook: 3, sheets: 0, docs: 3, slides: 0 }],
+  [/sales|marketing|commercial|business dev/i, { excel: 3, word: 3, powerpoint: 7, outlook: 3, sheets: 1, docs: 1, slides: 3 }],
+  [/operat|delivery|engineering|product|it\b|technology/i, { excel: 5, word: 3, powerpoint: 3, outlook: 2, sheets: 2, docs: 2, slides: 1 }],
 ];
-const DEFAULT_MIX = { excel: 3, word: 3, powerpoint: 3, outlook: 2 };
+const DEFAULT_MIX = { excel: 3, word: 3, powerpoint: 3, outlook: 2, sheets: 1, docs: 1, slides: 1 };
 const MODELS = ['claude-sonnet-5', 'claude-sonnet-5', 'claude-sonnet-5', 'claude-opus-5-5'];
 
 function rng(seed) {
@@ -229,7 +259,7 @@ async function main() {
       }
     }
     await db.query('COMMIT');
-    console.log(`[sample-office] ${sessions} Office sessions for ${people.length} people`);
+    console.log(`[sample-office] ${sessions} Office and Google sessions for ${people.length} people`);
   } catch (e) {
     await db.query('ROLLBACK').catch(() => {});
     throw e;

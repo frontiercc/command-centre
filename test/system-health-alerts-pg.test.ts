@@ -55,6 +55,17 @@ describe('runSystemHealthAlerts (postgres)', () => {
     expect(await alerts()).toHaveLength(3);
   });
 
+  it('a rejected OpenAI key raises a key-rejected alert pointing to the key page', async () => {
+    await run(`INSERT INTO job_runs (job_name, last_failed_at, last_error, consecutive_failures) VALUES
+               ('openai_sync', ${NOW - 60}, 'OpenAI sync errors: CONVERSATION_MESSAGE: OpenAI API error 401', 1)`);
+    expect(await mod.runSystemHealthAlerts(NOW)).toBe(1);
+    expect(await alerts()).toEqual([
+      { title: 'OpenAI Admin API key rejected', severity: 'high', user_id: null, rule: 'key_rejected', subject: 'openai_sync' },
+    ]);
+    const [row] = await run(`SELECT explanation FROM alerts WHERE alert_type = 'system_health'`);
+    expect(String(row.explanation)).toContain('/admin/security');
+  });
+
   it('raises again only after the job has succeeded and then failed again', async () => {
     await run(`INSERT INTO job_runs (job_name, last_failed_at, last_error, consecutive_failures) VALUES ('use_case_tracker', ${NOW - 60}, 'boom', 2)`);
     expect(await mod.runSystemHealthAlerts(NOW)).toBe(1);
@@ -95,6 +106,9 @@ describe('runSystemHealthAlerts (postgres)', () => {
       run(`INSERT INTO cowork_messages (id, session_id, message_type, surface, occurred_at, ingested_at)
            VALUES ('${id}', 's-${id}', 'cowork_user_message', '${surface}', ${occurredAt}, ${ingestedAt})`);
     const silence = async () => (await alerts()).filter(a => a.rule === 'telemetry_silence');
+    const clearOpenAi = async () => {
+      for (const t of ['openai_replies', 'openai_costs', 'codex_turns', 'codex_actions']) await run(`DELETE FROM ${t}`);
+    };
 
     it('raises one alert per quiet surface, from when the hub last RECEIVED it, once per silence', async () => {
       await msg('c1', 'cowork', WED - 4 * 3600);   // Cowork quiet 4 working hours
@@ -112,6 +126,53 @@ describe('runSystemHealthAlerts (postgres)', () => {
       await run(`INSERT INTO code_otel_metrics (id, metric_name, occurred_at, ingested_at) VALUES ('m2', 'claude_code.lines_of_code.count', ${WED + 86000}, ${WED + 86000})`);
       expect(await runAt(WED + 86400)).toBe(1);
       expect(await silence()).toHaveLength(2);
+    });
+
+    it('watches ChatGPT and Codex as two sources, and their rows never keep a Claude feed alive', async () => {
+      await clearOpenAi();
+      await msg('k1', 'code', WED - 600);
+      await run(`INSERT INTO code_otel_metrics (id, metric_name, occurred_at, ingested_at) VALUES ('m1', 'claude_code.lines_of_code.count', ${WED - 600}, ${WED - 600})`);
+      // Cowork quiet 4 working hours; a ChatGPT prompt 10 minutes ago must not hide that.
+      await msg('c1', 'cowork', WED - 4 * 3600);
+      await run(`INSERT INTO cowork_messages (id, session_id, message_type, surface, source, occurred_at, ingested_at)
+                 VALUES ('g1', 'chatgpt:g1', 'cowork_user_message', 'cowork', 'chatgpt_chat', ${WED - 600}, ${WED - 600})`);
+      // Codex has never sent anything: never raised.
+      expect(await runAt(WED)).toBe(1);
+      expect((await silence()).map(a => a.subject)).toEqual(['cowork']);
+
+      // ChatGPT goes quiet (prompt and reply both 5 working hours old) while
+      // Codex keeps arriving: only ChatGPT is raised.
+      await run(`UPDATE cowork_messages SET ingested_at = ${WED - 5 * 3600} WHERE id = 'g1'`);
+      await run(`INSERT INTO openai_replies (id, user_id, session_id, source, occurred_at, ingested_at) VALUES ('r1', 'u1', 'chatgpt:g1', 'chatgpt_chat', ${WED - 5 * 3600}, ${WED - 5 * 3600})`);
+      await run(`INSERT INTO codex_turns (id, user_id, session_id, started_at, ingested_at) VALUES ('t1', 'u1', 'codex:t1', ${WED - 600}, ${WED - 600})`);
+      expect(await runAt(WED + 60)).toBe(1);
+      expect((await silence()).filter(a => a.subject === 'chatgpt')).toEqual([{ title: 'No ChatGPT data for 5 working hours', severity: 'high', user_id: null, rule: 'telemetry_silence', subject: 'chatgpt' }]);
+
+      // Then Codex goes quiet too: its own alert. Codex spend arriving would
+      // have counted for Codex, never for ChatGPT.
+      await run(`UPDATE codex_turns SET ingested_at = ${WED - 4 * 3600} WHERE id = 't1'`);
+      await run(`INSERT INTO openai_costs (id, hour_start, product, billed_in, ingested_at) VALUES ('k-codex', ${WED - 4 * 3600}, 'codex', 'usd', ${WED - 4 * 3600})`);
+      expect(await runAt(WED + 120)).toBe(1);
+      expect((await silence()).filter(a => a.subject === 'codex')).toEqual([{ title: 'No Codex data for 4 working hours', severity: 'high', user_id: null, rule: 'telemetry_silence', subject: 'codex' }]);
+      await clearOpenAi();
+    });
+
+    it('raises nothing for ChatGPT or Codex while the OpenAI sync is paused', async () => {
+      await clearOpenAi();
+      await msg('k1', 'code', WED - 600);
+      await msg('c1', 'cowork', WED - 600);
+      await run(`INSERT INTO code_otel_metrics (id, metric_name, occurred_at, ingested_at) VALUES ('m1', 'claude_code.lines_of_code.count', ${WED - 600}, ${WED - 600})`);
+      await run(`INSERT INTO cowork_messages (id, session_id, message_type, surface, source, occurred_at, ingested_at)
+                 VALUES ('g1', 'chatgpt:g1', 'cowork_user_message', 'cowork', 'chatgpt_chat', ${WED - 5 * 3600}, ${WED - 5 * 3600})`);
+      await run(`INSERT INTO codex_actions (id, user_id, session_id, occurred_at, ingested_at) VALUES ('a1', 'u1', 'codex:t1', ${WED - 5 * 3600}, ${WED - 5 * 3600})`);
+      await run(`INSERT INTO config (key, value) VALUES ('openai_sync_paused', 'true') ON CONFLICT (key) DO UPDATE SET value = 'true'`);
+      expect(await runAt(WED)).toBe(0);
+      // Resumed: both are quiet, each raised on its own.
+      await run(`UPDATE config SET value = 'false' WHERE key = 'openai_sync_paused'`);
+      expect(await runAt(WED + 60)).toBe(2);
+      expect((await silence()).map(a => a.subject).sort()).toEqual(['chatgpt', 'codex']);
+      await run(`DELETE FROM config WHERE key = 'openai_sync_paused'`);
+      await clearOpenAi();
     });
 
     it('follows the hub settings: 0 hours is off, and the time zone moves the working day', async () => {

@@ -111,3 +111,40 @@ describe('createIntentAlerts', () => {
     expect(types).toContain('data_exfiltration');
   });
 });
+
+describe('intent alerts name the product', () => {
+  const match = [{ categoryId: 'data_exfiltration', categoryName: 'Data Exfiltration', matchedPhrases: ['extract all'], defaultSeverity: 'high' as const }];
+  const evidenceOf = (a: Record<string, unknown>) => JSON.parse(a.raw_evidence as string) as { surface: string; product: string };
+
+  it('defaults to the Claude product of the surface', async () => {
+    await createIntentAlerts('user-1', 'cowork', 'm-cowork', 'extract all', match);
+    await createIntentAlerts('user-1', 'code', 'm-code', 'extract all', match);
+    await createIntentAlerts('user-1', 'chat', 'm-chat', 'extract all', match);
+    const alerts = await getAlerts() as Array<Record<string, unknown>>;
+    const byMessage = new Map(alerts.map(a => [JSON.parse(a.raw_evidence as string).message_id as string, a]));
+    expect(byMessage.get('m-cowork')!.title).toBe('Data Exfiltration intent detected in Claude Cowork');
+    expect(evidenceOf(byMessage.get('m-cowork')!).product).toBe('Claude Cowork');
+    expect(byMessage.get('m-code')!.title).toBe('Data Exfiltration intent detected in Claude Code');
+    expect(byMessage.get('m-chat')!.title).toBe('Data Exfiltration intent detected in Claude Chat');
+  });
+
+  it('records the product a caller names (Codex, ChatGPT, Claude in Excel) and keeps the surface', async () => {
+    await createIntentAlerts('user-1', 'code', 'm-codex', 'extract all', match, 'Codex');
+    await createIntentAlerts('user-1', 'cowork', 'm-work', 'extract all', match, 'ChatGPT Work');
+    await createIntentAlerts('user-1', 'cowork', 'm-excel', 'extract all', match, 'Claude in Excel');
+    const alerts = await getAlerts() as Array<Record<string, unknown>>;
+    const byMessage = new Map(alerts.map(a => [JSON.parse(a.raw_evidence as string).message_id as string, a]));
+    expect(byMessage.get('m-codex')!.title).toBe('Data Exfiltration intent detected in Codex');
+    expect(evidenceOf(byMessage.get('m-codex')!)).toMatchObject({ surface: 'code', product: 'Codex' });
+    expect(evidenceOf(byMessage.get('m-work')!)).toMatchObject({ surface: 'cowork', product: 'ChatGPT Work' });
+    expect(byMessage.get('m-excel')!.title).toBe('Data Exfiltration intent detected in Claude in Excel');
+  });
+
+  it('labels an Office or Google app the way the Office receiver passes it', async () => {
+    const { officeProductLabel } = await import('@/lib/otel/office-receiver');
+    expect(officeProductLabel('excel')).toBe('Claude in Excel');
+    expect(officeProductLabel('sheets')).toBe('Claude in Google Sheets');
+    expect(officeProductLabel(null)).toBe('Claude in Office');
+    expect(officeProductLabel('cowork')).toBe('Claude in Office');
+  });
+});

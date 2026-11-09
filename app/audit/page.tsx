@@ -4,7 +4,10 @@
 
 'use client';
 
-import { PRODUCT_LABEL, type WorkProduct } from '@/lib/pulse/cowork/products';
+import { FAMILY_LABEL, FAMILY_ORDER, PRODUCT_LABEL, PRODUCT_ORDER, productFullName, productsIn, type WorkProduct } from '@/lib/pulse/cowork/products';
+
+/** Product-list values that are Work Pulse apps (sent as ?app=): Cowork alone, a group, or one app. */
+const AUDIT_APP_VALUES = new Set<string>(['office', 'google', ...PRODUCT_ORDER]);
 import { useEffect, useState, useCallback, useMemo, type ReactNode } from 'react';
 import { useSearchParams } from 'next/navigation';
 import TopBar from '@/components/layout/TopBar';
@@ -14,11 +17,15 @@ import { flagSeverity, isFullyDismissed } from '@/lib/pii/flag-severity';
 import { useCorePlatformGuard } from '@/components/shared/useCorePlatformGuard';
 import { PageBody, Panel, PanelFoot, Notice, Empty, Tag, Dot, T, B, SEVERITY_COLOR } from '@/components/precision/ui';
 import WhereMoneyWent, { SplitLine, spendMoney } from '@/components/finance/WhereMoneyWent';
-import { hasBreakdown, type SpendSplit } from '@/lib/finance/where-money-went';
+import { hasBreakdown, onlyModel, type SpendSplit } from '@/lib/finance/where-money-went';
+import { isOpenAiSource, OPENAI_SOURCE_LABELS } from '@/lib/openai/sources';
+import { productLabel, productOf } from '@/lib/dashboard/vendor';
+import { useConnectedProducts } from '@/components/shared/VendorSwitch';
+import { isOpenAiOnly, openAiConnected } from '@/lib/sources/connected-shared';
 
 interface AuditEvent {
   id: string;
-  /** Claude in Office app, when the prompt came from Excel, Word, PowerPoint or Outlook. */
+  /** The app, when the prompt came from Claude in Office or Claude in Google. */
   product?: string | null;
   user_id: string;
   department?: string | null;
@@ -232,6 +239,7 @@ function ChatThread({ messages }: { messages: ChatThreadMessage[] }) {
   );
 }
 
+/** A session's messages, newest first; turns are numbered in time order, so the top one is the latest. */
 function CoworkThread({ messages }: { messages: CoworkMessage[] }) {
   if (messages.length === 0) {
     return (
@@ -258,7 +266,7 @@ function CoworkThread({ messages }: { messages: CoworkMessage[] }) {
             <div className="flex items-center gap-2">
               <div className="h-px flex-1 bg-[#EAEAEA]" />
               <span className="text-[12px] text-[#8F8F8F] whitespace-nowrap tabular-nums">
-                Turn {ti + 1} · {timeOf(turn.messages[0].occurred_at)}
+                Turn {turns.length - ti} · {timeOf(Math.min(...turn.messages.map(m => m.occurred_at)))}
               </span>
               <div className="h-px flex-1 bg-[#EAEAEA]" />
             </div>
@@ -358,9 +366,10 @@ function CoworkThread({ messages }: { messages: CoworkMessage[] }) {
 }
 
 function SourceCell({ event }: { event: AuditEvent }) {
-  if (event._source === 'otel') return <>OTel</>;
+  if (isOpenAiSource(event._source)) return <>OpenAI Compliance API</>;
+  if (event._source === 'otel') return <>OpenTelemetry</>;
   if (event._source === 'local-agent') return <>Agent</>;
-  return <>{event.surface === 'cowork_partial' ? 'OpenTelemetry' : 'Compliance API'}</>;
+  return <>{event.surface === 'cowork_partial' ? 'OpenTelemetry' : 'Anthropic Compliance API'}</>;
 }
 
 function StatusCell({ event }: { event: AuditEvent }) {
@@ -405,9 +414,12 @@ export default function AuditPage() {
   const [chatThreadLoading, setChatThreadLoading] = useState(false);
 
   // Filters
-  const [surface, setSurface] = useState('');
+  const [product, setProduct] = useState('');
+  const connected = useConnectedProducts();
+  const openaiOnly = isOpenAiOnly(connected && { claude: connected.claude, openai: openAiConnected(connected) });
+  // The Audit Log is the compliance record: it lists ChatGPT and Codex even while hidden elsewhere.
+  const openaiConnected = openAiConnected(connected);
   const [sourceFilter, setSourceFilter] = useState('');
-  const [appFilter, setAppFilter] = useState('');
   const [userFilter, setUserFilter] = useState('');
   const [flaggedOnly, setFlaggedOnly] = useState(false);
   const [dateFrom, setDateFrom] = useState('');
@@ -464,9 +476,10 @@ export default function AuditPage() {
     if (resetOffset) setOffset(0);
 
     const params = new URLSearchParams();
-    if (surface) params.set('surface', surface);
+    // One Product list: a Work Pulse app choice (Cowork alone, Claude in Office,
+    // Claude in Google, or one app) goes as ?app=, every other product as ?product=.
+    if (product) params.set(AUDIT_APP_VALUES.has(product) ? 'app' : 'product', product);
     if (sourceFilter) params.set('source', sourceFilter);
-    if (appFilter) params.set('app', appFilter);
     if (userFilter) params.set('userId', userFilter);
     if (departmentFilter) params.set('department', departmentFilter);
     if (flaggedOnly) params.set('flagged', 'true');
@@ -500,11 +513,11 @@ export default function AuditPage() {
       })
       .catch(console.error)
       .finally(() => setLoading(false));
-  }, [surface, sourceFilter, appFilter, userFilter, departmentFilter, flaggedOnly, dateFrom, dateTo, searchDebounced, offset]);
+  }, [product, sourceFilter, userFilter, departmentFilter, flaggedOnly, dateFrom, dateTo, searchDebounced, offset]);
 
   // Refetch on filter changes only; fetchEvents also changes with offset, which must not refetch page one.
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  useEffect(() => { fetchEvents(true); }, [surface, sourceFilter, appFilter, userFilter, departmentFilter, flaggedOnly, dateFrom, dateTo, searchDebounced]);
+  useEffect(() => { fetchEvents(true); }, [product, sourceFilter, userFilter, departmentFilter, flaggedOnly, dateFrom, dateTo, searchDebounced]);
 
   // When a cowork/code/chat event is selected, fetch the full conversation thread
   const handleEventClick = useCallback((event: AuditEvent) => {
@@ -517,7 +530,9 @@ export default function AuditPage() {
 
     if ((event.surface === 'cowork' || event.surface === 'code') && sessionId) {
       const spendQs = new URLSearchParams({ sessionId });
-      if (event.prompt_id) spendQs.set('promptId', event.prompt_id);
+      // ChatGPT and Codex rows are the prompt themselves; Claude's carry the prompt's id.
+      const promptId = isOpenAiSource(event._source) ? event.id : event.prompt_id;
+      if (promptId) spendQs.set('promptId', promptId);
       fetch(`/api/audit/session-spend?${spendQs}`)
         .then(r => (r.ok ? r.json() : null))
         .then(d => { if (d?.conversation) setSessionSpend({ conversation: d.conversation, prompt: d.prompt ?? null }); })
@@ -568,11 +583,11 @@ export default function AuditPage() {
     try { hasSessionId = JSON.parse(selectedEvent.metadata)?.session_id || null; } catch { /* ignore */ }
   }
 
-  const filtersActive = Boolean(searchDebounced || surface || sourceFilter || appFilter || userFilter || departmentFilter || flaggedOnly || dateFrom || dateTo);
+  const filtersActive = Boolean(searchDebounced || product || sourceFilter || userFilter || departmentFilter || flaggedOnly || dateFrom || dateTo);
 
   if (noAccess) return (
     <>
-      <TopBar title="Audit Log" subtitle="Compliance event trail across Chat, Code, and Cowork" />
+      <TopBar title="Audit Log" subtitle="Compliance event trail across Chat, Work and Code" />
       <PageBody>
         {noDepartment ? (
           <Notice tone="info" title="Your account has no department yet.">
@@ -590,16 +605,17 @@ export default function AuditPage() {
 
   return (
     <>
-      <TopBar title="Audit Log" subtitle="Compliance event trail across Chat, Code, and Cowork" />
+      <TopBar title="Audit Log" subtitle="Compliance event trail across Chat, Work and Code" />
       <PageBody>
         {/* What each surface captures */}
         <Notice tone="info">
           <div className="flex flex-col gap-0.5 text-[13px]">
             <span><span className="font-semibold">Claude Code:</span> Prompts, models, cost and tool use.</span>
-            <span><span className="font-semibold">Cowork:</span> Prompts, models, cost and tool use.</span>
-            <span><span className="font-semibold">Claude in Office:</span> Prompts, models and tool use. No cost, and never the document&apos;s content.</span>
-            <span><span className="font-semibold">Chat:</span> Prompts, through the Compliance API (Enterprise plan).</span>
-            <span>Claude&apos;s replies are never stored.</span>
+            <span><span className="font-semibold">Claude Cowork:</span> Prompts, models, cost and tool use.</span>
+            <span><span className="font-semibold">Claude in Office and Claude in Google:</span> Prompts, models and tool use. No cost, and never the document&apos;s content.</span>
+            <span><span className="font-semibold">Claude Chat:</span> Prompts, through Anthropic&apos;s Compliance API (Claude for Enterprise).</span>
+            <span><span className="font-semibold">ChatGPT and Codex:</span> Prompts, through OpenAI&apos;s Compliance API (ChatGPT Enterprise or Edu).</span>
+            <span>Replies from Claude, ChatGPT and Codex are never stored.</span>
           </div>
         </Notice>
 
@@ -617,30 +633,33 @@ export default function AuditPage() {
             />
           </label>
 
-          <select value={surface} onChange={e => setSurface(e.target.value)} className={B.select} aria-label="Surface">
-            <option value="">All surfaces</option>
-            <option value="chat">Chat</option>
-            <option value="code">Code</option>
-            <option value="cowork">Cowork</option>
+          <select value={product} onChange={e => setProduct(e.target.value)} className={B.select} aria-label="Product">
+            <option value="">All products</option>
+            {!openaiOnly && (
+              <optgroup label="Claude">
+                <option value="claude_chat">Claude Chat</option>
+                <option value="cowork">Cowork</option>
+                {FAMILY_ORDER.filter(f => f !== 'cowork').map(f => [
+                  <option key={f} value={f}>{FAMILY_LABEL[f]} (all apps)</option>,
+                  ...productsIn(f).map(p => <option key={p} value={p}>{'  '}{productFullName(p)}</option>),
+                ])}
+                <option value="claude_code">Claude Code</option>
+              </optgroup>
+            )}
+            {openaiConnected && (
+              <optgroup label="OpenAI">
+                <option value="chatgpt_chat">ChatGPT Chat</option>
+                <option value="chatgpt_work">ChatGPT Work</option>
+                <option value="codex">Codex</option>
+              </optgroup>
+            )}
           </select>
 
           <select value={sourceFilter} onChange={e => setSourceFilter(e.target.value)} className={B.select} aria-label="Source">
             <option value="">All sources</option>
-            <option value="otel">OpenTelemetry</option>
-            <option value="compliance">Compliance API</option>
-            <option value="cowork">Cowork</option>
-            <option value="code">Code Sessions</option>
-            <option value="chat">Chat</option>
-          </select>
-
-          <select value={appFilter} onChange={e => setAppFilter(e.target.value)} className={B.select} aria-label="App">
-            <option value="">All apps</option>
-            <option value="cowork">Cowork</option>
-            <option value="office">Claude in Office</option>
-            <option value="excel">Excel</option>
-            <option value="word">Word</option>
-            <option value="powerpoint">PowerPoint</option>
-            <option value="outlook">Outlook</option>
+            {!openaiOnly && <option value="otel">OpenTelemetry (Claude)</option>}
+            {!openaiOnly && <option value="compliance">Anthropic Compliance API (Claude Chat)</option>}
+            {openaiConnected && <option value="openai">OpenAI Compliance API (ChatGPT and Codex)</option>}
           </select>
 
           <select value={userFilter} onChange={e => setUserFilter(e.target.value)} className={`${B.select} max-w-[220px]`} aria-label="User">
@@ -715,7 +734,7 @@ export default function AuditPage() {
                       <th scope="col" className={T.th}>Time</th>
                       <th scope="col" className={T.th}>User</th>
                       <th scope="col" className={`${T.th} hidden md:table-cell`}>Department</th>
-                      <th scope="col" className={T.th}>Surface</th>
+                      <th scope="col" className={T.th}>Product</th>
                       <th scope="col" className={`${T.th} hidden md:table-cell`}>Source</th>
                       <th scope="col" className={T.th}>Event</th>
                       <th scope="col" className={`${T.th} hidden lg:table-cell`}>Preview</th>
@@ -745,8 +764,8 @@ export default function AuditPage() {
                           </td>
                           <td className={`${T.tdMute} hidden md:table-cell`}>{event.department ?? '—'}</td>
                           <td className={`${T.td} whitespace-nowrap`}>
-                            {/* A Claude in Office prompt shows its app alone (Excel, Word...), not Cowork */}
-                            <Tag>{event.product && event.product in PRODUCT_LABEL ? PRODUCT_LABEL[event.product as WorkProduct] : event.surface}</Tag>
+                            {/* An Office or Google prompt shows its app (Excel, Google Sheets...), not Cowork */}
+                            <Tag>{event.product && event.product in PRODUCT_LABEL ? productFullName(event.product as WorkProduct) : productLabel(productOf(event.surface, event._source))}</Tag>
                             {event.surface === 'cowork_partial' && (
                               <span className="ml-1 text-[13px] text-[#8F8F8F]">Metadata only</span>
                             )}
@@ -804,7 +823,7 @@ export default function AuditPage() {
           >
             <div className="h-12 shrink-0 flex items-center gap-2.5 px-5 border-b border-[#EAEAEA]">
               <h2 className="m-0 text-[14px] font-semibold text-[#0A0A0A] truncate">
-                {isChatEvent ? (hasSessionId ? 'Chat conversation' : 'Chat prompt') : isCodeEvent ? (hasSessionId ? 'Code session' : 'Code event') : isSkillEvent ? 'Skill invocation' : isMcpEvent ? 'Connector usage' : isCoworkEvent ? 'Cowork session' : 'Event detail'}
+                {isOpenAiSource(selectedEvent?._source) ? `${OPENAI_SOURCE_LABELS[selectedEvent!._source as keyof typeof OPENAI_SOURCE_LABELS]} ${hasSessionId ? (selectedEvent!._source === 'codex' ? 'session' : 'conversation') : 'event'}` : isChatEvent ? (hasSessionId ? 'Chat conversation' : 'Chat prompt') : isCodeEvent ? (hasSessionId ? 'Code session' : 'Code event') : isSkillEvent ? 'Skill invocation' : isMcpEvent ? 'Connector usage' : isCoworkEvent ? 'Cowork session' : 'Event detail'}
               </h2>
               {selectedEvent.flagged ? <Tag tone="bad">Flagged</Tag> : null}
               <button
@@ -822,8 +841,8 @@ export default function AuditPage() {
               <dl className="m-0 grid grid-cols-[96px_minmax(0,1fr)] sm:grid-cols-[96px_minmax(0,1fr)_80px_minmax(0,1fr)] gap-x-3 gap-y-1.5 text-[13px]">
                 <dt className="text-[#8F8F8F]">User</dt>
                 <dd className="m-0 font-medium text-[#0A0A0A] break-all">{selectedEvent.user_id}</dd>
-                <dt className="text-[#8F8F8F]">Surface</dt>
-                <dd className="m-0"><Tag>{selectedEvent.surface}</Tag></dd>
+                <dt className="text-[#8F8F8F]">Product</dt>
+                <dd className="m-0"><Tag>{selectedEvent.product && selectedEvent.product in PRODUCT_LABEL ? productFullName(selectedEvent.product as WorkProduct) : productLabel(productOf(selectedEvent.surface, selectedEvent._source))}</Tag></dd>
                 <dt className="text-[#8F8F8F]">Time</dt>
                 <dd className="m-0 tabular-nums">{new Date(selectedEvent.occurred_at * 1000).toLocaleString('en-GB')}</dd>
                 <dt className="text-[#8F8F8F]">Event</dt>
@@ -865,7 +884,7 @@ export default function AuditPage() {
                 return (
                   <div className="border border-[#EAEAEA] rounded-[10px] px-3 py-2.5 flex flex-col gap-1.5 text-[13px]">
                     <span className="font-semibold text-[#245BF3]">
-                      {isCodeEvent ? 'Session stats' : 'Session stats (OTel)'}
+                      {isCodeEvent || isOpenAiSource(selectedEvent?._source) ? 'Session stats' : 'Session stats (OTel)'}
                     </span>
                     {facts.length > 0 && (
                       <span className="flex flex-wrap gap-x-1.5 text-[#333333] tabular-nums">
@@ -894,6 +913,14 @@ export default function AuditPage() {
                         {files.map(f => <Mono key={f}>{f}</Mono>)}
                       </span>
                     )}
+                    {(selectedEvent?._source === 'chatgpt_chat' || selectedEvent?._source === 'chatgpt_work') && cost != null && (
+                      <span className="text-[#8F8F8F]">
+                        Cost is an estimate: OpenAI reports ChatGPT cost per hour, so each hour&apos;s cost is shared evenly across the replies in it. Priced at OpenAI&apos;s USD token rates.
+                      </span>
+                    )}
+                    {selectedEvent?._source === 'codex' && cost != null && (
+                      <span className="text-[#8F8F8F]">Priced from each turn&apos;s tokens at OpenAI&apos;s USD token rates.</span>
+                    )}
                     {sessionSpend && (sessionSpend.prompt || hasBreakdown(sessionSpend.conversation) || sessionSpend.conversation.byModel.length > 1) && (
                       <span className="flex flex-col gap-1.5 pt-1.5 mt-0.5 border-t border-[#F2F2F2]">
                         <span className="font-semibold text-[#0A0A0A]">Where the money went</span>
@@ -906,8 +933,18 @@ export default function AuditPage() {
                             <SplitLine s={sessionSpend.prompt} />
                           </span>
                         )}
-                        <span className="text-[#333333]">This conversation</span>
-                        <WhereMoneyWent s={sessionSpend.conversation} showModels />
+                        {/* ChatGPT and Codex conversations run on one model: name it in the line, not a one-line list. */}
+                        {isOpenAiSource(selectedEvent?._source) && onlyModel(sessionSpend.conversation) ? (
+                          <span className="text-[#333333] tabular-nums">
+                            This conversation: {sessionSpend.conversation.totalUsd === null ? 'not priced' : spendMoney(sessionSpend.conversation.totalUsd)}, all on{' '}
+                            <span className="font-mono text-[12px]">{onlyModel(sessionSpend.conversation)}</span>
+                          </span>
+                        ) : (
+                          <>
+                            <span className="text-[#333333]">This conversation</span>
+                            <WhereMoneyWent s={sessionSpend.conversation} showModels />
+                          </>
+                        )}
                         {sessionSpend.conversation.unpricedModels.length > 0 && (
                           <span className="text-[13px] text-[#B54708]">Not priced, so left out: {sessionSpend.conversation.unpricedModels.join(', ')}</span>
                         )}
@@ -1004,7 +1041,9 @@ export default function AuditPage() {
                   })()}
 
                   <NoteBox>
-                    <span className="font-semibold text-[#333333]">Source:</span> Claude Code session file (~/.claude/projects). User prompts and tool summaries are captured. Full assistant responses are not stored.
+                    <span className="font-semibold text-[#333333]">Source:</span> {selectedEvent?._source === 'codex'
+                      ? "Codex log from OpenAI's Compliance API. User prompts and tool activity are captured. Codex's replies are not stored."
+                      : 'Claude Code telemetry. User prompts and tool summaries are captured. Full assistant responses are not stored.'}
                   </NoteBox>
                 </div>
               ) : null}
@@ -1085,7 +1124,7 @@ export default function AuditPage() {
                 </div>
               ) : isCoworkEvent ? (
                 <NoteBox>
-                  This Cowork event does not have an associated session ID. Conversation content is unavailable.
+                  This event does not have an associated session ID. Conversation content is unavailable.
                 </NoteBox>
               ) : !isCodeEvent && !isChatEvent ? (
                 /* Standard event detail for compliance/OTel events */

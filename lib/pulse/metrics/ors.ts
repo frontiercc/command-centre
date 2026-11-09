@@ -6,6 +6,8 @@
 import { and, eq, gte, inArray, isNotNull, sql } from 'drizzle-orm';
 import { getTypedClient } from '@/lib/db/client';
 import { schema } from '@/lib/db/schema';
+import { messageVendor, connectorVendor, skillVendor } from '@/lib/pulse/vendor-filter';
+import type { Vendor } from '@/lib/dashboard/vendor';
 
 // ─── Component computations ───────────────────────────────────────────────────
 
@@ -16,6 +18,7 @@ import { schema } from '@/lib/db/schema';
 async function computeT2Breadth(
   teamMemberIds: string[],
   windowStart: number,
+  vendor: Vendor,
 ): Promise<{ breadth: number | null; totalParticipants: number }> {
   if (teamMemberIds.length === 0) return { breadth: null, totalParticipants: 0 };
 
@@ -28,7 +31,7 @@ async function computeT2Breadth(
     .selectDistinct({ user_id: pc.user_id })
     .from(pc)
     .innerJoin(cm, eq(cm.id, pc.cowork_message_id))
-    .where(and(inArray(pc.user_id, teamMemberIds), eq(pc.classifier_status, 'classified'), gte(cm.occurred_at, windowStart)));
+    .where(and(inArray(pc.user_id, teamMemberIds), eq(pc.classifier_status, 'classified'), gte(cm.occurred_at, windowStart), messageVendor(vendor)));
 
   const totalParticipants = activeRows.length;
   if (totalParticipants < 2) return { breadth: null, totalParticipants };
@@ -45,6 +48,7 @@ async function computeT2Breadth(
         eq(pc.classifier_status, 'classified'),
         gte(cm.occurred_at, windowStart),
         gte(pc.tier, 2),
+        messageVendor(vendor),
       ),
     );
 
@@ -63,6 +67,7 @@ async function computeT2Breadth(
 async function computeConnectorOverlap(
   activeIds: string[],
   windowStart: number,
+  vendor: Vendor,
 ): Promise<number | null> {
   if (activeIds.length < 2) return null;
 
@@ -84,6 +89,7 @@ async function computeConnectorOverlap(
         gte(cmi.occurred_at, windowStart),
         gte(pc.tier, 2),
         eq(pc.classifier_status, 'classified'),
+        connectorVendor(vendor),
       ),
     );
 
@@ -113,6 +119,7 @@ async function computeConnectorOverlap(
 async function computeSkillPropagation(
   activeIds: string[],
   windowStart: number,
+  vendor: Vendor,
 ): Promise<number | null> {
   if (activeIds.length < 2) return null;
 
@@ -125,7 +132,7 @@ async function computeSkillPropagation(
       user_count: sql<number | string>`count(distinct ${csi.user_id})`,
     })
     .from(csi)
-    .where(and(inArray(csi.user_id, activeIds), gte(csi.occurred_at, windowStart)))
+    .where(and(inArray(csi.user_id, activeIds), gte(csi.occurred_at, windowStart), skillVendor(vendor)))
     .groupBy(csi.skill_name);
 
   if (skillRows.length === 0) return null;
@@ -182,7 +189,7 @@ export interface OrsDetail {
  * Null components are reweighted proportionally across available signals.
  * Returns null if fewer than 2 active participants in the past 30 days.
  */
-async function computeOrsForMembers(memberIds: string[]): Promise<OrsDetail | null> {
+async function computeOrsForMembers(memberIds: string[], vendor: Vendor = 'all'): Promise<OrsDetail | null> {
   if (memberIds.length === 0) return null;
 
   const db = await getTypedClient();
@@ -193,7 +200,7 @@ async function computeOrsForMembers(memberIds: string[]): Promise<OrsDetail | nu
   const now = Math.floor(Date.now() / 1000);
   const windowStart = now - THIRTY_DAYS;
 
-  const { breadth, totalParticipants } = await computeT2Breadth(memberIds, windowStart);
+  const { breadth, totalParticipants } = await computeT2Breadth(memberIds, windowStart, vendor);
   if (totalParticipants < 2) return null;
 
   // Active member IDs (those with any classified work in window by occurred_at)
@@ -201,12 +208,12 @@ async function computeOrsForMembers(memberIds: string[]): Promise<OrsDetail | nu
     .selectDistinct({ user_id: pc.user_id })
     .from(pc)
     .innerJoin(cm, eq(cm.id, pc.cowork_message_id))
-    .where(and(inArray(pc.user_id, memberIds), eq(pc.classifier_status, 'classified'), gte(cm.occurred_at, windowStart)));
+    .where(and(inArray(pc.user_id, memberIds), eq(pc.classifier_status, 'classified'), gte(cm.occurred_at, windowStart), messageVendor(vendor)));
 
   const activeIds = activeRows.map((r) => r.user_id);
 
-  const connectorOverlap = await computeConnectorOverlap(activeIds, windowStart);
-  const skillPropagation = await computeSkillPropagation(activeIds, windowStart);
+  const connectorOverlap = await computeConnectorOverlap(activeIds, windowStart, vendor);
+  const skillPropagation = await computeSkillPropagation(activeIds, windowStart, vendor);
 
   const ors = composeOrs(breadth, connectorOverlap, skillPropagation);
   if (ors === null) return null;
@@ -236,7 +243,7 @@ export async function computeTeamOrsDetail(teamId: string): Promise<OrsDetail | 
  * Compute ORS (Operational Resilience Score) + its components for a department.
  * Returns null if fewer than 2 active participants in the past 30 days.
  */
-export async function computeDeptOrsDetail(department: string): Promise<OrsDetail | null> {
+export async function computeDeptOrsDetail(department: string, vendor: Vendor = 'all'): Promise<OrsDetail | null> {
   const db = await getTypedClient();
   const au = schema.adminUsers;
 
@@ -245,7 +252,7 @@ export async function computeDeptOrsDetail(department: string): Promise<OrsDetai
     .from(au)
     .where(and(eq(au.department, department), isNotNull(au.linked_cowork_user_id)))) as Array<{ id: string }>;
 
-  return computeOrsForMembers(memberRows.map((r) => r.id));
+  return computeOrsForMembers(memberRows.map((r) => r.id), vendor);
 }
 
 /** @deprecated Use computeTeamOrsDetail for component breakdown. */

@@ -4,9 +4,9 @@ Guidance for Claude, or any AI assistant, helping someone contribute to Frontier
 
 ## What Command Centre is
 
-A single Next.js 15 (App Router) application, backed by PostgreSQL through Drizzle, styled with Tailwind, and run in Docker. Command Centre receives OpenTelemetry from Claude Code, Claude Cowork and Claude in Office (Excel, Word, PowerPoint and Outlook, stored beside Cowork with `cowork_messages.product` set; `lib/otel/office-receiver.ts`), and pulls Claude Chat from Anthropic's Compliance API; pulls from the Analytics and Admin APIs are on the roadmap. Command Centre measures whether the work people hand to Claude is becoming deeper and more valuable, and governs what it stores.
+A single Next.js 15 (App Router) application, backed by PostgreSQL through Drizzle, styled with Tailwind, and run in Docker. Command Centre receives OpenTelemetry from Claude Code, Claude Cowork and Claude in Office/Google (Excel, Word, PowerPoint, Outlook and Google Sheets, Docs and Slides, stored beside Cowork with `cowork_messages.product` set; `lib/otel/office-receiver.ts`), and pulls Claude Chat from Anthropic's Compliance API; pulls from the Analytics and Admin APIs are on the roadmap. It also pulls ChatGPT and Codex activity from OpenAI's Compliance API (`lib/openai/`), with a stand-in for testing in `scripts/openai-mock/`. Command Centre measures whether the work people hand to AI (Claude, ChatGPT and Codex) is becoming deeper and more valuable, and governs what it stores.
 
-Command Centre is a downstream observer. Telemetry arrives after a prompt has reached Claude, so the product can flag, alert on and restrict access to what it stores, but can never block, alter or delay a prompt.
+Command Centre is a downstream observer. Activity arrives after a prompt has reached Claude, ChatGPT or Codex, so the product can flag, alert on and restrict access to what it stores, but can never block, alter or delay a prompt.
 
 ## Where things are
 
@@ -52,7 +52,7 @@ These protect the product's credibility. A change that breaks one will be reject
 2. **Not measured is null, never zero.** Return `null` and show "not measured". An unpriced model has no cost, not $0.
 3. **A model never writes a number that is stored or shown.** Compute figures in code and pass them in. Model-written text is checked against them.
 4. **No person-level data in the metrics connector** (`lib/connector/`, `/api/export/`, `/api/mcp`). Organisation-wide figures only.
-5. **Never store Claude's replies.** Prompts are stored; assistant text is not.
+5. **Never store the AI's replies (Claude, ChatGPT or Codex).** Prompts are stored; assistant text is not.
 6. **Every API route makes an explicit role decision.** A session is not authorisation. Prompt text goes through `gateContentRead` in `lib/auth/content-access.ts`. `test/api-route-authz-coverage.test.ts` enforces this.
 7. **New API routes** export `dynamic = 'force-dynamic'`, return JSON, and report errors with `errorResponse` from `lib/api/errors.ts`. Never return an exception's message to the caller.
 8. **Configuration keys** the interface saves go in `allowedKeys` in `app/api/config/route.ts`. Secrets are registered in `lib/config-secrets.ts`.

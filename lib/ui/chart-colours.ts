@@ -17,10 +17,28 @@ export const SURFACE_COLOR = {
 } as const;
 
 /**
- * Work Pulse products (Cowork and Claude in Office): one indigo family, chosen 2026-11-05.
- * Cowork keeps its surface indigo; each Office app is a shade of it, alternating light and
- * dark so neighbouring segments never blend, leaning purple so they stay clear of the
- * sky-blue tiers. Keys match cowork_messages.product (lib/pulse/cowork/products.ts).
+ * The six products the dashboard splits into (lib/dashboard/vendor.ts). Each
+ * Claude product keeps its surface colour; each OpenAI product has its own hue
+ * in the same temperature as its Claude partner (warm Chat, cool Work, green
+ * Code), chosen with the dataviz validator so every pair stays apart in normal
+ * vision (at least 15) and for protan and deutan readers (at least 13).
+ */
+export const PRODUCT_COLOR = {
+  claude_chat: SURFACE_COLOR.chat,
+  chatgpt_chat: '#883C04',  // burnt orange
+  claude_cowork: SURFACE_COLOR.cowork,
+  chatgpt_work: '#6975D8',  // periwinkle
+  claude_code: SURFACE_COLOR.code,
+  codex: '#A58E27',         // olive
+} as const;
+
+/**
+ * Work Pulse products (Cowork, Claude in Office, Claude in Google): one indigo family, chosen
+ * 2026-11-05. Cowork keeps its surface indigo; each Office app is a shade of it, alternating
+ * light and dark so neighbouring segments never blend, leaning purple so they stay clear of the
+ * sky-blue tiers. The Google apps (added 2026-11-06) are slate shades of the same family, greyer
+ * than the Office ones so the two groups read apart. Keys match cowork_messages.product
+ * (lib/pulse/cowork/products.ts).
  */
 export const WORK_PRODUCT_COLOR = {
   cowork: '#3F3D9E',
@@ -28,6 +46,22 @@ export const WORK_PRODUCT_COLOR = {
   word: '#241F66',
   powerpoint: '#6A5FCB',
   outlook: '#D2CAF2',
+  sheets: '#5C6B9E',
+  docs: '#2E3A66',
+  slides: '#A3AEDB',
+} as const;
+
+/**
+ * Rows of the Work Pulse By product panel: the Work Pulse products above, plus
+ * Claude Chat (its surface rose) and ChatGPT (ChatGPT Chat's burnt orange, the
+ * product's own hue on the dashboard). Checked with the dataviz validator in
+ * panel order: every neighbour stays apart in normal vision and for protan,
+ * deutan and tritan readers.
+ */
+export const BY_PRODUCT_ROW_COLOR = {
+  claude_chat: SURFACE_COLOR.chat,
+  ...WORK_PRODUCT_COLOR,
+  chatgpt: PRODUCT_COLOR.chatgpt_chat,
 } as const;
 
 /** Text colour that reads on a full-strength surface fill. */

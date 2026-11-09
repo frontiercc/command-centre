@@ -11,7 +11,8 @@
 import { getCodeWorkTypeDefinitions } from '@/lib/pulse/code/tier-config';
 import { codeWorkTypeLabel, codeWorkTypeDefinition } from '@/lib/pulse/code/work-type-labels';
 import { NextRequest, NextResponse } from 'next/server';
-import { and, desc, eq, gte, inArray, isNotNull, lte, ne, notInArray, sql } from 'drizzle-orm';
+import { visibleVendor, visibleOpenAi } from '@/lib/sources/openai-visibility';
+import { and, desc, eq, gte, inArray, isNotNull, lte, ne, notInArray, or, sql } from 'drizzle-orm';
 import { getAdminSession, canAccessOrgOverview } from '@/lib/auth/admin-auth';
 import { getTypedClient } from '@/lib/db/client';
 import { schema } from '@/lib/db/schema';
@@ -21,8 +22,10 @@ import { ORG_SCOPE_ID } from '@/lib/pulse/code/aggregator';
 import { computeSpendConcentration } from '@/lib/pulse/code/concentration';
 import { getWeeklySeries, getWeeklyDelta } from '@/lib/pulse/trends';
 import { projectMonthEndSpend, type SpendProjection } from '@/lib/pulse/code/projection';
-import { buildDailyWindow, buildShippingSeries, buildRepoCards, countReposActive7d, type GhDailyRow, type ShippingDay, type RepoShippingCard } from '@/lib/pulse/code/shipping-alignment';
+import { buildDailyWindow, buildShippingSeries, buildRepoCards, countReposActive7d, hasToolSplit, buildCodexRepoReach, type GhDailyRow, type ShippingDay, type RepoShippingCard, type CodexRepoReach } from '@/lib/pulse/code/shipping-alignment';
 import { readHumanTime } from '@/lib/pulse/human-time-summary';
+import { hasCodexData, readCodeMetrics, trendVendor, codeSessionVendor } from '@/lib/pulse/code/vendor-view';
+import { codexSpend } from '@/lib/openai/spend';
 
 export const dynamic = 'force-dynamic';
 
@@ -40,7 +43,16 @@ export async function GET(request: NextRequest) {
   const thirtyDaysAgo = now - 30 * 24 * 3600;
   const sevenDaysAgo = now - 7 * 24 * 3600;
 
-  const cm = schema.codeMetrics;
+  // Developer Pulse's All / Claude / Codex switch. Claude Code's own
+  // telemetry (model calls, engaged time, lines, edits, languages) has no
+  // Codex counterpart, so those lists read Claude Code in every view but Codex.
+  const vendor = await visibleVendor(request.nextUrl.searchParams.get('vendor'));
+  const codexPresent = await visibleOpenAi(hasCodexData());
+  const tv = trendVendor(vendor, codexPresent);
+  const withClaude = vendor !== 'openai';
+  const withCodex = vendor !== 'claude' && codexPresent;
+  const sessionVendor = codeSessionVendor(sql`${schema.codeSessionStats.session_id}`, vendor);
+
   const cam = schema.codeAssistantMeta;
   const css = schema.codeSessionStats;
   const csi = schema.coworkSkillInvocations;
@@ -52,7 +64,7 @@ export async function GET(request: NextRequest) {
   const usr = schema.users;
   const adu = schema.adminUsers;
 
-  const metricsCols = {
+  const metricsColsFor = (cm: typeof schema.codeMetrics) => ({
     spend_usd: cm.spend_usd,
     input_tokens: cm.input_tokens,
     output_tokens: cm.output_tokens,
@@ -73,41 +85,51 @@ export async function GET(request: NextRequest) {
     period_start: cm.period_start,
     period_end: cm.period_end,
     computed_at: cm.computed_at,
-  };
+  });
 
-  const metricsRows = await client
-    .select(metricsCols)
-    .from(cm)
-    .where(and(eq(cm.scope_type, 'organisation'), eq(cm.scope_id, ORG_SCOPE_ID), eq(cm.granularity, 'rolling')))
-    .orderBy(desc(cm.computed_at))
+  const latestOrgRow = (t: typeof schema.codeMetrics, only: ReturnType<typeof eq> | undefined) => client
+    .select(metricsColsFor(t))
+    .from(t)
+    .where(and(eq(t.scope_type, 'organisation'), eq(t.scope_id, ORG_SCOPE_ID), eq(t.granularity, 'rolling'), only))
+    .orderBy(desc(t.computed_at))
     .limit(1);
-  const metricsRaw = metricsRows[0] ?? null;
-  const metrics = metricsRaw
-    ? { ...metricsRaw, spend_usd: metricsRaw.spend_usd !== null ? Number(metricsRaw.spend_usd) : null }
+  const toMetrics = <R extends { spend_usd: string | null }>(r: R | undefined) =>
+    r ? { ...r, spend_usd: r.spend_usd !== null ? Number(r.spend_usd) : null } : null;
+  const metricsRows = await readCodeMetrics(vendor, codexPresent, latestOrgRow);
+  const metrics = toMetrics(metricsRows[0]);
+
+  // All view, once Codex data exists: each product's figures, for the split
+  // lines under the headline figures.
+  const metricsSplit = vendor === 'all' && codexPresent
+    ? {
+        claude: toMetrics((await readCodeMetrics('claude', true, latestOrgRow))[0]),
+        openai: toMetrics((await readCodeMetrics('openai', true, latestOrgRow))[0]),
+      }
     : null;
 
-  const priorMetricsRows = await client
+  const priorMetricsRows = await readCodeMetrics(vendor, codexPresent, (t, only) => client
     .select({
-      spend_usd: cm.spend_usd,
-      autonomy_ratio: cm.autonomy_ratio,
-      cache_hit_ratio: cm.cache_hit_ratio,
-      session_count: cm.session_count,
-      repo_count: cm.repo_count,
+      spend_usd: t.spend_usd,
+      autonomy_ratio: t.autonomy_ratio,
+      cache_hit_ratio: t.cache_hit_ratio,
+      session_count: t.session_count,
+      repo_count: t.repo_count,
     })
-    .from(cm)
+    .from(t)
     .where(and(
-      eq(cm.scope_type, 'organisation'), eq(cm.scope_id, ORG_SCOPE_ID), eq(cm.granularity, 'rolling'),
-      lte(cm.computed_at, sevenDaysAgo),
+      eq(t.scope_type, 'organisation'), eq(t.scope_id, ORG_SCOPE_ID), eq(t.granularity, 'rolling'),
+      lte(t.computed_at, sevenDaysAgo), only,
     ))
-    .orderBy(desc(cm.computed_at))
-    .limit(1);
+    .orderBy(desc(t.computed_at))
+    .limit(1));
   const priorMetricsRaw = priorMetricsRows[0] ?? null;
   const priorMetrics = priorMetricsRaw
     ? { ...priorMetricsRaw, spend_usd: priorMetricsRaw.spend_usd !== null ? Number(priorMetricsRaw.spend_usd) : null }
     : null;
 
-  // Token share by model, last 30 days
-  const modelMixRaw = await client
+  // Token share by model, last 30 days: Claude Code's model calls, and Codex's
+  // turns (uncached and cached input, output) in the views that include it.
+  const modelMixRaw = !withClaude ? [] : await client
     .select({
       model: cam.model,
       input_tokens: sql<number | string>`SUM(${cam.input_tokens})`,
@@ -129,6 +151,26 @@ export async function GET(request: NextRequest) {
     cache_read_tokens: Number(m.cache_read_tokens),
     turns: Number(m.turns),
   }));
+  if (withCodex) {
+    const codexModels = await client
+      .select({
+        model: schema.codexTurns.model,
+        inp: sql<number | string>`SUM(${schema.codexTurns.uncached_input_tokens})`,
+        cached: sql<number | string>`SUM(${schema.codexTurns.cached_input_tokens})`,
+        outp: sql<number | string>`SUM(${schema.codexTurns.output_tokens})`,
+        turns: sql<number | string>`COUNT(*)`,
+      })
+      .from(schema.codexTurns)
+      .where(and(gte(schema.codexTurns.started_at, thirtyDaysAgo), isNotNull(schema.codexTurns.model)))
+      .groupBy(schema.codexTurns.model);
+    for (const m of codexModels) {
+      modelMix.push({
+        model: m.model as string, input_tokens: Number(m.inp), output_tokens: Number(m.outp),
+        cache_creation_tokens: 0, cache_read_tokens: Number(m.cached), turns: Number(m.turns),
+      });
+    }
+    modelMix.sort((a, b) => (b.input_tokens + b.output_tokens) - (a.input_tokens + a.output_tokens));
+  }
 
   const rates = await getCodeModelRates();
   // Unpriced = no exact rate AND no normalised fallback. A Bedrock/Vertex id priced at the
@@ -151,7 +193,7 @@ export async function GET(request: NextRequest) {
       commits: sql<number | string>`SUM(${css.commit_count})`,
     })
     .from(css)
-    .where(and(isNotNull(css.repo), gte(css.last_at, thirtyDaysAgo)))
+    .where(and(isNotNull(css.repo), gte(css.last_at, thirtyDaysAgo), sessionVendor))
     .groupBy(css.repo)
     .orderBy(desc(sql`COUNT(*)`))
     .limit(20);
@@ -162,7 +204,7 @@ export async function GET(request: NextRequest) {
   const darkReposRaw = await client
     .select({ repo: css.repo, last_seen: sql<number | string>`MAX(${css.last_at})` })
     .from(css)
-    .where(isNotNull(css.repo))
+    .where(and(isNotNull(css.repo), sessionVendor))
     .groupBy(css.repo)
     .having(sql`MAX(${css.last_at}) < ${thirtyDaysAgo}`)
     .orderBy(desc(sql`MAX(${css.last_at})`))
@@ -178,7 +220,7 @@ export async function GET(request: NextRequest) {
     })
     .from(csi)
     .innerJoin(css, eq(css.session_id, csi.session_id))
-    .where(gte(csi.occurred_at, thirtyDaysAgo))
+    .where(and(gte(csi.occurred_at, thirtyDaysAgo), sessionVendor))
     .groupBy(csi.skill_name)
     .orderBy(desc(sql`COUNT(*)`))
     .limit(10);
@@ -189,8 +231,16 @@ export async function GET(request: NextRequest) {
   const topConnectorsRaw = await client
     .select({ mcp_server: cmi.mcp_server, uses: sql<number | string>`COUNT(*)` })
     .from(cmi)
-    .innerJoin(css, eq(css.session_id, cmi.session_id))
-    .where(and(gte(cmi.occurred_at, thirtyDaysAgo), notInArray(cmi.mcp_server, ['workspace', 'cowork'])))
+    .leftJoin(css, eq(css.session_id, cmi.session_id))
+    .where(and(
+      gte(cmi.occurred_at, thirtyDaysAgo), notInArray(cmi.mcp_server, ['workspace', 'cowork']),
+      // A Code session's calls, or a Codex call: Codex's log carries no
+      // session on a connector call, so it is counted by its source.
+      or(
+        and(isNotNull(css.session_id), sessionVendor),
+        withCodex ? eq(cmi.source, 'codex') : sql`FALSE`,
+      ),
+    ))
     .groupBy(cmi.mcp_server)
     .orderBy(desc(sql`COUNT(*)`))
     .limit(10);
@@ -235,8 +285,9 @@ export async function GET(request: NextRequest) {
       .sort((a, b) => (b.spend_usd ?? 0) - (a.spend_usd ?? 0) || b.turns - a.turns)
       .slice(0, 10);
   };
-  const skillLeverage = await leverageBy('skill_name');
-  const agentLeverage = await leverageBy('agent_name');
+  // Claude Code's model calls only: Codex records no skill or subagent per call.
+  const skillLeverage = withClaude ? await leverageBy('skill_name') : [];
+  const agentLeverage = withClaude ? await leverageBy('agent_name') : [];
 
   // Autonomy: share of turns driven by a named subagent (delegation depth).
   const autonomyRows = await client
@@ -248,12 +299,12 @@ export async function GET(request: NextRequest) {
     .where(and(gte(cam.occurred_at, thirtyDaysAgo), ne(cam.model, '')));
   const autonomyRow = autonomyRows[0];
   const autonomyTotal = Number(autonomyRow?.total ?? 0);
-  const subagentShare = autonomyTotal ? Number(autonomyRow?.subagent ?? 0) / autonomyTotal : null;
+  const subagentShare = withClaude && autonomyTotal ? Number(autonomyRow?.subagent ?? 0) / autonomyTotal : null;
 
   // Spend concentration (30d): how much of total priced spend comes from the top
   // few users. Priced per-user from the same token rates as everything else —
   // measured, not estimated. Hidden below a minimum spender count (see helper).
-  const perUserSpendRows = await client
+  const perUserSpendRows = !withClaude ? [] : await client
     .select({
       user_id: cam.user_id,
       model: cam.model,
@@ -271,6 +322,15 @@ export async function GET(request: NextRequest) {
       inputTokens: Number(r.inp), outputTokens: Number(r.outp), cacheCreationTokens: Number(r.cw), cacheReadTokens: Number(r.cr),
     }, rates);
     if (usd !== null) spendByUser.set(r.user_id as string, (spendByUser.get(r.user_id as string) ?? 0) + usd);
+  }
+  // Codex spend per person, priced from the rates table, in the views that include it.
+  if (withCodex) {
+    const codexPeople = await client.selectDistinct({ user_id: schema.codexTurns.user_id }).from(schema.codexTurns)
+      .where(gte(schema.codexTurns.started_at, thirtyDaysAgo));
+    for (const { user_id } of codexPeople) {
+      const usd = (await codexSpend({ since: thirtyDaysAgo, userIds: [user_id] }, rates)).usd;
+      if (usd !== null) spendByUser.set(user_id, (spendByUser.get(user_id) ?? 0) + usd);
+    }
   }
   const spendConcentration = computeSpendConcentration([...spendByUser.values()]);
 
@@ -307,8 +367,9 @@ export async function GET(request: NextRequest) {
     return total;
   }
 
-  const mtdSpend = await sumPricedSpend(monthStart);
-  const last7dSpend = await sumPricedSpend(sevenDaysAgo);
+  const codexPriced = async (since: number) => withCodex ? ((await codexSpend({ since }, rates)).usd ?? 0) : 0;
+  const mtdSpend = (withClaude ? await sumPricedSpend(monthStart) : 0) + await codexPriced(monthStart);
+  const last7dSpend = (withClaude ? await sumPricedSpend(sevenDaysAgo) : 0) + await codexPriced(sevenDaysAgo);
   const spendProjection: SpendProjection | null = last7dSpend > 0
     ? projectMonthEndSpend(mtdSpend, last7dSpend, now)
     : null;
@@ -326,7 +387,7 @@ export async function GET(request: NextRequest) {
     .groupBy(com.language)
     .orderBy(desc(sql`SUM(${com.value})`))
     .limit(8);
-  const languageMix = languageMixRaw.map(r => ({ language: r.language as string, edits: Number(r.edits) }));
+  const languageMix = withClaude ? languageMixRaw.map(r => ({ language: r.language as string, edits: Number(r.edits) })) : [];
 
   // GitHub overlay — GitHub shipping VOLUME for the manually-tracked repos.
   // Repo/org level only (never commits/authors). No in-session share: Claude Code
@@ -345,6 +406,10 @@ export async function GET(request: NextRequest) {
     reposActive7d: number;
     shippingSeries: ShippingDay[];
     repoCards: RepoShippingCard[];
+    /** A sync has written the tool split (made with Claude Code / Codex / no AI tool recorded). */
+    toolSplit: boolean;
+    /** Codex tab's "How much of our codebase" box: worked out from GitHub commits matched to Codex. */
+    codexReach: CodexRepoReach | null;
   } | null = null;
 
   if (mappedRepos.length > 0) {
@@ -389,13 +454,34 @@ export async function GET(request: NextRequest) {
         .where(gte(cam.occurred_at, thirtyDaysAgo))
         .groupBy(sql`1`);
       const aiByDay: Record<string, number> = {};
-      for (const r of aiDailyRows) aiByDay[r.day] = Number(r.commits ?? 0);
+      if (withClaude) for (const r of aiDailyRows) aiByDay[r.day] = Number(r.commits ?? 0);
+      if (withCodex) {
+        const ca = schema.codexActions;
+        const codexDay = sql<string>`to_char(to_timestamp(${ca.occurred_at}) AT TIME ZONE 'UTC', 'YYYY-MM-DD')`;
+        const codexDaily = await client
+          .select({ day: codexDay, commits: sql<number | string>`SUM(${ca.commit_count})` })
+          .from(ca)
+          .where(gte(ca.occurred_at, thirtyDaysAgo))
+          .groupBy(sql`1`);
+        for (const r of codexDaily) aiByDay[r.day] = (aiByDay[r.day] ?? 0) + Number(r.commits ?? 0);
+      }
 
       const ghDailyRows: GhDailyRow[] = (await client
-        .select({ repo: grs.repo, date: grs.date, commit_count: grs.commit_count, prs_merged: grs.prs_merged })
+        .select({
+          repo: grs.repo, date: grs.date, commit_count: grs.commit_count, prs_merged: grs.prs_merged,
+          claude: grs.claude_commit_count, codex: grs.codex_commit_count, none: grs.no_tool_commit_count,
+        })
         .from(grs)
         .where(and(gte(grs.date, windowDays[0]), inArray(grs.repo, mappedRepos))))
-        .map(r => ({ repo: r.repo, date: r.date, commit_count: Number(r.commit_count), prs_merged: Number(r.prs_merged) }));
+        .map(r => ({
+          repo: r.repo, date: r.date, commit_count: Number(r.commit_count), prs_merged: Number(r.prs_merged),
+          claude: r.claude == null ? null : Number(r.claude),
+          // While Codex is hidden (or has no data) the hub reads as Claude only,
+          // so commits matched to Codex count as no AI tool recorded, the same
+          // as a tool that is not connected.
+          codex: r.codex == null ? null : (codexPresent ? Number(r.codex) : 0),
+          none: r.none == null ? null : Number(r.none) + (codexPresent || r.codex == null ? 0 : Number(r.codex)),
+        }));
 
       githubOverlay = {
         trackedRepoCount: coveredRepos.length,
@@ -405,6 +491,8 @@ export async function GET(request: NextRequest) {
         reposActive7d: countReposActive7d(windowDays, ghDailyRows),
         shippingSeries: buildShippingSeries(windowDays, aiByDay, ghDailyRows),
         repoCards: buildRepoCards(windowDays, ghDailyRows),
+        toolSplit: hasToolSplit(ghDailyRows),
+        codexReach: withCodex ? buildCodexRepoReach(windowDays, ghDailyRows, coveredRepos) : null,
       };
     }
   }
@@ -429,14 +517,42 @@ export async function GET(request: NextRequest) {
       gte(css.last_at, sevenDaysAgo),
       gte(css.tool_use_count, 5),
       sql`CAST(${css.error_count} AS REAL) / ${css.tool_use_count} > 0.25`,
+      withClaude ? undefined : sql`FALSE`,
     ))
     .orderBy(desc(sql`CAST(${css.error_count} AS REAL) / ${css.tool_use_count}`))
     .limit(10);
+  // Codex sessions' actions live in codex_actions: the same rule over them.
+  if (withCodex) {
+    const ca = schema.codexActions;
+    const codexFriction = await client
+      .select({
+        session_id: ca.session_id, user_id: sql<string>`MAX(${ca.user_id})`,
+        error_count: sql<number | string>`SUM(${ca.failed})`, tool_use_count: sql<number | string>`COUNT(*)`,
+        last_at: sql<number | string>`MAX(${ca.occurred_at})`,
+      })
+      .from(ca)
+      .where(gte(ca.occurred_at, sevenDaysAgo))
+      .groupBy(ca.session_id)
+      .having(sql`COUNT(*) >= 5 AND CAST(SUM(${ca.failed}) AS REAL) / COUNT(*) > 0.25`);
+    const names = new Map((codexFriction.length === 0 ? [] : await client
+      .select({ id: usr.id, name: sql<string | null>`COALESCE(${adu.display_name}, ${usr.display_name}, ${usr.email})` })
+      .from(usr).leftJoin(adu, eq(adu.linked_cowork_user_id, usr.id))
+      .where(inArray(usr.id, codexFriction.map(r => r.user_id)))).map(r => [r.id, r.name]));
+    for (const r of codexFriction) {
+      highFrictionSessions.push({
+        session_id: r.session_id, user_id: r.user_id, repo: null,
+        error_count: Number(r.error_count), tool_use_count: Number(r.tool_use_count), last_at: Number(r.last_at),
+        user_display_name: names.get(r.user_id) ?? null,
+      });
+    }
+    highFrictionSessions.sort((a, b) => b.error_count / b.tool_use_count - a.error_count / a.tool_use_count);
+    highFrictionSessions.splice(10);
+  }
 
   // Judged layer (opt-in): work-type mix from the session-digest classifier.
   // null = classifier disabled; [] = enabled but nothing classified yet.
   const judgedLayerEnabled = (await getConfigValue('codeClassifierEnabled')) !== 'false';
-  let workMix: Array<{ work_type: string; label: string; definition: string | null; sessions: number; tier3: number; tier2: number; tier1: number; provisional: number }> | null = null;
+  let workMix: Array<{ work_type: string; label: string; definition: string | null; sessions: number; tier3: number; tier2: number; tier1: number; provisional: number; claude: number; openai: number }> | null = null;
   if (judgedLayerEnabled) {
     const workMixRaw = await client
       .select({
@@ -446,10 +562,11 @@ export async function GET(request: NextRequest) {
         tier2: sql<number | string>`SUM(CASE WHEN ${csc.tier} = 2 THEN 1 ELSE 0 END)`,
         tier1: sql<number | string>`SUM(CASE WHEN ${csc.tier} = 1 THEN 1 ELSE 0 END)`,
         provisional: sql<number | string>`SUM(CASE WHEN ${csc.provisional} = 1 THEN 1 ELSE 0 END)`,
+        openai: sql<number | string>`SUM(CASE WHEN ${css.session_id} LIKE 'codex:%' THEN 1 ELSE 0 END)`,
       })
       .from(csc)
       .innerJoin(css, eq(css.session_id, csc.session_id))
-      .where(and(eq(csc.status, 'classified'), gte(css.last_at, thirtyDaysAgo)))
+      .where(and(eq(csc.status, 'classified'), gte(css.last_at, thirtyDaysAgo), sessionVendor))
       .groupBy(csc.work_type)
       .orderBy(desc(sql`COUNT(*)`));
     const defs = await getCodeWorkTypeDefinitions();
@@ -459,6 +576,8 @@ export async function GET(request: NextRequest) {
       definition: codeWorkTypeDefinition(r.work_type, defs.get(r.work_type)),
       sessions: Number(r.sessions), tier3: Number(r.tier3), tier2: Number(r.tier2), tier1: Number(r.tier1),
       provisional: Number(r.provisional),
+      claude: Number(r.sessions) - Number(r.openai),
+      openai: Number(r.openai),
     }));
   }
 
@@ -466,8 +585,8 @@ export async function GET(request: NextRequest) {
   // current (partial) week is included and flagged — never presented as a
   // completed week. Deltas compare the two most recent COMPLETED weeks.
   const trendSeries = async (column: 'spend_usd' | 'autonomy_ratio' | 'commit_count' | 'session_count') => ({
-    series: await getWeeklySeries('code_metrics', 'organisation', ORG_SCOPE_ID, column, 8),
-    delta: await getWeeklyDelta('code_metrics', 'organisation', ORG_SCOPE_ID, column, 8),
+    series: await getWeeklySeries('code_metrics', 'organisation', ORG_SCOPE_ID, column, 8, now, tv),
+    delta: await getWeeklyDelta('code_metrics', 'organisation', ORG_SCOPE_ID, column, 8, now, tv),
   });
   const trends = {
     spend: await trendSeries('spend_usd'),
@@ -477,9 +596,12 @@ export async function GET(request: NextRequest) {
   };
 
   // Human time vs Claude time — org totals; null when off.
-  const humanTime = await readHumanTime('code');
+  const humanTime = await readHumanTime('code', undefined, vendor);
 
   return NextResponse.json({
+    vendor,
+    codexPresent,
+    metricsSplit,
     humanTime,
     metrics,
     priorMetrics,

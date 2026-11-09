@@ -4,19 +4,24 @@
 /**
  * What the dashboard's "Get started" panel shows: five setup steps, each
  * worked out from what the install already holds or marked as done by an
- * admin, plus an optional sample data step on installs that ship the sample
- * data command.
+ * admin, plus optional steps that do not count towards the five: Claude Chat,
+ * ChatGPT and Codex, and sample data on installs that ship its command.
+ *
+ * With only OpenAI connected (lib/sources/connected-shared.ts) there are four:
+ * connecting ChatGPT and Codex replaces connecting Claude Code and Cowork,
+ * which become optional.
  */
 import { and, ne, isNotNull, like, sql } from 'drizzle-orm';
 import { getTypedClient } from '@/lib/db/client';
 import { schema } from '@/lib/db/schema';
 import { getConfigValue } from '@/lib/config';
+import { getConnectedProducts, isOpenAiOnly, openAiConnected } from '@/lib/sources/connected';
 
 /** The sample organisation's people (scripts/demo/acme-people.json). */
 export const SAMPLE_EMAIL_PATTERN = '%@acmecorp.example';
 
-/** The five steps' ids, as an admin marks them done. */
-export const SETUP_STEPS = ['api-key', 'claude-code', 'cowork', 'rubric', 'departments'] as const;
+/** The steps' ids, as an admin marks them done. 'openai' counts only with OpenAI alone connected. */
+export const SETUP_STEPS = ['api-key', 'claude-code', 'cowork', 'openai', 'rubric', 'departments'] as const;
 export type SetupStep = (typeof SETUP_STEPS)[number];
 
 export interface SetupStatus {
@@ -25,6 +30,9 @@ export interface SetupStatus {
   /** Epoch seconds the first real telemetry arrived, or null. */
   claudeCodeAt: number | null;
   coworkAt: number | null;
+  /** Optional steps: the first Claude Chat prompt, the first ChatGPT or Codex prompt. */
+  chatAt: number | null;
+  openaiAt: number | null;
   /** The tiers were saved at least once, or an admin marked them as reviewed. */
   rubricReviewed: boolean;
   departmentsSet: boolean;
@@ -32,7 +40,11 @@ export interface SetupStatus {
   markedDone: SetupStep[];
   /** Offered only where the sample data command exists (CCC_SAMPLE_DATA=1). */
   sampleData: { available: boolean; loaded: boolean };
-  /** Count of the five required steps done. */
+  /** Only OpenAI is connected: ChatGPT and Codex replace Claude Code and Cowork as a required step. */
+  openaiOnly: boolean;
+  /** How many steps count: five, or four with only OpenAI connected. */
+  total: number;
+  /** Count of the required steps done. */
   done: number;
   complete: boolean;
 }
@@ -56,13 +68,16 @@ export async function getSetupStatus(): Promise<SetupStatus> {
   const client = await getTypedClient();
   const exists = async (q: Promise<unknown[]>) => (await q).length > 0;
 
-  const [hidden, key, codeAt, coworkAt, markedReviewed, stepsDone] = await Promise.all([
+  const [hidden, key, codeAt, coworkAt, markedReviewed, stepsDone, chatAt, openaiAt, connected] = await Promise.all([
     getConfigValue('setupGuideHidden'),
     getConfigValue('anthropicAiApiKey'),
     getConfigValue('setupFirstCodeAt'),
     getConfigValue('setupFirstCoworkAt'),
     getConfigValue('setupRubricReviewed'),
     getConfigValue('setupStepsDone'),
+    getConfigValue('setupFirstChatAt'),
+    getConfigValue('setupFirstOpenaiAt'),
+    getConnectedProducts(),
   ]);
   const markedDone = parseStepsDone(stepsDone);
   const marked = (step: SetupStep) => markedDone.includes(step);
@@ -86,12 +101,18 @@ export async function getSetupStatus(): Promise<SetupStatus> {
     apiKey: key.length > 0 || marked('api-key'),
     claudeCodeAt: toEpoch(codeAt),
     coworkAt: toEpoch(coworkAt),
+    chatAt: toEpoch(chatAt),
+    openaiAt: toEpoch(openaiAt),
     rubricReviewed: rubricSaved || markedReviewed === 'true' || marked('rubric'),
     departmentsSet,
     markedDone,
     sampleData: { available: process.env.CCC_SAMPLE_DATA === '1', loaded: sampleLoaded },
   };
-  const done = [status.apiKey, status.claudeCodeAt !== null || marked('claude-code'), status.coworkAt !== null || marked('cowork'), status.rubricReviewed, departmentsSet]
-    .filter(Boolean).length;
-  return { ...status, done, complete: done === 5 };
+  // Setup follows what is connected, whether or not ChatGPT and Codex are shown.
+  const openaiOnly = isOpenAiOnly({ claude: connected.claude, openai: openAiConnected(connected) });
+  const required = openaiOnly
+    ? [status.apiKey, status.openaiAt !== null || marked('openai'), status.rubricReviewed, departmentsSet]
+    : [status.apiKey, status.claudeCodeAt !== null || marked('claude-code'), status.coworkAt !== null || marked('cowork'), status.rubricReviewed, departmentsSet];
+  const done = required.filter(Boolean).length;
+  return { ...status, openaiOnly, total: required.length, done, complete: done === required.length };
 }

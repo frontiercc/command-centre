@@ -268,3 +268,128 @@ describe('cost spike wording names the window and the month so far', () => {
     expect(alert.explanation).toContain(`(${month} so far: $${earlierThisMonth ? '40.00' : '30.00'})`);
   });
 });
+
+describe('codex_cost_spike: Codex against its own daily limit', () => {
+  // gpt-5.3-codex: $1.75/MTok uncached input, $0.175 cached, $14 output.
+  async function seedCodex(id: string, uncached: number, cached: number, output: number, startedAt: number) {
+    await sql.run(`INSERT INTO codex_turns (id, user_id, session_id, model, started_at, uncached_input_tokens, cached_input_tokens, output_tokens)
+      VALUES (?, 'user-1', 'codex:s1', 'gpt-5.3-codex', ?, ?, ?, ?)`, [id, startedAt, uncached, cached, output]);
+  }
+  const codexAlerts = async () => sql.all<{ title: string; severity: string; explanation: string }>(
+    `SELECT title, severity, explanation FROM alerts WHERE alert_type = 'codex_cost_spike' ORDER BY generated_at`);
+
+  beforeEach(async () => {
+    await sql.exec(`DELETE FROM codex_turns; DELETE FROM config WHERE key LIKE 'codex_%';`);
+  });
+
+  it('alerts on Codex spend over the Codex limit, naming Codex', async () => {
+    await setConfig('codex_daily_spend_limit_usd', '25');
+    await seedCodex('t1', 10_000_000, 0, 1_000_000, NOW - 3600); // $17.50 + $14 = $31.50
+    await runCodePulseAlerts();
+    const a = await codexAlerts();
+    expect(a).toHaveLength(1);
+    expect(a[0].title).toBe('Codex spend over the daily limit: $31.50 in 24h');
+    expect(a[0].severity).toBe('medium');
+    expect(a[0].explanation).toContain('on Codex in the 24 hours');
+    expect(a[0].explanation).toContain('over the daily limit of $25.00');
+  });
+
+  it('uses its own limit, not Claude Code\'s, and defaults to $500', async () => {
+    // Claude Code's limit is $25 in these tests. $490 of Codex is under Codex's default $500.
+    await seedCodex('t1', 0, 0, 35_000_000, NOW - 3600); // 35M output at $14 = $490
+    await runCodePulseAlerts();
+    expect(await codexAlerts()).toHaveLength(0);
+    expect((await sql.all(`SELECT 1 FROM alerts WHERE alert_type = 'code_cost_spike'`))).toHaveLength(0);
+    await seedCodex('t2', 0, 0, 1_000_000, NOW - 1800);  // + $14 = $504
+    await runCodePulseAlerts();
+    expect((await codexAlerts()).map(a => a.title)).toEqual(['Codex spend over the daily limit: $504.00 in 24h']);
+  });
+
+  it('counts only the last 24 hours and prices cached input at the cached rate', async () => {
+    await setConfig('codex_daily_spend_limit_usd', '25');
+    await seedCodex('old', 100_000_000, 0, 0, NOW - 2 * 86400);   // outside the 24 hours
+    await seedCodex('t1', 0, 100_000_000, 0, NOW - 3600);         // $17.50 cached: under
+    await runCodePulseAlerts();
+    expect(await codexAlerts()).toHaveLength(0);
+  });
+
+  it('steps up to high past twice the limit, and respects its own switch', async () => {
+    await setConfig('codex_daily_spend_limit_usd', '10');
+    await seedCodex('t1', 10_000_000, 0, 1_000_000, NOW - 3600); // $31.50: over twice $10
+    await setConfig('codex_alert_spend_enabled', 'false');
+    await runCodePulseAlerts();
+    expect(await codexAlerts()).toHaveLength(0);
+    await setConfig('codex_alert_spend_enabled', 'true');
+    await runCodePulseAlerts();
+    expect((await codexAlerts()).map(a => a.severity)).toEqual(['high']);
+    await runCodePulseAlerts();
+    expect(await codexAlerts()).toHaveLength(1);
+  });
+});
+
+describe('Codex in the model policy and friction alerts', () => {
+  beforeEach(async () => {
+    await sql.exec(`DELETE FROM codex_turns; DELETE FROM codex_actions; DELETE FROM config WHERE key LIKE 'codex_%';`);
+  });
+
+  async function seedTurn(id: string, model: string, startedAt: number, userId = 'user-1') {
+    await sql.run(`INSERT INTO codex_turns (id, user_id, session_id, model, started_at) VALUES (?, ?, 'codex:s1', ?, ?)`,
+      [id, userId, model, startedAt]);
+  }
+  async function seedActions(sessionId: string, total: number, failed: number, at: number, userId = 'user-1') {
+    for (let i = 0; i < total; i++) {
+      await sql.run(`INSERT INTO codex_actions (id, user_id, session_id, tool_name, failed, commit_count, occurred_at) VALUES (?, ?, ?, 'shell', ?, 0, ?)`,
+        [`${sessionId}-a${i}`, userId, sessionId, i < failed ? 1 : 0, at - i]);
+    }
+  }
+
+  it('alerts on a Codex model not on the approved list, naming Codex and the person', async () => {
+    await setConfig('code_alert_model_policy_enabled', 'true');
+    await setConfig('code_model_allowlist', JSON.stringify(['claude-haiku-4-5', 'gpt-5.3-codex']));
+    await seedTurn('t-ok', 'gpt-5.3-codex', NOW - 3600);
+    await seedTurn('t-bad', 'gpt-5.4', NOW - 3600);
+    await seedTurn('t-old', 'gpt-4o', NOW - 3 * 86400); // outside the 24 hours
+    await runCodePulseAlerts();
+    const alerts = await sql.all<{ title: string; explanation: string; user_id: string; raw_evidence: string }>(
+      `SELECT title, explanation, user_id, raw_evidence::text AS raw_evidence FROM alerts WHERE alert_type = 'code_model_policy'`);
+    expect(alerts).toHaveLength(1);
+    expect(alerts[0].title).toBe('Non-approved model in Codex: gpt-5.4');
+    expect(alerts[0].explanation).toBe('user-1@test.local used model "gpt-5.4" in Codex, which is not on the approved model list.');
+    expect(alerts[0].user_id).toBe('user-1');
+    expect(JSON.parse(alerts[0].raw_evidence)).toMatchObject({ product: 'Codex', model: 'gpt-5.4' });
+    // Dedup within 24 hours, as for Claude Code.
+    await runCodePulseAlerts();
+    expect(await sql.all(`SELECT 1 FROM alerts WHERE alert_type = 'code_model_policy'`)).toHaveLength(1);
+  });
+
+  it('keeps Codex and Claude Code model alerts apart in the dedup', async () => {
+    await setConfig('code_alert_model_policy_enabled', 'true');
+    await setConfig('code_model_allowlist', JSON.stringify(['claude-haiku-4-5']));
+    await seedTurn('t-bad', 'gpt-5.4', NOW - 3600);
+    await seedSpend('user-1', 'claude-fable-5', 1000, NOW - 3600, 'mp-claude');
+    await runCodePulseAlerts();
+    const titles = (await sql.all<{ title: string }>(`SELECT title FROM alerts WHERE alert_type = 'code_model_policy' ORDER BY title`)).map(a => a.title);
+    expect(titles).toEqual(['Non-approved model in Claude Code: claude-fable-5', 'Non-approved model in Codex: gpt-5.4']);
+  });
+
+  it('raises the high-friction alert for a Codex session from its actions', async () => {
+    await setConfig('code_alert_friction_enabled', 'true');
+    // The aggregator leaves a Codex session's tool counts at 0 in code_session_stats.
+    await sql.run(`INSERT INTO code_session_stats (session_id, user_id, first_at, last_at, user_msg_count, tool_use_count, error_count, computed_at)
+      VALUES ('codex:s1', 'user-1', ?, ?, 2, 0, 0, ?)`, [NOW - 7200, NOW - 600, NOW]);
+    await seedActions('codex:s1', 8, 4, NOW - 600);     // 50% failed: alert
+    await seedActions('codex:s2', 8, 1, NOW - 600);     // 12.5%: no alert
+    await seedActions('codex:s3', 4, 4, NOW - 600);     // under 5 actions: no alert
+    await seedActions('codex:s4', 8, 8, NOW - 3 * 86400); // last action over 24h ago: no alert
+    await runCodePulseAlerts();
+    const alerts = await sql.all<{ title: string; explanation: string; user_id: string; raw_evidence: string }>(
+      `SELECT title, explanation, user_id, raw_evidence::text AS raw_evidence FROM alerts WHERE alert_type = 'code_friction'`);
+    expect(alerts).toHaveLength(1);
+    expect(alerts[0].title).toBe('High-friction Codex session');
+    expect(alerts[0].explanation).toMatch(/^4 of 8 tool actions failed \(50%\)\./);
+    expect(alerts[0].user_id).toBe('user-1');
+    expect(JSON.parse(alerts[0].raw_evidence)).toMatchObject({ product: 'Codex', session_id: 'codex:s1', errors: 4, tools: 8 });
+    await runCodePulseAlerts();
+    expect(await sql.all(`SELECT 1 FROM alerts WHERE alert_type = 'code_friction'`)).toHaveLength(1);
+  });
+});

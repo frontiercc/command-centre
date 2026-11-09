@@ -7,13 +7,13 @@ import { describe, it, expect } from 'vitest';
 import { SECRET_KEYS, SENSITIVE_KEYS } from '@/lib/config-secrets';
 
 describe('config-secrets registry', () => {
-  it('covers all 13 sensitive keys', () => {
+  it('covers all 14 sensitive keys', () => {
     expect(new Set(SENSITIVE_KEYS)).toEqual(new Set([
       'anthropicAdminApiKey', 'anthropicAnalyticsApiKey', 'anthropicAiApiKey',
       'otelEndpointSecret', 'archiveAccessKeyId', 'archiveSecretAccessKey',
       'smtpPassword', 'digestSlackWebhookUrl', 'ssoClientSecret', 'dxApiKey',
       'complianceAccessKey', 'githubToken',
-      'alertsSlackWebhookUrl',
+      'alertsSlackWebhookUrl', 'openaiAdminApiKey',
     ]));
   });
 
@@ -39,5 +39,11 @@ describe('config-secrets registry', () => {
 
   it('github key resets its last-sync bookmark', () => {
     expect(SECRET_KEYS.githubToken.associatedKeys).toEqual(['githubSyncLastRun']);
+  });
+
+  it('OpenAI key resets its sync position and last-sync status', () => {
+    expect(new Set(SECRET_KEYS.openaiAdminApiKey.associatedKeys)).toEqual(new Set([
+      'openaiSyncCursors', 'openaiLastSyncAt', 'openaiLastSyncStats',
+    ]));
   });
 });

@@ -9,6 +9,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { getAllConfig } from '@/lib/config';
 import { getAdminSession, canAccessPulseAdmin } from '@/lib/auth/admin-auth';
 import { logAccess } from '@/lib/audit/log';
+import { promptTextVisibleFor } from '@/lib/auth/content-access';
 import { errorResponse } from '@/lib/api/errors';
 import { currentPeriod, monthBounds } from '@/lib/finance/period';
 import { officeSpendByUser, summariseOfficeSpend } from '@/lib/finance/office-spend';
@@ -73,8 +74,9 @@ export async function GET(
         pendingRequestAt: email ? requests.get(email)?.createdAt ?? null : null,
       },
       nearLimitShare: NEAR_LIMIT_SHARE,
-      // The session click-through shows prompts, which follow the Audit Log rule.
-      canSeePrompts: canAccessPulseAdmin(session.role),
+      // The session click-through shows prompts, which follow the Audit Log
+      // rule: admins for anyone, managers for their own department.
+      canSeePrompts: canAccessPulseAdmin(session.role) && (await promptTextVisibleFor(session, [userId])).has(userId),
     });
   } catch (err) {
     return errorResponse('api/finance/spend-review/[userId]', err, { message: 'Could not build the spend review.' });

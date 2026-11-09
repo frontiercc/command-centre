@@ -42,6 +42,24 @@ export interface DeptBox<S> {
 
 export const SURFACE_LABEL: Record<SuggestionSurface, string> = { cowork: 'Cowork', code: 'Claude Code' };
 
+/**
+ * The lists' names. Suggestions are mined from every Work prompt (Claude
+ * Cowork and ChatGPT) and every Code prompt (Claude Code and Codex), so with
+ * OpenAI connected the names say so; with only OpenAI they name its products.
+ */
+export function surfaceLabels(connected?: { claude: boolean; openai: boolean } | null): Record<SuggestionSurface, string> {
+  if (!connected?.openai) return SURFACE_LABEL;
+  if (!connected.claude) return { cowork: 'ChatGPT', code: 'Codex' };
+  return { cowork: 'Claude Cowork and ChatGPT', code: 'Claude Code and Codex' };
+}
+
+/** A use case's surface as the register names it: Work and Code take in ChatGPT and Codex too. */
+export function labelForUseCaseSurface(surface: string, connected?: { claude: boolean; openai: boolean } | null): string {
+  if (surface === 'cowork' || surface === 'code') return surfaceLabels(connected)[surface];
+  if (surface === 'chat') return connected?.openai ? 'Claude Chat' : 'Chat';
+  return surface;
+}
+
 /** How many titles each list in a box shows; the rest are reached through Review. */
 export const TITLES_PER_GROUP = 3;
 
@@ -61,7 +79,7 @@ function rank<S extends BoxableSuggestion>(list: S[]): S[] {
 }
 
 /** Department suggestions (department set) grouped into one box per department, alphabetical. */
-export function groupDeptBoxes<S extends BoxableSuggestion>(suggestions: S[]): DeptBox<S>[] {
+export function groupDeptBoxes<S extends BoxableSuggestion>(suggestions: S[], labels: Record<SuggestionSurface, string> = SURFACE_LABEL): DeptBox<S>[] {
   const byDept = new Map<string, S[]>();
   for (const s of suggestions) {
     if (!s.department) continue;
@@ -70,7 +88,7 @@ export function groupDeptBoxes<S extends BoxableSuggestion>(suggestions: S[]): D
   const boxes: DeptBox<S>[] = [];
   for (const [department, list] of byDept) {
     const groups = SURFACE_ORDER
-      .map(surface => ({ surface, label: SURFACE_LABEL[surface], suggestions: rank(list.filter(s => surfaceOf(s) === surface)) }))
+      .map(surface => ({ surface, label: labels[surface], suggestions: rank(list.filter(s => surfaceOf(s) === surface)) }))
       .filter(g => g.suggestions.length > 0);
     boxes.push({
       key: department, department, label: department, count: list.length,

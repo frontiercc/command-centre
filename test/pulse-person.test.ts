@@ -30,7 +30,6 @@ beforeEach(async () => {
   await sql.exec(`DELETE FROM pulse_metrics;`);
   await sql.exec(`DELETE FROM code_metrics;`);
   await sql.exec(`DELETE FROM cowork_messages;`);
-  await sql.exec(`DELETE FROM chat_messages;`);
   await sql.exec(`DELETE FROM users;`);
 });
 
@@ -75,15 +74,15 @@ describe('getPerson360', () => {
       [NOW - 1000],
     );
 
-    // Chat: messages in the last 7 days
+    // Chat: Claude Chat prompts in the last 7 days (cowork_messages, surface 'chat')
     await sql.run(
-      `INSERT INTO chat_messages (id, user_id, prompt_text, prompt_length, occurred_at)
-       VALUES ('c1', 'u1', 'hello', 5, ?)`,
+      `INSERT INTO cowork_messages (id, session_id, user_id, message_type, surface, source, content_preview, content_full, occurred_at)
+       VALUES ('c1', 'conv1', 'u1', 'cowork_user_message', 'chat', 'compliance', 'hello', 'hello', ?)`,
       [NOW - 500],
     );
     await sql.run(
-      `INSERT INTO chat_messages (id, user_id, prompt_text, prompt_length, occurred_at)
-       VALUES ('c2', 'u1', 'world', 5, ?)`,
+      `INSERT INTO cowork_messages (id, session_id, user_id, message_type, surface, source, content_preview, content_full, occurred_at)
+       VALUES ('c2', 'conv1', 'u1', 'cowork_user_message', 'chat', 'compliance', 'world', 'world', ?)`,
       [NOW - 400],
     );
 
@@ -136,6 +135,8 @@ describe('getPerson360', () => {
       codeUsd: 12.5,
       coworkUsd: 3.25,
       totalUsd: 12.5 + 3.25,
+      chatgptUsd: null,
+      codeIncludesCodex: false,
     });
     expect(result.combinedSpend.totalIsPartial).toBeFalsy();
 
@@ -145,7 +146,7 @@ describe('getPerson360', () => {
 
   it('returns null per-surface sections when a surface has no data, and null userId fields are handled', async () => {
     await seedUser('u2', null, null);
-    // No pulse_metrics, no code_metrics, no cowork_messages, no chat_messages rows for u2.
+    // No pulse_metrics, no code_metrics, no cowork_messages rows (Cowork or Claude Chat) for u2.
 
     const result = await getPerson360('u2');
 
@@ -160,6 +161,8 @@ describe('getPerson360', () => {
       codeUsd: null,
       coworkUsd: 0,
       totalUsd: null,
+      chatgptUsd: null,
+      codeIncludesCodex: false,
     });
   });
 
@@ -193,6 +196,8 @@ describe('getPerson360', () => {
       coworkUsd: 5.0,
       totalUsd: 5.0,
       totalIsPartial: true,
+      chatgptUsd: null,
+      codeIncludesCodex: false,
     });
   });
 
@@ -204,7 +209,42 @@ describe('getPerson360', () => {
       codeUsd: null,
       coworkUsd: 0,
       totalUsd: null,
+      chatgptUsd: null,
+      codeIncludesCodex: false,
     });
     expect(result.combinedSpend.totalIsPartial).toBeFalsy();
+  });
+
+  it('does not call the total partial for someone with no coding activity', async () => {
+    await seedUser('u6', 'Cowork Only', 'Sales');
+    await sql.run(
+      `INSERT INTO cowork_messages (id, session_id, user_id, message_type, occurred_at, cost_usd)
+       VALUES ('m6', 's6', 'u6', 'cowork_api_request', ?, 2.0)`,
+      [NOW - 1000],
+    );
+    const result = await getPerson360('u6');
+    expect(result.code).toBeNull();
+    expect(result.combinedSpend.totalUsd).toBeCloseTo(2, 6);
+    expect(result.combinedSpend.totalIsPartial).toBeFalsy();
+  });
+
+  it('adds ChatGPT spend to the combined total once ChatGPT cost records exist', async () => {
+    await seedUser('u5', 'Ada Lovelace', 'Finance');
+    await sql.run(
+      `INSERT INTO cowork_messages (id, session_id, user_id, message_type, occurred_at, cost_usd)
+       VALUES ('m5', 's5', 'u5', 'cowork_api_request', ?, 1.0)`,
+      [NOW - 1000],
+    );
+    // One hour of ChatGPT use: a million input tokens on gpt-6, $2 at OpenAI's list rate.
+    await sql.run(
+      `INSERT INTO openai_costs (id, user_id, hour_start, product, model, input_tokens, billed_in)
+       VALUES ('c5', 'u5', ?, 'chatgpt', 'gpt-6', 1000000, 'usd')`,
+      [NOW - 3600],
+    );
+
+    const result = await getPerson360('u5');
+    expect(result.combinedSpend.chatgptUsd).toBeCloseTo(2, 6);
+    expect(result.combinedSpend.coworkUsd).toBeCloseTo(1, 6);
+    expect(result.combinedSpend.totalUsd).toBeCloseTo(3, 6);
   });
 });

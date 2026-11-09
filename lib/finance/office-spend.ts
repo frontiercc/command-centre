@@ -2,7 +2,9 @@
 // SPDX-License-Identifier: Apache-2.0
 
 /**
- * Estimated spend for Claude in Office (Excel, Word, PowerPoint, Outlook).
+ * Estimated spend for Claude in Office (Excel, Word, PowerPoint, Outlook) and
+ * Claude in Google (Sheets, Docs, Slides). "Office" below covers both: they
+ * send the same add-in telemetry.
  *
  * Office sends tokens but no cost (lib/otel/office-receiver.ts stores
  * cost_usd NULL), so its spend is the tokens priced from the admin model rates
@@ -18,7 +20,7 @@ import { and, gte, isNotNull, lt, eq } from 'drizzle-orm';
 import { getTypedClient } from '@/lib/db/client';
 import { schema } from '@/lib/db/schema';
 import { getCodeModelRates, priceTokens, type ModelRates, type TokenUsage } from '@/lib/pulse/code/rates';
-import { PRODUCT_ORDER, type WorkProduct } from '@/lib/pulse/cowork/products';
+import { PRODUCT_FAMILY, PRODUCT_ORDER, type WorkProduct } from '@/lib/pulse/cowork/products';
 
 export type OfficeProduct = Exclude<WorkProduct, 'cowork'>;
 
@@ -37,8 +39,10 @@ export interface OfficeSpendRow extends OfficeSpend {
 export interface OfficeSpendSummary {
   byProduct: Array<OfficeSpend & { product: OfficeProduct; people: number }>;
   total: OfficeSpend & { people: number };
-  /** False when no Office activity was found (only with allApps). */
+  /** False when no Office or Google activity was found (only with allApps). */
   hasOffice: boolean;
+  /** Which groups had activity: the panels say how to set up a group with none. */
+  seen: { office: boolean; google: boolean };
 }
 
 const emptyTokens = (): TokenUsage => ({ inputTokens: 0, outputTokens: 0, cacheReadTokens: 0, cacheCreationTokens: 0 });
@@ -146,5 +150,9 @@ export function summariseOfficeSpend(rows: OfficeSpendRow[], opts: { allApps?: b
       }),
     total: { ...total, people: total.people.size },
     hasOffice: rows.length > 0,
+    seen: {
+      office: rows.some(r => PRODUCT_FAMILY[r.product] === 'office'),
+      google: rows.some(r => PRODUCT_FAMILY[r.product] === 'google'),
+    },
   };
 }

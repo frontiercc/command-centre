@@ -5,6 +5,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { getAllConfig } from '@/lib/config';
 import { getAdminSession, canAccessPulseAdmin } from '@/lib/auth/admin-auth';
 import { listOpenSuggestions } from '@/lib/usecases/suggestion-store';
+import { openaiShown } from '@/lib/sources/openai-visibility';
 
 export const dynamic = 'force-dynamic';
 
@@ -30,5 +31,10 @@ export async function GET(request: NextRequest) {
   const rows = await listOpenSuggestions();
   // Cross-department process suggestions are department NULL with a
   // canvas; the retired tray's rows have no canvas and stay hidden.
-  return NextResponse.json(rows.filter(r => r.department !== null || r.canvas !== null));
+  // The sessions-by-product line shows only while ChatGPT and Codex are shown,
+  // the rule the register's Claude / OpenAI column follows.
+  const shown = await openaiShown();
+  return NextResponse.json(rows
+    .filter(r => r.department !== null || r.canvas !== null)
+    .map(r => (shown ? r : { ...r, products: null })));
 }

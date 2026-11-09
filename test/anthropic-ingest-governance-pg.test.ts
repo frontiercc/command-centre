@@ -216,19 +216,19 @@ async function runSpec(): Promise<void> {
     mockCreate.mockReset();
     mockCreate.mockResolvedValue({ content: [{ type: 'text', text: '# Report\n\nok' }] });
 
-    const reportMd = await ai.generateGovernanceReport('2026-01-01', '2026-01-31', ['cowork_audit', 'code_audit']);
+    // The audit sections count the report period, so the period holds the rows seeded above.
+    const day = (s: number) => new Date(s * 1000).toISOString().slice(0, 10);
+    const reportMd = await ai.generateGovernanceReport(day(NOW - 2 * 86400), day(NOW), ['cowork_audit', 'code_audit']);
     expect(reportMd).toContain('# Report');
     expect(mockCreate).toHaveBeenCalledTimes(1);
 
     const systemPrompt = mockCreate.mock.calls[0][0].system as string;
-    // messageCount (ALL cowork_messages rows, both surfaces) = 5.
-    expect(systemPrompt).toContain('**Total Cowork messages:** 5');
-    // flaggedCount (flagged=1, both surfaces: cm-1 + cm-3) = 2.
-    expect(systemPrompt).toContain('**Flagged messages (PII/policy):** 2');
-    // totalCodeMessages (surface='code': cm-3/4/5) = 3.
-    expect(systemPrompt).toContain('**Total Code events:** 3');
-    // codeFlaggedCount (surface='code' AND flagged=1: cm-3) = 1.
-    expect(systemPrompt).toContain('**Flagged events (PII/policy):** 1');
+    // Claude Cowork messages only (cm-1, cm-2); Claude Code rows are counted in their own section.
+    expect(systemPrompt).toContain('**Cowork messages in this period:** 2');
+    expect(systemPrompt).toContain('**Flagged messages in this period (PII/policy):** 1');
+    // Claude Code events (cm-3/4/5), one flagged (cm-3).
+    expect(systemPrompt).toContain('**Claude Code events in this period:** 3');
+    expect(systemPrompt).toContain('**Flagged events in this period (PII/policy):** 1');
   } finally {
     global.fetch = originalFetch;
     await cleanup();

@@ -8,6 +8,7 @@ import { requireAdmin, getAdminSession } from '@/lib/auth/admin-auth';
 import { logAccess } from '@/lib/audit/log';
 import { SENSITIVE_KEYS } from '@/lib/config-secrets';
 import { normaliseCollectorAddress } from '@/lib/setup/collector';
+import { getConnectedProducts } from '@/lib/sources/connected';
 
 function maskValue(value: string): string {
   if (!value || value.length < 8) return value ? '••••••••' : '';
@@ -43,7 +44,7 @@ export async function GET(request: NextRequest) {
     for (const key of NON_ADMIN_CONFIG_KEYS) {
       if (key in all) shared[key] = all[key];
     }
-    return NextResponse.json(shared);
+    return NextResponse.json({ ...shared, connectedProducts: await getConnectedProducts() });
   }
 
   // Mask sensitive values before returning to client
@@ -56,7 +57,9 @@ export async function GET(request: NextRequest) {
     }
   }
 
-  return NextResponse.json(safe);
+  // Which vendors are connected: the sidebar, the vendor switch and the
+  // dashboard's Get started read it (lib/sources/connected-shared.ts).
+  return NextResponse.json({ ...safe, connectedProducts: await getConnectedProducts() });
 }
 
 export async function POST(request: NextRequest) {
@@ -117,6 +120,8 @@ export async function POST(request: NextRequest) {
     'codeAlertFrictionEnabled',
     'codeCostSpikeMultiplier',
     'codeCostSpikeFloorUsd',
+    'codexAlertSpendEnabled',
+    'codexDailySpendLimitUsd',
     'codeFrictionThreshold',
     'codeModelAllowlist',
     'codeSensitiveRepoPatterns',
@@ -145,9 +150,11 @@ export async function POST(request: NextRequest) {
     'pulseBriefingModel',
     'pulseUserBriefingModel',
     'pulseSessionDescriptionsEnabled',
+    'pulseClassifyChatgpt',
     'claudeInOfficeShown',
     'humanTimeEnabled',
     'humanTimeCodeEnabled',
+    'codeClassifyCodex',
     'systemHealthAlertsEnabled',
     'telemetrySilenceHours',
     'telemetrySilenceTimezone',
@@ -186,6 +193,8 @@ export async function POST(request: NextRequest) {
     'chargebackEnabled',
     'financeModelEfficiencyEnabled',
     'finopsSeatPriceMonthly',
+    'chatgptSeats',
+    'chatgptSeatPriceMonthly',
     'useCasesExtractModel',
     'useCasesIdeateModel',
     'useCasesSuggestUseContent',
@@ -225,6 +234,13 @@ export async function POST(request: NextRequest) {
     'complianceActivityBackfillDays',
     'complianceActivitySyncEnabled',
     'complianceActivityExcludedTypes',
+    'openaiAdminApiKey',
+    'openaiWorkspaceId',
+    'openaiOrganizationId',
+    'openaiSyncIntervalMinutes',
+    'openaiBackfillDays',
+    'openaiSyncPaused',
+    'openaiShown',
   ]);
 
   const values: Partial<Record<keyof AppConfig, string>> = {};
@@ -242,11 +258,12 @@ export async function POST(request: NextRequest) {
       'pulseUserBriefingModel',
       // Blank = Developer Pulse briefings use the organisation briefing model again.
       'codeBriefingModel',
-      'licensedSeats', 'finopsSeatPriceMonthly',
+      'licensedSeats', 'finopsSeatPriceMonthly', 'chatgptSeats', 'chatgptSeatPriceMonthly',
       'ssoIssuerUrl', 'ssoClientId', 'ssoProviderLabel', 'ssoRedirectBaseUrl',
       'dxInstanceUrl',
       // Blank = the address falls back to CCC_COLLECTOR_ADDRESS, then localhost.
       'otelCollectorAddress',
+      'openaiWorkspaceId', 'openaiOrganizationId',
     ]);
     if (!allowedKeys.has(key) || typeof value !== 'string') continue;
     if (String(value).includes('••••••••')) {

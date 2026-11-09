@@ -14,6 +14,8 @@ import ImpactPanel, { type UseCaseImpact, type ImpactSummary } from '@/component
 import SkillDraftPanel, { type SkillDraftView } from '@/components/usecases/SkillDraftPanel';
 import { buildActivateEvidenceLine, tierDepthLabel, humaniseMatchedSignals } from '@/lib/usecases/activate-evidence-format';
 import { PageBody, Toolbar, Panel, PanelFoot, SubHead, T, Tag, Pill, B, Notice, Empty, Muted, cx } from '@/components/precision/ui';
+import { useConnectedProducts } from '@/components/shared/VendorSwitch';
+import { labelForUseCaseSurface } from '@/lib/usecases/dept-boxes';
 
 interface WeekActivity {
   weekStart: number;
@@ -109,11 +111,13 @@ export default function UseCaseDetailPage() {
   const router = useRouter();
   const params = useParams();
   const id = decodeURIComponent(String(params?.id ?? ''));
+  const connected = useConnectedProducts();
 
   const [checked, setChecked] = useState(false);
   const [uc, setUc] = useState<UseCase | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [notEnabled, setNotEnabled] = useState(false);
+  const [missing, setMissing] = useState(false);
 
   const [editingRule, setEditingRule] = useState(false);
   const [keywords, setKeywords] = useState('');
@@ -149,8 +153,12 @@ export default function UseCaseDetailPage() {
   const load = useCallback(() => {
     if (!id) return;
     fetch(`/api/use-cases/${encodeURIComponent(id)}`)
-      .then(r => {
-        if (r.status === 404) { setNotEnabled(true); throw new Error('not enabled'); }
+      .then(async r => {
+        if (r.status === 404) {
+          const body = await r.json().catch(() => ({}));
+          if (body.error === 'use_case_not_found') { setMissing(true); throw new Error('not enabled'); }
+          setNotEnabled(true); throw new Error('not enabled');
+        }
         if (!r.ok) throw new Error("Couldn't load this page. Try again.");
         return r.json();
       })
@@ -188,13 +196,6 @@ export default function UseCaseDetailPage() {
     return () => { cancelled = true; };
     // eslint-disable-next-line react-hooks/exhaustive-deps -- keyed on the use case id, not the whole uc object
   }, [uc?.id]);
-
-  // Note: /api/use-cases/[id] returns 404 both when the use case is missing
-  // AND when useCasesEnabled is false — indistinguishable from this endpoint
-  // alone. If the use case genuinely doesn't exist while the feature IS
-  // enabled, this card's "enable it under Admin → System" copy is slightly
-  // misleading but harmless; the register page is the far more common
-  // not-enabled entry point and gives the accurate read there.
 
   useEffect(() => {
     if (!checked) return;
@@ -340,7 +341,7 @@ export default function UseCaseDetailPage() {
     }
   };
 
-  if (!checked || (!uc && !error && !notEnabled)) {
+  if (!checked || (!uc && !error && !notEnabled && !missing)) {
     return (
       <>
         <TopBar title="Use Case" />
@@ -349,6 +350,22 @@ export default function UseCaseDetailPage() {
     );
   }
 
+  // A missing use case ('use_case_not_found') says so; the plain 404 below is
+  // only Use Cases switched off.
+  if (missing) {
+    return (
+      <>
+        <TopBar title="Use Case" />
+        <PageBody>
+          <Empty title="This use case doesn't exist">
+            It may have been deleted, or the link may be wrong. <Link href="/use-cases" className={B.link}>Back to the register</Link>
+          </Empty>
+        </PageBody>
+      </>
+    );
+  }
+
+  // A plain 404 (no use_case_not_found) means Use Cases is switched off.
   if (notEnabled) {
     return (
       <>
@@ -424,7 +441,7 @@ export default function UseCaseDetailPage() {
                     {uc.departments.map(d => (
                       <span key={d} className="text-[13px] text-[#4D4D4D] bg-[#F2F2F2] rounded-[6px] px-1.5 py-0.5">{d}</span>
                     ))}
-                    {uc.surfaces.map(s => <Tag key={s}>{s}</Tag>)}
+                    {uc.surfaces.map(s => <Tag key={s}>{labelForUseCaseSurface(s, connected)}</Tag>)}
                   </div>
                 )}
                 {uc.sourceExcerpt && (

@@ -32,13 +32,13 @@ export interface UseCaseImpact {
   weeks: ImpactWeek[];
   totals: {
     durationSecs: number | null; engagedSecs: number | null; sessions: number; estimateHours: number | null;
-    coworkDurationSecs: number | null; codeDurationSecs: number | null;
+    coworkDurationSecs: number | null; codeDurationSecs: number | null; chatgptDurationSecs?: number | null; codexDurationSecs?: number | null;
   };
   participation: {
     skills: ImpactParticipationItem[];
     connectors: ImpactParticipationItem[];
     models: ImpactParticipationItem[];
-    surfaces: { cowork: number; code: number };
+    surfaces: { cowork: number; code: number; chatgpt?: number; codex?: number };
     cappedAt: number | null;
   };
   depth: { weeks: ImpactDepthWeek[]; rubricChangesAt: number[] };
@@ -60,16 +60,39 @@ function round1(n: number): number {
   return Math.round(n * 10) / 10;
 }
 
-function hoursLabel(secs: number | null): string {
-  return secs === null ? 'Not measured' : `${round1(secs / 3600).toFixed(1)}h`;
+/** Measured time: hours to one decimal, or minutes when under 0.1h, so a real minute never reads "0.0h". */
+function timeText(secs: number): string {
+  if (secs > 0 && secs < 360) return `${Math.max(1, Math.round(secs / 60))}m`;
+  return `${round1(secs / 3600).toFixed(1)}h`;
 }
 
-/** "(Cowork 2.1h · Code 1.1h)" — surface parts omitted individually when null; null when neither surface is measured. */
-function surfaceSplitLabel(coworkSecs: number | null, codeSecs: number | null): string | null {
+function hoursLabel(secs: number | null): string {
+  return secs === null ? 'Not measured' : timeText(secs);
+}
+
+/**
+ * "(Cowork 2.1h · Code 1.1h)" — surface parts omitted individually when null;
+ * null when none is measured. With ChatGPT or Codex in the window each part
+ * names its product ("Claude Cowork", "ChatGPT").
+ */
+function surfaceSplitLabel(coworkSecs: number | null, codeSecs: number | null, chatgptSecs: number | null = null, codexSecs: number | null = null): string | null {
+  const openai = chatgptSecs !== null || codexSecs !== null;
   const parts: string[] = [];
-  if (coworkSecs !== null) parts.push(`Cowork ${round1(coworkSecs / 3600).toFixed(1)}h`);
-  if (codeSecs !== null) parts.push(`Code ${round1(codeSecs / 3600).toFixed(1)}h`);
+  const add = (label: string, secs: number | null) => { if (secs !== null) parts.push(`${label} ${timeText(secs)}`); };
+  add(openai ? 'Claude Cowork' : 'Cowork', coworkSecs);
+  add(openai ? 'Claude Code' : 'Code', codeSecs);
+  add('ChatGPT', chatgptSecs);
+  add('Codex', codexSecs);
   return parts.length > 0 ? parts.join(' · ') : null;
+}
+
+/** "Cowork 4 sessions · Code 2 sessions", plus ChatGPT and Codex when they have any. */
+function surfaceSessionsLabel(s: { cowork: number; code: number; chatgpt?: number; codex?: number }): string {
+  const openai = (s.chatgpt ?? 0) > 0 || (s.codex ?? 0) > 0;
+  const n = (k: number) => `${k} session${k === 1 ? '' : 's'}`;
+  const parts = [`${openai ? 'Claude Cowork' : 'Cowork'} ${n(s.cowork)}`, `${openai ? 'Claude Code' : 'Code'} ${n(s.code)}`];
+  if (openai) parts.push(`ChatGPT ${n(s.chatgpt ?? 0)}`, `Codex ${n(s.codex ?? 0)}`);
+  return parts.join(' · ');
 }
 
 /** AI-judged tiers: light to deep violet. */
@@ -100,7 +123,7 @@ export default function ImpactPanel({ impact, summary, useCaseId, canRegenerate 
 
   const rubricWeekStarts = new Set(impact.depth.rubricChangesAt.map(ts => weekStart(ts)));
   const depthByWeek = new Map(impact.depth.weeks.map(w => [w.weekStart, w]));
-  const split = surfaceSplitLabel(impact.totals.coworkDurationSecs, impact.totals.codeDurationSecs);
+  const split = surfaceSplitLabel(impact.totals.coworkDurationSecs, impact.totals.codeDurationSecs, impact.totals.chatgptDurationSecs ?? null, impact.totals.codexDurationSecs ?? null);
 
   return (
     <Panel title="Workflow impact" flush>
@@ -169,7 +192,7 @@ export default function ImpactPanel({ impact, summary, useCaseId, canRegenerate 
           <ParticipationColumn label="Models" items={impact.participation.models} />
         </div>
         <p className="m-0 text-[13px] text-[#666666] tabular-nums">
-          Cowork {impact.participation.surfaces.cowork} session{impact.participation.surfaces.cowork === 1 ? '' : 's'} · Code {impact.participation.surfaces.code} session{impact.participation.surfaces.code === 1 ? '' : 's'}
+          {surfaceSessionsLabel(impact.participation.surfaces)}
         </p>
       </div>
 
@@ -205,7 +228,7 @@ export default function ImpactPanel({ impact, summary, useCaseId, canRegenerate 
           <span className="flex items-center gap-1.5"><span className={`w-2.5 h-2.5 ${TIER_CLS[2]} rounded-full inline-block`} aria-hidden="true" /> Tier 2</span>
           <span className="flex items-center gap-1.5"><span className={`w-2.5 h-2.5 ${TIER_CLS[3]} rounded-full inline-block`} aria-hidden="true" /> Tier 3</span>
         </div>
-        <p className="m-0 text-[13px] text-[#8F8F8F]">Cowork work is counted per message, Code per session.</p>
+        <p className="m-0 text-[13px] text-[#8F8F8F]">Claude Cowork and ChatGPT work is counted per message, Claude Code and Codex per session.</p>
       </div>
 
       {impact.participation.cappedAt !== null && (

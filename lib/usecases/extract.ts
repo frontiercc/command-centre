@@ -47,7 +47,7 @@ For EACH candidate, return an object with:
 - "title": short, plain-English name for the use case (a few words)
 - "description": 1-3 sentences describing what it is and why it matters
 - "departments": array of department names mentioned or clearly implied (omit or use an empty array if unclear)
-- "surfaces": array from ["cowork", "code", "chat"] if the transcript implies which Claude surface would be used (omit or use an empty array if unclear)
+- "surfaces": array from ["cowork", "code", "chat"] if the transcript implies where the work would be done: "cowork" for everyday knowledge work (Claude Cowork or ChatGPT), "code" for software work (Claude Code or Codex), "chat" for Claude Chat (omit or use an empty array if unclear)
 - "keywords": short array of distinctive keywords that would help match this use case against real usage data later (omit or use an empty array if unclear)
 - "sourceExcerpt": a VERBATIM quote copied exactly from the transcript that is the basis for this candidate. Do not paraphrase or invent this; it must be text that appears in the transcript.
 - "origin": either "planned" or "ideated" as defined above

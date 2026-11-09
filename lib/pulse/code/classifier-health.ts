@@ -33,6 +33,30 @@ export async function getClassifierHealth(nowS?: number) {
   };
 }
 
+/**
+ * Classified (30 days) and failed sessions for Claude Code and for Codex
+ * ('codex:' sessions). Empty until a Codex session exists, so the tab shows
+ * the table only once there are two products to compare.
+ */
+export async function getClassifierByProduct(nowS?: number): Promise<Array<{ product: 'claude_code' | 'codex'; classified: number; failed: number }>> {
+  const now = nowS ?? Math.floor(Date.now() / 1000);
+  const client = await getTypedClient();
+  const csc = schema.codeSessionClassifications;
+  const product = sql<string>`CASE WHEN ${csc.session_id} LIKE 'codex:%' THEN 'codex' ELSE 'claude_code' END`;
+  const rows = await client.select({
+    product,
+    classified: sql<number | string>`SUM(CASE WHEN ${csc.status} = 'classified' AND ${csc.classified_at} >= ${now - 30 * 86400} THEN 1 ELSE 0 END)`,
+    failed: sql<number | string>`SUM(CASE WHEN ${csc.status} = 'failed' THEN 1 ELSE 0 END)`,
+  }).from(csc).groupBy(product);
+  const codexSessions = await client.select({ x: sql<number>`1` }).from(schema.codeSessionStats)
+    .where(sql`${schema.codeSessionStats.session_id} LIKE 'codex:%'`).limit(1);
+  if (codexSessions.length === 0) return [];
+  return (['claude_code', 'codex'] as const).map(p => {
+    const r = rows.find(x => x.product === p);
+    return { product: p, classified: Number(r?.classified ?? 0), failed: Number(r?.failed ?? 0) };
+  });
+}
+
 export async function getTierDistribution() {
   const client = await getTypedClient();
   const csc = schema.codeSessionClassifications;

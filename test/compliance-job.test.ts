@@ -38,7 +38,7 @@ beforeEach(async () => {
   setConfigValueMock.mockClear();
   runChatSyncMock.mockReset();
   runActivitySyncMock.mockReset();
-  runChatSyncMock.mockResolvedValue({ chatsProcessed: 3, prompts: 7, assistantMeta: 5, connectors: 2, errors: [] });
+  runChatSyncMock.mockResolvedValue({ chatsProcessed: 3, prompts: 7, assistantMeta: 5, connectors: 2, excluded: 1, errors: [] });
   runActivitySyncMock.mockResolvedValue({ activities: 11, errors: [] });
 
   const mod = await import('../lib/compliance/job');
@@ -104,12 +104,13 @@ describe('runComplianceSyncJob', () => {
     expect(stats.prompts).toBe(7);
     expect(stats.assistantMeta).toBe(5);
     expect(stats.connectors).toBe(2);
+    expect(stats.excluded).toBe(1);
     expect(stats.activities).toBe(11);
     expect(stats.errors).toEqual([]);
   });
 
   it('merges errors from both sub-syncs into the stats', async () => {
-    runChatSyncMock.mockResolvedValue({ chatsProcessed: 0, prompts: 0, assistantMeta: 0, connectors: 0, errors: ['chat boom'] });
+    runChatSyncMock.mockResolvedValue({ chatsProcessed: 0, prompts: 0, assistantMeta: 0, connectors: 0, excluded: 0, errors: ['chat boom'] });
     runActivitySyncMock.mockResolvedValue({ activities: 0, errors: ['activity boom'] });
     configStore['complianceActivitySyncEnabled'] = 'true';
 

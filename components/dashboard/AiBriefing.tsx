@@ -94,7 +94,8 @@ function Spinner() {
 
 const BADGE = <Tag tone="judged">AI summary</Tag>;
 
-export default function AiBriefing({ refreshKey }: { refreshKey?: number }) {
+/** coversBoth: OpenAI data is present and shown, so the briefing speaks for Claude and OpenAI together while the cards follow the switch. */
+export default function AiBriefing({ refreshKey, coversBoth = false }: { refreshKey?: number; coversBoth?: boolean }) {
   const [data, setData] = useState<BriefingData | null>(null);
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
@@ -163,6 +164,9 @@ export default function AiBriefing({ refreshKey }: { refreshKey?: number }) {
           {/* Briefing text */}
           <div className="lg:col-span-2 p-4 flex flex-col gap-3">
             <p className="m-0 text-[14px] leading-[1.6] text-[#333333]">{data.briefing}</p>
+            {coversBoth && (
+              <p className="m-0 text-[13px] text-[#8F8F8F]">This briefing covers Claude and OpenAI together, whichever view is selected above.</p>
+            )}
             {data.adoption_headline && (
               <div className="border border-[#EAEAEA] bg-[#FAFAFA] rounded-[10px] px-3 py-2.5">
                 <SubHead>Adoption momentum</SubHead>

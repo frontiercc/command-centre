@@ -17,6 +17,7 @@ interface ModuleConfig {
   /** '' = follow the Core AI model. */
   pulseUserBriefingModel: string;
   pulseSessionDescriptionsEnabled: string;
+  pulseClassifyChatgpt: string;
   claudeInOfficeShown: string;
   humanTimeEnabled: string;
   coreAiModel: string;
@@ -143,14 +144,20 @@ export default function OverviewTab({
           onChange={on => onConfigChange({ pulseSessionDescriptionsEnabled: on ? 'true' : 'false' })}
         />
         <ToggleRow
-          label="Show Claude in Office"
-          hint={<>The By product panel on the Work Pulse overview and the Claude in Office (estimate) panel on FinOps, comparing Cowork with Claude in Excel, Word, PowerPoint and Outlook. Turn off if your organisation does not use Claude in Office. Off only hides the panels: any Office activity that arrives is still stored and counted.</>}
+          label="Classify ChatGPT prompts"
+          hint={<>The classifier judges ChatGPT Chat and ChatGPT Work prompts from OpenAI&apos;s Compliance API the same way as Claude prompts, using the Anthropic API key and the classifier model below, so Work Pulse can show how deeply people hand work to ChatGPT. Off stops new ChatGPT prompts being judged; those already judged stay. Applies once ChatGPT prompts arrive.</>}
+          checked={config.pulseClassifyChatgpt !== 'false'}
+          onChange={on => onConfigChange({ pulseClassifyChatgpt: on ? 'true' : 'false' })}
+        />
+        <ToggleRow
+          label="Show Claude in Office and Google"
+          hint={<>The By product panel on the Work Pulse overview and the Claude in Office and Google (estimate) panel on FinOps, comparing Cowork with Claude in Excel, Word, PowerPoint, Outlook and Google Sheets, Docs and Slides. Turn off if your organisation uses neither. Off only hides the panels: any activity that arrives is still stored and counted.</>}
           checked={config.claudeInOfficeShown !== 'false'}
           onChange={on => onConfigChange({ claudeInOfficeShown: on ? 'true' : 'false' })}
         />
         <ToggleRow
-          label="Human time vs Claude time · Cowork"
-          hint={<>For each Tier 2 and 3 Cowork session, an AI estimate of how long the same result would take by hand, shown beside the measured time with Claude on Work Pulse, and in the weekly digest, Highlights, Reports and the Metrics Connector. Code has its own switch on Admin → Developer Pulse. Admins and managers see everyone&apos;s; each person sees their own. Off stops new Cowork estimates and hides the Cowork figures.</>}
+          label="Human time vs AI time"
+          hint={<>For each Tier 2 and 3 Claude Cowork session and ChatGPT conversation, an AI estimate of how long the same result would take by hand, shown beside the measured time with AI on Work Pulse. A ChatGPT conversation&apos;s time is measured from the times of its prompts and replies. The weekly digest, Highlights, Reports and the Metrics Connector carry the Claude Cowork figures. Code has its own switch on Admin → Developer Pulse. Admins and managers see everyone&apos;s; each person sees their own. Off stops new estimates and hides the figures.</>}
           checked={config.humanTimeEnabled === 'true'}
           onChange={on => onConfigChange({ humanTimeEnabled: on ? 'true' : 'false' })}
         />

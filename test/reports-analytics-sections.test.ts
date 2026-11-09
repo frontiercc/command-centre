@@ -136,8 +136,9 @@ describe('renderCoworkPulseSection', () => {
 
   it('shows not measured for null scores', () => {
     const md = renderCoworkPulseSection(coworkFacts({ dds: null, ors: null }));
-    expect(md).toContain('(DDS) | not measured');
-    expect(md).toContain('(ORS) | not measured');
+    expect(md).toContain('Delegation depth (average tier handed to AI) | not measured');
+    expect(md).toContain("Resilience (how widely capability is shared; 0.7 means organisation-owned) | not measured");
+    expect(md).not.toMatch(/(DDS|OTI|PSR|ORS)/);
   });
 
   it('states when there are no emerging candidates', () => {
@@ -146,7 +147,7 @@ describe('renderCoworkPulseSection', () => {
   });
 
   it('says plainly when no metrics exist', () => {
-    expect(renderCoworkPulseSection(coworkFacts({ hasData: false }))).toContain('No Work Pulse metrics');
+    expect(renderCoworkPulseSection(coworkFacts({ hasData: false }))).toContain('No Work Pulse figures were computed in this period');
   });
 });
 
@@ -229,5 +230,34 @@ describe('renderUseCasesSection', () => {
 
   it('says plainly when nothing is registered', () => {
     expect(renderUseCasesSection(facts([]))).toContain('No use cases have been registered');
+  });
+});
+
+describe('report sections with ChatGPT and Codex', () => {
+  it('Developer Pulse shows Claude Code and Codex apart, and never claims Codex signals it lacks', () => {
+    const md = renderCodePulseSection(codeFacts(), codeFacts({ spendUsd: 12.5, commitCount: 4, linesAdded: 999 }));
+    expect(md).toContain('### Claude Code (measured)');
+    expect(md).toContain('### Codex (measured)');
+    const codex = md.slice(md.indexOf('### Codex (measured)'));
+    expect(codex).toContain("$12.50 (at OpenAI's USD token rates)");
+    expect(codex).toContain('not captured (Claude Code telemetry only)');
+    expect(codex).not.toContain('999');
+  });
+
+  it('a Claude-only Developer Pulse section is unchanged', () => {
+    expect(renderCodePulseSection(codeFacts())).not.toContain('Codex');
+  });
+
+  it('Skills & Connectors names the product once ChatGPT or Codex appears', () => {
+    const md = renderScBoardSection(scFacts({
+      topConnectors: [
+        { name: 'linear', product: 'Claude', invocations: 5, users: 2, departments: 1 },
+        { name: 'linear', product: 'Codex', invocations: 3, users: 1, departments: 1 },
+      ],
+      singleUserTools: ['linear (Codex)'],
+    }));
+    expect(md).toContain('| Name | Product | Invocations | Users | Departments |');
+    expect(md).toContain('| linear | Codex | 3 |');
+    expect(md).toContain('linear (Codex)');
   });
 });

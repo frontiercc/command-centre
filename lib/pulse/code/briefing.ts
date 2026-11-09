@@ -23,6 +23,7 @@
  * lexicographic comparison.
  */
 import { getCodeWorkTypeLabeller } from '@/lib/pulse/code/tier-config';
+import { visibleOpenAi } from '@/lib/sources/openai-visibility';
 import { getOrgBriefingModel } from '@/lib/anthropic/model';
 import { createAnthropicClient } from '@/lib/anthropic/client';
 import { and, desc, eq, sql } from 'drizzle-orm';
@@ -31,10 +32,11 @@ import { schema } from '@/lib/db/schema';
 import { getConfigValue } from '@/lib/config';
 import { ORG_SCOPE_ID } from '@/lib/pulse/code/aggregator';
 import { createGroundedJson, paragraphsShape, pctChange, pctOf } from '@/lib/anthropic/grounded-json';
+import { hasCodexData, pickCodeMetricsSource } from '@/lib/pulse/code/vendor-view';
 
 export const CODE_BRIEFING_SCOPE_ID = 'code-org';
 
-const SYSTEM = `You write a short weekly briefing about how an engineering organisation is using Claude Code, for a senior leader who will not open a dashboard.
+const SYSTEM_BASE = `You write a short weekly briefing about how an engineering organisation is using Claude Code, for a senior leader who will not open a dashboard.
 
 Rules:
 - Plain language only. Never use acronyms or metric names (no "OTI", "DDS", "autonomy ratio"; describe what the numbers mean instead).
@@ -46,6 +48,17 @@ Rules:
 Respond with ONLY JSON, no markdown fences:
 {"paragraphs": ["...", "...", "..."], "suggestion": "one concrete, grounded action"}
 Exactly 3 paragraphs: (1) cost and scale of the week, (2) how deeply work is being delegated and what kind of work it is, (3) shipping and codebase reach. The suggestion must follow from the data given.`;
+
+/** Once Codex data exists the briefing covers both coding tools and names each. */
+const PRODUCT_RULE = `
+- The organisation uses two coding tools: Claude Code and Codex (OpenAI). The PRODUCTS lines give each one's own figures. Name the tool whenever you quote a figure for one of them, never describe Codex activity as Claude Code, and do not recommend one vendor over the other unless the figures given support it.`;
+
+function systemPrompt(codexPresent: boolean): string {
+  if (!codexPresent) return SYSTEM_BASE;
+  return SYSTEM_BASE
+    .replace('is using Claude Code,', 'is using Claude Code and Codex,')
+    .replace('- Be direct about weak signals; no cheerleading.', `- Be direct about weak signals; no cheerleading.${PRODUCT_RULE}`);
+}
 
 export interface CodeBriefingRow {
   body: string;
@@ -68,10 +81,12 @@ async function rawGet<T>(client: unknown, query: unknown): Promise<T | undefined
   return rows[0];
 }
 
-async function buildDataSummary(): Promise<string> {
+async function buildDataSummary(codexPresent: boolean): Promise<string> {
   const client = await getTypedClient();
   const now = Math.floor(Date.now() / 1000);
   const lines: string[] = [];
+  // All products once Codex data exists (lib/pulse/code/vendor-view.ts).
+  const src = await pickCodeMetricsSource('all', codexPresent);
 
   const m = await rawGet<{
     spend_usd: string | number | null;
@@ -86,7 +101,7 @@ async function buildDataSummary(): Promise<string> {
   }>(client, sql`
     SELECT spend_usd, input_tokens, output_tokens, cache_hit_ratio, autonomy_ratio,
            session_count, repo_count, commit_count, skill_leverage
-    FROM code_metrics WHERE scope_type = 'organisation' AND scope_id = ${ORG_SCOPE_ID} AND granularity = 'rolling'
+    FROM ${src.table} WHERE scope_type = 'organisation' AND scope_id = ${ORG_SCOPE_ID} AND granularity = 'rolling' ${src.only}
     ORDER BY computed_at DESC LIMIT 1
   `);
   const prior = await rawGet<{
@@ -96,13 +111,13 @@ async function buildDataSummary(): Promise<string> {
     commit_count: number | string;
   }>(client, sql`
     SELECT spend_usd, autonomy_ratio, session_count, commit_count
-    FROM code_metrics WHERE scope_type = 'organisation' AND scope_id = ${ORG_SCOPE_ID} AND granularity = 'rolling' AND computed_at <= ${now - 7 * 24 * 3600}
+    FROM ${src.table} WHERE scope_type = 'organisation' AND scope_id = ${ORG_SCOPE_ID} AND granularity = 'rolling' AND computed_at <= ${now - 7 * 24 * 3600} ${src.only}
     ORDER BY computed_at DESC LIMIT 1
   `);
 
   if (!m) return '';
   const spendUsd = m.spend_usd !== null && m.spend_usd !== undefined ? Math.round(Number(m.spend_usd) * 100) / 100 : null; // pence, so the briefing never quotes $8.18486
-  lines.push(`this_week: spend_usd=${spendUsd ?? 'unpriced'}, sessions=${Number(m.session_count)}, active_repos=${Number(m.repo_count)}, commits_in_claude_sessions=${Number(m.commit_count)}, tool_actions_per_human_prompt=${m.autonomy_ratio?.toFixed(2) ?? 'n/a'}, context_served_from_cache=${m.cache_hit_ratio !== null && m.cache_hit_ratio !== undefined ? Math.round(m.cache_hit_ratio * 100) + '%' : 'n/a'}`);
+  lines.push(`this_week: spend_usd=${spendUsd ?? 'unpriced'}, sessions=${Number(m.session_count)}, active_repos=${Number(m.repo_count)}, ${codexPresent ? 'commits_in_ai_coding_sessions' : 'commits_in_claude_sessions'}=${Number(m.commit_count)}, tool_actions_per_human_prompt=${m.autonomy_ratio?.toFixed(2) ?? 'n/a'}, context_served_from_cache=${m.cache_hit_ratio !== null && m.cache_hit_ratio !== undefined ? Math.round(m.cache_hit_ratio * 100) + '%' : 'n/a'}`);
   if (prior) {
     const priorSpend = prior.spend_usd !== null && prior.spend_usd !== undefined ? Math.round(Number(prior.spend_usd) * 100) / 100 : null;
     lines.push(`prior_week: spend_usd=${priorSpend ?? 'unpriced'}, sessions=${Number(prior.session_count)}, commits=${Number(prior.commit_count)}, tool_actions_per_prompt=${prior.autonomy_ratio?.toFixed(2) ?? 'n/a'}`);
@@ -114,6 +129,31 @@ async function buildDataSummary(): Promise<string> {
       ['tool_actions_per_prompt', pctChange(m.autonomy_ratio, prior.autonomy_ratio)],
     ] as const).filter(([, c]) => c !== null).map(([k, c]) => `${k} ${c}`);
     if (changes.length) lines.push(`change_vs_prior_week: ${changes.join(', ')}`);
+  }
+
+  // Each coding tool's own figures, worked out here so the model never calculates them.
+  if (codexPresent) {
+    const product = async (vendor: 'claude' | 'openai') => {
+      const { table, only } = await pickCodeMetricsSource(vendor, true);
+      return rawGet<{
+        spend_usd: string | number | null; session_count: number | string; commit_count: number | string; autonomy_ratio: number | null;
+      }>(client, sql`
+        SELECT spend_usd, session_count, commit_count, autonomy_ratio
+        FROM ${table} WHERE scope_type = 'organisation' AND scope_id = ${ORG_SCOPE_ID} AND granularity = 'rolling' ${only}
+        ORDER BY computed_at DESC LIMIT 1
+      `);
+    };
+    const totalSpend = spendUsd;
+    const totalSessions = Number(m.session_count);
+    lines.push('PRODUCTS (this week, each tool on its own)');
+    for (const [name, vendor] of [['Claude Code', 'claude'], ['Codex', 'openai']] as const) {
+      const p = await product(vendor);
+      if (!p) { lines.push(`${name}: no activity this week`); continue; }
+      const spend = p.spend_usd !== null && p.spend_usd !== undefined ? Math.round(Number(p.spend_usd) * 100) / 100 : null;
+      const sessionShare = pctOf(Number(p.session_count), totalSessions);
+      const spendShare = spend !== null && totalSpend !== null ? pctOf(spend, totalSpend) : null;
+      lines.push(`${name}: spend_usd=${spend ?? 'unpriced'}${spendShare !== null ? ` (${spendShare}% of spend)` : ''}, sessions=${Number(p.session_count)}${sessionShare !== null ? ` (${sessionShare}% of sessions)` : ''}, commits=${Number(p.commit_count)}, tool_actions_per_human_prompt=${p.autonomy_ratio?.toFixed(2) ?? 'n/a'}`);
+    }
   }
 
   // github_repo_stats.date is TEXT (YYYY-MM-DD) — a JS-computed date-string
@@ -168,7 +208,8 @@ export async function generateCodeBriefing(): Promise<CodeBriefingRow> {
   const apiKey = await getConfigValue('anthropicAiApiKey');
   if (!apiKey) throw new Error('No AI API key configured');
 
-  const summary = await buildDataSummary();
+  const codexPresent = await visibleOpenAi(hasCodexData());
+  const summary = await buildDataSummary(codexPresent);
   if (!summary) throw new Error('No Developer Pulse metrics yet. The briefing needs at least one aggregation cycle');
 
   const model = (await getConfigValue('codeBriefingModel')) || (await getOrgBriefingModel());
@@ -178,8 +219,8 @@ export async function generateCodeBriefing(): Promise<CodeBriefingRow> {
     client: createAnthropicClient(apiKey),
     model,
     maxTokens: 4000,
-    system: SYSTEM,
-    userMessage: `Write this week's Claude Code briefing from this telemetry:\n\n${summary}`,
+    system: systemPrompt(codexPresent),
+    userMessage: `Write this week's ${codexPresent ? 'Developer Pulse' : 'Claude Code'} briefing from this telemetry:\n\n${summary}`,
     ...paragraphsShape(1, ['suggestion'] as const),
     cycles: 2, // a refused reply gets one fresh cycle before the job records a failure
   });

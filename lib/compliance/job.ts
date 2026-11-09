@@ -47,6 +47,7 @@ export async function runComplianceSyncJob(opts?: { force?: boolean }) {
   await setConfigValue('complianceLastSyncStats', JSON.stringify({
     chatsProcessed: chat.chatsProcessed, prompts: chat.prompts,
     assistantMeta: chat.assistantMeta, connectors: chat.connectors,
+    excluded: chat.excluded,
     activities: activity.activities,
     errors: [...chat.errors, ...activity.errors],
   }));

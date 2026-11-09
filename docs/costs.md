@@ -1,8 +1,8 @@
 # Frontier Command Centre: Indicative costs
 
-**These figures are indicative only.** They are worked out from real installation activity and today's model prices. Your costs depend on how much your people use Claude, which features you switch on and which models you choose in Admin.
+**These figures are indicative only.** They are worked out from real installation activity and today's model prices. Your costs depend on how much your people use Claude, ChatGPT and Codex, which features you switch on and which models you choose in Admin.
 
-This covers only Command Centre's own use of Claude, such as grading work, matching sessions to use cases and writing briefings. Your people's own Claude Code, Claude Cowork, Claude in Office and Claude Chat use is paid through your Claude plan, and hosting is separate.
+This covers only Command Centre's own use of Claude, such as grading work, matching sessions to use cases and writing briefings. Your people's own Claude Code, Claude Cowork, Claude in Office/Google and Claude Chat use is paid through your Claude plan, their ChatGPT and Codex use through your OpenAI plan, and hosting is separate. Command Centre grades and reads prompts from every connected product, so ChatGPT and Codex activity adds to its Claude API cost in the same way as Claude activity.
 
 ## Claude API cost per month
 

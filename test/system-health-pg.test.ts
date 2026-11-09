@@ -43,7 +43,6 @@ describe('getSystemHealth (postgres)', () => {
     await run(`DELETE FROM error_events`);
     await run(`DELETE FROM cowork_messages`);
     await run(`DELETE FROM code_otel_metrics`);
-    await run(`DELETE FROM chat_messages`);
   });
 
   it('an empty hub reads not yet run and nothing received — never healthy', async () => {
@@ -88,6 +87,38 @@ describe('getSystemHealth (postgres)', () => {
     expect(h.surfaces.find(s => s.key === 'chat')).toMatchObject({ lastEventAt: null });
   });
 
+  it('Chat reads the newest received Claude Chat prompt (cowork_messages, surface chat), without a key', async () => {
+    await run(`INSERT INTO users (id, email) VALUES ('u1', 'u1@test.local') ON CONFLICT DO NOTHING`);
+    await run(`INSERT INTO cowork_messages (id, user_id, session_id, message_type, surface, source, content_preview, content_full, occurred_at, ingested_at) VALUES
+               ('ch1', 'u1', 'conv1', 'cowork_user_message', 'chat', 'compliance', 'hi', 'hi', ${NOW - 900}, ${NOW - 600}),
+               ('ch2', 'u1', 'conv1', 'cowork_user_message', 'chat', 'compliance', 'again', 'again', ${NOW - 800}, ${NOW - 120})`);
+    const h = await health.getSystemHealth(NOW);
+    expect(h.surfaces.find(s => s.key === 'chat')).toMatchObject({ lastEventAt: NOW - 120 });
+    // Claude Chat prompts share cowork_messages but are not Cowork telemetry.
+    expect(h.surfaces.find(s => s.key === 'cowork')!.lastEventAt).toBeNull();
+  });
+
+  it('ChatGPT and Codex are two rows, each from everything the sync writes for it, by arrival', async () => {
+    for (const t of ['openai_replies', 'openai_costs', 'codex_turns', 'codex_actions']) await run(`DELETE FROM ${t}`);
+    // Nothing yet, no key: no rows.
+    let h = await health.getSystemHealth(NOW);
+    expect(h.surfaces.some(s => s.key === 'chatgpt' || s.key === 'codex')).toBe(false);
+    // ChatGPT: a prompt, then a reply and ChatGPT spend arriving later.
+    await run(`INSERT INTO cowork_messages (id, session_id, message_type, surface, source, occurred_at, ingested_at) VALUES
+               ('g1', 'chatgpt:g1', 'cowork_user_message', 'cowork', 'chatgpt_chat', ${NOW - 5000}, ${NOW - 4000})`);
+    await run(`INSERT INTO openai_replies (id, user_id, session_id, source, occurred_at, ingested_at) VALUES ('r1', 'u1', 'chatgpt:g1', 'chatgpt_chat', ${NOW - 5000}, ${NOW - 3000})`);
+    await run(`INSERT INTO openai_costs (id, hour_start, product, billed_in, ingested_at) VALUES ('k1', ${NOW - 7200}, 'chatgpt', 'usd', ${NOW - 2000})`);
+    // Codex: newer Codex spend must not count for ChatGPT.
+    await run(`INSERT INTO codex_actions (id, user_id, session_id, occurred_at, ingested_at) VALUES ('a1', 'u1', 'codex:x', ${NOW - 9000}, ${NOW - 900})`);
+    await run(`INSERT INTO openai_costs (id, hour_start, product, billed_in, ingested_at) VALUES ('k2', ${NOW - 7200}, 'codex', 'usd', ${NOW - 100})`);
+    h = await health.getSystemHealth(NOW);
+    expect(h.surfaces.find(s => s.key === 'chatgpt')).toMatchObject({ label: 'ChatGPT (OpenAI Compliance API)', lastEventAt: NOW - 2000 });
+    expect(h.surfaces.find(s => s.key === 'codex')).toMatchObject({ label: 'Codex (OpenAI Compliance API)', lastEventAt: NOW - 100 });
+    // None of it is Claude Cowork telemetry.
+    expect(h.surfaces.find(s => s.key === 'cowork')!.lastEventAt).toBeNull();
+    for (const t of ['openai_replies', 'openai_costs', 'codex_turns', 'codex_actions']) await run(`DELETE FROM ${t}`);
+  });
+
   it('counts only ingest failures, over 24 hours and 7 days', async () => {
     await run(`INSERT INTO error_events (occurred_at, severity, source, message) VALUES
                (${NOW - 3600}, 'error', 'otel-ingest', 'insert failed'),
@@ -110,7 +141,7 @@ describe('getSystemHealth (postgres)', () => {
     const h = await health.getSystemHealth(NOW);
     expect(h.integrations).toEqual([
       { key: 'anthropicAiApiKey', label: 'Anthropic API (AI features)', status: 'ok', lastSucceededAt: NOW - 100, lastFailedAt: null, lastError: null },
-      { key: 'complianceAccessKey', label: 'Compliance API', status: 'failing', lastSucceededAt: null, lastFailedAt: NOW - 30, lastError: 'Compliance sync errors: HTTP 401' },
+      { key: 'complianceAccessKey', label: 'Anthropic Compliance API', status: 'failing', lastSucceededAt: null, lastFailedAt: NOW - 30, lastError: 'Compliance sync errors: HTTP 401' },
       { key: 'githubToken', label: 'GitHub', status: 'not_run', lastSucceededAt: null, lastFailedAt: null, lastError: null },
       { key: 'smtpHost', label: 'Email (SMTP)', status: 'untracked', lastSucceededAt: null, lastFailedAt: null, lastError: null },
     ]);

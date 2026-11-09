@@ -37,7 +37,9 @@ beforeEach(async () => {
   delete process.env.CCC_SAMPLE_DATA;
   fm.resetFirstTelemetryForTests();
   await sql.exec(`DELETE FROM config; DELETE FROM pulse_rubric_versions; DELETE FROM admin_users;
-    DELETE FROM users; DELETE FROM cowork_messages; DELETE FROM code_otel_metrics; DELETE FROM chat_messages;`);
+    DELETE FROM users; DELETE FROM cowork_messages; DELETE FROM code_otel_metrics;`);
+  // Claude Chat prompts are cowork_messages rows (surface 'chat'), so the
+  // cowork_messages delete above clears them too.
 });
 
 afterEach(() => {
@@ -51,7 +53,7 @@ describe('getSetupStatus', () => {
     expect(s).toMatchObject({
       hidden: false, apiKey: false, claudeCodeAt: null, coworkAt: null,
       rubricReviewed: false, departmentsSet: false,
-      sampleData: { available: false, loaded: false }, done: 0, complete: false,
+      sampleData: { available: false, loaded: false }, openaiOnly: false, total: 5, done: 0, complete: false,
     });
   });
 
@@ -67,6 +69,25 @@ describe('getSetupStatus', () => {
       apiKey: true, claudeCodeAt: 1_790_000_000, coworkAt: 1_790_000_100,
       rubricReviewed: true, departmentsSet: true, done: 5, complete: true,
     });
+  });
+
+  it('with only OpenAI connected, four steps count and ChatGPT and Codex is one of them', async () => {
+    const { setConfigValue } = await import('@/lib/config');
+    await setConfigValue('openaiAdminApiKey', 'sk-admin-test');
+    let s = await getSetupStatus();
+    expect(s).toMatchObject({ openaiOnly: true, total: 4, done: 0, complete: false });
+
+    process.env.ANTHROPIC_AI_API_KEY = 'sk-ant-test';
+    await fm.noteFirstTelemetry('openai', 1_790_000_200);
+    await sql.run(`INSERT INTO pulse_rubric_versions (changed_by, changed_at, rubric_json) VALUES ('a', 1, '{}')`);
+    await sql.run(`INSERT INTO admin_users (id, email, password_hash, role, department) VALUES ('a1', 'a@test.local', 'x', 'admin', 'Finance')`);
+    s = await getSetupStatus();
+    expect(s).toMatchObject({ openaiOnly: true, total: 4, done: 4, complete: true, claudeCodeAt: null, coworkAt: null });
+
+    // Claude data arriving brings back the Claude steps.
+    await sql.run(`INSERT INTO cowork_messages (id, session_id, message_type, occurred_at, surface, source) VALUES ('c-1', 's1', 'cowork_user_message', 1, 'cowork', 'otel')`);
+    s = await getSetupStatus();
+    expect(s).toMatchObject({ openaiOnly: false, total: 5 });
   });
 
   it('a blank department does not count', async () => {

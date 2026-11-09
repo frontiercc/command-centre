@@ -101,6 +101,10 @@ export interface AppConfig {
   // (the only Work Pulse feature that sends prompt text to the model outside
   // the classifier). Default 'true'.
   pulseSessionDescriptionsEnabled: string;
+  // 'false' stops the Work Pulse classifier judging ChatGPT prompts (OpenAI
+  // export), which it otherwise does on the Anthropic key like any prompt.
+  // Default 'true'.
+  pulseClassifyChatgpt: string;
   // 'false' hides the Claude in Office panels (Work Pulse By product, FinOps
   // Office estimate) on hubs that do not use Office. Screens only: Office
   // activity is still stored if it arrives. Default 'true'.
@@ -110,6 +114,9 @@ export interface AppConfig {
   humanTimeEnabled: string;
   // Code's own human-time switch (Admin → Developer Pulse). '' = follow humanTimeEnabled.
   humanTimeCodeEnabled: string;
+  // 'false' stops the Developer Pulse session classifier judging Codex sessions
+  // (OpenAI Compliance API), which it otherwise does like Claude Code sessions. Default 'true'.
+  codeClassifyCodex: string;
   // 'true' raises an alert (and so a Slack message, if Slack alerts are on) for
   // system health problems, once per failure. Off by default: System health on
   // /admin/system shows them regardless.
@@ -133,6 +140,10 @@ export interface AppConfig {
   // telemetry arrives (epoch seconds). Never by sample data. Not admin-editable.
   setupFirstCodeAt: string;
   setupFirstCoworkAt: string;
+  // The same, for the optional steps: the first Claude Chat prompt from the
+  // Compliance API sync and the first ChatGPT or Codex prompt from the OpenAI sync.
+  setupFirstChatAt: string;
+  setupFirstOpenaiAt: string;
   // Sessions needing both figures before a ratio ("about 7x faster") is shown. Default '20'.
   humanTimeMinSessionsForRatio: string;
   // Core AI model — the four original AI consumers (Intelligence Briefing,
@@ -146,6 +157,8 @@ export interface AppConfig {
   pulseAuditLastRun: string;
   pulseSessionDescriptionsLastRun: string;
   pulseAggregatorLastRun: string;
+  /** Job-written: graded-at time the per-vendor past weeks were last brought up to date from. */
+  pulseVendorWeeksGradedSince: string;
   pulseAggregatorDailyLastRun: string;
   // Job-written only (lib/pulse/cowork/session-aggregator.ts's runCoworkSessionAggJob,
   // hourly, cadence-guarded inside the job) — deliberately NOT in
@@ -158,10 +171,14 @@ export interface AppConfig {
   codePulseEnabled: boolean;
   codeModelRates: string;
   codeAggregatorLastRun: string;
+  /** Job-written: session-stats time the per-product past weeks were last brought up to date from. */
+  codeVendorWeeksChangedSince: string;
   // Developer Pulse alerts (deterministic, evaluated hourly)
   codeAlertCostSpikeEnabled: boolean;
   codeCostSpikeMultiplier: number;
   codeCostSpikeFloorUsd: number;
+  codexAlertSpendEnabled: boolean;      // Codex daily spend alert (default on)
+  codexDailySpendLimitUsd: number;      // Codex's own daily limit, default 500
   codeAlertModelPolicyEnabled: boolean;
   codeModelAllowlist: string;
   codeAlertRepoExposureEnabled: boolean;
@@ -229,6 +246,10 @@ export interface AppConfig {
   financeModelEfficiencyEnabled: boolean;
   // Wasted-seats estimate (Workflow Impact) — price per licensed seat, USD/month.
   finopsSeatPriceMonthly: string;
+  // ChatGPT Enterprise licence: OpenAI charges per assigned seat each month,
+  // apart from usage. Shown beside ChatGPT usage, never added to it. Blank = not set.
+  chatgptSeats: string;
+  chatgptSeatPriceMonthly: string;
   // Dev Framework Alignment (dormant)
   dxFrameworkEnabled: boolean;
   dxFrameworkMock: string;
@@ -304,6 +325,17 @@ export interface AppConfig {
   complianceActivityExcludedTypes: string;     // default '["compliance_api_accessed"]' — JSON array of activity `type` values skipped at ingest
   complianceLastSyncAt: string;          // job-written (epoch seconds)
   complianceLastSyncStats: string;       // job-written (JSON)
+  // OpenAI Compliance API sync (ChatGPT and Codex), dormant until a key and workspace are saved
+  openaiAdminApiKey: string;             // OpenAI Admin API key, SENSITIVE
+  openaiWorkspaceId: string;             // ChatGPT workspace ID
+  openaiOrganizationId: string;          // OpenAI organisation ID (costs)
+  openaiSyncIntervalMinutes: string;     // default '5'
+  openaiBackfillDays: string;            // default '30' (OpenAI keeps files 30 days)
+  openaiSyncPaused: string;              // 'true' pauses the sync, key and data kept; default 'false'
+  openaiShown: string;                   // 'false' hides ChatGPT and Codex from the analytics screens; default 'true'
+  openaiSyncCursors: string;             // job-written (JSON: event type → last file end_time)
+  openaiLastSyncAt: string;              // job-written (epoch seconds)
+  openaiLastSyncStats: string;           // job-written (JSON)
   // Weekly Highlights (dormant) — model used by lib/highlights/compose.ts's
   // single LLM call. Registered here so compose.ts type-checks.
   highlightsModel: string;
@@ -385,9 +417,11 @@ export const CONFIG_KEYS: Record<keyof AppConfig, string> = {
   pulseBriefingModel: 'pulse_briefing_model',
   pulseUserBriefingModel: 'pulse_user_briefing_model',
   pulseSessionDescriptionsEnabled: 'pulse_session_descriptions_enabled',
+  pulseClassifyChatgpt: 'pulse_classify_chatgpt',
   claudeInOfficeShown: 'claude_in_office_shown',
   humanTimeEnabled: 'human_time_enabled',
   humanTimeCodeEnabled: 'human_time_code_enabled',
+  codeClassifyCodex: 'code_classify_codex',
   systemHealthAlertsEnabled: 'system_health_alerts_enabled',
   telemetrySilenceHours: 'telemetry_silence_hours',
   telemetrySilenceTimezone: 'telemetry_silence_timezone',
@@ -397,6 +431,8 @@ export const CONFIG_KEYS: Record<keyof AppConfig, string> = {
   setupStepsDone: 'setup_steps_done',
   setupFirstCodeAt: 'setup_first_code_at',
   setupFirstCoworkAt: 'setup_first_cowork_at',
+  setupFirstChatAt: 'setup_first_chat_at',
+  setupFirstOpenaiAt: 'setup_first_openai_at',
   humanTimeMinSessionsForRatio: 'human_time_min_sessions_for_ratio',
   coreAiModel: 'core_ai_model',
   otiThresholds: 'oti_thresholds',
@@ -405,6 +441,7 @@ export const CONFIG_KEYS: Record<keyof AppConfig, string> = {
   pulseAuditLastRun: 'pulse_audit_last_run',
   pulseSessionDescriptionsLastRun: 'pulse_session_descriptions_last_run',
   pulseAggregatorLastRun: 'pulse_aggregator_last_run',
+  pulseVendorWeeksGradedSince: 'pulse_vendor_weeks_graded_since',
   pulseAggregatorDailyLastRun: 'pulse_aggregator_daily_last_run',
   coworkSessionAggLastRun: 'cowork_session_agg_last_run',
   pulseWeeklyBriefingLastRun: 'pulse_weekly_briefing_last_run',
@@ -413,9 +450,12 @@ export const CONFIG_KEYS: Record<keyof AppConfig, string> = {
   codePulseEnabled: 'code_pulse_enabled',
   codeModelRates: 'code_model_rates',
   codeAggregatorLastRun: 'code_aggregator_last_run',
+  codeVendorWeeksChangedSince: 'code_vendor_weeks_changed_since',
   codeAlertCostSpikeEnabled: 'code_alert_cost_spike_enabled',
   codeCostSpikeMultiplier: 'code_cost_spike_multiplier',
   codeCostSpikeFloorUsd: 'code_cost_spike_floor_usd',
+  codexAlertSpendEnabled: 'codex_alert_spend_enabled',
+  codexDailySpendLimitUsd: 'codex_daily_spend_limit_usd',
   codeAlertModelPolicyEnabled: 'code_alert_model_policy_enabled',
   codeModelAllowlist: 'code_model_allowlist',
   codeAlertRepoExposureEnabled: 'code_alert_repo_exposure_enabled',
@@ -469,6 +509,8 @@ export const CONFIG_KEYS: Record<keyof AppConfig, string> = {
   chargebackEnabled: 'chargeback_enabled',
   financeModelEfficiencyEnabled: 'finance_model_efficiency_enabled',
   finopsSeatPriceMonthly: 'finops_seat_price_monthly',
+  chatgptSeats: 'chatgpt_seats',
+  chatgptSeatPriceMonthly: 'chatgpt_seat_price_monthly',
   dxFrameworkEnabled: 'dx_framework_enabled',
   dxFrameworkMock: 'dx_framework_mock',
   dxApiKey: 'dx_api_key',
@@ -516,6 +558,16 @@ export const CONFIG_KEYS: Record<keyof AppConfig, string> = {
   complianceActivityExcludedTypes: 'compliance_activity_excluded_types',
   complianceLastSyncAt: 'compliance_last_sync_at',
   complianceLastSyncStats: 'compliance_last_sync_stats',
+  openaiAdminApiKey: 'openai_admin_api_key',
+  openaiWorkspaceId: 'openai_workspace_id',
+  openaiOrganizationId: 'openai_organization_id',
+  openaiSyncIntervalMinutes: 'openai_sync_interval_minutes',
+  openaiBackfillDays: 'openai_backfill_days',
+  openaiSyncPaused: 'openai_sync_paused',
+  openaiShown: 'openai_shown',
+  openaiSyncCursors: 'openai_sync_cursors',
+  openaiLastSyncAt: 'openai_last_sync_at',
+  openaiLastSyncStats: 'openai_last_sync_stats',
   highlightsModel: 'highlights_model',
   highlightsEnabled: 'highlights_enabled',
   highlightsIncludeNames: 'highlights_include_names',
@@ -543,6 +595,7 @@ const SENSITIVE_KEYS = new Set<keyof AppConfig>([
   'dxApiKey',
   'complianceAccessKey',
   'alertsSlackWebhookUrl',
+  'openaiAdminApiKey',
 ]);
 
 export const ENCRYPTED_CONFIG_KEYS: ReadonlySet<keyof AppConfig> = SENSITIVE_KEYS;
@@ -613,6 +666,7 @@ const ENV_FALLBACKS: Partial<Record<keyof AppConfig, string>> = {
   otelEndpointSecret: 'OTEL_ENDPOINT_SECRET',
   ingestIntervalSeconds: 'INGEST_INTERVAL_SECONDS',
   complianceAccessKey: 'COMPLIANCE_ACCESS_KEY',
+  openaiAdminApiKey: 'OPENAI_ADMIN_API_KEY',
 };
 
 /**
@@ -761,9 +815,11 @@ export async function getAllConfig(): Promise<AppConfig> {
     // the admin page shows which model that currently is.
     pulseUserBriefingModel: resolve('pulseUserBriefingModel'),
     pulseSessionDescriptionsEnabled: resolve('pulseSessionDescriptionsEnabled', 'true'),
+    pulseClassifyChatgpt: resolve('pulseClassifyChatgpt', 'true'),
     claudeInOfficeShown: resolve('claudeInOfficeShown', 'true'),
     humanTimeEnabled: resolve('humanTimeEnabled', 'false'),
     humanTimeCodeEnabled: resolve('humanTimeCodeEnabled'),
+    codeClassifyCodex: resolve('codeClassifyCodex', 'true'),
     systemHealthAlertsEnabled: resolve('systemHealthAlertsEnabled', 'false'),
     telemetrySilenceHours: resolve('telemetrySilenceHours', '3'),
     telemetrySilenceTimezone: resolve('telemetrySilenceTimezone', 'Europe/London'),
@@ -773,6 +829,8 @@ export async function getAllConfig(): Promise<AppConfig> {
     setupStepsDone: resolve('setupStepsDone', '[]'),
     setupFirstCodeAt: resolve('setupFirstCodeAt'),
     setupFirstCoworkAt: resolve('setupFirstCoworkAt'),
+    setupFirstChatAt: resolve('setupFirstChatAt'),
+    setupFirstOpenaiAt: resolve('setupFirstOpenaiAt'),
     humanTimeMinSessionsForRatio: resolve('humanTimeMinSessionsForRatio', '20'),
     coreAiModel: resolve('coreAiModel', CLAUDE_MODEL),
     otiThresholds: resolve('otiThresholds', '{"progress":1.2,"uplift":1.5}'),
@@ -781,6 +839,7 @@ export async function getAllConfig(): Promise<AppConfig> {
     pulseAuditLastRun: resolve('pulseAuditLastRun'),
     pulseSessionDescriptionsLastRun: resolve('pulseSessionDescriptionsLastRun'),
     pulseAggregatorLastRun: resolve('pulseAggregatorLastRun'),
+    pulseVendorWeeksGradedSince: resolve('pulseVendorWeeksGradedSince'),
     pulseAggregatorDailyLastRun: resolve('pulseAggregatorDailyLastRun'),
     coworkSessionAggLastRun: resolve('coworkSessionAggLastRun'),
     pulseWeeklyBriefingLastRun: resolve('pulseWeeklyBriefingLastRun'),
@@ -790,9 +849,12 @@ export async function getAllConfig(): Promise<AppConfig> {
     codePulseEnabled: resolve('codePulseEnabled', 'true') === 'true',
     codeModelRates: resolve('codeModelRates', '{}'),
     codeAggregatorLastRun: resolve('codeAggregatorLastRun'),
+    codeVendorWeeksChangedSince: resolve('codeVendorWeeksChangedSince'),
     codeAlertCostSpikeEnabled: resolve('codeAlertCostSpikeEnabled', 'true') === 'true',
     codeCostSpikeMultiplier: parseFloat(resolve('codeCostSpikeMultiplier', '3')),
     codeCostSpikeFloorUsd: parseFloat(resolve('codeCostSpikeFloorUsd', '100')),
+    codexAlertSpendEnabled: resolve('codexAlertSpendEnabled', 'true') === 'true',
+    codexDailySpendLimitUsd: parseFloat(resolve('codexDailySpendLimitUsd', '500')),
     codeAlertModelPolicyEnabled: resolve('codeAlertModelPolicyEnabled', 'false') === 'true',
     codeModelAllowlist: resolve('codeModelAllowlist', '[]'),
     codeAlertRepoExposureEnabled: resolve('codeAlertRepoExposureEnabled', 'false') === 'true',
@@ -856,6 +918,8 @@ export async function getAllConfig(): Promise<AppConfig> {
     chargebackEnabled: resolve('chargebackEnabled', 'false') === 'true',
     financeModelEfficiencyEnabled: resolve('financeModelEfficiencyEnabled', 'false') === 'true',
     finopsSeatPriceMonthly: resolve('finopsSeatPriceMonthly', ''),
+    chatgptSeats: resolve('chatgptSeats', ''),
+    chatgptSeatPriceMonthly: resolve('chatgptSeatPriceMonthly', ''),
     // Dev Framework Alignment (dormant)
     dxFrameworkEnabled: resolve('dxFrameworkEnabled', 'false') === 'true',
     dxFrameworkMock: resolve('dxFrameworkMock', 'false'),
@@ -904,6 +968,16 @@ export async function getAllConfig(): Promise<AppConfig> {
     complianceActivityExcludedTypes: resolve('complianceActivityExcludedTypes', '["compliance_api_accessed"]'),
     complianceLastSyncAt: resolve('complianceLastSyncAt'),
     complianceLastSyncStats: resolve('complianceLastSyncStats'),
+    openaiAdminApiKey: resolve('openaiAdminApiKey'),
+    openaiWorkspaceId: resolve('openaiWorkspaceId'),
+    openaiOrganizationId: resolve('openaiOrganizationId'),
+    openaiSyncIntervalMinutes: resolve('openaiSyncIntervalMinutes', '5'),
+    openaiBackfillDays: resolve('openaiBackfillDays', '30'),
+    openaiSyncPaused: resolve('openaiSyncPaused', 'false'),
+    openaiShown: resolve('openaiShown', 'true'),
+    openaiSyncCursors: resolve('openaiSyncCursors'),
+    openaiLastSyncAt: resolve('openaiLastSyncAt'),
+    openaiLastSyncStats: resolve('openaiLastSyncStats'),
     highlightsModel: resolve('highlightsModel'),
     highlightsEnabled: resolve('highlightsEnabled', 'false'),
     highlightsIncludeNames: resolve('highlightsIncludeNames', 'false'),
@@ -956,6 +1030,8 @@ export interface DataSourceStatus {
   complianceApi: boolean;
   analyticsApi: boolean;
   aiFeatures: boolean;
+  /** An OpenAI Admin API key is saved, so the ChatGPT and Codex sync runs. */
+  openai: boolean;
   mode: 'max' | 'enterprise';
 }
 
@@ -975,6 +1051,7 @@ export async function getDataSourceStatus(): Promise<DataSourceStatus> {
 
   const aiKey = await getConfigValue('anthropicAiApiKey');
   const aiFeatures = !!aiKey;
+  const openai = !!(await getConfigValue('openaiAdminApiKey'));
   const mode = complianceApi || analyticsApi ? 'enterprise' : 'max';
 
   // Check if OTel Cowork data is present (users with source='otel')
@@ -988,5 +1065,5 @@ export async function getDataSourceStatus(): Promise<DataSourceStatus> {
     otelCowork = otelUserRows.length > 0;
   } catch { /* users table may not have source column yet */ }
 
-  return { coworkContent, otelCowork, complianceApi, analyticsApi, aiFeatures, mode };
+  return { coworkContent, otelCowork, complianceApi, analyticsApi, aiFeatures, openai, mode };
 }
