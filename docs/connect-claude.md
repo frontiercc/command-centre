@@ -123,7 +123,7 @@ Claude Chat sends no telemetry. On Claude for Enterprise, Command Centre reads e
 
 Command Centre checks for new Claude Chat prompts every two minutes, and its first check brings in the last 30 days. Command Centre stores people's prompts in full, the names of files they attach, the model and the connectors used, and how many artifacts and files Claude made. It never stores the text of Claude's replies.
 
-## Why OpenTelemetry for Claude Cowork and Claude Code, and the Compliance API for Claude Chat
+## Why OpenTelemetry for Claude Cowork and Claude Code, and Anthropic's Compliance API for Claude Chat
 
 Claude Cowork and Claude Code send their activity through OpenTelemetry to a collector you run. OpenTelemetry is the only route that carries what each session cost and which models it used, and the engineering measures: lines of code, commits, pull requests and edits accepted. OpenTelemetry has no Anthropic rate limit, and it works on Claude for Teams and Claude for Enterprise.
 

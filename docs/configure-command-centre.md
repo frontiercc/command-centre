@@ -19,7 +19,7 @@ Several major features are off until you enable them.
 | Retention | Admin → Data | Defaults applied |
 | Alerts, thresholds, Slack alerts | Admin → Risk Scoring | Slack alerts off; Claude Code daily spend limit $100; Codex daily spend limit $500 |
 
-**Contents:** [Claude API key and models](#claude-api-key-and-models) · [Claude Chat capture through the Compliance API](#claude-chat-capture-through-the-compliance-api) · [Connect ChatGPT and Codex](#connect-chatgpt-and-codex) · [Single sign-on](#single-sign-on) · [Email (SMTP)](#email-smtp) · [Users, roles and departments](#users-roles-and-departments) · [Cost centres, licensed seats and seat price](#cost-centres-licensed-seats-and-seat-price) · [Retention](#retention) · [Content and AI switches](#content-and-ai-switches) · [Work Pulse](#work-pulse) · [Developer Pulse and the GitHub overlay](#developer-pulse-and-the-github-overlay) · [Use Cases](#use-cases) · [Skills and Connectors Board](#skills-and-connectors-board) · [Weekly Digest](#weekly-digest) · [Weekly Highlights](#weekly-highlights) · [High-priority alerts to Slack](#high-priority-alerts-to-slack) · [System health and telemetry-silence alerts](#system-health-and-telemetry-silence-alerts) · [Metrics Connector](#metrics-connector) · [Reports](#reports)
+**Contents:** [Claude API key and models](#claude-api-key-and-models) · [Claude Chat capture through Anthropic's Compliance API](#claude-chat-capture-through-anthropics-compliance-api) · [Connect ChatGPT and Codex](#connect-chatgpt-and-codex) · [Single sign-on](#single-sign-on) · [Email (SMTP)](#email-smtp) · [Users, roles and departments](#users-roles-and-departments) · [Cost centres, licensed seats and seat price](#cost-centres-licensed-seats-and-seat-price) · [Retention](#retention) · [Content and AI switches](#content-and-ai-switches) · [Work Pulse](#work-pulse) · [Developer Pulse and the GitHub overlay](#developer-pulse-and-the-github-overlay) · [Use Cases](#use-cases) · [Skills and Connectors Board](#skills-and-connectors-board) · [Weekly Digest](#weekly-digest) · [Weekly Highlights](#weekly-highlights) · [High-priority alerts to Slack](#high-priority-alerts-to-slack) · [System health and telemetry-silence alerts](#system-health-and-telemetry-silence-alerts) · [Metrics Connector](#metrics-connector) · [Reports](#reports)
 
 ## Claude API key and models
 
@@ -32,7 +32,7 @@ Most features with their own model offer a drop-down filled from your key's mode
 
 **Check:** the **Test** button reports success, and the model drop-downs on Admin → Work Pulse list models.
 
-## Claude Chat capture through the Compliance API
+## Claude Chat capture through Anthropic's Compliance API
 
 Command Centre captures Claude Chat by pulling it from the Anthropic Compliance API, which requires Claude for Enterprise. Command Centre stores each person's prompts in full, subject to personal-data and intent flagging, with the names of any files they attach, and Work Pulse sorts them into tiers alongside Claude Cowork work. For Claude's replies it stores metadata only: the model and the number of artifacts and files Claude made, never the reply text. Command Centre also records which named connectors a chat used.
 

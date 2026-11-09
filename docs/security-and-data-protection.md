@@ -26,7 +26,7 @@ All data Command Centre stores remains on infrastructure you control. The Comman
 | Identity | Identity provider, MFA policy for SSO users, joiners and leavers, role assignment | Local accounts, password hashing, TOTP MFA, sessions, role checks on every route | The identity each person signed in to Claude or ChatGPT with, reported in telemetry and exports |
 | Data at rest | Disk or database encryption and its keys, backups and access to them | Encryption of stored secrets and MFA seeds, hashing of sign-in, reset and connector tokens | Data in their own services, under your agreements with them |
 | Data in transit | Certificates and TLS at your proxy, TLS on a managed database, SMTP relay TLS | Verified TLS to a managed database, HTTPS to outbound services | TLS on their APIs |
-| Logging and monitoring | Keeping, alerting on and forwarding the containers' logs, SIEM | Access audit log, authentication events, System health, alerts | Compliance API activity records |
+| Logging and monitoring | Keeping, alerting on and forwarding the containers' logs, SIEM | Access audit log, authentication events, System health, alerts | Anthropic Compliance API activity records |
 | Content capture | Claude's telemetry settings and the read permissions on the OpenAI key, which decide what is sent | Detection, retention, access control and deletion of what arrives | Running their clients and APIs |
 | Patching | Applying Command Centre releases, patching the host and its container runtime | Dependency management and fixes in each release | Their clients and APIs |
 | Legal basis | Lawful basis, employee notices, DPIA, works council consultation | Retention, erasure, export and access controls that support them | Its own processing under your agreement |
@@ -224,7 +224,7 @@ A retention job runs daily in a single database transaction, so a run either com
 | ChatGPT prompts, reply records, conversation times and spend | The Claude Cowork window, 90 days |
 | Codex prompts, turns, tool calls and spend | The Claude Code window, 90 days |
 | Raw telemetry events | 30 days |
-| Compliance API activity events | 365 days |
+| Anthropic Compliance API activity events | 365 days |
 | Operational errors | 90 days |
 | Resolved and dismissed alerts | 90 days |
 | Daily analytics snapshots | 365 days |
