@@ -255,7 +255,7 @@ export default function DashboardPage() {
             value={stats.activeUsersThisWeek}
             change={formatChange(stats.activeUsersThisWeek, stats.activeUsersLastWeek)}
             subtitle={activeSub}
-            action={split ? formatSplit(data.products.activeUsers) : undefined}
+            action={split ? formatSplit(data.products.activeUsers, 'ChatGPT and Codex') : undefined}
           />
           <StatCard
             title="Events ingested"
@@ -268,14 +268,14 @@ export default function DashboardPage() {
             subtitle={`${formatAlertSeverity(stats.alertsBySeverity)}${allProducts}`}
           />
         </Strip>
-        {/* Chat, Work and Code: each box adds Claude and OpenAI in the All view */}
+        {/* Chat, Work and Code: in the All view each box splits into Claude and its own OpenAI product */}
         <Strip cols={3}>
           <StatCard
             title="Chat conversations"
             value={stats.avgSessionsPerWeek.chat}
             change="avg / week"
             subtitle={flaggedLine(stats.chatFlagged)}
-            action={split ? formatSplit(data.products.sessions.chat) : undefined}
+            action={split ? formatSplit(data.products.sessions.chat, 'ChatGPT') : undefined}
           />
           <StatCard
             title="Work sessions"
@@ -283,7 +283,7 @@ export default function DashboardPage() {
             change="avg / week"
             subtitle={flaggedLine(stats.coworkFlagged)}
             action={
-              split ? formatSplit(data.products.sessions.work)
+              split ? formatSplit(data.products.sessions.work, 'ChatGPT')
                 : !data.dataSourceStatus.otelCowork && vendor !== 'openai' ? (
                 <span>Connect OpenTelemetry for Cowork visibility</span>
               ) : undefined
@@ -294,7 +294,7 @@ export default function DashboardPage() {
             value={stats.avgSessionsPerWeek.code}
             change="avg / week"
             subtitle={flaggedLine(stats.codeFlagged)}
-            action={split ? formatSplit(data.products.sessions.code) : undefined}
+            action={split ? formatSplit(data.products.sessions.code, 'Codex') : undefined}
           />
         </Strip>
 
