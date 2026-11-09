@@ -1522,7 +1522,7 @@ export default function SecurityPage() {
         </Panel>
 
         {/* OpenAI Compliance API: ChatGPT and Codex */}
-        <Panel title="OpenAI (ChatGPT and Codex)">
+        <Panel title="OpenAI (ChatGPT and Codex)" badge={<Tag tone="neutral" title="ChatGPT and Codex support is in preview">Preview</Tag>}>
           <div className="flex flex-col gap-4">
             <ApiKeyField
               label="OpenAI Admin API Key"
