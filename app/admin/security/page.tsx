@@ -857,7 +857,7 @@ export default function SecurityPage() {
                     <option value="viewer">Viewer</option>
                     <option value="cowork">Work Pulse</option>
                     <option value="code">Developer Pulse</option>
-                    <option value="pulse">Pulse (Cowork + Code)</option>
+                    <option value="pulse">Pulse (Work and Developer)</option>
                   </select>
                 </FormField>
                 {(newRole === 'viewer' || newRole === 'cowork') && (
@@ -1078,7 +1078,7 @@ export default function SecurityPage() {
                                 <option value="viewer">Viewer</option>
                                 <option value="cowork">Work Pulse</option>
                                 <option value="code">Developer Pulse</option>
-                                <option value="pulse">Pulse (Cowork + Code)</option>
+                                <option value="pulse">Pulse (Work and Developer)</option>
                               </select>
                               <button
                                 type="button"

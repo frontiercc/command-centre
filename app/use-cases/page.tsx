@@ -14,6 +14,7 @@ import ProcessCanvasCard from '@/components/usecases/ProcessCanvasCard';
 import type { ProcessCanvas } from '@/lib/usecases/suggestion-store';
 import { groupDeptBoxes, surfaceLabels } from '@/lib/usecases/dept-boxes';
 import { useConnectedProducts } from '@/components/shared/VendorSwitch';
+import { isOpenAiOnly } from '@/lib/sources/connected-shared';
 import { PageBody, Toolbar, Panel, PanelFoot, SubHead, T, Tag, Pill, B, Notice, Empty, cx } from '@/components/precision/ui';
 
 interface UseCase {
@@ -28,6 +29,8 @@ interface UseCase {
   lifecycle: 'not_seen' | 'piloting' | 'adopted' | 'at_risk';
   lastActivatedAt: number | null;
   strategic: number;
+  /** Sessions per vendor, last 13 completed weeks; openai null when ChatGPT and Codex are hidden. */
+  platformSessions?: { claude: number; openai: number | null };
 }
 
 interface SuggestionDraft {
@@ -70,6 +73,20 @@ const LIFECYCLE_DOT: Record<LifecycleTone, string> = {
 };
 
 const LIFECYCLE_FACETS: Array<UseCase['lifecycle']> = ['adopted', 'piloting', 'at_risk', 'not_seen'];
+
+/**
+ * "Claude 12 · OpenAI 4": a use case's matched sessions by vendor. OpenAI is
+ * shown only once OpenAI is connected and ChatGPT and Codex are shown, and
+ * Claude is left out on a hub where only OpenAI is connected.
+ */
+function PlatformCell({ p, openAiOnly, showOpenAi }: { p?: { claude: number; openai: number | null }; openAiOnly: boolean; showOpenAi: boolean }) {
+  if (!p) return <span className="text-[#8F8F8F]">—</span>;
+  const parts: string[] = [];
+  if (!openAiOnly) parts.push(`Claude ${p.claude}`);
+  if (showOpenAi && p.openai !== null) parts.push(`OpenAI ${p.openai}`);
+  if (parts.length === 0) return <span className="text-[#8F8F8F]">—</span>;
+  return <span className="text-[#333333]">{parts.join(' · ')}</span>;
+}
 
 export default function UseCasesRegisterPage() {
   const router = useRouter();
@@ -201,6 +218,7 @@ export default function UseCasesRegisterPage() {
 
   const visibleSuggestions = suggestions ?? [];
   const connected = useConnectedProducts();
+  const openAiOnly = isOpenAiOnly(connected);
 
   // One box per department; Work and Code suggestions are lists inside it.
   const { deptBoxes, orgSuggestions } = useMemo(() => {
@@ -386,10 +404,11 @@ export default function UseCasesRegisterPage() {
             flush
           >
             <div className="overflow-x-auto">
-              <table className={cx(T.table, 'table-fixed min-w-[640px]')}>
+              <table className={cx(T.table, 'table-fixed min-w-[810px]')}>
                 <thead>
                   <tr className={T.headRow}>
                     <th scope="col" className={T.th}>Use case</th>
+                    <th scope="col" className={cx(T.th, 'w-[170px]')} title="Matched sessions in the last 13 completed weeks, by vendor">Sessions, 13 weeks</th>
                     <th scope="col" className={cx(T.th, 'w-[120px]')}>Lifecycle</th>
                     <th scope="col" className={cx(T.th, 'w-[240px]')}>Departments</th>
                   </tr>
@@ -421,6 +440,7 @@ export default function UseCasesRegisterPage() {
                             <p className="m-0 mt-0.5 text-[#666666] truncate" title={uc.description}>{uc.description}</p>
                           )}
                         </td>
+                        <td className={cx(T.td, 'text-[13px] tabular-nums')}><PlatformCell p={uc.platformSessions} openAiOnly={openAiOnly} showOpenAi={!!connected?.openai} /></td>
                         <td className={T.td}>{pill ? <Pill tone={pill.tone}>{pill.label}</Pill> : <span className="text-[#8F8F8F]">—</span>}</td>
                         <td className={cx(T.tdMute, 'text-[13px] truncate')} title={uc.departments.join(', ')}>
                           {uc.departments.length > 0 ? uc.departments.join(', ') : '—'}

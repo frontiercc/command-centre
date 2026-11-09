@@ -682,3 +682,58 @@ describe('POST /api/use-cases/[id]/activate', () => {
     expect(persisted.activateResult.seen).toBe(false);
   });
 });
+
+describe('GET /api/use-cases — sessions by vendor (register column)', () => {
+  async function seedUseCase(id: string) {
+    await sql.run(`INSERT INTO use_cases (id, title, description, status, lifecycle, origin, created_at, updated_at)
+      VALUES (?, ?, 'Work and what it produces.', 'confirmed', 'piloting', 'planned', 1, 1)`, [id, `UC ${id}`]);
+  }
+
+  it('counts each matched session under its vendor, only when its session row exists', async () => {
+    await enableUseCases();
+    const { weekStart } = await import('@/lib/pulse/period');
+    const now = Math.floor(Date.now() / 1000);
+    const wk = weekStart(now - 14 * 86400); // a completed week inside the 13-week window
+    await seedUseCase('uc-plat');
+    await sql.run(`INSERT INTO users (id, email, display_name) VALUES ('u1', 'u1@example.com', 'U1') ON CONFLICT DO NOTHING`);
+    const match = (sid: string) => sql.run(
+      `INSERT INTO use_case_week_matches (use_case_id, week_start, user_id, session_id) VALUES ('uc-plat', ?, 'u1', ?)`, [wk, sid]);
+    // Claude Cowork and Claude Code sessions
+    await match('cw-1');
+    await sql.run(`INSERT INTO cowork_sessions (id, conversation_id, user_id) VALUES ('cw-1', 'cw-1', 'u1') ON CONFLICT DO NOTHING`);
+    await sql.run(`INSERT INTO cowork_session_stats (session_id, user_id, computed_at) VALUES ('cw-1', 'u1', 1)`);
+    await match('cc-1');
+    await sql.run(`INSERT INTO code_session_stats (session_id, first_at, last_at, computed_at) VALUES ('cc-1', 1, 2, 1)`);
+    // ChatGPT and Codex sessions
+    await match('chatgpt:a');
+    await sql.run(`INSERT INTO chatgpt_session_time (session_id, user_id, source, first_at, last_at, computed_at) VALUES ('chatgpt:a', 'u1', 'chatgpt_work', 1, 2, 1)`);
+    await match('codex:b');
+    await sql.run(`INSERT INTO code_session_stats (session_id, first_at, last_at, computed_at) VALUES ('codex:b', 1, 2, 1)`);
+    // A matched session with no session row is not counted, as on the use case page
+    await match('chatgpt:nostats');
+
+    const { GET } = await import('../app/api/use-cases/route');
+    const res = await GET(makeRequest('/api/use-cases'));
+    expect(res.status).toBe(200);
+    const body = await res.json();
+    expect(Array.isArray(body)).toBe(true);
+    const row = body.find((r: { id: string }) => r.id === 'uc-plat');
+    expect(row.platformSessions).toEqual({ claude: 2, openai: 2 });
+    // Leave nothing that would block the shared clean-up of users
+    await sql.exec(`DELETE FROM cowork_session_stats WHERE session_id = 'cw-1'`);
+    await sql.exec(`DELETE FROM cowork_sessions WHERE id = 'cw-1'`);
+    await sql.exec(`DELETE FROM code_session_stats WHERE session_id IN ('cc-1', 'codex:b')`);
+    await sql.exec(`DELETE FROM chatgpt_session_time WHERE session_id = 'chatgpt:a'`);
+  });
+
+  it('gives zero for a use case with no matches, and no OpenAI figure while ChatGPT and Codex are hidden', async () => {
+    await enableUseCases();
+    await seedUseCase('uc-empty');
+    const { saveConfig } = await import('@/lib/config');
+    await saveConfig({ openaiShown: 'false' });
+    const { GET } = await import('../app/api/use-cases/route');
+    const body = await (await GET(makeRequest('/api/use-cases'))).json();
+    const row = body.find((r: { id: string }) => r.id === 'uc-empty');
+    expect(row.platformSessions).toEqual({ claude: 0, openai: null });
+  });
+});

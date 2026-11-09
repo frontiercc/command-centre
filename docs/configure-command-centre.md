@@ -95,18 +95,18 @@ Email carries password reset links and the Weekly Digest.
 
 ## Users, roles and departments
 
-People appear in Command Centre automatically the first time their telemetry, Claude Chat activity or ChatGPT and Codex activity arrives, matched by email, with the contributor role "Pulse (Cowork + Code)" and no password. Your job is to assign departments and to give the right people wider roles.
+People appear in Command Centre automatically the first time their telemetry, Claude Chat activity or ChatGPT and Codex activity arrives, matched by email, with the contributor role "Pulse (Work and Developer)" and no password. Your job is to assign departments and to give the right people wider roles.
 
 | Role | What it can see |
 |---|---|
 | Admin | Everything, including the Admin area and every person's prompts in the Audit Log |
 | Manager | Dashboard, Alerts, Reports, organisation overviews, FinOps, Use Cases, the Work Pulse admin page; the Audit Log for their own department |
 | Viewer | Dashboard, Alerts, Reports, organisation-level Work Pulse and Developer Pulse pages and Use Case Governance; never the Audit Log or FinOps |
-| Pulse (Cowork + Code) | Their own and their department's Work Pulse and Developer Pulse pages |
+| Pulse (Work and Developer) | Their own and their department's Work Pulse and Developer Pulse pages |
 | Work Pulse | As above, Work Pulse only (Claude Chat, Claude Cowork, Claude in Office/Google and ChatGPT) |
 | Developer Pulse | As above, Developer Pulse only (Claude Code and Codex) |
 
-1. **Load departments in bulk.** In **Admin → Ingestion → Pre-populate users**, paste the CSV of `email,display_name,department` and select **Import users**. Rows whose email already exists are skipped, so import before you connect clients. People are matched by email whether they first appear in Claude's telemetry or in OpenAI's Compliance API (ChatGPT and Codex). Imported people are given the Work Pulse role; change it to Pulse (Cowork + Code) for anyone who also uses Claude Code or Codex.
+1. **Load departments in bulk.** In **Admin → Ingestion → Pre-populate users**, paste the CSV of `email,display_name,department` and select **Import users**. Rows whose email already exists are skipped, so import before you connect clients. People are matched by email whether they first appear in Claude's telemetry or in OpenAI's Compliance API (ChatGPT and Codex). Imported people are given the Work Pulse role; change it to Pulse (Work and Developer) for anyone who also uses Claude Code or Codex.
 2. **Exclude people from monitoring.** In **Admin → Ingestion → Exclude people from monitoring**, list their emails, one per line, and select **Save exclusion list**. Claude telemetry, Claude Chat from Anthropic's Compliance API, and ChatGPT and Codex records from OpenAI's Compliance API for these addresses are dropped on arrival: nothing is written, including spend, and no alert fires. The Compliance API's Activity Feed (logins and admin actions) is an audit trail and is kept for everyone.
 3. **Set roles and departments.** In **Admin → Access & Keys → Users**, use the role selector and **Set dept** on each row, and give every manager a department. Create accounts for administrators, managers and viewers who do not use Claude or ChatGPT with **+ Add user**, which opens the **New admin user** form.
 

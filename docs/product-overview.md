@@ -276,7 +276,7 @@ Use Cases connects the productivity view to the work an organisation cares about
 
 ### The register
 
-Administrators and managers maintain the register. A use case can be entered through a guided form, extracted from an uploaded meeting transcript (text, subtitle, PDF or Word files), developed in a brainstorming conversation with Claude grounded in the organisation's own activity, or adopted from a suggestion. Each has a status set by people (candidate, confirmed or archived) and a lifecycle derived from activity.
+Administrators and managers maintain the register. A use case can be entered through a guided form, extracted from an uploaded meeting transcript (text, subtitle, PDF or Word files), developed in a brainstorming conversation with Claude grounded in the organisation's own activity, or adopted from a suggestion. Each has a status set by people (candidate, confirmed or archived) and a lifecycle derived from activity, and each row shows how many of its matched sessions in the last 13 completed weeks ran in Claude and how many in OpenAI's ChatGPT or Codex.
 
 | Lifecycle | Meaning with default settings |
 |---|---|
@@ -387,11 +387,11 @@ Command Centre has six roles, enforced on the server for every page and data req
 | Administrator | The team running Command Centre | Everything, including all prompt text, configuration, users, alert resolution, cost centres and period close |
 | Manager | Department and functional leaders | Dashboard, Alerts (read), Reports, Audit Log for their department (none until a department is set), all Pulse views, FinOps, Spend Review, the Use Cases register, the Work Pulse administration overview, the Board |
 | Viewer | Executives and reviewers | Dashboard, Alerts (read), Reports, Work Pulse and Developer Pulse views (including each department member's Claude Code and Codex spend), Use Case governance, the Board, their own Spend Review; no Audit Log or FinOps |
-| Pulse (Cowork + Code) | People whose work is observed | Their own and their department's Work Pulse and Developer Pulse views, the Board, their own Spend Review |
+| Pulse (Work and Developer) | People whose work is observed | Their own and their department's Work Pulse and Developer Pulse views, the Board, their own Spend Review |
 | Work Pulse | As above, Work Pulse only (Claude Cowork, Claude Chat, Claude in Office/Google and ChatGPT) | Their own and their department's Work Pulse views, the Board, their own Spend Review |
 | Developer Pulse | As above, Developer Pulse only (Claude Code and Codex) | Their own and their department's Developer Pulse views, the Board, their own Spend Review |
 
-When telemetry, Anthropic's Compliance API or OpenAI's Compliance API first shows a new person, Command Centre creates a record with the Pulse (Cowork + Code) role so their work can be attributed. That record has no password and cannot be used to sign in until the account is activated.
+When telemetry, Anthropic's Compliance API or OpenAI's Compliance API first shows a new person, Command Centre creates a record with the Pulse (Work and Developer) role so their work can be attributed. That record has no password and cannot be used to sign in until the account is activated.
 
 ### Sign-in, single sign-on and MFA
 
