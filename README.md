@@ -377,6 +377,8 @@ The **Last sync** line under the fields shows ChatGPT and Codex prompts, and the
 
 **Can it block risky prompts?** No. It sees activity after it reaches Claude, ChatGPT or Codex, so it flags and alerts rather than blocks.
 
+**How are departments set?** By hand on **Admin → Access & Keys**, from a CSV under **Admin → Ingestion → Pre-populate users**, from a `department` attribute in Claude Code telemetry, or, with single sign-on through Microsoft Entra ID, from the directory with [department sync](docs/configure-command-centre.md#department-sync).
+
 **Is it an Anthropic or OpenAI product?** No. It is an independent open-source project and is not endorsed by Anthropic or OpenAI.
 
 ## Documentation
@@ -406,7 +408,7 @@ Vote or add ideas in [Discussions](https://github.com/frontiercc/command-centre/
 
 ## Status
 
-1.0.0, in October 2026, was the first public release; the current release is 1.3.0, which adds ChatGPT and Codex in preview. Command Centre was built with Claude Code, then reviewed, tested and run in production; it has been in daily use since mid-2026. Several features ship switched off and are turned on from the admin pages: FinOps, Use Cases, Weekly Highlights, Dev Framework Alignment and single sign-on.
+1.0.0, in October 2026, was the first public release; the current release is 1.3.0, which adds ChatGPT and Codex in preview and department sync from Microsoft Entra ID. Command Centre was built with Claude Code, then reviewed, tested and run in production; it has been in daily use since mid-2026. Several features ship switched off and are turned on from the admin pages: FinOps, Use Cases, Weekly Highlights, Dev Framework Alignment and single sign-on.
 
 ## Support
 

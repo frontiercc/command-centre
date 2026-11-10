@@ -90,6 +90,18 @@ On AWS or Azure, change `OTEL_ENDPOINT_SECRET` in your secret store and redeploy
 
 **Change the collector address.** On **Admin → Ingestion**, select **Edit** beside the collector address, enter the new one and save. Then copy the new Claude Code settings into claude.ai and update the OTLP endpoint in the Claude Cowork monitoring settings and in Office agents → Monitoring.
 
+## Department sync
+
+**The Department sync section says it works with Microsoft Entra ID only, but you use Entra.** Check that the single sign-on **Issuer URL** is `https://login.microsoftonline.com/<tenant ID>/v2.0`, save the single sign-on settings, and reload the page.
+
+**After switching it on, Microsoft asks for permission or admin approval at sign-in.** Grant admin consent for **User.Read** on the app registration, as in step 1 of [Department sync](configure-command-centre.md#department-sync).
+
+**The Daily lookup says it can't read the directory.** Add **User.Read.All** as an application permission, with admin consent. Until then, departments update only when people sign in.
+
+**Someone's department doesn't update.** Look for them under **Kept manual** (their department was set by hand; select **Return to directory**) or under **Not found** (no address in Entra matches their email). Otherwise, their department is empty in Entra, which never removes one.
+
+**A new department appeared that should be an existing one.** Add the directory's name to the **Name map** and select **Save name map**. The next lookup moves those people.
+
 ## Running it
 
 **Stop and start.** `docker compose stop` keeps your data; `docker compose up -d` starts again.

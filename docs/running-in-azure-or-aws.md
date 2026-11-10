@@ -14,7 +14,7 @@ This is a deployment reference, not a supported infrastructure template. Cloud s
 | **PostgreSQL 16** | Reachable only from the Hub, with a database for Command Centre. The Hub must connect directly: a transaction pooler in between stops the scheduled jobs running |
 | **HTTPS** | Two addresses with valid certificates: one where people sign in (the Hub) and one where Claude sends its activity (the collector). Claude in Office/Google sends from people's browsers, so the load balancer in front of the collector must pass the browser's cross-origin check (`OPTIONS` requests) through to the collector, which answers it |
 | **Persistent storage for the collector's queue** | So telemetry waiting to be delivered survives a restart |
-| **Outbound access** | HTTPS from the Hub to `api.anthropic.com`, and to any service you switch on, such as Slack or your identity provider. For ChatGPT and Codex, also to `api.chatgpt.com` and the download links it returns, whose host OpenAI chooses |
+| **Outbound access** | HTTPS from the Hub to `api.anthropic.com`, and to any service you switch on, such as Slack or your identity provider. For ChatGPT and Codex, also to `api.chatgpt.com` and the download links it returns, whose host OpenAI chooses. For department sync, also to `graph.microsoft.com`, or your national cloud's Microsoft Graph address |
 
 | Container | Port | Health check | Settings |
 |---|---|---|---|

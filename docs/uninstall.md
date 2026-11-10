@@ -34,7 +34,8 @@ Delete or revoke each key you entered in Command Centre, where you created it:
 - the Analytics API key, if you set one, at [claude.ai/analytics/api-keys](https://claude.ai/analytics/api-keys);
 - the Admin API key, if you set one, in the Claude Console;
 - the OpenAI Admin API key, if you set one, in OpenAI's admin console;
-- any GitHub token, single sign-on client secret, Slack webhook, SMTP password, and the AWS access key used for the archive.
+- any GitHub token, single sign-on client secret, Slack webhook, SMTP password, and the AWS access key used for the archive;
+- if you used department sync, the Microsoft Graph permission User.Read.All (and User.Read, if nothing else needs it) on the app registration in Microsoft Entra ID, or the app registration itself.
 
 ## 3. Remove Command Centre
 
