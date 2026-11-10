@@ -58,7 +58,7 @@ export default function Leaderboard({ leaderboard, period, openaiOnly = false }:
   return (
     <Panel
       title="Top spenders"
-      right={<Link href={`/finops/spend-review${period ? `?period=${period}` : ''}`} className="text-[13px] font-medium text-[#245BF3] hover:underline">Spend Review</Link>}
+      right={<Link href={`/finops/spend-review${period ? `?period=${encodeURIComponent(period)}` : ''}`} className="text-[13px] font-medium text-[#245BF3] hover:underline">Spend Review</Link>}
       flush
     >
       {leaderboard.length === 0 ? (
@@ -83,7 +83,7 @@ export default function Leaderboard({ leaderboard, period, openaiOnly = false }:
                   <td className={`${T.td} w-8 text-[12px] text-[#B3B3B3] tabular-nums`}>{i + 1}</td>
                   <td className={T.td}>
                     <Link
-                      href={`/finops/spend-review/${encodeURIComponent(u.userId)}${period ? `?period=${period}` : ''}`}
+                      href={`/finops/spend-review/${encodeURIComponent(u.userId)}${period ? `?period=${encodeURIComponent(period)}` : ''}`}
                       className="font-medium text-[#0A0A0A] hover:text-[#245BF3] hover:underline"
                     >
                       {u.displayName}

@@ -165,7 +165,7 @@ interface IndexData {
 const MIN_PRIOR_FOR_CHANGE = 1;
 
 function reviewHref(p: Person, period: string): string | null {
-  return p.userId ? `/finops/spend-review/${encodeURIComponent(p.userId)}?period=${period}` : null;
+  return p.userId ? `/finops/spend-review/${encodeURIComponent(p.userId)}?period=${encodeURIComponent(period)}` : null;
 }
 
 /** Share of the current UTC month gone by, so last month can be compared at the same pace. */

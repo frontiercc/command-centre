@@ -410,7 +410,7 @@ export default function CostChargebackPage() {
           left={isAdmin ? <a href="/admin/cost-centres" className={B.link}>Manage cost centres</a> : undefined}
         >
           {monthPicker}
-          <a href={`/api/finance/chargeback/export?period=${period}`} className={B.secondary}>
+          <a href={`/api/finance/chargeback/export?period=${encodeURIComponent(period)}`} className={B.secondary}>
             Export CSV
           </a>
           {report.status === 'open' && isAdmin && !isEmpty && (

@@ -86,11 +86,9 @@ export async function POST(request: NextRequest) {
     await logAccess({ actorId: session.userId!, actorEmail: session.email!, actorIp: request.headers.get('x-forwarded-for') || undefined, resource: 'reports', action: 'WRITE', outcome: 'success', detail: `period=${periodStart}..${periodEnd}${department ? ` dept=${department}` : ''}` });
     const contentMd = await generateGovernanceReport(periodStart, periodEnd, sections, department);
 
-    // Extract executive summary (first paragraph after first heading)
-    const summaryMatch = contentMd.match(/## Executive Summary\s*\n([\s\S]*?)(?=\n##|\n$)/i);
-    const contentSummary = summaryMatch
-      ? summaryMatch[1].trim().slice(0, 500)
-      : contentMd.slice(0, 200);
+    // The executive summary is the text between its heading and the next heading.
+    const summary = executiveSummary(contentMd);
+    const contentSummary = summary ? summary.slice(0, 500) : contentMd.slice(0, 200);
 
     const report = {
       id: uuidv4(),
@@ -119,6 +117,15 @@ function isIsoDate(value: unknown): value is string {
   if (typeof value !== 'string' || !/^\d{4}-\d{2}-\d{2}$/.test(value)) return false;
   const d = new Date(`${value}T00:00:00Z`);
   return !Number.isNaN(d.getTime()) && d.toISOString().slice(0, 10) === value;
+}
+
+/** Text under "## Executive Summary" up to the next "##" heading, or null. A plain search, not a backtracking pattern. */
+function executiveSummary(md: string): string | null {
+  const heading = /## Executive Summary[^\n]*\n/i.exec(md);
+  if (!heading) return null;
+  const rest = md.slice(heading.index + heading[0].length);
+  const end = rest.indexOf('\n##');
+  return (end === -1 ? rest : rest.slice(0, end)).trim() || null;
 }
 
 function getDefaultPeriodStart(): string {
