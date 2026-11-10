@@ -22,7 +22,8 @@ let server: ChildProcess;
 
 beforeAll(async () => {
   server = spawn(process.execPath, [path.join(ROOT, 'scripts/openai-mock/server.mjs')], {
-    env: { ...process.env, OPENAI_MOCK_PORT: String(PORT), OPENAI_MOCK_DAYS: '5', OPENAI_MOCK_RATE_LIMIT: '1000000' },
+    // Frozen: no file appears mid-test, so the repeat and resumed runs see exactly what the first run saw.
+    env: { ...process.env, OPENAI_MOCK_PORT: String(PORT), OPENAI_MOCK_DAYS: '5', OPENAI_MOCK_RATE_LIMIT: '1000000', OPENAI_MOCK_FROZEN: '1' },
     stdio: ['ignore', 'pipe', 'pipe'],
   });
   await new Promise<void>((resolve, reject) => {

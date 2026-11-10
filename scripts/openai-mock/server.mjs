@@ -9,7 +9,8 @@
 //   node scripts/openai-mock/server.mjs --write out  # also writes the files available now to out/
 //
 // Settings (environment): OPENAI_MOCK_PORT (4010), OPENAI_MOCK_DAYS of
-// history (14), OPENAI_MOCK_SEED (42), OPENAI_MOCK_RATE_LIMIT (100 a minute).
+// history (14), OPENAI_MOCK_SEED (42), OPENAI_MOCK_RATE_LIMIT (100 a minute),
+// OPENAI_MOCK_FROZEN (off; 1 lists only the files available at start-up).
 // The data runs 24 hours past start-up
 // and files appear as their time comes, about every 10 minutes, so an
 // incremental sync can be watched picking up new files.
@@ -28,6 +29,8 @@ const SEED = Number(process.env.OPENAI_MOCK_SEED || 42);
 // Per key, per method and route, as documented. Tests raise it to run at full speed.
 const RATE_LIMIT_PER_MIN = Number(process.env.OPENAI_MOCK_RATE_LIMIT || 100);
 const SIGNED_URL_TTL_MS = 5 * 60 * 1000;
+// Tests freeze the clock, so no new file appears between two runs however slow the machine.
+const FROZEN = process.env.OPENAI_MOCK_FROZEN === '1';
 
 const KEYS = {
   'mock-admin-key': new Set(['CONVERSATION_MESSAGE', 'CODEX_LOG', 'CODEX_TURN', 'COSTS']),
@@ -37,6 +40,8 @@ const WORKSPACE_TYPES = new Set(['CONVERSATION_MESSAGE', 'CODEX_LOG', 'CODEX_TUR
 const ORG_TYPES = new Set(['COSTS']);
 
 const startedAt = Date.now();
+/** The time that decides which files are available: start-up when frozen, otherwise now. */
+const fileClock = () => (FROZEN ? startedAt : Date.now());
 const { events, people } = buildEvents({ nowMs: startedAt, days: DAYS, seed: SEED });
 const files = buildFiles(events, { seed: SEED });
 const byId = new Map(files.map((f) => [f.id, f]));
@@ -84,7 +89,7 @@ function listFiles(res, url, scope, allowedHere, grants) {
 
   const afterMs = Date.parse(after);
   const beforeMs = before ? Date.parse(before) : Infinity;
-  const matching = available(Date.now()).filter(
+  const matching = available(fileClock()).filter(
     (f) => types.includes(f.event_type) && f.endMs > afterMs && f.endMs < beforeMs,
   );
   const page = matching.slice(0, limit);
@@ -97,7 +102,7 @@ function listFiles(res, url, scope, allowedHere, grants) {
 
 function redirectToFile(req, res, fileId, allowedHere, grants) {
   const f = byId.get(fileId);
-  if (!f || f.endMs > Date.now()) return fail(res, 404, 'The log file was not found or is no longer available.');
+  if (!f || f.endMs > fileClock()) return fail(res, 404, 'The log file was not found or is no longer available.');
   if (!allowedHere.has(f.event_type)) return fail(res, 404, 'The log file was not found or is no longer available.');
   if (!grants.has(f.event_type)) return fail(res, 403, `API key is missing the scope to read ${f.event_type}`);
   const token = randomBytes(16).toString('hex');
@@ -114,7 +119,7 @@ function maxEventTime(res, url, allowedHere, grants) {
   for (const t of types) {
     if (!allowedHere.has(t)) return fail(res, 400, `event_type ${t} is not supported on this route`);
     if (!grants.has(t)) return fail(res, 403, `API key is missing the scope to read ${t}`);
-    const mine = available(Date.now()).filter((f) => f.event_type === t);
+    const mine = available(fileClock()).filter((f) => f.event_type === t);
     out[t] = mine.length ? new Date(Math.max(...mine.map((f) => f.maxEventMs))).toISOString() : null;
   }
   send(res, 200, { max_event_time: out });
