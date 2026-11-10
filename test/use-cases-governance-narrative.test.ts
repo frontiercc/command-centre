@@ -10,7 +10,7 @@ import { trailingQuietWeeks, buildGovernanceNarrative, type GovernanceBet } from
 const bet = (over: Partial<GovernanceBet>): GovernanceBet => ({
   id: 'b1', title: 'Recruiting Screener', ownerDisplayName: null, departments: ['HR'],
   lifecycle: 'at_risk', weeksInLifecycle: 0, quietWeeks: 0,
-  measured: { distinctUsers: 2, sessions: 3, hours: null, platformSessions: { claude: 3, openai: null }, platformHours: { claude: null, openai: null } }, estimated: { hoursRecovered: 1 },
+  measured: { distinctUsers: 2, sessions: 3, hours: null, platformSessions: { claude: 3, openai: null }, platformHours: { claude: null, openai: null }, productSessions: { cowork: 3, code: 0, chatgpt: null, codex: null }, productHours: { cowork: null, code: null, chatgpt: null, codex: null } }, estimated: { hoursRecovered: 1 },
   series: [], ...over,
 });
 

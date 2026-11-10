@@ -68,23 +68,37 @@ function parseCanvas(raw: string | null): ProcessCanvas | null {
     return null;
   }
 }
-function parseProducts(raw: string | null): SuggestionProducts | null {
+function citedIds(raw: string | null): string[] | null {
   if (!raw) return null;
   try {
     const ids = JSON.parse(raw);
-    return Array.isArray(ids) ? productsOfSessions(ids.filter((x): x is string => typeof x === 'string')) : null;
+    return Array.isArray(ids) ? ids.filter((x): x is string => typeof x === 'string') : null;
   } catch {
     return null;
   }
 }
-function toDraft(r: Row): SuggestionDraft {
+/** Which of the rows' cited Claude sessions are Claude Code sessions: one query for all the rows. */
+async function claudeCodeIdsOf(rows: Row[]): Promise<Set<string>> {
+  const ids = [...new Set(rows.flatMap(r => citedIds(r.cited_sessions) ?? []))]
+    .filter(id => !id.startsWith('chatgpt:') && !id.startsWith('codex:'));
+  if (ids.length === 0) return new Set();
+  const client = await getTypedClient();
+  const t = schema.codeSessionStats;
+  const found = (await client.select({ id: t.session_id }).from(t).where(inArray(t.session_id, ids))) as Array<{ id: string }>;
+  return new Set(found.map(f => f.id));
+}
+async function toDrafts(rows: Row[]): Promise<SuggestionDraft[]> {
+  const codeIds = await claudeCodeIdsOf(rows);
+  return rows.map(r => toDraft(r, codeIds));
+}
+function toDraft(r: Row, claudeCodeIds: ReadonlySet<string>): SuggestionDraft {
   return {
     id: r.id, signalKey: r.signal_key, title: r.title, description: r.description,
     matchingRule: JSON.parse(r.matching_rule), evidence: JSON.parse(r.evidence),
     status: r.status as SuggestionDraft['status'], generatedAt: r.generated_at,
     department: r.department, canvas: parseCanvas(r.canvas_json),
     surface: r.surface === 'code' ? 'code' : r.surface === 'cowork' ? 'cowork' : null,
-    products: parseProducts(r.cited_sessions),
+    products: (() => { const ids = citedIds(r.cited_sessions); return ids ? productsOfSessions(ids, claudeCodeIds) : null; })(),
   };
 }
 
@@ -144,14 +158,14 @@ export async function listOpenSuggestions(): Promise<SuggestionDraft[]> {
     .from(t)
     .where(eq(t.status, 'open'))
     .orderBy(desc(t.generated_at), desc(t.id))) as Row[];
-  return rows.map(toDraft);
+  return toDrafts(rows);
 }
 
 export async function getSuggestionById(id: string): Promise<SuggestionDraft | undefined> {
   const client = await getTypedClient();
   const t = schema.useCaseSuggestions;
   const rows = (await client.select().from(t).where(eq(t.id, id)).limit(1)) as Row[];
-  return rows[0] ? toDraft(rows[0]) : undefined;
+  return rows[0] ? (await toDrafts([rows[0]]))[0] : undefined;
 }
 
 export async function setSuggestionStatus(id: string, status: 'open' | 'dismissed' | 'added'): Promise<void> {
@@ -165,7 +179,7 @@ export async function getSuggestionBySignalKey(signalKey: string): Promise<Sugge
   const client = await getTypedClient();
   const t = schema.useCaseSuggestions;
   const rows = (await client.select().from(t).where(eq(t.signal_key, signalKey)).limit(1)) as Row[];
-  return rows[0] ? toDraft(rows[0]) : undefined;
+  return rows[0] ? (await toDrafts([rows[0]]))[0] : undefined;
 }
 
 export async function resolvedSignalKeys(): Promise<Set<string>> {

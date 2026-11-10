@@ -5,6 +5,7 @@ import { describe, it, expect, beforeAll, afterAll } from 'vitest';
 import { createTestDatabase } from './helpers/db';
 
 let cleanup: () => Promise<void>;
+let sql: Awaited<ReturnType<typeof createTestDatabase>>['sql'];
 
 let store: typeof import('@/lib/usecases/suggestion-store');
 let queries: typeof import('@/lib/usecases/queries');
@@ -12,6 +13,7 @@ let queries: typeof import('@/lib/usecases/queries');
 beforeAll(async () => {
   const testDb = await createTestDatabase();
   cleanup = testDb.cleanup;
+  sql = testDb.sql;
 
   store = await import('@/lib/usecases/suggestion-store');
   queries = await import('@/lib/usecases/queries');
@@ -56,10 +58,12 @@ describe('dept process suggestion storage (migration 077/0018)', () => {
       matchingRule: { skills: [], connectors: [], taskTypes: [], departments: ['Sales'] },
       evidence: { distinctUsers: 2, sessionCount: 4, departments: ['Sales'] },
       nowS: 1000, department: 'Sales', canvas: { ...CANVAS, sessions: 4 }, surface: 'cowork',
-      citedSessions: ['chatgpt:a', 'cw-1', 'chatgpt:b', 'codex:c'],
+      citedSessions: ['chatgpt:a', 'cw-1', 'chatgpt:b', 'codex:c', 'cc-1'],
     });
+    // cc-1 is a Claude Code session: it has a code_session_stats row.
+    await sql.run(`INSERT INTO code_session_stats (session_id, first_at, last_at, computed_at) VALUES ('cc-1', 1, 2, 1)`);
     const all = await store.listOpenSuggestions();
-    expect(all.find(s => s.signalKey === 'k-dept-products')!.products).toEqual({ claude: 1, chatgpt: 2, codex: 1 });
+    expect(all.find(s => s.signalKey === 'k-dept-products')!.products).toEqual({ cowork: 1, code: 1, chatgpt: 2, codex: 1 });
     // Stored without its sessions (older rows): no product line, never a guess.
     expect(all.find(s => s.signalKey === 'k-dept-1')!.products).toBeNull();
   });

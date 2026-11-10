@@ -33,24 +33,31 @@ export function formatSuggestionEvidenceLine(draft: SuggestionDraftEvidenceLine)
 }
 
 /** Sessions behind a suggestion by product, read from the session ids it was found in. */
-export interface SuggestionProducts { claude: number; chatgpt: number; codex: number }
+export interface SuggestionProducts { cowork: number; code: number; chatgpt: number; codex: number }
 
-/** `chatgpt:` ids are ChatGPT, `codex:` ids Codex, every other id Claude (the OpenAI sync's prefixes). */
-export function productsOfSessions(ids: string[]): SuggestionProducts {
-  const out: SuggestionProducts = { claude: 0, chatgpt: 0, codex: 0 };
+/**
+ * `chatgpt:` ids are ChatGPT and `codex:` ids Codex (the OpenAI sync's
+ * prefixes). Every other id is Claude's: Claude Code when it is in
+ * `claudeCodeIds` (sessions with a code_session_stats row), otherwise Claude
+ * Cowork, which covers Cowork, Claude Chat and Claude in Office and Google.
+ */
+export function productsOfSessions(ids: string[], claudeCodeIds: ReadonlySet<string> = new Set()): SuggestionProducts {
+  const out: SuggestionProducts = { cowork: 0, code: 0, chatgpt: 0, codex: 0 };
   for (const id of new Set(ids)) {
     if (id.startsWith('chatgpt:')) out.chatgpt += 1;
     else if (id.startsWith('codex:')) out.codex += 1;
-    else out.claude += 1;
+    else if (claudeCodeIds.has(id)) out.code += 1;
+    else out.cowork += 1;
   }
   return out;
 }
 
-/** "Claude 3 sessions · ChatGPT 2 sessions": each product with sessions, Claude first. */
+/** "Claude Cowork 3 sessions · Claude Code 1 session · ChatGPT 2 sessions": each product with sessions, Claude's first. */
 export function formatSuggestionProducts(p: SuggestionProducts): string {
   const n = (k: number) => `${k} session${k === 1 ? '' : 's'}`;
   const parts: string[] = [];
-  if (p.claude > 0) parts.push(`Claude ${n(p.claude)}`);
+  if (p.cowork > 0) parts.push(`Claude Cowork ${n(p.cowork)}`);
+  if (p.code > 0) parts.push(`Claude Code ${n(p.code)}`);
   if (p.chatgpt > 0) parts.push(`ChatGPT ${n(p.chatgpt)}`);
   if (p.codex > 0) parts.push(`Codex ${n(p.codex)}`);
   return parts.join(' · ');

@@ -10,8 +10,6 @@ import LoadingSpinner from '@/components/shared/LoadingSpinner';
 import {
   PageBody, Toolbar, Panel, PanelFoot, Strip, Figure, T, Tag, Pill, Notice, Empty, Spark, cx,
 } from '@/components/precision/ui';
-import { useConnectedProducts } from '@/components/shared/VendorSwitch';
-import { isOpenAiOnly } from '@/lib/sources/connected-shared';
 
 interface GovernanceBet {
   id: string;
@@ -24,6 +22,8 @@ interface GovernanceBet {
     distinctUsers: number; sessions: number; hours: number | null;
     platformSessions?: PlatformSessions;
     platformHours?: { claude: number | null; openai: number | null };
+    productSessions?: ProductSessions;
+    productHours?: ProductHours;
   };
   estimated: { hoursRecovered: number };
   series: Array<number | null>;
@@ -32,8 +32,10 @@ interface GovernanceBet {
 /** Matched sessions per vendor, 13 completed weeks; openai null while ChatGPT and Codex are hidden. */
 interface PlatformSessions { claude: number; openai: number | null }
 
-/** Which vendor parts to show: Claude unless OpenAI-only, OpenAI only when connected and shown. */
-interface VendorParts { claude: boolean; openai: boolean }
+/** The same sessions, and their measured hours, per product; ChatGPT and Codex null while hidden. */
+interface ProductSessions { cowork: number; code: number; chatgpt: number | null; codex: number | null }
+interface ProductHours { cowork: number | null; code: number | null; chatgpt: number | null; codex: number | null }
+
 
 interface GovernanceWorkflow {
   id: string;
@@ -43,6 +45,7 @@ interface GovernanceWorkflow {
   measuredHours: number | null;
   distinctUsers: number;
   platformSessions?: PlatformSessions;
+  productSessions?: ProductSessions;
 }
 
 interface GovernanceRollup {
@@ -88,32 +91,36 @@ function fmtSplitHours(n: number): string {
   return `${n.toLocaleString('en-GB', { minimumFractionDigits: 1, maximumFractionDigits: 1 })}h`;
 }
 
-/** "Claude 12 · ChatGPT and Codex 4", the register's column wording; null when no part shows. */
-function sessionsSplit(p: PlatformSessions | undefined, parts: VendorParts): string | null {
-  if (!p) return null;
-  const out: string[] = [];
-  if (parts.claude) out.push(`Claude ${p.claude.toLocaleString('en-GB')}`);
-  if (parts.openai && p.openai !== null) out.push(`ChatGPT and Codex ${p.openai.toLocaleString('en-GB')}`);
-  return out.length > 0 ? out.join(' · ') : null;
+const PRODUCTS: Array<[keyof ProductSessions, string]> = [
+  ['cowork', 'Claude Cowork'], ['code', 'Claude Code'], ['chatgpt', 'ChatGPT'], ['codex', 'Codex'],
+];
+
+/** The products with sessions, in the order Claude Cowork, Claude Code, ChatGPT, Codex. */
+function productsWithSessions(p: ProductSessions | undefined): Array<[keyof ProductSessions, string, number]> {
+  if (!p) return [];
+  return PRODUCTS.flatMap(([k, label]) => {
+    const n = p[k];
+    return n !== null && n > 0 ? [[k, label, n] as [keyof ProductSessions, string, number]] : [];
+  });
+}
+
+/** "Claude Cowork 40 · Claude Code 6 · ChatGPT 13", the register's wording; null when no product has sessions. */
+function sessionsSplit(p: ProductSessions | undefined): string | null {
+  const with_ = productsWithSessions(p);
+  return with_.length > 0 ? with_.map(([, label, n]) => `${label} ${n.toLocaleString('en-GB')}`).join(' · ') : null;
 }
 
 /**
- * "Claude 12.5h · ChatGPT and Codex 3.0h". A vendor with no matched sessions had no time
- * on the work, a real 0h; one with sessions but no measured time reads
- * "not measured".
+ * "Claude Cowork 12.5h · Claude Code 3.0h", for each product with sessions;
+ * one whose sessions carry no measured time reads "not measured".
  */
-function hoursSplit(
-  h: { claude: number | null; openai: number | null } | undefined,
-  s: { claude: number; openai: number | null } | undefined,
-  parts: VendorParts,
-): string | null {
-  if (!h) return null;
-  const one = (label: string, hours: number | null, sessions: number | null | undefined) =>
-    hours !== null ? `${label} ${fmtSplitHours(hours)}` : sessions === 0 ? `${label} ${fmtSplitHours(0)}` : `${label} not measured`;
-  const out: string[] = [];
-  if (parts.claude) out.push(one('Claude', h.claude, s?.claude));
-  if (parts.openai) out.push(one('ChatGPT and Codex', h.openai, s?.openai));
-  return out.length > 0 ? out.join(' · ') : null;
+function hoursSplit(h: ProductHours | undefined, s: ProductSessions | undefined): string | null {
+  const with_ = productsWithSessions(s);
+  if (!h || with_.length === 0) return null;
+  return with_.map(([k, label]) => {
+    const hours = h[k];
+    return hours !== null ? `${label} ${fmtSplitHours(hours)}` : `${label} not measured`;
+  }).join(' · ');
 }
 
 function LifecyclePill({ lifecycle }: { lifecycle: string }) {
@@ -130,9 +137,9 @@ function GroupRow({ lifecycle, count, colSpan }: { lifecycle: string; count: num
   );
 }
 
-function BetsPanel({ bets, minutesPerSession, parts }: { bets: GovernanceBet[]; minutesPerSession: number; parts: VendorParts }) {
-  // The per-vendor lines show once OpenAI is connected and shown; a Claude-only hub keeps the single figures.
-  const split = parts.openai;
+function BetsPanel({ bets, minutesPerSession }: { bets: GovernanceBet[]; minutesPerSession: number }) {
+  // The per-product lines say which products did the work, so Claude Code and Codex work is visible.
+  const split = (bet: GovernanceBet) => productsWithSessions(bet.measured.productSessions).length > 0;
   const groups = LIFECYCLE_ORDER
     .map(lifecycle => ({ lifecycle, bets: bets.filter(b => b.lifecycle === lifecycle) }))
     .filter(g => g.bets.length > 0);
@@ -182,16 +189,16 @@ function BetsPanel({ bets, minutesPerSession, parts }: { bets: GovernanceBet[]; 
                     </td>
                     <td className={cx(T.tdRight, 'text-[#05073F] whitespace-nowrap')}>
                       {bet.measured.sessions} {bet.measured.sessions === 1 ? 'session' : 'sessions'} · {bet.measured.distinctUsers} {bet.measured.distinctUsers === 1 ? 'user' : 'users'}
-                      {split && sessionsSplit(bet.measured.platformSessions, parts) && (
-                        <div className="text-[13px] tabular-nums mt-0.5">{sessionsSplit(bet.measured.platformSessions, parts)}</div>
+                      {split(bet) && (
+                        <div className="text-[13px] tabular-nums mt-0.5">{sessionsSplit(bet.measured.productSessions)}</div>
                       )}
                     </td>
                     <td className={cx(T.tdRight, 'whitespace-nowrap')}>
                       {bet.measured.hours != null
                         ? <span className="text-[#05073F]">{fmtHours(bet.measured.hours)} h</span>
                         : <span className="text-[#8F8F8F]">Not measured</span>}
-                      {split && hoursSplit(bet.measured.platformHours, bet.measured.platformSessions, parts) && (
-                        <div className="text-[13px] tabular-nums text-[#05073F] mt-0.5">{hoursSplit(bet.measured.platformHours, bet.measured.platformSessions, parts)}</div>
+                      {split(bet) && (
+                        <div className="text-[13px] tabular-nums text-[#05073F] mt-0.5">{hoursSplit(bet.measured.productHours, bet.measured.productSessions)}</div>
                       )}
                     </td>
                     <td className={cx(T.tdRight, 'whitespace-nowrap text-[#2451F3]')}>
@@ -209,7 +216,7 @@ function BetsPanel({ bets, minutesPerSession, parts }: { bets: GovernanceBet[]; 
   );
 }
 
-function WorkflowsByLifecycle({ workflows, total, parts }: { workflows: GovernanceWorkflow[]; total: number; parts: VendorParts }) {
+function WorkflowsByLifecycle({ workflows, total }: { workflows: GovernanceWorkflow[]; total: number }) {
   if (workflows.length === 0) return null;
   const groups = LIFECYCLE_ORDER
     .map(lifecycle => ({ lifecycle, workflows: workflows.filter(wf => wf.lifecycle === lifecycle) }))
@@ -248,7 +255,7 @@ function WorkflowsByLifecycle({ workflows, total, parts }: { workflows: Governan
                     <span role="img" aria-label={`${wf.title} weekly sessions`}><Spark data={wf.series} width={96} /></span>
                   </td>
                   <td className={cx(T.td, 'text-[13px] tabular-nums whitespace-nowrap')}>
-                    {sessionsSplit(wf.platformSessions, parts) ?? <span className="text-[#8F8F8F]">—</span>}
+                    {sessionsSplit(wf.productSessions) ?? <span className="text-[#8F8F8F]">—</span>}
                   </td>
                   <td className={cx(T.tdRight, 'whitespace-nowrap')}>
                     {wf.measuredHours != null ? (
@@ -278,8 +285,6 @@ export default function UseCaseGovernancePage() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [notEnabled, setNotEnabled] = useState(false);
-  const connected = useConnectedProducts();
-  const parts: VendorParts = { claude: !isOpenAiOnly(connected), openai: !!connected?.openai };
 
   useEffect(() => {
     fetch('/api/use-cases/governance')
@@ -333,7 +338,7 @@ export default function UseCaseGovernancePage() {
               Use Cases register
             </Link>.
           </Empty>
-          <WorkflowsByLifecycle workflows={data.allWorkflows} total={data.allWorkflowsTotal} parts={parts} />
+          <WorkflowsByLifecycle workflows={data.allWorkflows} total={data.allWorkflowsTotal} />
         </PageBody>
       </>
     );
@@ -370,9 +375,9 @@ export default function UseCaseGovernancePage() {
           <p className="m-0 text-[14px] leading-6 text-[#333333]">{data.narrative}</p>
         </Panel>
 
-        <BetsPanel bets={data.bets} minutesPerSession={value.calibration.minutesPerSession} parts={parts} />
+        <BetsPanel bets={data.bets} minutesPerSession={value.calibration.minutesPerSession} />
 
-        <WorkflowsByLifecycle workflows={data.allWorkflows} total={data.allWorkflowsTotal} parts={parts} />
+        <WorkflowsByLifecycle workflows={data.allWorkflows} total={data.allWorkflowsTotal} />
       </PageBody>
     </>
   );
