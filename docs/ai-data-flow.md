@@ -78,7 +78,8 @@ The application makes no call to Anthropic beyond those listed in this document 
 | `api.github.com` | Developer Pulse GitHub overlay | Access token and repository names |
 | Your Amazon S3 archive bucket | Optional archive before retention deletes data | Expiring records, including stored prompts |
 | Your identity provider | Single sign-on (OpenID Connect) | Standard OIDC exchange |
-| `graph.microsoft.com` | Department sync from Microsoft Entra ID | At sign-in, the person's own Microsoft access token; for the daily lookup, an app-only token. Email addresses and departments come in; nothing about your people is sent |
+| `graph.microsoft.com`, or your national cloud's Microsoft Graph address | Department sync from Microsoft Entra ID | At sign-in, the person's own Microsoft access token; for the daily lookup, an app-only token. Email addresses and departments come in; nothing about your people is sent |
+| Your Microsoft Entra sign-in address, for example `login.microsoftonline.com` | The app-only token for department sync's daily lookup | The single sign-on app's client ID and secret |
 | Your cloud provider's services, if you run on a cloud | For example on AWS: ECR, CloudWatch Logs, Secrets Manager and KMS | Images, logs and secrets, within your own cloud account |
 
 ![AI data flow and trust boundaries](diagrams/AI%20data%20flow%20and%20trust%20boundaries.png)
@@ -282,7 +283,7 @@ Captured prompts are written by your people, and some will contain instructions.
 
 - **Labelling.** AI-judged figures and AI-written summaries carry their own colour and label, and estimates are shown beside measured time and cost, never combined with them.
 - **Confirmation by a person.** Capability candidates identified by the classifier are confirmed or dismissed by a person before they count as confirmed capabilities. Use cases mined from prompts, extracted from transcripts or proposed in ideation exist only as suggestions until a person adds them. Skill drafts can be reviewed and edited by an owner before download. Highlights drafts are sent only when an administrator chooses to send them.
-- **Quality checks.** A monthly sample of classifier decisions is drawn for administrators to review and score, and the Classifier Health page shows queue depth, failures, tier distribution and confidence. Administrators can also spot-check human time estimates.
+- **Quality checks.** A monthly sample of classifier decisions is drawn for administrators to review and score, and the Classifier health tabs show queue depth, failures, tier distribution and confidence. Administrators can also spot-check human time estimates.
 - **No automated decisions about people.** Alerts and judgements are advisory. Nothing in Command Centre changes a person's access, blocks their use of Claude, ChatGPT or Codex or takes any action against them.
 
 ## Positioning against the EU AI Act and ISO/IEC 42001

@@ -130,9 +130,9 @@ People appear in Command Centre automatically the first time their telemetry, Cl
 | Role | What it can see |
 |---|---|
 | Admin | Everything, including the Admin area and every person's prompts in the Audit Log |
-| Manager | Dashboard, Alerts, Reports, organisation overviews, FinOps, Use Cases, the Work Pulse admin page; the Audit Log for their own department |
-| Viewer | Dashboard, Alerts, Reports, organisation-level Work Pulse and Developer Pulse pages and Use Case Governance; never the Audit Log or FinOps |
-| Pulse (Work and Developer) | Their own and their department's Work Pulse and Developer Pulse pages |
+| Manager | Dashboard, Alerts, Reports, organisation overviews, FinOps, Spend Review, Use Cases, the Work Pulse admin page, the Board; the Audit Log for their own department |
+| Viewer | Dashboard, Alerts, Reports, organisation-level Work Pulse and Developer Pulse pages, Use Case Governance, the Board and their own Spend Review; never the Audit Log or FinOps |
+| Pulse (Work and Developer) | Their own and their department's Work Pulse and Developer Pulse pages, the Board and their own Spend Review |
 | Work Pulse | As above, Work Pulse only (Claude Chat, Claude Cowork, Claude in Office/Google and ChatGPT) |
 | Developer Pulse | As above, Developer Pulse only (Claude Code and Codex) |
 

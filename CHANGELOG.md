@@ -1,6 +1,6 @@
 # Changelog
 
-## 1.3.0 (2026-11-09)
+## 1.3.0 (2026-11-10)
 
 ### Added
 
@@ -59,6 +59,9 @@
 ### Upgrading
 
 - The database changes apply when the Hub starts. Claude Chat prompts move from their own table into the Cowork table in one step; if the move fails, nothing changes.
+- Back up the database before you upgrade, as in [Updating](docs/troubleshooting.md#updating). The move deletes the old Claude Chat table, so a 1.2.0 Hub cannot run against the upgraded database; going back means restoring that backup.
+- On a hub with a long Claude Chat history, the first start can take longer than usual while the prompts move. On AWS or Azure, give that start a longer health-check grace period, so the platform does not replace the Hub part-way through.
+- After the upgrade, Work Pulse grades the Claude Chat prompts already stored, oldest first, and, once ChatGPT is connected, its first 30 days of prompts. This uses your Claude API key, and new Claude Cowork prompts wait behind them until the queue clears. To leave ChatGPT prompts ungraded, switch off **Classify ChatGPT prompts** under **Admin → Work Pulse**.
 - To connect ChatGPT and Codex, create an OpenAI Admin API key with read access to conversation messages, Codex logs, Codex turns and costs, and enter it with the workspace and organisation IDs under **Admin → Access & Keys**. The first sync reaches back 30 days and reads at most 300 files a run, so on a busy workspace it spreads over several runs.
 - Some details of OpenAI's Compliance API are not yet confirmed against a live workspace: the exact model names, and how ChatGPT Work is marked in the Codex logs. A model Command Centre has no price for is named as not priced, never counted as $0, and an admin can add its price under **Admin → Developer Pulse**.
 

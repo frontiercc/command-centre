@@ -6,7 +6,7 @@ This document describes what Frontier Command Centre is, the question it answers
 
 ## What Command Centre is
 
-Command Centre is a self-hosted web application that receives activity from your organisation's use of Claude and ChatGPT, analyses it and shows whether teams are becoming more productive with it. Command Centre runs on infrastructure you control: a single machine with Docker Compose, or your own servers or cloud. Its inputs are the telemetry that Claude Code, Claude Cowork and Claude in Office and Google apps already send, and the conversation exports Anthropic and OpenAI provide through their Compliance APIs: Claude Chat for Claude for Enterprise customers, and ChatGPT and Codex for ChatGPT Enterprise and Edu workspaces.
+Command Centre is a self-hosted web application that receives activity from your organisation's use of Claude, ChatGPT and Codex, analyses it and shows whether teams are becoming more productive with it. Command Centre runs on infrastructure you control: a single machine with Docker Compose, or your own servers or cloud. Its inputs are the telemetry that Claude Code, Claude Cowork and Claude in Office and Google apps already send, and the conversation exports Anthropic and OpenAI provide through their Compliance APIs: Claude Chat for Claude for Enterprise customers, and ChatGPT and Codex for ChatGPT Enterprise and Edu workspaces.
 
 The object of measurement is the work people hand to AI. Command Centre answers four questions for every employee and department:
 
@@ -199,7 +199,7 @@ Command Centre keeps three kinds of figure apart and labels each wherever it app
 
 - **Measured** figures come directly from telemetry: sessions, active time, spend, lines of code, commits, pull requests, connector and skill use, files produced.
 - **AI-judged** figures come from a Claude model reading the work: tiers, kinds of work, which use case a session belongs to, session descriptions and suggested processes.
-- **Estimates** apply a stated assumption to a measured or judged count: hours a task would take by hand, value recovered by a use case, return on Claude Code spend.
+- **Estimates** apply a stated assumption to a measured or judged count: hours a task would take by hand, value recovered by a use case, return on Claude Code and Codex spend.
 
 An unmeasured value is shown as "not measured" or a dash, never as zero, and a model with no known price is shown as unpriced. Every briefing a model writes is checked so that each number in it appears in the facts it was given. A sentence that fails the check is removed; a briefing that cannot be repaired is withheld, and the previous one, where there is one, stays in place.
 
@@ -250,7 +250,7 @@ Developer Pulse is the productivity view of coding with Claude Code and Codex: a
 The productivity strip shows four measured figures for the last seven days: engaged time (active, AI-assisted engineering time), code output (lines added and removed), shipping (AI-assisted commits from Claude Code and Codex, and Claude Code's pull requests) and edit acceptance (proposed edits accepted against rejected). Around these sit:
 
 - **Spend**, priced from a model rate table that administrators maintain. Claude Code through Amazon Bedrock or Google Vertex AI is priced at Anthropic's list rate and labelled as an estimate.
-- **Autonomy**, the number of tool actions Claude takes per human prompt.
+- **Autonomy**, the number of tool actions Claude Code or Codex takes per human prompt.
 - **Model mix and cache use**, showing which models carried the work and how much came from the prompt cache.
 - **Skills and subagents** in use, and the programming-language mix of Claude's edits.
 
@@ -258,7 +258,7 @@ Once Codex data arrives, a switch reading All, Claude or ChatGPT appears on the 
 
 ### Work Mix and tiers
 
-The session classifier grades each Claude Code and Codex session once it has been idle for 30 minutes, assigning a kind of work and a tier from a short digest of the session; a session still running after two hours receives a provisional grade that is replaced when it ends. This drives the AI-judged Work Mix card and the tier progression on each person's page. An administrator can stop Codex sessions being graded by switching off **Classify Codex sessions** under **Admin → Developer Pulse**. A Classifier Health tab shows the classifier's queue, confidence and failures, and, once Codex sessions exist, classified and failed sessions for each tool.
+The session classifier grades each Claude Code and Codex session once it has been idle for 30 minutes, assigning a kind of work and a tier from a short digest of the session; a session still running after two hours receives a provisional grade that is replaced when it ends. This drives the AI-judged Work Mix card and the tier progression on each person's page. An administrator can stop Codex sessions being graded by switching off **Classify Codex sessions** under **Admin → Developer Pulse**. A Classifier health tab shows the classifier's queue, confidence and failures, and, once Codex sessions exist, classified and failed sessions for each tool.
 
 ### GitHub overlay
 
@@ -371,9 +371,9 @@ Each surface has its own retention window under one organisation-wide mode that 
 
 **Reports.** Administrators, managers and viewers can generate reports for any period from a choice of sections. Compliance sections cover GDPR, LGPD, the EU AI Act, ISO/IEC 27001, ISO/IEC 42001 and open compliance gaps, combining evidence from live data with declarations administrators complete. Analytics sections cover Work Pulse, Developer Pulse, the Board, use cases, human time against Claude time and, for administrators and managers only, chargeback and Spend Review, each with the Claude in Office/Google spend estimate on its own line. The compliance and analytics sections are built in code from live data and passed to Claude with an instruction to include them exactly as provided, without restating or recalculating any figure; Claude writes the remaining sections, such as the executive summary, usage, alerts and recommendations. The reports evidence alignment with these frameworks and do not certify compliance. Every section reports each connected product on its own line: the data sources table lists each source, usage and adoption are reported per product from Command Centre's own counts, the audit sections give each product its own figures, Developer Pulse shows Claude Code and Codex in separate tables, the Board names each tool's product, and alerts are attributed to the product they came from. The human time section counts ChatGPT conversations and Codex sessions while they are shown, with Claude Cowork's and ChatGPT's parts on their own lines, and the Spend Review section carries the Claude and OpenAI efficiency boards.
 
-**Weekly Digest.** Every Monday Command Centre can send a digest of the last completed week by email and Slack, built from stored weekly figures with no model involved, including use cases needing attention and coaching counts by department. Its coding figures cover Claude Code and Codex, with spend split between them, and its time-saved line includes ChatGPT while it is shown. Weekly Highlights names Claude Code on its code-output line, which only Claude Code reports.
+**Weekly Digest.** Every Monday Command Centre can send a digest of the last completed week by email and Slack, built from stored weekly figures with no model involved, including use cases needing attention and coaching counts by department. Its coding figures cover Claude Code and Codex, with spend split between them, and its time-saved line includes ChatGPT while it is shown.
 
-**Weekly Highlights.** Switched off until an administrator turns it on from its card under **Admin → System**. An administrator can then generate a draft "what the week produced" post from the last completed week's Tier 3 work, with personal data and identifying paths removed. Claude writes the descriptive sentences, each checked against a real work item; figures are inserted from measured data. The administrator edits the draft, then copies it or sends it to Slack. The post is never scheduled or sent unreviewed, and names people only if the organisation allows it.
+**Weekly Highlights.** Switched off until an administrator turns it on from its card under **Admin → System**. An administrator can then generate a draft "what the week produced" post from the last completed week's Tier 3 work, with personal data and identifying paths removed. Claude writes the descriptive sentences, each checked against a real work item; figures are inserted from measured data. Weekly Highlights names Claude Code on its code-output line, which only Claude Code reports. The administrator edits the draft, then copies it or sends it to Slack. The post is never scheduled or sent unreviewed, and names people only if the organisation allows it.
 
 **Metrics Connector.** Business-intelligence tools and Model Context Protocol clients can read organisation-level figures (a weekly summary, metric trends and data-health indicators) over REST or as MCP tools, using bearer tokens that administrators issue, shown once and stored as hashes. The connector never carries data about individual people or sessions. It is not yet tested with a real BI tool.
 

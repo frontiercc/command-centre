@@ -118,6 +118,12 @@ Back up the database, and keep a copy of `.env` with it: stored secrets, such as
 docker compose exec -T postgres pg_dump -U ccc -d ccc > command-centre-backup.sql
 ```
 
+### Upgrading from 1.2.0 to 1.3.0
+
+- **Back up first.** On its first start, 1.3.0 moves Claude Chat prompts into the Cowork table and deletes the old table, so a 1.2.0 Hub cannot run against the upgraded database; going back means restoring the backup.
+- **The first start can take longer** on a hub with a long Claude Chat history. On AWS or Azure, give that start a longer health-check grace period.
+- **Stored Claude Chat prompts are graded after the upgrade**, and the first 30 days of ChatGPT prompts once ChatGPT is connected, using your Claude API key. New Claude Cowork prompts wait behind them until the queue clears. **Classify ChatGPT prompts** under **Admin → Work Pulse** leaves ChatGPT prompts ungraded.
+
 ### Update
 
 Each release is tagged, for example `v1.0.1`, and the [releases page](https://github.com/frontiercc/command-centre/releases) says what changed. Replace `v1.0.1` with the release you want:
