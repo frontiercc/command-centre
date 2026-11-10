@@ -401,6 +401,7 @@ The **Last sync** line under the fields shows ChatGPT and Codex prompts, and the
 
 - Integration with Anthropic's Analytics and Admin APIs, for Claude for Enterprise.
 - Signing in with SAML.
+- Department sync from Google Workspace, beside Microsoft Entra ID.
 - A benchmark kit, so you can test Command Centre's AI grading against your own examples.
 - Publishing skills drafted in Command Centre to your organisation's skills marketplace, through GitHub.
 
