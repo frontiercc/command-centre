@@ -44,7 +44,6 @@
 - Opening a person or a use case that doesn't exist says so, instead of crashing or saying Use Cases is switched off.
 - A use case's measured time under six minutes reads in minutes, never "0.0h".
 - An AI session summary containing characters from another writing system is refused and written again.
-- Everyone can generate their own Weekly Pulse on My Pulse, not only admins and managers. The other briefing "Generate" buttons are shown only to admins and managers, who are the only people the server lets generate those briefings.
 - Opening another department's Work Pulse page says it is not available, instead of "Couldn't load, try again".
 - Spend Review offers a manager "Show prompts" only for people in their own department, as the Audit Log does.
 - A manager on the Work Pulse admin overview sees that process baselines are set by an admin, not "No departments found".
