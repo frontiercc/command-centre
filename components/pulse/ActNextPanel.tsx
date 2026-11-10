@@ -53,7 +53,7 @@ export default function ActNextPanel({
         <div className="p-4">
           <SubHead>Department process opportunities</SubHead>
           {fromBothVendors && (
-            <p className="m-0 mb-2 text-[13px] text-[#8F8F8F]">Found by reading Claude and OpenAI prompts together, so they are the same whichever view is selected.</p>
+            <p className="m-0 mb-2 text-[13px] text-[#8F8F8F]">Found by reading Claude, ChatGPT and Codex prompts together, so they are the same whichever view is selected.</p>
           )}
           <DeptProcessBoxes boxes={deptBoxes} onOpen={() => router.push('/use-cases')} />
         </div>

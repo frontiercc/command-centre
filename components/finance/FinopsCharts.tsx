@@ -183,14 +183,14 @@ function ProjectionCard({ monthToDate, projection, byVendor, openaiOnly }: {
             <span className="text-[14px] text-[#4D4D4D]">
               Projected <span className="text-[24px] leading-7 font-semibold tracking-[-0.02em] text-[#2451F3]">{fmtUsd(projection.projected)}</span>:
             </span>
-            <span className="text-[13px] text-[#4D4D4D]">Claude {fmtUsd(split.claudeUsd)} · OpenAI {fmtUsd(split.openaiUsd)}</span>
+            <span className="text-[13px] text-[#4D4D4D]">Claude {fmtUsd(split.claudeUsd)} · ChatGPT and Codex {fmtUsd(split.openaiUsd)}</span>
           </p>
         ) : (
           <span className="text-[24px] leading-7 font-semibold tracking-[-0.02em] tabular-nums text-[#2451F3]">{fmtUsd(projection.projected)}</span>
         )}
         <span className="text-[13px] text-[#666666] tabular-nums">Day {projection.daysElapsed} of {projection.daysInMonth}</span>
         <Bar pct={(projection.daysElapsed / Math.max(1, projection.daysInMonth)) * 100} tone="measured" height={6} />
-        <Muted>{split ? 'Run-rate estimate: Claude and OpenAI each extrapolated from their own month-to-date spend.' : 'Run-rate estimate, extrapolated from month-to-date spend.'}</Muted>
+        <Muted>{split ? 'Run-rate estimate: Claude spend and ChatGPT and Codex spend, each extrapolated from its own month-to-date figure.' : 'Run-rate estimate, extrapolated from month-to-date spend.'}</Muted>
       </div>
     </Panel>
   );

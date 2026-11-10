@@ -647,7 +647,7 @@ export default function AuditPage() {
               </optgroup>
             )}
             {openaiConnected && (
-              <optgroup label="OpenAI">
+              <optgroup label="ChatGPT and Codex">
                 <option value="chatgpt_chat">ChatGPT Chat</option>
                 <option value="chatgpt_work">ChatGPT Work</option>
                 <option value="codex">Codex</option>

@@ -77,15 +77,15 @@ const LIFECYCLE_DOT: Record<LifecycleTone, string> = {
 const LIFECYCLE_FACETS: Array<UseCase['lifecycle']> = ['adopted', 'piloting', 'at_risk', 'not_seen'];
 
 /**
- * "Claude 12 · OpenAI 4": a use case's matched sessions by vendor. OpenAI is
- * shown only once OpenAI is connected and ChatGPT and Codex are shown, and
+ * "Claude 12 · ChatGPT and Codex 4": a use case's matched sessions by vendor. The
+ * ChatGPT and Codex part shows only once OpenAI is connected and shown, and
  * Claude is left out on a hub where only OpenAI is connected.
  */
 function PlatformCell({ p, openAiOnly, showOpenAi }: { p?: { claude: number; openai: number | null }; openAiOnly: boolean; showOpenAi: boolean }) {
   if (!p) return <span className="text-[#8F8F8F]">—</span>;
   const parts: string[] = [];
   if (!openAiOnly) parts.push(`Claude ${p.claude}`);
-  if (showOpenAi && p.openai !== null) parts.push(`OpenAI ${p.openai}`);
+  if (showOpenAi && p.openai !== null) parts.push(`ChatGPT and Codex ${p.openai}`);
   if (parts.length === 0) return <span className="text-[#8F8F8F]">—</span>;
   return <span className="text-[#333333]">{parts.join(' · ')}</span>;
 }

@@ -165,7 +165,7 @@ export default function AiBriefing({ refreshKey, coversBoth = false }: { refresh
           <div className="lg:col-span-2 p-4 flex flex-col gap-3">
             <p className="m-0 text-[14px] leading-[1.6] text-[#333333]">{data.briefing}</p>
             {coversBoth && (
-              <p className="m-0 text-[13px] text-[#8F8F8F]">This briefing covers Claude and OpenAI together, whichever view is selected above.</p>
+              <p className="m-0 text-[13px] text-[#8F8F8F]">This briefing covers Claude, ChatGPT and Codex together, whichever view is selected above.</p>
             )}
             {data.adoption_headline && (
               <div className="border border-[#EAEAEA] bg-[#FAFAFA] rounded-[10px] px-3 py-2.5">
