@@ -208,10 +208,12 @@ export default function PersonalPulsePage() {
           briefing={data.weeklyPulse}
           userId={data.userId ?? undefined}
           onGenerate={() => setRefreshKey(k => k + 1)}
+          own
           action={data.weeklyPulse && data.userId ? (
             <GenerateBriefingButton
               type="user"
               userId={data.userId}
+              own
               onComplete={() => setRefreshKey(k => k + 1)}
             />
           ) : undefined}
