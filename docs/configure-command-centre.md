@@ -88,7 +88,7 @@ People who appear automatically because their telemetry arrived have SSO off unt
 
 ## Department sync
 
-Department sync keeps each person's department in step with Microsoft Entra ID, so departmental reporting follows your organisation's structure without anyone typing departments in. It reads a person's department when they sign in with Microsoft, and once a day looks up everyone Command Centre knows by email, including people who never sign in. It only ever changes departments: roles, single sign-on access and accounts are never touched. It needs single sign-on with Microsoft Entra ID; other identity providers, including Google Workspace, are not supported yet.
+Department sync keeps each person's department in step with Microsoft Entra ID, so departmental reporting follows your organisation's structure without anyone typing departments in. It reads a person's department when they sign in with Microsoft, and once a day looks up everyone Command Centre knows by email, including people who never sign in. It only ever changes departments: roles, single sign-on access and accounts are never touched. For anyone who is not an admin, such as a manager, the department also sets which department's data they can see, so when the sync moves them, what they can see moves with them. Admins see every department whatever their department says. It needs single sign-on with Microsoft Entra ID; other identity providers, including Google Workspace, are not supported yet.
 
 1. **Grant two read-only permissions.** In Microsoft Entra ID, open the app registration you use for single sign-on, then **API permissions → Add a permission → Microsoft Graph**, and add:
    - **User.Read** (Delegated), which reads the department of the person signing in;

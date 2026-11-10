@@ -13,7 +13,9 @@
  *
  * Nothing is written until an admin applies the first-run preview
  * (departmentSyncAppliedAt). Only departments are ever written: never a role,
- * single sign-on access, or an account. A person is their login account
+ * single sign-on access, or an account. For a non-admin account the department
+ * is also its access scope, so a move changes what that person can see.
+ * A person is their login account
  * (admin_users) plus their monitored record(s) (users), joined by the account
  * link and by email; both are written together, and every change is recorded
  * in department_history.

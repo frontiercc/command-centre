@@ -244,7 +244,7 @@ export default function DepartmentSyncPanel() {
   return (
     <Panel title={title} flush>
       <p className="m-0 px-4 pt-3 text-[13px] text-[#666666] leading-5">
-        Keeps each person&apos;s department in step with {label}: when they sign in with Microsoft, and in a daily lookup of everyone Command Centre knows, including people who never sign in. Only departments change; roles and access never do. A department an admin sets by hand is kept, and an empty value in the directory never removes one.
+        Keeps each person&apos;s department in step with {label}: when they sign in with Microsoft, and in a daily lookup of everyone Command Centre knows, including people who never sign in. Only departments change, never roles. For anyone who isn&apos;t an admin, the department also sets which department&apos;s data they can see, so a move changes that too. A department an admin sets by hand is kept, and an empty value in the directory never removes one.
       </p>
       <ToggleRow
         first
