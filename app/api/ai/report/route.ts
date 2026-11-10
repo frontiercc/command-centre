@@ -119,11 +119,13 @@ function isIsoDate(value: unknown): value is string {
   return !Number.isNaN(d.getTime()) && d.toISOString().slice(0, 10) === value;
 }
 
-/** Text under "## Executive Summary" up to the next "##" heading, or null. A plain search, not a backtracking pattern. */
+/** Text under "## Executive Summary" up to the next "##" heading, or null. Plain text search, no regular expression. */
 function executiveSummary(md: string): string | null {
-  const heading = /## Executive Summary[^\n]*\n/i.exec(md);
-  if (!heading) return null;
-  const rest = md.slice(heading.index + heading[0].length);
+  const start = md.toLowerCase().indexOf('## executive summary');
+  if (start === -1) return null;
+  const lineEnd = md.indexOf('\n', start);
+  if (lineEnd === -1) return null;
+  const rest = md.slice(lineEnd + 1);
   const end = rest.indexOf('\n##');
   return (end === -1 ? rest : rest.slice(0, end)).trim() || null;
 }
