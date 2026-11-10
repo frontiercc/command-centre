@@ -52,7 +52,7 @@ describe('Spend Review report section', () => {
     expect(md).toContain('Scored on Claude Code and Cowork work only.');
     expect(md).toContain('| 1 | Gabriel | Engineering | 58% below | 275 | 12% vs 3% |');
     // A Claude-only hub: no OpenAI board.
-    expect(md).not.toContain('Most efficient on OpenAI');
+    expect(md).not.toContain('Most efficient on ChatGPT and Codex');
   });
 
   it('never shows unpriced spend as $0', () => {
@@ -110,13 +110,13 @@ describe('Spend Review report section', () => {
     const md = renderSpendReviewSection(input({ period: '2026-10', periodStart: '2026-10-01T00:00:00Z', periodEnd: '2026-10-31T23:59:59Z', boards }));
     expect(md).toContain('#### Most efficient on Claude in October 2026');
     expect(md).toContain('| 1 | Claude Now | Sales | 50% below | 12 | 30% vs 30% |');
-    expect(md).toContain('#### Most efficient on OpenAI in September 2026');
-    expect(md).toContain('Showing September 2026: nobody has 10 sessions of OpenAI work in October 2026 yet');
+    expect(md).toContain('#### Most efficient on ChatGPT and Codex in September 2026');
+    expect(md).toContain('Showing September 2026: nobody has 10 sessions of ChatGPT and Codex work in October 2026 yet');
     expect(md).toContain('Scored on ChatGPT and Codex work only.');
     expect(md).toContain('| 1 | OpenAI Last | Ops | 20% below | 11 | 20% vs 25% |');
     // Claude's board comes first, and neither borrows the other's people.
-    expect(md.indexOf('on Claude')).toBeLessThan(md.indexOf('on OpenAI'));
-    const claudeBlock = md.slice(md.indexOf('on Claude'), md.indexOf('on OpenAI'));
+    expect(md.indexOf('on Claude')).toBeLessThan(md.indexOf('on ChatGPT and Codex'));
+    const claudeBlock = md.slice(md.indexOf('on Claude'), md.indexOf('on ChatGPT and Codex'));
     expect(claudeBlock).not.toContain('OpenAI Last');
   });
 
@@ -131,7 +131,7 @@ describe('Spend Review report section', () => {
     const only = chooseEfficiencyBoards({ period: '2026-09', index: { ...idx, openai: true } as never, prior: null, connected: { claude: false, openai: true } });
     expect(only.map(b => b.vendor)).toEqual(['openai']);
     const md = renderSpendReviewSection(input({ boards: only }));
-    expect(md).toContain('#### Most efficient on OpenAI in September 2026');
+    expect(md).toContain('#### Most efficient on ChatGPT and Codex in September 2026');
     expect(md).not.toContain('Most efficient on Claude');
     // No fallback for a past month (no prior passed) and none when last month is empty too: the board is left out.
     const none = renderSpendReviewSection(input({ boards: [{ vendor: 'openai', rows: [], period: '2026-09' }] }));

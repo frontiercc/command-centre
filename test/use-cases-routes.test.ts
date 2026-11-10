@@ -719,6 +719,8 @@ describe('GET /api/use-cases — sessions by vendor (register column)', () => {
     expect(Array.isArray(body)).toBe(true);
     const row = body.find((r: { id: string }) => r.id === 'uc-plat');
     expect(row.platformSessions).toEqual({ claude: 2, openai: 2 });
+    // The register column shows the same sessions per product.
+    expect(row.productSessions).toEqual({ cowork: 1, code: 1, chatgpt: 1, codex: 1 });
     // Leave nothing that would block the shared clean-up of users
     await sql.exec(`DELETE FROM cowork_session_stats WHERE session_id = 'cw-1'`);
     await sql.exec(`DELETE FROM cowork_sessions WHERE id = 'cw-1'`);
@@ -735,5 +737,6 @@ describe('GET /api/use-cases — sessions by vendor (register column)', () => {
     const body = await (await GET(makeRequest('/api/use-cases'))).json();
     const row = body.find((r: { id: string }) => r.id === 'uc-empty');
     expect(row.platformSessions).toEqual({ claude: 0, openai: null });
+    expect(row.productSessions).toEqual({ cowork: 0, code: 0, chatgpt: null, codex: null });
   });
 });

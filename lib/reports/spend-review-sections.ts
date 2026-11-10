@@ -100,7 +100,7 @@ export type BoardVendor = 'claude' | 'openai';
 /** One "Most efficient" board: one vendor's work only, never mixed. */
 export interface EfficiencyBoard { vendor: BoardVendor; rows: EfficiencyEntry[]; period: string }
 
-const BOARD_NAME: Record<BoardVendor, string> = { claude: 'Claude', openai: 'OpenAI' };
+const BOARD_NAME: Record<BoardVendor, string> = { claude: 'Claude', openai: 'ChatGPT and Codex' };
 const BOARD_WORK: Record<BoardVendor, string> = { claude: 'Claude Code and Cowork', openai: 'ChatGPT and Codex' };
 
 type BoardSource = Pick<SpendReviewIndex, 'openai' | 'efficiency'> & { efficiencyOpenai?: EfficiencyEntry[] };

@@ -52,7 +52,7 @@ interface Summary {
 interface EfficiencyEntry { userId: string; displayName: string; department: string | null; vsColleagues: number; sessions: number; deepRate: number | null; peerDeepRate: number | null }
 type BoardVendor = 'claude' | 'openai';
 interface Board { vendor: BoardVendor; rows: EfficiencyEntry[]; boardPeriod: string }
-const BOARD_VENDOR_LABEL: Record<BoardVendor, string> = { claude: 'Claude', openai: 'OpenAI' };
+const BOARD_VENDOR_LABEL: Record<BoardVendor, string> = { claude: 'Claude', openai: 'ChatGPT and Codex' };
 
 const MONTH_LONG = ['January', 'February', 'March', 'April', 'May', 'June', 'July', 'August', 'September', 'October', 'November', 'December'];
 function monthLabel(p: string): string {
@@ -135,7 +135,7 @@ function EfficiencyBoard({ boards, period }: { boards: Board[]; period: string }
       )}
       <PanelFoot>
         Each person&apos;s typical session cost against colleagues doing the same kinds of work, weighted by where their money goes. Only people whose share of Tier 3 work is no more than 10 points below colleagues&apos; are ranked, so cheaper-because-shallower work doesn&apos;t count as efficient.
-        {tabs && ' Claude and OpenAI are ranked separately: each board scores people on that vendor’s work only (Claude Code and Cowork, or ChatGPT and Codex).'}
+        {tabs && ' Claude work and ChatGPT and Codex work are ranked on separate boards: each board scores people on that work only (Claude Code and Cowork, or ChatGPT and Codex).'}
       </PanelFoot>
     </Panel>
   );
@@ -376,11 +376,11 @@ function SpendReviewIndex() {
                   value={money(s.totalUsd)}
                   sub={vendorSplit ? (
                     <span className="flex flex-col gap-0.5">
-                      <span className="text-[#4D4D4D] tabular-nums">Claude {money(vendorSplit.claudeUsd)} · OpenAI {money(vendorSplit.openaiUsd)}</span>
+                      <span className="text-[#4D4D4D] tabular-nums">Claude {money(vendorSplit.claudeUsd)} · ChatGPT and Codex {money(vendorSplit.openaiUsd)}</span>
                       {s.priorTotalUsd !== null && (
                         <span>
                           Claude <Change now={vendorSplit.claudeUsd} prior={s.priorVendors?.claudeUsd ?? null} pace={pace} />
-                          {' · '}OpenAI <Change now={vendorSplit.openaiUsd} prior={s.priorVendors?.openaiUsd ?? null} pace={pace} />
+                          {' · '}ChatGPT and Codex <Change now={vendorSplit.openaiUsd} prior={s.priorVendors?.openaiUsd ?? null} pace={pace} />
                           {' '}{data.isCurrentMonth ? 'against last month’s pace' : 'against last month'}
                         </span>
                       )}

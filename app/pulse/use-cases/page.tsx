@@ -88,17 +88,17 @@ function fmtSplitHours(n: number): string {
   return `${n.toLocaleString('en-GB', { minimumFractionDigits: 1, maximumFractionDigits: 1 })}h`;
 }
 
-/** "Claude 12 · OpenAI 4", the register's column wording; null when no part shows. */
+/** "Claude 12 · ChatGPT and Codex 4", the register's column wording; null when no part shows. */
 function sessionsSplit(p: PlatformSessions | undefined, parts: VendorParts): string | null {
   if (!p) return null;
   const out: string[] = [];
   if (parts.claude) out.push(`Claude ${p.claude.toLocaleString('en-GB')}`);
-  if (parts.openai && p.openai !== null) out.push(`OpenAI ${p.openai.toLocaleString('en-GB')}`);
+  if (parts.openai && p.openai !== null) out.push(`ChatGPT and Codex ${p.openai.toLocaleString('en-GB')}`);
   return out.length > 0 ? out.join(' · ') : null;
 }
 
 /**
- * "Claude 12.5h · OpenAI 3.0h". A vendor with no matched sessions had no time
+ * "Claude 12.5h · ChatGPT and Codex 3.0h". A vendor with no matched sessions had no time
  * on the work, a real 0h; one with sessions but no measured time reads
  * "not measured".
  */
@@ -112,7 +112,7 @@ function hoursSplit(
     hours !== null ? `${label} ${fmtSplitHours(hours)}` : sessions === 0 ? `${label} ${fmtSplitHours(0)}` : `${label} not measured`;
   const out: string[] = [];
   if (parts.claude) out.push(one('Claude', h.claude, s?.claude));
-  if (parts.openai) out.push(one('OpenAI', h.openai, s?.openai));
+  if (parts.openai) out.push(one('ChatGPT and Codex', h.openai, s?.openai));
   return out.length > 0 ? out.join(' · ') : null;
 }
 

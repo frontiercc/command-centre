@@ -448,7 +448,7 @@ export default function CostChargebackPage() {
               </div>
               {openai && !openaiOnly && report.vendors && (
                 <p className="m-0 text-[13px] text-[#4D4D4D] tabular-nums">
-                  Claude {fmtUsd(report.vendors.claudeUsd)} · OpenAI {fmtUsd(report.vendors.openaiUsd)}
+                  Claude {fmtUsd(report.vendors.claudeUsd)} · ChatGPT and Codex {fmtUsd(report.vendors.openaiUsd)}
                 </p>
               )}
               {report.status === 'closed' && report.closedAt && (

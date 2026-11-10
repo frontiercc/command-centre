@@ -110,7 +110,7 @@ describe('spend review efficiency boards by vendor (postgres)', () => {
       const { buildSpendReviewSection } = await import('@/lib/reports/spend-review-sections');
       const md = await buildSpendReviewSection('2026-09-01T00:00:00Z', '2026-09-30T23:59:59Z');
       const claudeAt = md.indexOf('#### Most efficient on Claude in September 2026');
-      const openaiAt = md.indexOf('#### Most efficient on OpenAI in September 2026');
+      const openaiAt = md.indexOf('#### Most efficient on ChatGPT and Codex in September 2026');
       expect(claudeAt).toBeGreaterThan(-1);
       expect(openaiAt).toBeGreaterThan(claudeAt);
       expect(md.slice(claudeAt, openaiAt)).toContain('| 1 | u-ana |');
@@ -126,7 +126,7 @@ describe('spend review efficiency boards by vendor (postgres)', () => {
       expect(hidden.efficiency.map(e => e.userId)).toEqual(['u-ana']);
       const hiddenMd = await buildSpendReviewSection('2026-09-01T00:00:00Z', '2026-09-30T23:59:59Z');
       expect(hiddenMd).toContain('#### Most efficient on Claude in September 2026');
-      expect(hiddenMd).not.toContain('Most efficient on OpenAI');
+      expect(hiddenMd).not.toContain('Most efficient on ChatGPT and Codex');
     } finally {
       await cleanup();
     }

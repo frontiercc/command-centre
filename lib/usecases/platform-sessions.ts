@@ -63,6 +63,69 @@ export async function getUseCasePlatformSessions(
   return out;
 }
 
+/** Sessions per product, the four the use case page's Workflow Impact panel names. */
+export interface ProductSessions {
+  /** Claude's knowledge work: Claude Cowork, Claude Chat and Claude in Office and Google (cowork_session_stats). */
+  cowork: number;
+  /** Claude Code (code_session_stats). */
+  code: number;
+  /** ChatGPT and Codex; null when ChatGPT and Codex are hidden. */
+  chatgpt: number | null;
+  codex: number | null;
+}
+
+interface ProductRow { use_case_id: string; cowork: number | string; code: number | string; chatgpt: number | string; codex: number | string }
+
+/**
+ * The same sessions as getUseCasePlatformSessions, counted per product
+ * rather than per vendor, so the register can show which products the work
+ * was done in (Claude Code and Codex included). Same window and rules.
+ */
+export async function getUseCaseProductSessions(
+  nowS: number,
+  opts: { openaiShown: boolean },
+): Promise<Map<string, ProductSessions>> {
+  const windowStarts = weekStarts(nowS - WEEK, WINDOW_WEEKS);
+  const client = await getTypedClient();
+  const res = await (client as unknown as { execute: (q: unknown) => Promise<{ rows: ProductRow[] }> }).execute(sql`
+    WITH s AS (
+      SELECT DISTINCT use_case_id, session_id
+        FROM use_case_week_matches
+       WHERE session_id <> ''
+         AND week_start IN (${sql.join(windowStarts.map(w => sql`${w}`), sql`, `)})
+    )
+    SELECT s.use_case_id,
+           COUNT(*) FILTER (
+             WHERE s.session_id NOT LIKE 'chatgpt:%' AND s.session_id NOT LIKE 'codex:%'
+               AND EXISTS (SELECT 1 FROM cowork_session_stats c WHERE c.session_id = s.session_id)
+           ) AS cowork,
+           COUNT(*) FILTER (
+             WHERE s.session_id NOT LIKE 'chatgpt:%' AND s.session_id NOT LIKE 'codex:%'
+               AND NOT EXISTS (SELECT 1 FROM cowork_session_stats c WHERE c.session_id = s.session_id)
+               AND EXISTS (SELECT 1 FROM code_session_stats d WHERE d.session_id = s.session_id)
+           ) AS code,
+           COUNT(*) FILTER (
+             WHERE s.session_id LIKE 'chatgpt:%'
+               AND EXISTS (SELECT 1 FROM chatgpt_session_time t WHERE t.session_id = s.session_id)
+           ) AS chatgpt,
+           COUNT(*) FILTER (
+             WHERE s.session_id LIKE 'codex:%'
+               AND EXISTS (SELECT 1 FROM code_session_stats d WHERE d.session_id = s.session_id)
+           ) AS codex
+      FROM s
+     GROUP BY s.use_case_id`);
+  const out = new Map<string, ProductSessions>();
+  for (const r of res.rows) {
+    out.set(r.use_case_id, {
+      cowork: Number(r.cowork),
+      code: Number(r.code),
+      chatgpt: opts.openaiShown ? Number(r.chatgpt) : null,
+      codex: opts.openaiShown ? Number(r.codex) : null,
+    });
+  }
+  return out;
+}
+
 export interface PlatformHours {
   /** Measured hours on Claude's sessions (Cowork and Claude Code); null when none carries measured time. */
   claude: number | null;
