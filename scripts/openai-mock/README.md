@@ -28,7 +28,7 @@ Add `--write <folder>` to also save the files available at start-up, to read the
 
 ## How it behaves like the real export
 
-- Files cover about 10 minutes each, per log type. A file lists only once its end time has passed, so new files keep appearing while it runs.
+- Files cover about 10 minutes each, per log type. A file lists only once its end time has passed, so new files keep appearing while it runs. `OPENAI_MOCK_FROZEN=1` stops that: only the files available at start-up are listed, which tests use so that a slow run never sees a new file.
 - Events reach a file within 30 minutes; about 2% appear in two files, so the sync must remove duplicates by `event_id`.
 - The file link returns a 307 redirect to a download link that lasts five minutes and needs no key.
 - Costs are listed only on the organisation route, the other types only on the workspace route.
