@@ -39,11 +39,10 @@ export async function getConnectedProducts(): Promise<ConnectedProducts> {
       return false;
     }
   };
-  const [claudeRows, chatRows, metricRows, openaiRows] = await Promise.all([
+  const [claudeRows, metricRows, openaiRows] = await Promise.all([
     claudeKey ? true : exists(sql`SELECT 1 FROM cowork_messages WHERE ${sql.raw(vendorClause('claude'))} LIMIT 1`),
-    claudeKey ? true : exists(sql`SELECT 1 FROM chat_messages LIMIT 1`),
     claudeKey ? true : exists(sql`SELECT 1 FROM code_otel_metrics LIMIT 1`),
     openaiKey ? true : exists(sql`SELECT 1 FROM cowork_messages WHERE ${sql.raw(vendorClause('openai'))} LIMIT 1`),
   ]);
-  return { claude: claudeRows || chatRows || metricRows, openai: openaiRows && shown, openaiConnected: openaiRows };
+  return { claude: claudeRows || metricRows, openai: openaiRows && shown, openaiConnected: openaiRows };
 }

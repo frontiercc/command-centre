@@ -38,7 +38,7 @@ Command Centre works with Claude for Teams, Claude for Enterprise, and ChatGPT E
 
 | Product | What Command Centre receives |
 |---|---|
-| **Claude Chat** | Every conversation: people's prompts in full, the files they attach, the model, the connectors used, and the artifacts and files Claude made |
+| **Claude Chat** | Every conversation: people's prompts in full, the names of the files they attach, the model, the connectors used, and how many artifacts and files Claude made |
 | **ChatGPT Chat and ChatGPT Work** | Prompts, the names of files people attach, the skills ChatGPT used, the model and time of each reply, and spend from OpenAI's hourly cost records |
 | **Claude Cowork** | Prompts, models, tokens and cost, the tools, skills, connectors and subagents used, and the files people upload and Claude produces |
 | **Claude in Office and Google apps** | Prompts in Excel, Word, PowerPoint, Outlook, Google Sheets, Docs and Slides, models and tokens, the tools Claude used, and the names of the documents it changed. Spend is estimated from published prices. |
@@ -178,7 +178,7 @@ Run the commands below in PowerShell on Windows, or Terminal on macOS and Linux.
 
    If the log says a token was already printed, wait 10 minutes, run `docker compose restart hub`, then run the command again.
 
-5. **Load the sample data**: Acme Corp, with thirteen weeks of Claude Code, Claude Cowork, Claude in Office/Google, Claude Chat, ChatGPT and Codex activity, graded work, use cases, alerts and spend. Loading takes about two minutes. Create your admin account in step 4 first: once the sample data is loaded, the setup page closes.
+5. **Load the sample data**: Acme Corp, with thirteen weeks of Claude Chat, ChatGPT and Codex activity and about two months of Claude Code, Claude Cowork and Claude in Office/Google activity, graded work, use cases, alerts and spend. Loading takes about two minutes. Create your admin account in step 4 first: once the sample data is loaded, the setup page closes.
 
    ```bash
    docker compose --profile demo run --rm demo-data
@@ -352,7 +352,7 @@ ChatGPT work then appears in Work Pulse and Codex work in Developer Pulse, grade
 ### Before you begin
 
 - ChatGPT Enterprise or Edu, and a ChatGPT workspace owner to create an OpenAI Admin API key.
-- Command Centre installed on the server, served over HTTPS and with your Claude API key added: journey 2, steps 1 to 6. The collector address is needed only for Claude Code and Claude Cowork. Command Centre fetches ChatGPT and Codex activity itself. Its AI features still need the Claude API key.
+- Command Centre installed on the server, served over HTTPS and with your Claude API key added: journey 2, steps 1 to 6. The collector address is needed only for Claude Code, Claude Cowork and Claude in Office/Google. Command Centre fetches ChatGPT and Codex activity itself. Its AI features still need the Claude API key.
 
 ### Steps
 
@@ -409,7 +409,7 @@ Vote or add ideas in [Discussions](https://github.com/frontiercc/command-centre/
 
 ## Status
 
-1.0.0, in October 2026, was the first public release; the current release is 1.3.0, which adds ChatGPT and Codex in preview and department sync from Microsoft Entra ID. Command Centre was built with Claude Code, then reviewed, tested and run in production; it has been in daily use since mid-2026. Several features ship switched off and are turned on from the admin pages: FinOps, Use Cases, Weekly Highlights, Dev Framework Alignment and single sign-on.
+1.0.0, in October 2026, was the first public release; the current release is 1.3.0, which adds ChatGPT and Codex in preview and department sync from Microsoft Entra ID. Command Centre was built with Claude Code, then reviewed, tested and run in production; it has been in daily use since mid-2026. Several features ship switched off and are turned on from the admin pages: FinOps, Use Cases, the Weekly Digest, Weekly Highlights, human time, Dev Framework Alignment, single sign-on and department sync.
 
 ## Support
 
