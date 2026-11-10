@@ -151,6 +151,36 @@ interface MutableUser {
   chatgptUsd: number;
   codexUsd: number;
   tokens: CodeTokens;
+  /** Spend per part of the month, for a person who moved department (department sync). */
+  segs?: Map<number, SegSpend>;
+}
+
+interface SegSpend { codeUsd: number; coworkUsd: number; chatgptUsd: number; codexUsd: number; tokens: CodeTokens }
+
+/** A department move during the month: before changedAt the person was in `from`, after it in `to`. */
+interface Move { changedAt: number; from: string; to: string }
+
+/**
+ * One entry per person: a person who moved department during the month has a
+ * part in each department's list, and these add their parts back together.
+ * Used wherever spend is read per person rather than per department.
+ */
+export function mergeUsersById(users: ChargebackUser[]): ChargebackUser[] {
+  const byId = new Map<string, ChargebackUser>();
+  for (const u of users) {
+    const prev = byId.get(u.userId);
+    if (!prev) { byId.set(u.userId, { ...u, tokens: { ...u.tokens } }); continue; }
+    prev.codeUsd += u.codeUsd;
+    prev.coworkUsd += u.coworkUsd;
+    if (u.chatgptUsd !== undefined) prev.chatgptUsd = (prev.chatgptUsd ?? 0) + u.chatgptUsd;
+    if (u.codexUsd !== undefined) prev.codexUsd = (prev.codexUsd ?? 0) + u.codexUsd;
+    prev.totalUsd += u.totalUsd;
+    prev.tokens.input += u.tokens.input;
+    prev.tokens.output += u.tokens.output;
+    prev.tokens.cacheWrite += u.tokens.cacheWrite;
+    prev.tokens.cacheRead += u.tokens.cacheRead;
+  }
+  return [...byId.values()];
 }
 
 /**
@@ -179,6 +209,38 @@ export async function buildChargeback(period: string, nowS: number = Math.floor(
   const { start, end } = monthBounds(period);
   const rates: ModelRates = await getCodeModelRates();
 
+  // Department moves during the month (department sync, migration 0049). A
+  // move recorded by the directory splits the person's spend at the move: the
+  // part before counts to the old department, the part after to the new one.
+  // A person with a manual change this month is not split: a manual
+  // department applies to the whole open month. With no moves (the usual
+  // case) every query below is exactly as before.
+  const moveRows = await rawAll<{ user_id: string; changed_at: number | string; from_department: string | null; to_department: string | null }>(
+    db,
+    sql`SELECT user_id, changed_at, from_department, to_department
+       FROM department_history
+       WHERE is_move = 1 AND user_id IS NOT NULL AND changed_at >= ${start} AND changed_at < ${end}
+         AND user_id NOT IN (SELECT user_id FROM department_history
+                             WHERE source = 'manual' AND user_id IS NOT NULL AND changed_at >= ${start} AND changed_at < ${end})
+       ORDER BY user_id, changed_at`
+  );
+  const moves = new Map<string, Move[]>();
+  for (const r of moveRows) {
+    if (!r.from_department || !r.to_department) continue;
+    const list = moves.get(r.user_id) ?? [];
+    list.push({ changedAt: Number(r.changed_at), from: r.from_department, to: r.to_department });
+    moves.set(r.user_id, list);
+  }
+  const moverIds = [...moves.keys()];
+  /** Which part of the month a row falls in: the number of moves at or before its time; 0 for everyone else. */
+  const segOf = (table: string, timeCol: string) => moverIds.length === 0
+    ? sql`0`
+    : sql`CASE WHEN ${sql.raw(table)}.user_id IN (${sql.join(moverIds.map(id => sql`${id}`), sql`, `)})
+              THEN (SELECT COUNT(*) FROM department_history h
+                    WHERE h.user_id = ${sql.raw(table)}.user_id AND h.is_move = 1
+                      AND h.changed_at >= ${start} AND h.changed_at <= ${sql.raw(table)}.${sql.raw(timeCol)})
+              ELSE 0 END`;
+
   const users = new Map<string, MutableUser>();
   const unpricedModels = new Set<string>();
   const modelsSeen: string[] = [];
@@ -202,6 +264,17 @@ export async function buildChargeback(period: string, nowS: number = Math.floor(
     }
     return u;
   }
+  function segOfUser(u: MutableUser, seg: number | string | null | undefined): SegSpend | null {
+    if (!moves.has(u.userId)) return null;
+    const n = Number(seg ?? 0);
+    if (!u.segs) u.segs = new Map();
+    let part = u.segs.get(n);
+    if (!part) {
+      part = { codeUsd: 0, coworkUsd: 0, chatgptUsd: 0, codexUsd: 0, tokens: { input: 0, output: 0, cacheWrite: 0, cacheRead: 0 } };
+      u.segs.set(n, part);
+    }
+    return part;
+  }
 
   // --- Code spend per (user_id, model) ---
   // Policy B: SUM() of integer columns comes back as bigint → a STRING from a
@@ -216,14 +289,16 @@ export async function buildChargeback(period: string, nowS: number = Math.floor(
     o: number | string | null;
     cw: number | string | null;
     cr: number | string | null;
+    seg: number | string | null;
   }>(
     db,
     sql`SELECT user_id, model,
               SUM(input_tokens) AS i, SUM(output_tokens) AS o,
-              SUM(cache_creation_tokens) AS cw, SUM(cache_read_tokens) AS cr
+              SUM(cache_creation_tokens) AS cw, SUM(cache_read_tokens) AS cr,
+              ${segOf('code_assistant_meta', 'occurred_at')} AS seg
        FROM code_assistant_meta
        WHERE occurred_at >= ${start} AND occurred_at < ${end}
-       GROUP BY user_id, model`
+       GROUP BY user_id, model, seg`
   );
 
   for (const row of codeRows) {
@@ -240,6 +315,8 @@ export async function buildChargeback(period: string, nowS: number = Math.floor(
     tu.tokens.output += to;
     tu.tokens.cacheWrite += tcw;
     tu.tokens.cacheRead += tcr;
+    const ts = segOfUser(tu, row.seg);
+    if (ts) { ts.tokens.input += ti; ts.tokens.output += to; ts.tokens.cacheWrite += tcw; ts.tokens.cacheRead += tcr; }
 
     if (!row.model) continue;
     modelsSeen.push(row.model);
@@ -259,6 +336,8 @@ export async function buildChargeback(period: string, nowS: number = Math.floor(
     }
     const u = getUser(row.user_id);
     u.codeUsd += usd;
+    const us = segOfUser(u, row.seg);
+    if (us) us.codeUsd += usd;
     codeSurfaceUsd += usd;
 
     // Cache-savings estimate for this priced model.
@@ -274,18 +353,20 @@ export async function buildChargeback(period: string, nowS: number = Math.floor(
   // Policy B: cost_usd is `numeric` on Postgres, so SUM(cost_usd) comes back
   // as a STRING — Number()-coerced before it feeds coworkUsd / grandTotalUsd
   // (a string here would break the reconciliation invariant).
-  const coworkRows = await rawAll<{ user_id: string | null; c: number | string | null }>(
+  const coworkRows = await rawAll<{ user_id: string | null; c: number | string | null; seg: number | string | null }>(
     db,
-    sql`SELECT user_id, COALESCE(SUM(cost_usd), 0) AS c
+    sql`SELECT user_id, COALESCE(SUM(cost_usd), 0) AS c, ${segOf('cowork_messages', 'occurred_at')} AS seg
        FROM cowork_messages
        WHERE message_type = 'cowork_api_request' AND product IS NULL AND occurred_at >= ${start} AND occurred_at < ${end}
-       GROUP BY user_id`
+       GROUP BY user_id, seg`
   );
 
   for (const row of coworkRows) {
     const u = getUser(row.user_id);
     const c = Number(row.c ?? 0);
     u.coworkUsd += c;
+    const us = segOfUser(u, row.seg);
+    if (us) us.coworkUsd += c;
     coworkSurfaceUsd += c;
   }
 
@@ -345,11 +426,12 @@ export async function buildChargeback(period: string, nowS: number = Math.floor(
       inp: number | string | null; cached: number | string | null; outp: number | string | null;
       // ChatGPT only: a group of records with no token split, valued at OpenAI's figure.
       no_split?: boolean; reported?: number | string | null; unknown_usd?: number | string | null;
+      seg?: number | string | null;
     }>(db, query);
     const priceInto = (
       rows: Awaited<ReturnType<typeof openaiRows>>,
       tokens: CodeTokens,
-      add: (u: MutableUser, usd: number) => void,
+      add: (u: MutableUser, usd: number, part: SegSpend | null) => void,
     ) => {
       for (const row of rows) {
         const inp = Number(row.inp ?? 0), cached = Number(row.cached ?? 0), outp = Number(row.outp ?? 0);
@@ -365,7 +447,7 @@ export async function buildChargeback(period: string, nowS: number = Math.floor(
           : row.model === null ? null : priceTokens(row.model, usage, rates);
         if (row.no_split && Number(row.unknown_usd ?? 0) > 0) openaiUnpriced.add(row.model ?? '(no model)');
         if (usd === null) { openaiUnpriced.add(row.model ?? '(no model)'); continue; }
-        add(u, usd);
+        add(u, usd, segOfUser(u, row.seg));
         // Cached input is billed at OpenAI's discounted rate: the saving joins the caching estimate.
         const r = rates[row.model!] ?? rates[normalizeModelId(row.model!)];
         if (r && typeof r.in === 'number' && typeof r.cacheRead === 'number') {
@@ -378,15 +460,17 @@ export async function buildChargeback(period: string, nowS: number = Math.floor(
     priceInto(await openaiRows(sql`
       SELECT user_id, model, (input_tokens + cached_input_tokens + output_tokens = 0) AS no_split,
              SUM(input_tokens) AS inp, SUM(cached_input_tokens) AS cached, SUM(output_tokens) AS outp,
-             SUM(cost_usd) AS reported, SUM(CASE WHEN cost_usd IS NULL THEN 1 ELSE 0 END) AS unknown_usd
+             SUM(cost_usd) AS reported, SUM(CASE WHEN cost_usd IS NULL THEN 1 ELSE 0 END) AS unknown_usd,
+             ${segOf('openai_costs', 'hour_start')} AS seg
       FROM openai_costs
       WHERE product = 'chatgpt' AND hour_start >= ${start} AND hour_start < ${end}
-      GROUP BY user_id, model, no_split`), chatgptTokens, (u, usd) => { u.chatgptUsd += usd; chatgptSurfaceUsd = (chatgptSurfaceUsd ?? 0) + usd; });
+      GROUP BY user_id, model, no_split, seg`), chatgptTokens, (u, usd, part) => { u.chatgptUsd += usd; if (part) part.chatgptUsd += usd; chatgptSurfaceUsd = (chatgptSurfaceUsd ?? 0) + usd; });
     priceInto(await openaiRows(sql`
-      SELECT user_id, model, SUM(uncached_input_tokens) AS inp, SUM(cached_input_tokens) AS cached, SUM(output_tokens) AS outp
+      SELECT user_id, model, SUM(uncached_input_tokens) AS inp, SUM(cached_input_tokens) AS cached, SUM(output_tokens) AS outp,
+             ${segOf('codex_turns', 'started_at')} AS seg
       FROM codex_turns
       WHERE started_at >= ${start} AND started_at < ${end}
-      GROUP BY user_id, model`), codexTokens, (u, usd) => { u.codexUsd += usd; codexSurfaceUsd += usd; });
+      GROUP BY user_id, model, seg`), codexTokens, (u, usd, part) => { u.codexUsd += usd; if (part) part.codexUsd += usd; codexSurfaceUsd += usd; });
   }
 
   // --- Cowork cost coverage ---
@@ -433,36 +517,49 @@ export async function buildChargeback(period: string, nowS: number = Math.floor(
       ? UNALLOCATED_DISPLAY_NAME
       : userRow?.displayName || u.userId;
 
-    const chargebackUser: ChargebackUser = {
-      userId: isNullUser ? UNALLOCATED_DISPLAY_NAME : u.userId,
-      displayName,
-      codeUsd: u.codeUsd,
-      coworkUsd: u.coworkUsd,
-      ...(hasOpenAi ? { chatgptUsd: u.chatgptUsd, codexUsd: u.codexUsd } : {}),
-      totalUsd,
-      tokens: u.tokens,
-    };
+    // The person's spend in each department they were in this month: one
+    // part for almost everyone, one per department for someone who moved.
+    const userMoves = moves.get(u.userId);
+    const parts: Array<{ department: string | null | undefined; amounts: SegSpend }> = userMoves && u.segs
+      ? [...u.segs.entries()].sort((a, b) => a[0] - b[0]).map(([seg, amounts]) => ({
+          department: seg === 0 ? userMoves[0].from : userMoves[Math.min(seg, userMoves.length) - 1].to,
+          amounts,
+        }))
+      : [{ department: isNullUser ? null : userRow?.department, amounts: u }];
 
-    const department = isNullUser ? null : userRow?.department;
-    if (department && department.trim() !== '') {
-      const mapped = deptToCentre.get(department);
-      const centreName = mapped ? mapped.name : department;
-      const centreCode = mapped ? mapped.code : null;
-      let centre = centreMap.get(centreName);
-      if (!centre) {
-        centre = { name: centreName, code: centreCode, totalUsd: 0, codeUsd: 0, coworkUsd: 0, ...(hasOpenAi ? { chatgptUsd: 0, codexUsd: 0 } : {}), users: [] };
-        centreMap.set(centreName, centre);
+    for (const part of parts) {
+      const a = part.amounts;
+      const chargebackUser: ChargebackUser = {
+        userId: isNullUser ? UNALLOCATED_DISPLAY_NAME : u.userId,
+        displayName,
+        codeUsd: a.codeUsd,
+        coworkUsd: a.coworkUsd,
+        ...(hasOpenAi ? { chatgptUsd: a.chatgptUsd, codexUsd: a.codexUsd } : {}),
+        totalUsd: a.codeUsd + a.coworkUsd + a.chatgptUsd + a.codexUsd,
+        tokens: a.tokens,
+      };
+
+      const department = part.department;
+      if (department && department.trim() !== '') {
+        const mapped = deptToCentre.get(department);
+        const centreName = mapped ? mapped.name : department;
+        const centreCode = mapped ? mapped.code : null;
+        let centre = centreMap.get(centreName);
+        if (!centre) {
+          centre = { name: centreName, code: centreCode, totalUsd: 0, codeUsd: 0, coworkUsd: 0, ...(hasOpenAi ? { chatgptUsd: 0, codexUsd: 0 } : {}), users: [] };
+          centreMap.set(centreName, centre);
+        }
+        centre.users.push(chargebackUser);
+        centre.codeUsd += chargebackUser.codeUsd;
+        centre.coworkUsd += chargebackUser.coworkUsd;
+        if (hasOpenAi) {
+          centre.chatgptUsd = (centre.chatgptUsd ?? 0) + (chargebackUser.chatgptUsd ?? 0);
+          centre.codexUsd = (centre.codexUsd ?? 0) + (chargebackUser.codexUsd ?? 0);
+        }
+        centre.totalUsd += chargebackUser.totalUsd;
+      } else {
+        unallocatedUsers.push(chargebackUser);
       }
-      centre.users.push(chargebackUser);
-      centre.codeUsd += chargebackUser.codeUsd;
-      centre.coworkUsd += chargebackUser.coworkUsd;
-      if (hasOpenAi) {
-        centre.chatgptUsd = (centre.chatgptUsd ?? 0) + (chargebackUser.chatgptUsd ?? 0);
-        centre.codexUsd = (centre.codexUsd ?? 0) + (chargebackUser.codexUsd ?? 0);
-      }
-      centre.totalUsd += chargebackUser.totalUsd;
-    } else {
-      unallocatedUsers.push(chargebackUser);
     }
   }
 
@@ -485,11 +582,13 @@ export async function buildChargeback(period: string, nowS: number = Math.floor(
   unallocatedUsers.sort((a, b) => b.totalUsd - a.totalUsd);
 
   // --- Top-spenders leaderboard (single-source: flatten the already-built
-  // per-user objects across centres + unallocated; no new query/re-sum) ---
-  const allUsers: ChargebackUser[] = [
+  // per-user objects across centres + unallocated; no new query/re-sum). A
+  // person who moved department this month has a part in two lists: merged
+  // back into one entry here. ---
+  const allUsers: ChargebackUser[] = mergeUsersById([
     ...costCentres.flatMap(c => c.users),
     ...unallocatedUsers,
-  ];
+  ]);
   const leaderboard: LeaderboardEntry[] = allUsers
     .filter(u => u.totalUsd > 0)
     .sort((a, b) => b.totalUsd - a.totalUsd)

@@ -6,6 +6,7 @@ import { runComplianceSyncJob } from '@/lib/compliance/job';
 import { ingestAnalyticsSnapshots } from '@/lib/anthropic/analytics';
 import { runRetentionCleanup } from '@/lib/retention/cleanup';
 import { runJob, JOB_SKIPPED, JOB_DISABLED } from '@/lib/ingestion/job-runs';
+import { isDepartmentSyncActive, departmentSyncDue, runDepartmentSync } from '@/lib/directory/department-sync';
 import { deleteExpiredSessions } from '@/lib/db/admin-queries';
 import { runClassifierJob } from '@/lib/pulse/classifier';
 import { runAuditDrawJob } from '@/lib/pulse/audit/cycle';
@@ -394,6 +395,15 @@ async function runCycle(): Promise<void> {
     if (lastRun && lastRun >= twelveHoursAgo) return JOB_SKIPPED;
     const result = await runGithubSync();
     if (result.errors.length > 0) throw new Error(`GitHub API errors: ${result.errors.join('; ')}`);
+  });
+
+  // Department sync from Microsoft Entra ID — the daily lookup of everyone.
+  // Off (and absent from System health) until switched on and the first-run
+  // preview applied; then once a day.
+  await runJob('department_sync', 'Department sync', async () => {
+    if (!(await isDepartmentSyncActive())) return JOB_DISABLED;
+    if (!(await departmentSyncDue())) return JOB_SKIPPED;
+    await runDepartmentSync('daily');
   });
 
   // Pulse aggregator — daily (function-level metrics)

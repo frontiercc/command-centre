@@ -8,7 +8,7 @@ Several major features are off until you enable them.
 
 | Area | Where | State on a new instance |
 |---|---|---|
-| Claude API key, Compliance Access Key, SSO, SMTP, user accounts | Admin → Access & Keys | Empty |
+| Claude API key, Compliance Access Key, SSO, department sync, SMTP, user accounts | Admin → Access & Keys | Empty |
 | ChatGPT and Codex: OpenAI Admin API key, workspace ID, organisation ID | Admin → Access & Keys → OpenAI (ChatGPT and Codex) | Empty |
 | Core AI model, FinOps, seats, Weekly Digest, Weekly Highlights, Metrics Connector, system health | Admin → System | FinOps, digest and highlights off |
 | Departments (bulk), monitoring exclusions, Claude collector status, identity conflicts | Admin → Ingestion | Empty |
@@ -19,7 +19,7 @@ Several major features are off until you enable them.
 | Retention | Admin → Data | Defaults applied |
 | Alerts, thresholds, Slack alerts | Admin → Risk Scoring | Slack alerts off; Claude Code daily spend limit $100; Codex daily spend limit $500 |
 
-**Contents:** [Claude API key and models](#claude-api-key-and-models) · [Claude Chat capture through Anthropic's Compliance API](#claude-chat-capture-through-anthropics-compliance-api) · [Connect ChatGPT and Codex](#connect-chatgpt-and-codex) · [Single sign-on](#single-sign-on) · [Email (SMTP)](#email-smtp) · [Users, roles and departments](#users-roles-and-departments) · [Cost centres, licensed seats and seat price](#cost-centres-licensed-seats-and-seat-price) · [Retention](#retention) · [Content and AI switches](#content-and-ai-switches) · [Work Pulse](#work-pulse) · [Developer Pulse and the GitHub overlay](#developer-pulse-and-the-github-overlay) · [Use Cases](#use-cases) · [Skills and Connectors Board](#skills-and-connectors-board) · [Weekly Digest](#weekly-digest) · [Weekly Highlights](#weekly-highlights) · [High-priority alerts to Slack](#high-priority-alerts-to-slack) · [System health and telemetry-silence alerts](#system-health-and-telemetry-silence-alerts) · [Metrics Connector](#metrics-connector) · [Reports](#reports)
+**Contents:** [Claude API key and models](#claude-api-key-and-models) · [Claude Chat capture through Anthropic's Compliance API](#claude-chat-capture-through-anthropics-compliance-api) · [Connect ChatGPT and Codex](#connect-chatgpt-and-codex) · [Single sign-on](#single-sign-on) · [Department sync](#department-sync) · [Email (SMTP)](#email-smtp) · [Users, roles and departments](#users-roles-and-departments) · [Cost centres, licensed seats and seat price](#cost-centres-licensed-seats-and-seat-price) · [Retention](#retention) · [Content and AI switches](#content-and-ai-switches) · [Work Pulse](#work-pulse) · [Developer Pulse and the GitHub overlay](#developer-pulse-and-the-github-overlay) · [Use Cases](#use-cases) · [Skills and Connectors Board](#skills-and-connectors-board) · [Weekly Digest](#weekly-digest) · [Weekly Highlights](#weekly-highlights) · [High-priority alerts to Slack](#high-priority-alerts-to-slack) · [System health and telemetry-silence alerts](#system-health-and-telemetry-silence-alerts) · [Metrics Connector](#metrics-connector) · [Reports](#reports)
 
 ## Claude API key and models
 
@@ -86,6 +86,34 @@ People who appear automatically because their telemetry arrived have SSO off unt
 
 **Check:** **Test connection** reports success. Sign out, use the SSO button on the sign-in page, complete your provider's prompt and land on the dashboard. A refused attempt returns to the sign-in page with a reason, and every attempt is written to the audit trail.
 
+## Department sync
+
+Department sync keeps each person's department in step with Microsoft Entra ID, so departmental reporting follows your organisation's structure without anyone typing departments in. It reads a person's department when they sign in with Microsoft, and once a day looks up everyone Command Centre knows by email, including people who never sign in. It only ever changes departments: roles, single sign-on access and accounts are never touched. For anyone who is not an admin, such as a manager, the department also sets which department's data they can see, so when the sync moves them, what they can see moves with them. Admins see every department whatever their department says. It needs single sign-on with Microsoft Entra ID; other identity providers, including Google Workspace, are not supported yet.
+
+1. **Grant two read-only permissions.** In Microsoft Entra ID, open the app registration you use for single sign-on, then **API permissions → Add a permission → Microsoft Graph**, and add:
+   - **Delegated permissions → User.Read**, which reads the department of the person signing in;
+   - **Application permissions → User → User.Read.All**, which the daily lookup of everyone needs.
+
+   Then select **Grant admin consent for (your organisation)**. This needs a Global Administrator or Privileged Role Administrator. Without User.Read.All, departments update only when people sign in, and the admin page says so.
+2. **Fill in departments in Entra**, under **Users → (person) → Edit properties → Job information → Department**, if your HR system does not already.
+3. **Switch it on.** In **Admin → Access & Keys → Department sync · Microsoft Entra ID**, switch on **Automatically synchronise departments from SSO**. Nothing changes yet.
+4. **Preview.** Select **Preview**. It lists each department name found in Entra, the Command Centre department it lands on, whether that is an existing department, one from your name map or a new one, and how many people it covers.
+5. **Map names that differ.** Where Entra uses a different name for a department you already have, for example "Eng" for "Engineering", add a row under **Name map** and select **Save name map**; the preview refreshes. Differences in capitals and spacing never need mapping.
+6. **Apply.** Select **Apply**. Departments are written now, and from then on update at sign-in and in the daily lookup.
+
+How the rules work:
+
+- A department set by hand, on a person's page or with **Set dept** on Access & Keys, is never changed by the sync. It is listed under **Kept manual** until you select **Return to directory**.
+- An empty department in Entra never removes one.
+- People are matched on every address Entra holds for them: email, sign-in name, other emails and proxy addresses.
+- A name that matches no existing department becomes a new department, and is listed under **Names waiting to be mapped** until you map it.
+- People Entra does not have, such as contractors using another address, keep their department and are listed under **Not found**.
+- If Entra cannot be reached, nothing changes and sign-in carries on as normal; the failure appears in System health.
+
+Every change is recorded, with its date and whether the directory or an administrator made it, under **Department source** on the person's page. In FinOps, when the directory moves someone from one department to another during a month that has not been closed, their spend before the move counts to the old department and their spend after it to the new one. A person's first department from the directory applies to the whole month, because it usually fills in a blank or corrects a guess, and a department set by hand applies to the whole open month. Closed FinOps months and Work Pulse's past weeks never change; figures for the last 7 or 30 days use each person's current department.
+
+**Check:** after **Apply**, the **Daily lookup** line shows how many departments were updated, and a person's page shows **From the directory** under **Department source**. Change someone's department in Entra and have them sign in with Microsoft: their department updates within a few seconds.
+
 ## Email (SMTP)
 
 Email carries password reset links and the Weekly Digest.
@@ -112,7 +140,7 @@ People appear in Command Centre automatically the first time their telemetry, Cl
 2. **Exclude people from monitoring.** In **Admin → Ingestion → Exclude people from monitoring**, list their emails, one per line, and select **Save exclusion list**. Claude telemetry, Claude Chat from Anthropic's Compliance API, and ChatGPT and Codex records from OpenAI's Compliance API for these addresses are dropped on arrival: nothing is written, including spend, and no alert fires. The Compliance API's Activity Feed (logins and admin actions) is an audit trail and is kept for everyone.
 3. **Set roles and departments.** In **Admin → Access & Keys → Users**, use the role selector and **Set dept** on each row, and give every manager a department. Create accounts for administrators, managers and viewers who do not use Claude or ChatGPT with **+ Add user**, which opens the **New admin user** form.
 
-If your Claude Code settings send a `department` attribute with telemetry, Command Centre uses it for a person it has not seen before; an existing department is never overwritten.
+If your Claude Code settings send a `department` attribute with telemetry, Command Centre uses it for a person it has not seen before; an existing department is never overwritten. With single sign-on through Microsoft Entra ID, [Department sync](#department-sync) can keep departments up to date from the directory instead. A department you set by hand stays as you set it.
 
 **Check:** the Users table on **Admin → Access & Keys** shows imported people with their departments.
 

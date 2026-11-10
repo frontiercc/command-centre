@@ -10,7 +10,7 @@
 // sso_enabled=1. There is no JIT provisioning in v1: an unknown email is a
 // polite refusal, never an account creation.
 import * as client from 'openid-client';
-import { getAllConfig } from '@/lib/config';
+import { getAllConfig, getConfigValue } from '@/lib/config';
 import { findAdminByEmail, type AdminUserRow } from '@/lib/db/admin-queries';
 import { sealPendingPayload, unsealPendingPayload } from '@/lib/auth/totp';
 
@@ -170,9 +170,16 @@ export async function beginSsoLogin(): Promise<SsoStart> {
   const state = client.randomState();
   const nonce = client.randomNonce();
 
+  // Department sync (lib/directory/department-sync.ts) reads the signed-in
+  // person's department from Microsoft Graph, which needs User.Read. Asked for
+  // only while the sync is on and the provider is Microsoft, so every other
+  // sign-in requests exactly what it always did.
+  const wantsDepartment = isMicrosoftIssuer(withTrailingSlash(settings.issuerUrl))
+    && (await getConfigValue('departmentSyncEnabled')) === 'true';
+
   const authUrl = client.buildAuthorizationUrl(config, {
     redirect_uri: settings.redirectUri,
-    scope: 'openid email profile',
+    scope: wantsDepartment ? 'openid email profile User.Read' : 'openid email profile',
     code_challenge: codeChallenge,
     code_challenge_method: 'S256',
     state,
@@ -214,12 +221,17 @@ export function isEmailVerified(claims: Record<string, unknown>): boolean {
 /** Microsoft Entra ID issuers: the public cloud and the sovereign clouds. */
 const MICROSOFT_ISSUER = /^https:\/\/(login\.microsoftonline\.(com|us)|login\.partner\.microsoftonline\.cn|sts\.windows\.net)\//;
 
-function isMicrosoftIssuer(iss: unknown): boolean {
+function withTrailingSlash(url: string): string {
+  return url.endsWith('/') ? url : `${url}/`;
+}
+
+export function isMicrosoftIssuer(iss: unknown): boolean {
   return typeof iss === 'string' && MICROSOFT_ISSUER.test(iss);
 }
 
 export type SsoResult =
-  | { ok: true; account: { id: string; email: string; role: string } }
+  /** accessToken: the provider's access token, for department sync only; never stored or logged. */
+  | { ok: true; account: { id: string; email: string; role: string }; accessToken?: string }
   | { ok: false; reason: SsoRefusal };
 
 function refuse(reason: SsoRefusal): SsoResult {
@@ -278,6 +290,7 @@ export async function completeSsoLogin(
   }
 
   let claims: Record<string, unknown> | undefined;
+  let accessToken: string | undefined;
   try {
     const tokens = await client.authorizationCodeGrant(config, callbackUrl, {
       pkceCodeVerifier: pending.verifier,
@@ -285,6 +298,7 @@ export async function completeSsoLogin(
       expectedNonce: pending.nonce,
     });
     claims = tokens.claims();
+    accessToken = typeof tokens.access_token === 'string' ? tokens.access_token : undefined;
   } catch {
     // Covers: state/nonce validation failures thrown by openid-client itself,
     // token exchange errors (incl. a replayed/already-consumed authorization
@@ -315,5 +329,6 @@ export async function completeSsoLogin(
   return {
     ok: true,
     account: { id: account.id, email: account.email, role: account.role },
+    accessToken,
   };
 }

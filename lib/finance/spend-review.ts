@@ -41,7 +41,7 @@ import { buildSessionTaskTypeMap, parseCoworkTokenUsage, computeCostByType, comp
 import { formatTaskType } from '@/lib/pulse/events/capability';
 import { codeWorkTypeLabel, codeWorkTypeDefinition } from '@/lib/pulse/code/work-type-labels';
 import { getCodeWorkTypeDefinitions } from '@/lib/pulse/code/tier-config';
-import { buildChargeback } from '@/lib/finance/chargeback';
+import { buildChargeback, mergeUsersById } from '@/lib/finance/chargeback';
 import { SpendSplitAcc, type SpendSplit } from '@/lib/finance/where-money-went';
 import { chatgptSessionShares, codexSessionTurns, type OpenAiFilter } from '@/lib/finance/spend-review-openai';
 
@@ -1560,10 +1560,11 @@ export async function buildSpendReviewIndex(period: string, nowS: number = Math.
   let prior: Awaited<ReturnType<typeof buildChargeback>> | null = null;
   try { prior = await buildChargeback(priorPeriod(period), nowS); } catch { prior = null; }
   const priorByUser = new Map<string, number>();
-  for (const u of prior ? [...prior.costCentres.flatMap(c => c.users), ...prior.unallocated.users] : []) priorByUser.set(u.userId, u.totalUsd);
+  // A person who moved department has a part in each department's list: merged back into one (mergeUsersById).
+  for (const u of prior ? mergeUsersById([...prior.costCentres.flatMap(c => c.users), ...prior.unallocated.users]) : []) priorByUser.set(u.userId, u.totalUsd);
 
   const tokenSum = (t: { input: number; output: number; cacheWrite: number; cacheRead: number }) => t.input + t.output + t.cacheWrite + t.cacheRead;
-  const users = [...report.costCentres.flatMap(c => c.users), ...report.unallocated.users]
+  const users = mergeUsersById([...report.costCentres.flatMap(c => c.users), ...report.unallocated.users])
     .filter(u => u.userId !== '__null_user__' && (u.totalUsd > 0 || tokenSum(u.tokens) > 0));
 
   // Every session this month, grouped per person by kind of work.

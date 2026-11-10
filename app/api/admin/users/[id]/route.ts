@@ -17,6 +17,8 @@ import {
   AdminUserRow,
 } from '@/lib/db/admin-queries';
 import { logAuthEvent } from '@/lib/db/auth-events';
+import { recordManualDepartment } from '@/lib/directory/department-sync';
+import { tidyDepartment } from '@/lib/directory/department-rules';
 import { MIN_PASSWORD_LENGTH, PASSWORD_TOO_SHORT } from '@/lib/auth/password-policy';
 
 export const dynamic = 'force-dynamic';
@@ -116,6 +118,17 @@ export async function PATCH(
 
   if (department !== undefined) {
     await updateAdminDepartment(id, department ?? null);
+    // Set by hand: department sync leaves it alone until an admin returns it
+    // to the directory. Only a real change counts, so saving the same value
+    // never locks a department the directory manages.
+    if (tidyDepartment(target.department) !== tidyDepartment(department ?? null)) {
+      await recordManualDepartment({
+        adminUserId: id,
+        userIds: target.linked_cowork_user_id ? [target.linked_cowork_user_id] : [],
+        from: target.department,
+        to: department ?? null,
+      });
+    }
   }
 
   if (linkedCoworkUserId !== undefined) {

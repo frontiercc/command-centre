@@ -78,6 +78,7 @@ The application makes no call to Anthropic beyond those listed in this document 
 | `api.github.com` | Developer Pulse GitHub overlay | Access token and repository names |
 | Your Amazon S3 archive bucket | Optional archive before retention deletes data | Expiring records, including stored prompts |
 | Your identity provider | Single sign-on (OpenID Connect) | Standard OIDC exchange |
+| `graph.microsoft.com` | Department sync from Microsoft Entra ID | At sign-in, the person's own Microsoft access token; for the daily lookup, an app-only token. Email addresses and departments come in; nothing about your people is sent |
 | Your cloud provider's services, if you run on a cloud | For example on AWS: ECR, CloudWatch Logs, Secrets Manager and KMS | Images, logs and secrets, within your own cloud account |
 
 ![AI data flow and trust boundaries](diagrams/AI%20data%20flow%20and%20trust%20boundaries.png)
@@ -330,7 +331,7 @@ Because Command Centre runs on infrastructure you control, under your keys, each
 | Slack | Weekly Digest, high-priority alerts, Highlights | Alert titles and explanations, which may name a person and, for intent alerts, can quote the prompt; administrator-edited Highlights text | Your organisation, optional |
 | Email (your SMTP relay) | Weekly Digest, password reset | Recipient addresses; digest content | Your organisation, optional |
 | GitHub | Developer Pulse shipping overlay | Commit author emails and logins received; stored as per-person daily commit counts, with unmatched authors listed for an administrator to map | Your organisation, optional |
-| Identity provider | Single sign-on | Standard OIDC identity claims | Your organisation, optional |
+| Identity provider | Single sign-on; department sync (Microsoft Entra ID only) | Standard OIDC identity claims. With department sync on, inbound only: each directory user's email addresses, sign-in name and department, read through Microsoft Graph. Only the departments of people Command Centre already knows are stored; the rest is discarded | Your organisation, optional |
 
 High-priority alerts sent to Slack carry the alert's title, its explanation (up to 500 characters), type, category, severity and time; the evidence field stored with an alert is removed before sending. For an intent alert, the explanation is the model's reasoning about the prompt and can quote it. The Weekly Digest carries organisation-level figures, per-department counts, use case titles (with the owner identifier for any that have gone quiet), the title and severity of the most significant open alert, and the first 400 characters of the latest Developer Pulse briefing. Weekly Highlights carry names only if an administrator turns on the option to credit people, and only after the administrator has reviewed the draft.
 

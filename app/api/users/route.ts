@@ -29,6 +29,8 @@ import { getTypedClient } from '@/lib/db/client';
 import { schema } from '@/lib/db/schema';
 import { requireAdmin, getAdminSession, canAccessCorePlatform } from '@/lib/auth/admin-auth';
 import { logAccess } from '@/lib/audit/log';
+import { recordManualDepartment } from '@/lib/directory/department-sync';
+import { tidyDepartment } from '@/lib/directory/department-rules';
 
 // Disable Next.js route caching — all API routes read live data from the database
 export const dynamic = 'force-dynamic';
@@ -146,6 +148,13 @@ export async function PUT(request: NextRequest) {
     .update(schema.users)
     .set({ display_name: display_name ?? null, department: department ?? null })
     .where(eq(schema.users.id, id));
+
+  // A department changed by hand is kept by department sync until an admin
+  // returns it to the directory. This form saves the name and department
+  // together, so only a real change of department counts.
+  if (tidyDepartment(user.department) !== tidyDepartment(department ?? null)) {
+    await recordManualDepartment({ userIds: [id], from: user.department ?? null, to: department ?? null });
+  }
 
   return NextResponse.json({ ok: true });
 }
