@@ -473,6 +473,8 @@ export async function deleteAdminUser(id: string): Promise<boolean> {
   // cascaded away with the account — clear it explicitly. Done BEFORE the
   // account delete so a failure here can't leave an orphan row behind.
   await db.delete(schema.totpConsumedSteps).where(eq(schema.totpConsumedSteps.user_id, id));
+  // The account's department changes (migration 0049) carry no FK either.
+  await db.delete(schema.departmentHistory).where(eq(schema.departmentHistory.admin_user_id, id));
   const result = await db.delete(schema.adminUsers).where(eq(schema.adminUsers.id, id));
   return rowsAffected(result) > 0;
 }

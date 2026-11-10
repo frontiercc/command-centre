@@ -74,6 +74,9 @@ export const adminUsers = pgTable('admin_users', {
     failed_login_count: integer().notNull().default(0),
     locked_until: integer(),
     sso_enabled: integer().notNull().default(0),
+    /** 'directory' | 'manual' | NULL (migration 0049). */
+    department_source: text(),
+    department_synced_at: bigint({ mode: 'number' }),
 }, (t) => [
     foreignKey({ columns: [t.linked_cowork_user_id], foreignColumns: [users.id], name: 'admin_users_linked_cowork_user_id_fk' }).onDelete('set null'),
     unique('admin_users_email_uq').on(t.email),
@@ -1272,6 +1275,21 @@ export const otelIdentityConflicts = pgTable('otel_identity_conflicts', {
     index('idx_otel_identity_conflicts_status').on(t.status),
 ]);
 
+/** Every department change, directory or manual; migration 0049. */
+export const departmentHistory = pgTable('department_history', {
+    id: text().primaryKey(),
+    user_id: text(),
+    admin_user_id: text(),
+    from_department: text(),
+    to_department: text(),
+    source: text().notNull(),
+    is_move: integer().notNull().default(0),
+    changed_at: bigint({ mode: 'number' }).notNull(),
+}, (t) => [
+    index('idx_department_history_user').on(t.user_id, t.changed_at),
+    index('idx_department_history_admin_user').on(t.admin_user_id, t.changed_at),
+]);
+
 /** The person each OpenAI account (export actor.user_id) resolved to; migration 0048. */
 export const openaiIdentityUsers = pgTable('openai_identity_users', {
     openai_user_id: text().primaryKey(),
@@ -1362,6 +1380,9 @@ export const users = pgTable('users', {
     account_uuid: text(),
     deactivated_at: bigint({ mode: 'number' }),
     deactivation_reason: text(),
+    /** 'directory' | 'manual' | NULL (migration 0049). */
+    department_source: text(),
+    department_synced_at: bigint({ mode: 'number' }),
 }, (t) => [
     index('idx_users_deactivated').on(t.deactivated_at),
     index('idx_users_department').on(t.department),
@@ -1434,6 +1455,7 @@ export const pgSchema = {
   jobRuns,
   otelIdentityConflicts,
   openaiIdentityUsers,
+  departmentHistory,
   totpConsumedSteps,
   totpRecoveryCodes,
   useCaseActivationWeeks,

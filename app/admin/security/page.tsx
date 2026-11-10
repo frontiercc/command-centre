@@ -12,6 +12,7 @@ import SecretRemoveButton from '@/components/admin/SecretRemoveButton';
 import { MIN_PASSWORD_LENGTH, PASSWORD_TOO_SHORT } from '@/lib/auth/password-policy';
 import { PageBody, Panel, Pill, Tag, Muted, T, B, cx } from '@/components/precision/ui';
 import { ToggleRow } from '@/components/admin/precision-admin';
+import DepartmentSyncPanel from '@/components/admin/DepartmentSyncPanel';
 
 type TestStatus = 'idle' | 'testing' | 'success' | 'error';
 
@@ -1763,6 +1764,9 @@ export default function SecurityPage() {
             )}
           </div>
         </Panel>
+
+        {/* Department sync: follows the single sign-on provider above (Microsoft Entra ID today) */}
+        <DepartmentSyncPanel />
 
         {/* Email / SMTP */}
         <Panel title="Email (SMTP)" flush>

@@ -1935,6 +1935,8 @@ export async function deleteUserData(userId: string): Promise<{
       async (h) => { await h.delete(schema.otelIdentityAliases).where(eq(schema.otelIdentityAliases.user_id, userId)); },
       // The OpenAI accounts this person resolved to (migration 0048).
       async (h) => { await h.delete(schema.openaiIdentityUsers).where(eq(schema.openaiIdentityUsers.user_id, userId)); },
+      // Their department changes (migration 0049).
+      async (h) => { await h.delete(schema.departmentHistory).where(eq(schema.departmentHistory.user_id, userId)); },
       async (h) => { if (userRows[0].email) await h.delete(schema.otelIdentityAliases).where(eq(schema.otelIdentityAliases.email, String(userRows[0].email).toLowerCase())); },
     ];
     const preResult = await savepointEach(tx, preOps, async (h, op) => { await op(h); });

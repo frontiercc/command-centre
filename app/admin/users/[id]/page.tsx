@@ -6,6 +6,7 @@
 import { useEffect, useState } from 'react';
 import { useParams } from 'next/navigation';
 import TopBar from '@/components/layout/TopBar';
+import PersonDepartmentSync from '@/components/admin/PersonDepartmentSync';
 import LoadingSpinner from '@/components/shared/LoadingSpinner';
 import { useToast } from '@/components/shared/ToastProvider';
 import { PageBody, Panel, Strip, Figure, Pill, Dot, SEVERITY_COLOR, Notice, Empty, Muted, SubHead, T, B, cx } from '@/components/precision/ui';
@@ -80,6 +81,8 @@ export default function UserDetailPage() {
   const { showToast } = useToast();
   const [deleting, setDeleting] = useState(false);
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
+  /** Bumped after a department save, so the Department source panel reloads. */
+  const [deptVersion, setDeptVersion] = useState(0);
 
   useEffect(() => {
     fetch(`/api/users?id=${userId}`)
@@ -125,6 +128,7 @@ export default function UserDetailPage() {
       });
       if (res.ok) {
         setUser(prev => prev ? { ...prev, display_name: alias || null, department: department || null } : prev);
+        setDeptVersion(v => v + 1);
         // A newly typed department becomes selectable immediately, without a
         // reload — it is now a real department as far as the rest of the app
         // is concerned.
@@ -293,6 +297,9 @@ export default function UserDetailPage() {
             </dl>
           )}
         </Panel>
+
+        {/* Department sync: where the department came from, and its changes */}
+        <PersonDepartmentSync userId={userId} version={deptVersion} />
 
         {/* GDPR Actions */}
         <div className="flex flex-wrap gap-2">

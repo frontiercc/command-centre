@@ -241,6 +241,8 @@ export async function POST(request: NextRequest) {
     'openaiBackfillDays',
     'openaiSyncPaused',
     'openaiShown',
+    'departmentSyncEnabled',
+    'departmentSyncMap',
   ]);
 
   const values: Partial<Record<keyof AppConfig, string>> = {};

@@ -336,6 +336,14 @@ export interface AppConfig {
   openaiSyncCursors: string;             // job-written (JSON: event type → last file end_time)
   openaiLastSyncAt: string;              // job-written (epoch seconds)
   openaiLastSyncStats: string;           // job-written (JSON)
+  // Department sync from Microsoft Entra ID (1.3.0): reads each person's
+  // department at sign-in and in a daily lookup. Dormant until switched on and
+  // the first-run preview is applied.
+  departmentSyncEnabled: string;         // 'true' turns it on; default 'false'
+  departmentSyncMap: string;             // JSON object: directory name → Command Centre department; default '{}'
+  departmentSyncAppliedAt: string;       // set by Apply on the first-run preview (epoch seconds); '' = not applied
+  departmentSyncLastRun: string;         // job-written (epoch seconds)
+  departmentSyncLastStats: string;       // job-written (JSON)
   // Weekly Highlights (dormant) — model used by lib/highlights/compose.ts's
   // single LLM call. Registered here so compose.ts type-checks.
   highlightsModel: string;
@@ -568,6 +576,11 @@ export const CONFIG_KEYS: Record<keyof AppConfig, string> = {
   openaiSyncCursors: 'openai_sync_cursors',
   openaiLastSyncAt: 'openai_last_sync_at',
   openaiLastSyncStats: 'openai_last_sync_stats',
+  departmentSyncEnabled: 'department_sync_enabled',
+  departmentSyncMap: 'department_sync_map',
+  departmentSyncAppliedAt: 'department_sync_applied_at',
+  departmentSyncLastRun: 'department_sync_last_run',
+  departmentSyncLastStats: 'department_sync_last_stats',
   highlightsModel: 'highlights_model',
   highlightsEnabled: 'highlights_enabled',
   highlightsIncludeNames: 'highlights_include_names',
@@ -978,6 +991,11 @@ export async function getAllConfig(): Promise<AppConfig> {
     openaiSyncCursors: resolve('openaiSyncCursors'),
     openaiLastSyncAt: resolve('openaiLastSyncAt'),
     openaiLastSyncStats: resolve('openaiLastSyncStats'),
+    departmentSyncEnabled: resolve('departmentSyncEnabled', 'false'),
+    departmentSyncMap: resolve('departmentSyncMap', '{}'),
+    departmentSyncAppliedAt: resolve('departmentSyncAppliedAt'),
+    departmentSyncLastRun: resolve('departmentSyncLastRun'),
+    departmentSyncLastStats: resolve('departmentSyncLastStats'),
     highlightsModel: resolve('highlightsModel'),
     highlightsEnabled: resolve('highlightsEnabled', 'false'),
     highlightsIncludeNames: resolve('highlightsIncludeNames', 'false'),
