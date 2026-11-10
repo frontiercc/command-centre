@@ -138,8 +138,8 @@ function GroupRow({ lifecycle, count, colSpan }: { lifecycle: string; count: num
 }
 
 function BetsPanel({ bets, minutesPerSession }: { bets: GovernanceBet[]; minutesPerSession: number }) {
-  // The per-product lines show when the work was done in more than one product; otherwise the single figures say it all.
-  const split = (bet: GovernanceBet) => productsWithSessions(bet.measured.productSessions).length > 1;
+  // The per-product lines say which products did the work, so Claude Code and Codex work is visible.
+  const split = (bet: GovernanceBet) => productsWithSessions(bet.measured.productSessions).length > 0;
   const groups = LIFECYCLE_ORDER
     .map(lifecycle => ({ lifecycle, bets: bets.filter(b => b.lifecycle === lifecycle) }))
     .filter(g => g.bets.length > 0);
