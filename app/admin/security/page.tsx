@@ -201,6 +201,7 @@ export default function SecurityPage() {
   const [ssoProviderLabel, setSsoProviderLabel] = useState('SSO');
   const [ssoRedirectBaseUrl, setSsoRedirectBaseUrl] = useState('');
   const [savingSso, setSavingSso] = useState(false);
+  const [ssoSaveCount, setSsoSaveCount] = useState(0);
   const [ssoTestStatus, setSsoTestStatus] = useState<TestStatus>('idle');
   const [ssoTestMessage, setSsoTestMessage] = useState('');
 
@@ -561,6 +562,7 @@ export default function SecurityPage() {
       });
       if (res.ok) {
         showToast('SSO settings saved', 'success');
+        setSsoSaveCount(n => n + 1);
       } else {
         const data = await res.json();
         showToast(data.error || 'Failed to save SSO settings', 'error');
@@ -1766,7 +1768,7 @@ export default function SecurityPage() {
         </Panel>
 
         {/* Department sync: follows the single sign-on provider above (Microsoft Entra ID today) */}
-        <DepartmentSyncPanel />
+        <DepartmentSyncPanel reloadKey={ssoSaveCount} />
 
         {/* Email / SMTP */}
         <Panel title="Email (SMTP)" flush>

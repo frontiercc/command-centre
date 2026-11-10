@@ -57,7 +57,8 @@ function summary(s: Stats, label: string): string {
   return `${parts.join('; ')}.`;
 }
 
-export default function DepartmentSyncPanel() {
+/** reloadKey: bumped by the page when the single sign-on settings are saved, so the provider shown here is current. */
+export default function DepartmentSyncPanel({ reloadKey = 0 }: { reloadKey?: number }) {
   const { showToast } = useToast();
   const [status, setStatus] = useState<Status | null>(null);
   const [loadError, setLoadError] = useState(false);
@@ -78,7 +79,7 @@ export default function DepartmentSyncPanel() {
     }
   }, []);
 
-  useEffect(() => { void load(); }, [load]);
+  useEffect(() => { void load(); }, [load, reloadKey]);
 
   const saveConfig = async (values: Record<string, string>): Promise<boolean> => {
     const res = await fetch('/api/config', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(values) });
