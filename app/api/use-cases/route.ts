@@ -9,7 +9,7 @@ import { eq } from 'drizzle-orm';
 import { getAllConfig } from '@/lib/config';
 import { getAdminSession, canAccessPulseAdmin } from '@/lib/auth/admin-auth';
 import { createUseCase, listUseCases } from '@/lib/usecases/queries';
-import { getUseCasePlatformSessions } from '@/lib/usecases/platform-sessions';
+import { getUseCasePlatformSessions, getUseCaseProductSessions } from '@/lib/usecases/platform-sessions';
 import { openaiShown } from '@/lib/sources/openai-visibility';
 import { getTypedClient } from '@/lib/db/client';
 import { schema } from '@/lib/db/schema';
@@ -40,10 +40,16 @@ export async function GET(request: NextRequest) {
   // Sessions per vendor over the last 13 completed weeks, for the register's
   // Claude / OpenAI column (lib/usecases/platform-sessions.ts).
   const shown = await openaiShown();
-  const platforms = await getUseCasePlatformSessions(Math.floor(Date.now() / 1000), { openaiShown: shown });
+  // The same sessions per product (Claude Cowork, Claude Code, ChatGPT, Codex), which the column shows.
+  const nowS = Math.floor(Date.now() / 1000);
+  const [platforms, products] = await Promise.all([
+    getUseCasePlatformSessions(nowS, { openaiShown: shown }),
+    getUseCaseProductSessions(nowS, { openaiShown: shown }),
+  ]);
   const res = NextResponse.json(rows.map(uc => ({
     ...uc,
     platformSessions: platforms.get(uc.id) ?? { claude: 0, openai: shown ? 0 : null },
+    productSessions: products.get(uc.id) ?? { cowork: 0, code: 0, chatgpt: shown ? 0 : null, codex: shown ? 0 : null },
   })));
 
   // Surface the viewer's linked cowork user id via a response header (not the

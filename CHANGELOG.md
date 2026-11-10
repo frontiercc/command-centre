@@ -12,7 +12,7 @@
 - Sample data includes thirteen weeks of ChatGPT and Codex activity.
 - A stand-in for OpenAI's Compliance API (`scripts/openai-mock`) for building and testing the sync without a ChatGPT Enterprise workspace.
 - GitHub commits are matched to the tool that made them. A commit counts as made with Claude Code or Codex when its author is a Command Centre person whose Claude Code or Codex activity recorded a commit within 15 minutes of it; commit messages are never read. Shipping Alignment compares each tool with its own GitHub commits, and each person's repository count and the Codex view's codebase reach follow the same matching.
-- The use cases register shows each use case's matched sessions in the last 13 weeks by vendor ("Claude 12 · ChatGPT and Codex 4"), and Use Case Governance shows sessions and measured hours by vendor. Each department and cross-department suggestion says how many of its sessions came from Claude, ChatGPT and Codex.
+- The use cases register shows each use case's matched sessions in the last 13 weeks for each product that did the work (Claude Cowork, Claude Code, ChatGPT and Codex), and Use Case Governance shows sessions and measured hours by vendor. Each department and cross-department suggestion says how many of its sessions came from Claude, ChatGPT and Codex.
 - Identity conflicts catch one OpenAI account arriving under two email addresses, beside Claude's installation conflicts, with the same merge and undo.
 - Anomaly detection runs once a day while a Claude API key is set and at least one of its alert types is on, takes the acceptable use policy into account, and sees Codex turns and tokens and ChatGPT replies per person (no prompt text).
 

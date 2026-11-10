@@ -14,7 +14,6 @@ import ProcessCanvasCard from '@/components/usecases/ProcessCanvasCard';
 import type { ProcessCanvas } from '@/lib/usecases/suggestion-store';
 import { groupDeptBoxes, surfaceLabels } from '@/lib/usecases/dept-boxes';
 import { useConnectedProducts } from '@/components/shared/VendorSwitch';
-import { isOpenAiOnly } from '@/lib/sources/connected-shared';
 import { PageBody, Toolbar, Panel, PanelFoot, SubHead, T, Tag, Pill, B, Notice, Empty, cx } from '@/components/precision/ui';
 
 interface UseCase {
@@ -31,7 +30,11 @@ interface UseCase {
   strategic: number;
   /** Sessions per vendor, last 13 completed weeks; openai null when ChatGPT and Codex are hidden. */
   platformSessions?: { claude: number; openai: number | null };
+  /** The same sessions per product, which the register column shows. */
+  productSessions?: ProductSessions;
 }
+
+interface ProductSessions { cowork: number; code: number; chatgpt: number | null; codex: number | null }
 
 interface SuggestionDraft {
   id: string;
@@ -77,17 +80,23 @@ const LIFECYCLE_DOT: Record<LifecycleTone, string> = {
 const LIFECYCLE_FACETS: Array<UseCase['lifecycle']> = ['adopted', 'piloting', 'at_risk', 'not_seen'];
 
 /**
- * "Claude 12 · ChatGPT and Codex 4": a use case's matched sessions by vendor. The
- * ChatGPT and Codex part shows only once OpenAI is connected and shown, and
- * Claude is left out on a hub where only OpenAI is connected.
+ * "Claude Cowork 40", "Claude Code 21", "Codex 13", one per line: a use
+ * case's matched sessions in the last 13 weeks, by product, listing only products with
+ * sessions. ChatGPT and Codex count only once OpenAI is connected and shown;
+ * a use case with no sessions reads 0.
  */
-function PlatformCell({ p, openAiOnly, showOpenAi }: { p?: { claude: number; openai: number | null }; openAiOnly: boolean; showOpenAi: boolean }) {
+function PlatformCell({ p, showOpenAi }: { p?: ProductSessions; showOpenAi: boolean }) {
   if (!p) return <span className="text-[#8F8F8F]">—</span>;
-  const parts: string[] = [];
-  if (!openAiOnly) parts.push(`Claude ${p.claude}`);
-  if (showOpenAi && p.openai !== null) parts.push(`ChatGPT and Codex ${p.openai}`);
-  if (parts.length === 0) return <span className="text-[#8F8F8F]">—</span>;
-  return <span className="text-[#333333]">{parts.join(' · ')}</span>;
+  const all: Array<[string, number | null]> = [
+    ['Claude Cowork', p.cowork],
+    ['Claude Code', p.code],
+    ['ChatGPT', showOpenAi ? p.chatgpt : null],
+    ['Codex', showOpenAi ? p.codex : null],
+  ];
+  const parts = all.filter((x): x is [string, number] => x[1] !== null && x[1] > 0).map(([label, n]) => `${label} ${n}`);
+  if (parts.length === 0) return <span className="text-[#8F8F8F]">0</span>;
+  // One product per line, so the column stays narrow however many products did the work.
+  return <span className="flex flex-col text-[#333333]">{parts.map(t => <span key={t} className="whitespace-nowrap">{t}</span>)}</span>;
 }
 
 export default function UseCasesRegisterPage() {
@@ -220,7 +229,6 @@ export default function UseCasesRegisterPage() {
 
   const visibleSuggestions = suggestions ?? [];
   const connected = useConnectedProducts();
-  const openAiOnly = isOpenAiOnly(connected);
 
   // One box per department; Work and Code suggestions are lists inside it.
   const { deptBoxes, orgSuggestions } = useMemo(() => {
@@ -445,7 +453,7 @@ export default function UseCasesRegisterPage() {
                             <p className="m-0 mt-0.5 text-[#666666] truncate" title={uc.description}>{uc.description}</p>
                           )}
                         </td>
-                        <td className={cx(T.td, 'text-[13px] tabular-nums')}><PlatformCell p={uc.platformSessions} openAiOnly={openAiOnly} showOpenAi={!!connected?.openai} /></td>
+                        <td className={cx(T.td, 'text-[13px] tabular-nums')}><PlatformCell p={uc.productSessions} showOpenAi={!!connected?.openai} /></td>
                         <td className={T.td}>{pill ? <Pill tone={pill.tone}>{pill.label}</Pill> : <span className="text-[#8F8F8F]">—</span>}</td>
                         <td className={cx(T.tdMute, 'text-[13px] truncate')} title={uc.departments.join(', ')}>
                           {uc.departments.length > 0 ? uc.departments.join(', ') : '—'}
