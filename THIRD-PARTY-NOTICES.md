@@ -2,7 +2,7 @@
 
 Frontier Command Centre uses the open-source packages below when it runs. Development-only tools are not listed. This file is generated from package-lock.json and the installed packages by `npm run notices`, and CI checks it is current. For each package it gives the version, licence and source, the copyright lines from the package's licence file and, where the package ships one, its NOTICE file. The text of each licence follows the list.
 
-455 packages:
+456 packages:
 
 | Licence | Packages |
 |---|---|
@@ -10,7 +10,7 @@ Frontier Command Centre uses the open-source packages below when it runs. Develo
 | Apache-2.0 | 120 |
 | ISC | 25 |
 | LGPL-3.0-or-later | 10 |
-| BlueOak-1.0.0 | 5 |
+| BlueOak-1.0.0 | 6 |
 | BSD-2-Clause | 4 |
 | BSD-3-Clause | 4 |
 | Apache-2.0 AND LGPL-3.0-or-later | 3 |
@@ -698,6 +698,12 @@ Installed on some machines only; licence taken from package-lock.json.
 Licence: Apache-2.0 AND LGPL-3.0-or-later.
 
 Installed on some machines only; licence taken from package-lock.json.
+
+### @isaacs/nonrecursive-glob-match 1.1.0
+
+Licence: BlueOak-1.0.0.
+
+- copyright in it.
 
 ### @next/env 15.5.28
 
@@ -1931,7 +1937,7 @@ Licence: ISC. Source: https://github.com/stefanpenner/get-caller-file.
 
 - Copyright 2018 Stefan Penner
 
-### glob 13.0.6
+### glob 14.0.4
 
 Licence: BlueOak-1.0.0. Source: git@github.com:isaacs/node-glob.
 
@@ -2402,9 +2408,9 @@ Licence: MIT. Source: https://github.com/micromark/micromark/tree/main/packages/
 
 - Copyright (c) Titus Wormer <tituswormer@gmail.com>
 
-### minimatch 10.2.6
+### minimatch 11.0.6
 
-Licence: BlueOak-1.0.0. Source: git@github.com:isaacs/minimatch.
+Licence: BlueOak-1.0.0. Source: https://github.com/isaacs/minimatch.
 
 - copyright in it.
 
@@ -2440,7 +2446,7 @@ Licence: MIT. Source: https://github.com/vercel/next.js.
 
 - Copyright (c) 2025 Vercel, Inc.
 
-### nodemailer 10.0.16
+### nodemailer 10.1.4
 
 Licence: MIT-0. Source: https://github.com/nodemailer/nodemailer.
 
@@ -2512,7 +2518,7 @@ Licence: MIT. Source: https://github.com/NaturalIntelligence/path-expression-mat
 
 - Copyright (c) 2024
 
-### path-scurry 2.0.2
+### path-scurry 3.0.0
 
 Licence: BlueOak-1.0.0. Source: https://github.com/isaacs/path-scurry.
 
@@ -4065,17 +4071,9 @@ Apache License
 
 ### BlueOak-1.0.0
 
-As included with glob@13.0.6.
+As included with @isaacs/nonrecursive-glob-match@1.1.0.
 
 ~~~text
-All packages under `src/` are licensed according to the terms in
-their respective `LICENSE` or `LICENSE.md` files.
-
-The remainder of this project is licensed under the Blue Oak
-Model License, as follows:
-
------
-
 # Blue Oak Model License
 
 Version 1.0.0
@@ -5508,7 +5506,7 @@ THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR IMPLI
 
 ### MIT-0
 
-As included with nodemailer@10.0.16.
+As included with nodemailer@10.1.4.
 
 ~~~text
 Permission is hereby granted, free of charge, to any person obtaining a copy
