@@ -84,7 +84,7 @@ describe('decideDepartment', () => {
 
 describe('normaliseEmails', () => {
   it('lower-cases, strips smtp: prefixes, drops non-addresses and duplicates', () => {
-    expect(normaliseEmails(['Declan@Example.com', 'SMTP:declan@example.com', 'smtp:d.g@example.co.uk', null, 'not-an-address']))
-      .toEqual(['declan@example.com', 'd.g@example.co.uk']);
+    expect(normaliseEmails(['Dana@Example.com', 'SMTP:dana@example.com', 'smtp:d.p@example.co.uk', null, 'not-an-address']))
+      .toEqual(['dana@example.com', 'd.p@example.co.uk']);
   });
 });

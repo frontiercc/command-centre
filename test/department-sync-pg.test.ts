@@ -29,8 +29,8 @@ function fakeGraph(opts: { users?: Array<Record<string, unknown>>; me?: Record<s
 
 const DIRECTORY = [
   { mail: 'lee@example.com', department: 'engineering ' },
-  // Declan's email in the directory differs from his sign-in; the proxy address matches.
-  { mail: 'declan@other.example.com', userPrincipalName: 'dg@example.onmicrosoft.com', proxyAddresses: ['smtp:declan@example.com'], department: 'Operations' },
+  // Dana's email in the directory differs from their sign-in; the proxy address matches.
+  { mail: 'dana@other.example.com', userPrincipalName: 'dp@example.onmicrosoft.com', proxyAddresses: ['smtp:dana@example.com'], department: 'Operations' },
   { mail: 'mani@example.com', department: 'Finance' },
   { mail: 'empty@example.com', department: '' },
   { mail: 'other@example.com', department: 'Engineering' },
@@ -42,7 +42,7 @@ async function seed() {
     `INSERT INTO users (id, email, display_name, source, department, department_source, first_seen_at, last_seen_at) VALUES (?, ?, ?, 'otel', ?, ?, ?, ?)`,
     [id, email, id, dept, source, NOW, NOW]);
   await user('u-lee', 'lee@example.com', null);
-  await user('u-dec', 'declan@example.com', 'Ops');
+  await user('u-dana', 'dana@example.com', 'Ops');
   await user('u-mani', 'mani@example.com', 'Legal', 'manual');
   await user('u-ghost', 'ghost@example.com', 'Sales');
   await user('u-empty', 'empty@example.com', 'HR');
@@ -51,7 +51,7 @@ async function seed() {
     `INSERT INTO admin_users (id, email, password_hash, role, department, linked_cowork_user_id, sso_enabled, department_source) VALUES (?, ?, 'x', ?, ?, ?, 1, ?)`,
     [id, email, role, dept, linked, source]);
   await admin('a-lee', 'lee@example.com', 'admin', null, 'u-lee');
-  await admin('a-dec', 'declan@example.com', 'pulse', 'Ops', null);
+  await admin('a-dana', 'dana@example.com', 'pulse', 'Ops', null);
   await admin('a-mani', 'mani@example.com', 'viewer', 'Legal', 'u-mani', 'manual');
   await saveConfig({
     ssoIssuerUrl: `https://login.microsoftonline.com/${TENANT}/v2.0`,
@@ -89,8 +89,8 @@ describe('daily lookup', () => {
     expect((await dept('users', 'u-lee'))?.department).toBe('Engineering');
     expect((await dept('admin_users', 'a-lee'))).toMatchObject({ department: 'Engineering', department_source: 'directory' });
     // Matched on a proxy address; both records updated; a new department.
-    expect((await dept('users', 'u-dec'))).toMatchObject({ department: 'Operations', department_source: 'directory' });
-    expect((await dept('admin_users', 'a-dec'))?.department).toBe('Operations');
+    expect((await dept('users', 'u-dana'))).toMatchObject({ department: 'Operations', department_source: 'directory' });
+    expect((await dept('admin_users', 'a-dana'))?.department).toBe('Operations');
     // Manual kept; empty directory value changes nothing; not found left alone.
     expect((await dept('users', 'u-mani'))).toMatchObject({ department: 'Legal', department_source: 'manual' });
     expect((await dept('users', 'u-empty'))?.department).toBe('HR');
@@ -103,7 +103,7 @@ describe('daily lookup', () => {
 
   it('never changes a role or single sign-on access', async () => {
     await sync.runDepartmentSync('run_now', fakeGraph({ users: DIRECTORY }));
-    expect(await dept('admin_users', 'a-dec')).toMatchObject({ role: 'pulse', sso_enabled: 1 });
+    expect(await dept('admin_users', 'a-dana')).toMatchObject({ role: 'pulse', sso_enabled: 1 });
     expect(await dept('admin_users', 'a-lee')).toMatchObject({ role: 'admin', sso_enabled: 1 });
   });
 
@@ -112,14 +112,14 @@ describe('daily lookup', () => {
     const first = await sql.all<{ user_id: string; from_department: string | null; to_department: string; is_move: number; source: string }>(
       `SELECT user_id, from_department, to_department, is_move, source FROM department_history ORDER BY user_id`);
     expect(first).toEqual([
-      { user_id: 'u-dec', from_department: 'Ops', to_department: 'Operations', is_move: 0, source: 'directory' },
+      { user_id: 'u-dana', from_department: 'Ops', to_department: 'Operations', is_move: 0, source: 'directory' },
       { user_id: 'u-lee', from_department: null, to_department: 'Engineering', is_move: 0, source: 'directory' },
     ]);
 
-    const moved = DIRECTORY.map(u => (u.mail === 'declan@other.example.com' ? { ...u, department: 'Finance' } : u));
+    const moved = DIRECTORY.map(u => (u.mail === 'dana@other.example.com' ? { ...u, department: 'Finance' } : u));
     await sync.runDepartmentSync('run_now', fakeGraph({ users: moved }));
     const move = await sql.get<{ from_department: string; to_department: string; is_move: number }>(
-      `SELECT from_department, to_department, is_move FROM department_history WHERE user_id = 'u-dec' ORDER BY changed_at DESC, is_move DESC LIMIT 1`);
+      `SELECT from_department, to_department, is_move FROM department_history WHERE user_id = 'u-dana' ORDER BY changed_at DESC, is_move DESC LIMIT 1`);
     expect(move).toEqual({ from_department: 'Operations', to_department: 'Finance', is_move: 1 });
   });
 
@@ -135,14 +135,14 @@ describe('daily lookup', () => {
   it('uses the name map', async () => {
     await saveConfig({ departmentSyncMap: JSON.stringify({ operations: 'Ops' }) });
     const stats = await sync.runDepartmentSync('run_now', fakeGraph({ users: DIRECTORY }));
-    expect((await dept('users', 'u-dec'))?.department).toBe('Ops');
+    expect((await dept('users', 'u-dana'))?.department).toBe('Ops');
     expect(stats.newNames).toEqual([]);
   });
 
   it('treats a missing User.Read.All as a note, not a failure, and changes nothing', async () => {
     const stats = await sync.runDepartmentSync('daily', fakeGraph({ listStatus: 403 }));
     expect(stats.error?.kind).toBe('permission');
-    expect((await dept('users', 'u-dec'))?.department).toBe('Ops');
+    expect((await dept('users', 'u-dana'))?.department).toBe('Ops');
   });
 
   it('throws on any other failure, with fixed text in the stats and the detail recorded', async () => {
@@ -150,7 +150,7 @@ describe('daily lookup', () => {
     const stats = JSON.parse((await sql.get<{ value: string }>(`SELECT value FROM config WHERE key = 'department_sync_last_stats'`))!.value);
     expect(stats.error).toEqual({ kind: 'failed', message: "Couldn't reach Microsoft Entra ID. The detail is in System health." });
     expect(await sql.get(`SELECT 1 FROM error_events WHERE source = 'department-sync'`)).toBeTruthy();
-    expect((await dept('users', 'u-dec'))?.department).toBe('Ops');
+    expect((await dept('users', 'u-dana'))?.department).toBe('Ops');
   });
 });
 
@@ -168,7 +168,7 @@ describe('sign-in', () => {
     await sync.syncDepartmentAtSignIn('lee@example.com', 'user-token', fakeGraph({ me: { mail: 'lee@example.com', department: 'Data' } }));
     expect((await dept('admin_users', 'a-lee'))?.department).toBe('Data');
     expect((await dept('users', 'u-lee'))?.department).toBe('Data');
-    expect((await dept('users', 'u-dec'))?.department).toBe('Ops');
+    expect((await dept('users', 'u-dana'))?.department).toBe('Ops');
   });
 
   it('does nothing until the first-run preview has been applied', async () => {
@@ -178,8 +178,8 @@ describe('sign-in', () => {
   });
 
   it('never throws: a failure keeps the department and is recorded', async () => {
-    await expect(sync.syncDepartmentAtSignIn('declan@example.com', 'user-token', fakeGraph({ fail: true }))).resolves.toBeUndefined();
-    expect((await dept('admin_users', 'a-dec'))?.department).toBe('Ops');
+    await expect(sync.syncDepartmentAtSignIn('dana@example.com', 'user-token', fakeGraph({ fail: true }))).resolves.toBeUndefined();
+    expect((await dept('admin_users', 'a-dana'))?.department).toBe('Ops');
     expect(await sql.get(`SELECT 1 FROM error_events WHERE source = 'department-sync'`)).toBeTruthy();
   });
 
@@ -191,16 +191,16 @@ describe('sign-in', () => {
 
 describe('manual departments', () => {
   it('marks a department set by hand and records the change; Return to directory hands it back', async () => {
-    await sync.recordManualDepartment({ adminUserId: 'a-dec', userIds: ['u-dec'], from: 'Ops', to: 'Sales' });
-    expect((await dept('admin_users', 'a-dec'))?.department_source).toBe('manual');
-    expect(await sql.get(`SELECT source, from_department, to_department FROM department_history WHERE admin_user_id = 'a-dec'`))
+    await sync.recordManualDepartment({ adminUserId: 'a-dana', userIds: ['u-dana'], from: 'Ops', to: 'Sales' });
+    expect((await dept('admin_users', 'a-dana'))?.department_source).toBe('manual');
+    expect(await sql.get(`SELECT source, from_department, to_department FROM department_history WHERE admin_user_id = 'a-dana'`))
       .toEqual({ source: 'manual', from_department: 'Ops', to_department: 'Sales' });
 
     await sync.runDepartmentSync('run_now', fakeGraph({ users: DIRECTORY }));
-    expect((await dept('users', 'u-dec'))?.department).toBe('Ops'); // untouched: manual
+    expect((await dept('users', 'u-dana'))?.department).toBe('Ops'); // untouched: manual
 
-    await sync.returnToDirectory({ adminUserId: 'a-dec', userIds: ['u-dec'] });
+    await sync.returnToDirectory({ adminUserId: 'a-dana', userIds: ['u-dana'] });
     await sync.runDepartmentSync('run_now', fakeGraph({ users: DIRECTORY }));
-    expect((await dept('users', 'u-dec'))?.department).toBe('Operations');
+    expect((await dept('users', 'u-dana'))?.department).toBe('Operations');
   });
 });

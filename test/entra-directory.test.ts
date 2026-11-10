@@ -34,14 +34,14 @@ describe('entraEndpoints', () => {
 describe('readSignedInEntra', () => {
   it('asks Graph for the department by name and returns every address', async () => {
     const fetchImpl = vi.fn(async () => jsonResponse(200, {
-      mail: 'Declan@Example.com', userPrincipalName: 'declan@example.onmicrosoft.com', otherMails: [], proxyAddresses: ['smtp:dg@example.com'], department: 'Operations',
+      mail: 'Dana@Example.com', userPrincipalName: 'dana@example.onmicrosoft.com', otherMails: [], proxyAddresses: ['smtp:dp@example.com'], department: 'Operations',
     }));
     const entry = await readSignedInEntra(ENDPOINTS, 'token', fetchImpl as unknown as typeof fetch);
     const [url, init] = fetchImpl.mock.calls[0] as unknown as [string, RequestInit];
     expect(url).toContain('https://graph.microsoft.com/v1.0/me?$select=');
     expect(url).toContain('department');
     expect((init.headers as Record<string, string>).Authorization).toBe('Bearer token');
-    expect(entry).toEqual({ emails: ['declan@example.com', 'declan@example.onmicrosoft.com', 'dg@example.com'], department: 'Operations' });
+    expect(entry).toEqual({ emails: ['dana@example.com', 'dana@example.onmicrosoft.com', 'dp@example.com'], department: 'Operations' });
   });
 
   it('gives a null department when the directory has none', async () => {
