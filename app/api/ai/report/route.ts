@@ -50,6 +50,11 @@ export async function POST(request: NextRequest) {
 
   try {
     const body = await request.json();
+    // The dates go into the model's instructions, so anything that is not a
+    // real calendar date is refused rather than passed on.
+    if ((body.period_start && !isIsoDate(body.period_start)) || (body.period_end && !isIsoDate(body.period_end))) {
+      return NextResponse.json({ error: 'period_start and period_end must be dates (YYYY-MM-DD)' }, { status: 400 });
+    }
     const periodStart = body.period_start || getDefaultPeriodStart();
     const periodEnd = body.period_end || new Date().toISOString().split('T')[0];
     const reportType = body.report_type || 'on-demand';
@@ -108,6 +113,12 @@ export async function POST(request: NextRequest) {
   } catch (err) {
     return errorResponse('Report', err, { message: 'The AI request failed. Details are in the server log.' });
   }
+}
+
+function isIsoDate(value: unknown): value is string {
+  if (typeof value !== 'string' || !/^\d{4}-\d{2}-\d{2}$/.test(value)) return false;
+  const d = new Date(`${value}T00:00:00Z`);
+  return !Number.isNaN(d.getTime()) && d.toISOString().slice(0, 10) === value;
 }
 
 function getDefaultPeriodStart(): string {
