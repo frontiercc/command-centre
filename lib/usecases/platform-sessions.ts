@@ -101,7 +101,6 @@ export async function getUseCaseProductSessions(
            ) AS cowork,
            COUNT(*) FILTER (
              WHERE s.session_id NOT LIKE 'chatgpt:%' AND s.session_id NOT LIKE 'codex:%'
-               AND NOT EXISTS (SELECT 1 FROM cowork_session_stats c WHERE c.session_id = s.session_id)
                AND EXISTS (SELECT 1 FROM code_session_stats d WHERE d.session_id = s.session_id)
            ) AS code,
            COUNT(*) FILTER (
@@ -121,6 +120,72 @@ export async function getUseCaseProductSessions(
       code: Number(r.code),
       chatgpt: opts.openaiShown ? Number(r.chatgpt) : null,
       codex: opts.openaiShown ? Number(r.codex) : null,
+    });
+  }
+  return out;
+}
+
+/** Measured hours per product; null = not measured (ChatGPT and Codex also null while hidden). */
+export interface ProductHours { cowork: number | null; code: number | null; chatgpt: number | null; codex: number | null }
+
+interface ProductHoursRow {
+  use_case_id: string;
+  cowork_n: number | string; cowork_s: number | string | null;
+  code_n: number | string; code_s: number | string | null;
+  chatgpt_n: number | string; chatgpt_s: number | string | null;
+  codex_n: number | string; codex_s: number | string | null;
+}
+
+/** getUseCasePlatformHours, per product rather than per vendor: same window, session rule and sums. */
+export async function getUseCaseProductHours(
+  nowS: number,
+  opts: { openaiShown: boolean },
+): Promise<Map<string, ProductHours>> {
+  const windowStarts = weekStarts(nowS - WEEK, WINDOW_WEEKS);
+  const client = await getTypedClient();
+  const res = await (client as unknown as { execute: (q: unknown) => Promise<{ rows: ProductHoursRow[] }> }).execute(sql`
+    WITH firsts AS (
+      SELECT use_case_id, session_id, MIN(week_start) AS first_week
+        FROM use_case_week_matches
+       WHERE session_id <> ''
+       GROUP BY use_case_id, session_id
+    ),
+    s AS (
+      SELECT use_case_id, session_id
+        FROM firsts
+       WHERE first_week IN (${sql.join(windowStarts.map(w => sql`${w}`), sql`, `)})
+    ),
+    t AS (
+      SELECT s.use_case_id, 'cowork' AS v, c.active_secs
+        FROM s JOIN cowork_session_stats c ON c.session_id = s.session_id
+       WHERE s.session_id NOT LIKE 'chatgpt:%' AND s.session_id NOT LIKE 'codex:%'
+      UNION ALL
+      SELECT s.use_case_id, 'code', d.active_secs
+        FROM s JOIN code_session_stats d ON d.session_id = s.session_id
+       WHERE s.session_id NOT LIKE 'chatgpt:%' AND s.session_id NOT LIKE 'codex:%'
+      UNION ALL
+      SELECT s.use_case_id, 'chatgpt', g.active_secs
+        FROM s JOIN chatgpt_session_time g ON g.session_id = s.session_id
+       WHERE s.session_id LIKE 'chatgpt:%'
+      UNION ALL
+      SELECT s.use_case_id, 'codex', d.active_secs
+        FROM s JOIN code_session_stats d ON d.session_id = s.session_id
+       WHERE s.session_id LIKE 'codex:%'
+    )
+    SELECT use_case_id,
+           COUNT(active_secs) FILTER (WHERE v = 'cowork') AS cowork_n, SUM(active_secs) FILTER (WHERE v = 'cowork') AS cowork_s,
+           COUNT(active_secs) FILTER (WHERE v = 'code') AS code_n, SUM(active_secs) FILTER (WHERE v = 'code') AS code_s,
+           COUNT(active_secs) FILTER (WHERE v = 'chatgpt') AS chatgpt_n, SUM(active_secs) FILTER (WHERE v = 'chatgpt') AS chatgpt_s,
+           COUNT(active_secs) FILTER (WHERE v = 'codex') AS codex_n, SUM(active_secs) FILTER (WHERE v = 'codex') AS codex_s
+      FROM t
+     GROUP BY use_case_id`);
+  const out = new Map<string, ProductHours>();
+  for (const r of res.rows) {
+    out.set(r.use_case_id, {
+      cowork: toHours(r.cowork_n, r.cowork_s),
+      code: toHours(r.code_n, r.code_s),
+      chatgpt: opts.openaiShown ? toHours(r.chatgpt_n, r.chatgpt_s) : null,
+      codex: opts.openaiShown ? toHours(r.codex_n, r.codex_s) : null,
     });
   }
   return out;

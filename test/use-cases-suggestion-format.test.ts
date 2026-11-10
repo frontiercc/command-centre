@@ -56,13 +56,15 @@ describe('formatSuggestionEvidenceLine', () => {
 
 describe('suggestion sessions by product', () => {
   it('reads the product from each session id, counting a repeated id once', () => {
-    expect(productsOfSessions(['chatgpt:a', 'ff-cw-1', 'codex:b', 'chatgpt:a', 'ff-code-2']))
-      .toEqual({ claude: 2, chatgpt: 1, codex: 1 });
+    expect(productsOfSessions(['chatgpt:a', 'ff-cw-1', 'codex:b', 'chatgpt:a', 'ff-code-2'], new Set(['ff-code-2'])))
+      .toEqual({ cowork: 1, code: 1, chatgpt: 1, codex: 1 });
+    // Without the Claude Code ids, every Claude session counts as Claude Cowork.
+    expect(productsOfSessions(['ff-cw-1', 'ff-code-2'])).toEqual({ cowork: 2, code: 0, chatgpt: 0, codex: 0 });
   });
   it('names each product with sessions, Claude first, and leaves out a product with none', () => {
-    expect(formatSuggestionProducts({ claude: 3, chatgpt: 2, codex: 0 })).toBe('Claude 3 sessions · ChatGPT 2 sessions');
-    expect(formatSuggestionProducts({ claude: 0, chatgpt: 1, codex: 0 })).toBe('ChatGPT 1 session');
-    expect(formatSuggestionProducts({ claude: 5, chatgpt: 0, codex: 0 })).toBe('Claude 5 sessions');
-    expect(formatSuggestionProducts({ claude: 1, chatgpt: 0, codex: 4 })).toBe('Claude 1 session · Codex 4 sessions');
+    expect(formatSuggestionProducts({ cowork: 3, code: 0, chatgpt: 2, codex: 0 })).toBe('Claude Cowork 3 sessions · ChatGPT 2 sessions');
+    expect(formatSuggestionProducts({ cowork: 0, code: 0, chatgpt: 1, codex: 0 })).toBe('ChatGPT 1 session');
+    expect(formatSuggestionProducts({ cowork: 5, code: 2, chatgpt: 0, codex: 0 })).toBe('Claude Cowork 5 sessions · Claude Code 2 sessions');
+    expect(formatSuggestionProducts({ cowork: 0, code: 1, chatgpt: 0, codex: 4 })).toBe('Claude Code 1 session · Codex 4 sessions');
   });
 });

@@ -136,7 +136,7 @@ describe('GET /api/use-cases/suggestions — department + canvas fields', () => 
     });
     const { GET } = await import('../app/api/use-cases/suggestions/route');
     const shown = (await (await GET(makeRequest('/api/use-cases/suggestions'))).json())[0];
-    expect(shown.products).toEqual({ claude: 2, chatgpt: 1, codex: 0 });
+    expect(shown.products).toEqual({ cowork: 2, code: 0, chatgpt: 1, codex: 0 });
 
     const { saveConfig } = await import('@/lib/config');
     await saveConfig({ openaiShown: 'false' });

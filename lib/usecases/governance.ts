@@ -21,6 +21,7 @@ import {
 import { getWindowDistinctUsers, type WeekActivity } from '@/lib/usecases/weeks';
 import {
   getUseCasePlatformSessions, getUseCasePlatformHours, type PlatformSessions, type PlatformHours,
+  getUseCaseProductSessions, getUseCaseProductHours, type ProductSessions, type ProductHours,
 } from '@/lib/usecases/platform-sessions';
 import { openaiShown } from '@/lib/sources/openai-visibility';
 
@@ -43,6 +44,9 @@ export interface GovernanceBet {
     platformSessions: PlatformSessions;
     /** Measured hours per vendor over the same sessions; null = not measured (openai also null while hidden). */
     platformHours: PlatformHours;
+    /** The same sessions and hours per product (Claude Cowork, Claude Code, ChatGPT, Codex), which the page shows. */
+    productSessions: ProductSessions;
+    productHours: ProductHours;
   };
   estimated: { hoursRecovered: number };
   series: Array<number | null>;
@@ -64,6 +68,8 @@ export interface GovernanceWorkflow {
   distinctUsers: number;
   /** Matched sessions per vendor, 13 completed weeks; openai null while ChatGPT and Codex are hidden. */
   platformSessions: PlatformSessions;
+  /** The same sessions per product, which the page shows. */
+  productSessions: ProductSessions;
 }
 
 export interface GovernanceRollup {
@@ -200,10 +206,16 @@ export async function buildGovernanceRollup(
   // Per-vendor split (Claude / OpenAI), same window and session rules as the
   // register column and the use case page's Workflow Impact panel.
   const shown = opts.openaiShown ?? await openaiShown();
-  const [platformSessions, platformHours] = await Promise.all([
+  const [platformSessions, platformHours, productSessions, productHours] = await Promise.all([
     getUseCasePlatformSessions(nowS, { openaiShown: shown }),
     getUseCasePlatformHours(nowS, { openaiShown: shown }),
+    getUseCaseProductSessions(nowS, { openaiShown: shown }),
+    getUseCaseProductHours(nowS, { openaiShown: shown }),
   ]);
+  const productSessionsFor = (id: string): ProductSessions =>
+    productSessions.get(id) ?? { cowork: 0, code: 0, chatgpt: shown ? 0 : null, codex: shown ? 0 : null };
+  const productHoursFor = (id: string): ProductHours =>
+    productHours.get(id) ?? { cowork: null, code: null, chatgpt: null, codex: null };
   const sessionsFor = (id: string): PlatformSessions =>
     platformSessions.get(id) ?? { claude: 0, openai: shown ? 0 : null };
   const hoursFor = (id: string): PlatformHours => platformHours.get(id) ?? { claude: null, openai: null };
@@ -229,7 +241,10 @@ export async function buildGovernanceRollup(
       lifecycle: uc.lifecycle,
       weeksInLifecycle,
       quietWeeks: trailingQuietWeeks(series),
-      measured: { distinctUsers, sessions, hours, platformSessions: sessionsFor(uc.id), platformHours: hoursFor(uc.id) },
+      measured: {
+        distinctUsers, sessions, hours, platformSessions: sessionsFor(uc.id), platformHours: hoursFor(uc.id),
+        productSessions: productSessionsFor(uc.id), productHours: productHoursFor(uc.id),
+      },
       estimated: { hoursRecovered },
       series,
     };
@@ -245,6 +260,7 @@ export async function buildGovernanceRollup(
     return {
       id: uc.id, title: uc.title, lifecycle: uc.lifecycle, series, measuredHours, distinctUsers,
       platformSessions: sessionsFor(uc.id),
+      productSessions: productSessionsFor(uc.id),
     };
   }));
 

@@ -305,7 +305,7 @@ For a confirmed use case with its own published skill, the Spread panel lists pe
 
 Each use case has a drill-in showing, over 13 completed weeks, measured hours on its matched sessions beside an estimate of hours saved (matched sessions multiplied by an administrator-set number of minutes saved per session), the skills, connectors and models it relies on in each product, each product's sessions and measured hours on their own line, and the tier mix. An administrator or manager can request a short Claude summary of these facts, checked against them before it is stored.
 
-The governance view is a read-only page for administrators, managers and viewers. The governance view shows lifecycle counts, the strategic bets grouped by lifecycle with a 13-week activity line, measured hours and estimated hours saved for each, with sessions and measured hours shown separately for Claude and for ChatGPT and Codex, an aggregate estimate of hours and value saved with its assumptions stated, and every other confirmed use case ranked by measured hours, with its sessions by vendor. A week without measurement appears as a gap.
+The governance view is a read-only page for administrators, managers and viewers. The governance view shows lifecycle counts, the strategic bets grouped by lifecycle with a 13-week activity line, measured hours and estimated hours saved for each, with sessions and measured hours shown for each product that did the work (Claude Cowork, Claude Code, ChatGPT and Codex), an aggregate estimate of hours and value saved with its assumptions stated, and every other confirmed use case ranked by measured hours, with its sessions by product. A week without measurement appears as a gap.
 
 ### Turning a use case into a skill
 

@@ -197,8 +197,12 @@ describe('governance rollup: sessions and hours by vendor', () => {
       expect(b.measured.platformSessions).toEqual({ claude: 2, openai: 2 });
       expect(b.measured.platformHours).toEqual({ claude: 1.5, openai: 3 });
       expect(b.measured.hours).toBe(4.5); // existing field unchanged
+      // The same sessions and hours per product, which the page shows.
+      expect(b.measured.productSessions).toEqual({ cowork: 1, code: 1, chatgpt: 1, codex: 1 });
+      expect(b.measured.productHours).toEqual({ cowork: 1, code: 0.5, chatgpt: 2, codex: 1 });
       const w = rollup.allWorkflows.find(x => x.title === 'Vendor workflow')!;
       expect(w.platformSessions).toEqual({ claude: 2, openai: 2 });
+      expect(w.productSessions).toEqual({ cowork: 1, code: 1, chatgpt: 1, codex: 1 });
       const q = rollup.allWorkflows.find(x => x.title === 'Quiet workflow')!;
       expect(q.platformSessions).toEqual({ claude: 0, openai: 0 });
       expect(quiet.id).toBeTruthy();
@@ -222,9 +226,12 @@ describe('governance rollup: sessions and hours by vendor', () => {
       const hidden = rollup.bets.find(b => b.title === 'Hidden bet')!;
       expect(hidden.measured.platformSessions).toEqual({ claude: 2, openai: null });
       expect(hidden.measured.platformHours).toEqual({ claude: 1.5, openai: null });
+      expect(hidden.measured.productSessions).toEqual({ cowork: 1, code: 1, chatgpt: null, codex: null });
+      expect(hidden.measured.productHours).toEqual({ cowork: 1, code: 0.5, chatgpt: null, codex: null });
       const n = rollup.bets.find(b => b.title === 'Null-time bet')!;
       expect(n.measured.platformSessions).toEqual({ claude: 1, openai: null });
       expect(n.measured.platformHours).toEqual({ claude: null, openai: null });
+      expect(n.measured.productHours).toEqual({ cowork: null, code: null, chatgpt: null, codex: null });
     } finally {
       await clearSessions();
     }
