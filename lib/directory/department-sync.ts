@@ -202,17 +202,22 @@ export async function applyDirectoryEntries(entries: DirectoryEntry[], opts: App
       continue;
     }
     stats.inDirectory += 1;
-    const resolved = resolver.resolve(entry.department);
+    const sources = sourcesOf(p);
+    // A kept-manual person is skipped before their directory name is read, so
+    // it never registers as a department that a later person then "matches".
+    const resolved = sources.includes('manual') ? null : resolver.resolve(entry.department);
+    const decision = decideDepartment({ current: currentDepartment(p), sources }, resolved);
+    if (decision.action === 'skip') {
+      if (decision.reason === 'manual') stats.manual += 1; else stats.emptyInDirectory += 1;
+      continue;
+    }
+    // Listed only for people who land in it: a name on a kept-manual person
+    // creates no department, so it is never shown as one.
     if (resolved) {
       const directoryName = tidyDepartment(entry.department);
       const row = names.get(directoryName.toLowerCase()) ?? { directoryName, department: resolved.department, matchedBy: resolved.matchedBy, people: 0 };
       row.people += 1;
       names.set(directoryName.toLowerCase(), row);
-    }
-    const decision = decideDepartment({ current: currentDepartment(p), sources: sourcesOf(p) }, resolved);
-    if (decision.action === 'skip') {
-      if (decision.reason === 'manual') stats.manual += 1; else stats.emptyInDirectory += 1;
-      continue;
     }
     if (decision.action === 'unchanged') stats.unchanged += 1; else stats.updated += 1;
     if (!opts.write) continue;

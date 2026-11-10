@@ -115,6 +115,7 @@ const COVERAGE: Record<string, { status: Status; why: string }> = {
   'otel_identity_aliases.user_id':            { status: 'deleted', why: 'merge aliases pointing at the person, plus the alias keyed by their own email' },
   'openai_identity_users.user_id':            { status: 'deleted', why: 'the OpenAI accounts the person resolved to, kept to spot one account under two emails (migration 0048)' },
   'openai_identity_users.openai_user_id':     { status: 'deleted', why: 'the OpenAI account id itself, the key of the row; the whole row goes with the person (deleted by user_id)' },
+  'department_history.user_id':          { status: 'deleted', why: 'department changes of the person (migration 0049), deleted by user_id' },
   'use_cases.owner_user_id':             { status: 'nulled', why: 'attribution field — mirrors pulse_skills.author_user_id' },
   'pulse_skills.author_user_id':         { status: 'nulled', why: 'existing behaviour' },
   'users.manager_id':                    { status: 'nulled', why: 'self-FK NO ACTION: erasing a manager must not fail' },
@@ -140,6 +141,7 @@ const COVERAGE: Record<string, { status: Status; why: string }> = {
   'password_reset_tokens.user_id':       { status: 'allowlisted', why: 'admin_users domain' },
   'totp_recovery_codes.user_id':         { status: 'allowlisted', why: 'admin_users domain' },
   'totp_consumed_steps.user_id':         { status: 'allowlisted', why: 'admin_users domain — TOTP replay-guard claim keyed by admin_users.id (mig 078), not a monitored-user id; cleared by disableTotp()/deleteAdminUser() rather than by deleteUserData()' },
+  'department_history.admin_user_id':    { status: 'allowlisted', why: 'admin_users domain: department changes of the login account (migration 0049), keyed by admin_users.id, not a monitored-user id; deleted by deleteAdminUser(); rows for the same person on the monitored side go by user_id in deleteUserData()' },
   'access_audit_log.actor_id':           { status: 'allowlisted', why: 'immutable audit trail — legal-basis retention, never erased (audit DB, triggers reject DELETE)' },
   // ── discovered during a coverage sweep ──
   'enrollment_tokens.created_by':        { status: 'allowlisted', why: 'admin_users id of the retired agent enrolment flow, which no code path writes any more (it was always null in practice); not a monitored-user id' },

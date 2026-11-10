@@ -40,6 +40,7 @@ export const JOB_CATALOG: readonly JobCatalogEntry[] = [
   { name: 'code_classifier', label: 'Code classifier' },
   { name: 'code_weekly_briefing', label: 'Developer Pulse weekly briefing', infrequent: true },
   { name: 'github_sync', label: 'GitHub sync', infrequent: true },
+  { name: 'department_sync', label: 'Department sync (Microsoft Entra ID)', infrequent: true },
   { name: 'pulse_daily_aggregation', label: 'Work Pulse daily aggregation', infrequent: true },
   { name: 'pulse_weekly_briefing', label: 'Work Pulse weekly briefing', infrequent: true },
   { name: 'pulse_cio_briefing', label: 'Executive briefing', infrequent: true },
