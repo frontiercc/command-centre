@@ -52,27 +52,36 @@ export async function GET(request: NextRequest) {
     outcome: 'success',
   });
 
+  // With OpenAI connected the columns name each product and add ChatGPT and
+  // Codex (priced at OpenAI's USD token rates); otherwise unchanged.
+  const openai = report.vendors !== undefined;
   const lines: string[] = [];
-  lines.push(rowToCSV(['Cost Centre', 'User', 'Code USD', 'Cowork USD', 'Total USD']));
+  lines.push(rowToCSV(openai
+    ? ['Cost Centre', 'User', 'Claude Code USD', 'Claude Cowork USD', 'ChatGPT USD', 'Codex USD', 'Total USD']
+    : ['Cost Centre', 'User', 'Code USD', 'Cowork USD', 'Total USD']));
 
   let totalCode = 0;
   let totalCowork = 0;
-
-  for (const centre of report.costCentres) {
-    for (const user of centre.users) {
-      lines.push(rowToCSV([centre.name, user.displayName, money(user.codeUsd), money(user.coworkUsd), money(user.totalUsd)]));
-      totalCode += user.codeUsd;
-      totalCowork += user.coworkUsd;
-    }
-  }
-
-  for (const user of report.unallocated.users) {
-    lines.push(rowToCSV(['Unallocated', user.displayName, money(user.codeUsd), money(user.coworkUsd), money(user.totalUsd)]));
+  let totalChatgpt = 0;
+  let totalCodex = 0;
+  const row = (centre: string, user: (typeof report.unallocated.users)[number]) => {
     totalCode += user.codeUsd;
     totalCowork += user.coworkUsd;
-  }
+    totalChatgpt += user.chatgptUsd ?? 0;
+    totalCodex += user.codexUsd ?? 0;
+    lines.push(rowToCSV(openai
+      ? [centre, user.displayName, money(user.codeUsd), money(user.coworkUsd), money(user.chatgptUsd ?? 0), money(user.codexUsd ?? 0), money(user.totalUsd)]
+      : [centre, user.displayName, money(user.codeUsd), money(user.coworkUsd), money(user.totalUsd)]));
+  };
 
-  lines.push(rowToCSV(['TOTAL', '', money(totalCode), money(totalCowork), money(report.grandTotalUsd)]));
+  for (const centre of report.costCentres) {
+    for (const user of centre.users) row(centre.name, user);
+  }
+  for (const user of report.unallocated.users) row('Unallocated', user);
+
+  lines.push(rowToCSV(openai
+    ? ['TOTAL', '', money(totalCode), money(totalCowork), money(totalChatgpt), money(totalCodex), money(report.grandTotalUsd)]
+    : ['TOTAL', '', money(totalCode), money(totalCowork), money(report.grandTotalUsd)]));
 
   const csv = lines.join('\n');
   const filename = `chargeback-${period}.csv`;

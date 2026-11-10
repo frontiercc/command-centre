@@ -12,14 +12,19 @@
  * any chargeback/reconciliation invariant (computed here in the route layer,
  * never in lib/finance/chargeback.ts).
  *
- * "Active" is measured, not judged — a plain COUNT(DISTINCT user_id) union
- * across cowork_messages and chat_messages, the same two capture surfaces
- * CCC has first-party telemetry for (Code activity lives in cowork_messages
- * too, under surface='code', so it is already covered by that table).
+ * "Active" is measured, not judged — a plain COUNT(DISTINCT user_id) over
+ * cowork_messages, which holds every captured prompt: Cowork, Code
+ * (surface='code') and Claude Chat (surface='chat'). ChatGPT and Codex
+ * prompts live there too and are left out: they use no Claude seat.
+ *
+ * The ChatGPT licence (getChatgptSeatsSummary) is the same idea for ChatGPT
+ * Enterprise: seats x the admin-set monthly seat price, which OpenAI charges
+ * apart from usage. Shown beside usage spend, never added to it.
  */
 import { sql } from 'drizzle-orm';
 import { getTypedClient } from '@/lib/db/client';
 import { getAllConfig } from '@/lib/config';
+import { OPENAI_SOURCES } from '@/lib/openai/sources';
 
 // ─── Raw-execution facade (mirrors lib/usecases/tracker.ts / lib/finance/chargeback.ts) ──
 interface RawFacade {
@@ -77,13 +82,40 @@ export async function getSeatsSummary(nowS: number): Promise<SeatsSummary | null
   // COUNT/UNION come back as bigint -> STRING on Postgres; Number()-coerce.
   const rows = await rawAll<{ c: number | string | null }>(
     db,
-    sql`SELECT COUNT(DISTINCT user_id) AS c FROM (
-          SELECT user_id FROM cowork_messages WHERE occurred_at >= ${cutoff} AND user_id IS NOT NULL
-          UNION
-          SELECT user_id FROM chat_messages WHERE occurred_at >= ${cutoff} AND user_id IS NOT NULL
-        ) AS active_users`
+    sql`SELECT COUNT(DISTINCT user_id) AS c FROM cowork_messages
+        WHERE occurred_at >= ${cutoff} AND user_id IS NOT NULL
+          AND (source IS NULL OR source NOT IN (${sql.join(OPENAI_SOURCES.map(s => sql`${s}`), sql`, `)}))`
   );
   const active = Number(rows[0]?.c ?? 0);
 
   return computeSeats(licensed, active, price);
+}
+
+export interface ChatgptSeatsSummary extends SeatsSummary {
+  /** seats x monthly price: the month's licence charge. null without a price. */
+  monthlyLicenceUsd: number | null;
+}
+
+/**
+ * The ChatGPT Enterprise licence: null when `chatgptSeats` is unset or
+ * invalid. Active = people with a ChatGPT Chat or Work prompt in the last 30
+ * days (Codex has no seat of its own here).
+ */
+export async function getChatgptSeatsSummary(nowS: number): Promise<ChatgptSeatsSummary | null> {
+  const config = await getAllConfig();
+  const licensed = Number(config.chatgptSeats);
+  if (!Number.isFinite(licensed) || licensed <= 0) return null;
+  const priceRaw = Number(config.chatgptSeatPriceMonthly);
+  const price = priceRaw > 0 ? priceRaw : null;
+
+  const cutoff = nowS - WINDOW_SECONDS;
+  const db = await getTypedClient();
+  const rows = await rawAll<{ c: number | string | null }>(
+    db,
+    sql`SELECT COUNT(DISTINCT user_id) AS c FROM cowork_messages
+        WHERE occurred_at >= ${cutoff} AND user_id IS NOT NULL
+          AND source IN ('chatgpt_chat', 'chatgpt_work')`
+  );
+  const seats = computeSeats(licensed, Number(rows[0]?.c ?? 0), price);
+  return { ...seats, monthlyLicenceUsd: price != null ? licensed * price : null };
 }

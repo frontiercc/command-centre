@@ -120,6 +120,32 @@ describe('getSeatsSummary', () => {
     });
   });
 
+  it('leaves ChatGPT and Codex users out of the Claude seat count', async () => {
+    await setConfigValue('licensedSeats', '5');
+    await setConfigValue('finopsSeatPriceMonthly', '');
+    await sql.run(
+      `INSERT INTO users (id, email, display_name, source, first_seen_at, last_seen_at) VALUES ('wi-s-oa', 'wi-s-oa@test.com', 'oa', 'openai', ?, ?)`,
+      [SEED_NOW, SEED_NOW]);
+    await sql.run(
+      `INSERT INTO cowork_messages (id, session_id, user_id, message_type, surface, source, occurred_at)
+       VALUES ('wi-s-oa-1', 'wi-s-oa-s', 'wi-s-oa', 'cowork_user_message', 'cowork', 'chatgpt_chat', ?)`, [RECENT]);
+    await sql.run(
+      `INSERT INTO cowork_messages (id, session_id, user_id, message_type, surface, source, occurred_at)
+       VALUES ('wi-s-oa-2', 'codex:wi-s', 'wi-s-oa', 'code_user_message', 'code', 'codex', ?)`, [RECENT]);
+    expect((await getSeatsSummary(NOW_S))?.activeUsers30d).toBe(2);
+  });
+
+  it('ChatGPT licence: seats x price, active ChatGPT people, null without a seat count', async () => {
+    const { getChatgptSeatsSummary } = await import('@/lib/finance/seats');
+    await setConfigValue('chatgptSeats', '');
+    expect(await getChatgptSeatsSummary(NOW_S)).toBeNull();
+    await setConfigValue('chatgptSeats', '10');
+    await setConfigValue('chatgptSeatPriceMonthly', '');
+    expect(await getChatgptSeatsSummary(NOW_S)).toMatchObject({ licensed: 10, activeUsers30d: 1, unused: 9, monthlyPriceUsd: null, monthlyLicenceUsd: null });
+    await setConfigValue('chatgptSeatPriceMonthly', '60');
+    expect(await getChatgptSeatsSummary(NOW_S)).toMatchObject({ licensed: 10, activeUsers30d: 1, monthlyPriceUsd: 60, monthlyLicenceUsd: 600 });
+  });
+
   it('includes the priced estimate when finopsSeatPriceMonthly is set', async () => {
     await setConfigValue('licensedSeats', '5');
     await setConfigValue('finopsSeatPriceMonthly', '20');

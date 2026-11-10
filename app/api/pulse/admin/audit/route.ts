@@ -11,7 +11,7 @@ import { and, desc, eq, isNull } from 'drizzle-orm';
 import { getAdminSession } from '@/lib/auth/admin-auth';
 import { getTypedClient } from '@/lib/db/client';
 import { schema } from '@/lib/db/schema';
-import { drawAuditSample, recordReview, scoreAuditCycle, getPublishedAgreement } from '@/lib/pulse/audit/cycle';
+import { drawAuditSample, recordReview, scoreAuditCycle, getPublishedAgreement, getAgreementByVendor } from '@/lib/pulse/audit/cycle';
 
 export const dynamic = 'force-dynamic';
 
@@ -61,6 +61,7 @@ export async function GET(request: NextRequest) {
 
   return NextResponse.json({
     published,
+    byVendor: await getAgreementByVendor(SURFACE),
     open: open ? { id: Number(open.id), period: open.period, nSampled: Number(open.n_sampled), nReviewed: Number(open.n_reviewed), items } : null,
     history,
     kappaFloor: 0.6,

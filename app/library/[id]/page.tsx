@@ -18,11 +18,19 @@ interface DayCount { day: string; cnt: number; }
 interface TopUser  { user_id: string; display_name: string | null; cnt: number; }
 interface WorkflowUsingSignal { id: string; title: string; lifecycle: string; distinctUsers: number; lastSeenAt: number | null; }
 
+/** Who picks an entry when it is not typed: the one product it is used in, else "The AI". */
+function triggeredBy(products: string[] | undefined): string {
+  if (!products?.length || (products.length === 1 && products[0] === 'Claude')) return 'Claude';
+  return products.length === 1 ? products[0] : 'The AI';
+}
+
 interface EntryDetail {
   id: number;
   name: string;
   type: string;
   surface: string;
+  /** Products it is used in, from its uses (Claude, ChatGPT, Codex). */
+  products?: string[];
   source: string;
   description: string | null;
   author_name: string | null;
@@ -312,7 +320,11 @@ export default function LibraryDetailPage({ params }: { params: Promise<{ id: st
               </span>
               {isTrending && <Tag tone="measured">Trending +{entry.stats.trend_pct}%</Tag>}
               {entry.author_name && <span className="text-[#666666]">by <strong className="font-medium text-[#0A0A0A]">{entry.author_name}</strong></span>}
-              <span className="text-[#666666]">{entry.surface === 'both' ? 'Code + Cowork' : entry.surface}</span>
+              <span className="text-[#666666]">
+                {entry.products?.some(p => p !== 'Claude')
+                  ? entry.products.join(' · ')
+                  : entry.surface === 'both' ? 'Code + Cowork' : entry.surface}
+              </span>
             </span>
           }
         >
@@ -518,7 +530,7 @@ export default function LibraryDetailPage({ params }: { params: Promise<{ id: st
             {entry.stats.total_invocations > 0 && (
               <Panel
                 title="How it's invoked"
-                subtitle={entry.stats.agent_chained_pct > 50 ? 'Claude triggers this more than users do' : undefined}
+                subtitle={entry.stats.agent_chained_pct > 50 ? `${triggeredBy(entry.products)} triggers this more than users do` : undefined}
                 flush
               >
                 <BarRow label={<><LineIcon d={ICON.agent} className="inline-block align-[-2px] mr-1.5 text-[#8F8F8F]" />Agent-chained</>} value={`${entry.stats.agent_chained_pct}%`} pct={entry.stats.agent_chained_pct} tone="measured" />

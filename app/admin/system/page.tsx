@@ -193,6 +193,8 @@ export default function SystemPage() {
   const [chargebackEnabled, setChargebackEnabled] = useState(false);
   const [chargebackSaving, setChargebackSaving] = useState(false);
   const [finopsSeatPriceMonthly, setFinopsSeatPriceMonthly] = useState('');
+  const [chatgptSeats, setChatgptSeats] = useState('');
+  const [chatgptSeatPriceMonthly, setChatgptSeatPriceMonthly] = useState('');
   const [seatPriceSaving, setSeatPriceSaving] = useState(false);
 
   // Core AI model state
@@ -275,6 +277,8 @@ export default function SystemPage() {
           configData.chargebackEnabled === true || configData.chargebackEnabled === 'true'
         );
         if (configData.finopsSeatPriceMonthly) setFinopsSeatPriceMonthly(String(configData.finopsSeatPriceMonthly));
+        if (configData.chatgptSeats) setChatgptSeats(String(configData.chatgptSeats));
+        if (configData.chatgptSeatPriceMonthly) setChatgptSeatPriceMonthly(String(configData.chatgptSeatPriceMonthly));
         if (configData.coreAiModel) setCoreAiModel(String(configData.coreAiModel));
         setDbStats(statsData);
       })
@@ -468,7 +472,7 @@ export default function SystemPage() {
       const res = await fetch('/api/config', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ finopsSeatPriceMonthly }),
+        body: JSON.stringify({ finopsSeatPriceMonthly, chatgptSeats, chatgptSeatPriceMonthly }),
       });
       if (res.ok) {
         showToast('Settings saved successfully', 'success');
@@ -572,7 +576,7 @@ export default function SystemPage() {
         const data = await res.json();
         const sizeMb = (Number(data.fileSizeBytes) / 1024 / 1024).toFixed(2);
         setIntegrityResult(
-          `OK (${elapsed}ms). DB size: ${sizeMb} MB, users: ${data.userCount}, chat: ${Number(data.chatCount).toLocaleString()}, code: ${Number(data.codeCount).toLocaleString()}, cowork: ${Number(data.coworkOnlyCount).toLocaleString()}, events: ${Number(data.otelCount).toLocaleString()}`
+          `OK (${elapsed}ms). DB size: ${sizeMb} MB, users: ${data.userCount}, chat: ${Number(data.chatCount).toLocaleString()}, code: ${Number(data.codeCount).toLocaleString()}, cowork: ${Number(data.coworkOnlyCount).toLocaleString()}${Number(data.chatgptCount) > 0 || Number(data.codexCount) > 0 ? `, ChatGPT: ${Number(data.chatgptCount).toLocaleString()}, Codex: ${Number(data.codexCount).toLocaleString()}` : ''}, events: ${Number(data.otelCount).toLocaleString()}`
         );
       } else {
         setIntegrityResult("Couldn't run the check. Try again.");
@@ -634,7 +638,7 @@ export default function SystemPage() {
                 max={3600}
               />
             </Field>
-            <Field label="Licensed seats (optional)" hint="Shown as the Active Users denominator on the dashboard. Blank to hide.">
+            <Field label="Claude licensed seats (optional)" hint="Shown as the Active Users denominator on the dashboard. Blank to hide.">
               <input
                 type="number"
                 value={licensedSeats}
@@ -700,7 +704,7 @@ export default function SystemPage() {
             disabled={financeSaving}
           />
           <div className="px-4 py-3 border-t border-[#F2F2F2]">
-            <Field label="Seat price (USD/month)" hint="Used only for the unused-seats estimate on FinOps." className="max-w-xs">
+            <Field label="Claude seat price (USD/month)" hint="With Claude licensed seats under General, used only for the unused Claude seats estimate on FinOps." className="max-w-xs">
               <input
                 type="number"
                 min={0}
@@ -710,6 +714,34 @@ export default function SystemPage() {
                 placeholder="e.g. 20"
               />
             </Field>
+          </div>
+          <div className="px-4 py-3 border-t border-[#F2F2F2] flex flex-col gap-3">
+            <p className="m-0 text-[13px] text-[#666666] leading-5 max-w-2xl">
+              ChatGPT Enterprise licence. OpenAI charges per seat assigned at the start of each month, apart from usage.
+              FinOps shows the licence cost beside ChatGPT usage, never added to it. Leave blank if you do not use ChatGPT.
+            </p>
+            <div className="flex flex-wrap gap-4">
+              <Field label="ChatGPT seats" className="max-w-xs">
+                <input
+                  type="number"
+                  min={0}
+                  value={chatgptSeats}
+                  onChange={(e) => setChatgptSeats(e.target.value)}
+                  className={cx(B.input, 'w-full sm:w-48')}
+                  placeholder="e.g. 150"
+                />
+              </Field>
+              <Field label="ChatGPT seat price (USD/month)" className="max-w-xs">
+                <input
+                  type="number"
+                  min={0}
+                  value={chatgptSeatPriceMonthly}
+                  onChange={(e) => setChatgptSeatPriceMonthly(e.target.value)}
+                  className={cx(B.input, 'w-full sm:w-48')}
+                  placeholder="e.g. 60"
+                />
+              </Field>
+            </div>
           </div>
           <div className="px-4 py-3 border-t border-[#F2F2F2] flex items-center gap-3">
             <button type="button" onClick={handleSaveSeatPrice} disabled={seatPriceSaving} className={B.primary}>
@@ -776,6 +808,7 @@ export default function SystemPage() {
                 <input
                   id="digest-slack-webhook"
                   type="password"
+                  autoComplete="new-password"
                   value={digestSlackWebhookUrl}
                   onChange={(e) => setDigestSlackWebhookUrl(e.target.value)}
                   className={cx(B.input, 'flex-1 min-w-0 font-mono')}
@@ -1014,6 +1047,10 @@ export default function SystemPage() {
                   <Figure label="Chat prompts" value={Number(dbStats.chatCount).toLocaleString()} />
                   <Figure label="Code messages" value={Number(dbStats.codeCount).toLocaleString()} />
                   <Figure label="Cowork messages" value={Number(dbStats.coworkOnlyCount).toLocaleString()} />
+                  {(Number(dbStats.chatgptCount) > 0 || Number(dbStats.codexCount) > 0) && (<>
+                    <Figure label="ChatGPT messages" value={Number(dbStats.chatgptCount).toLocaleString()} />
+                    <Figure label="Codex messages" value={Number(dbStats.codexCount).toLocaleString()} />
+                  </>)}
                   <Figure label="OTel events" value={Number(dbStats.otelCount).toLocaleString()} />
                   <Figure label="Compliance events" value={Number(dbStats.complianceCount).toLocaleString()} />
                 </div>

@@ -12,6 +12,16 @@ export function gapPct(ratio: number): string {
   return `${gap.toFixed(1)}%`;
 }
 
+export type SpendReviewSurface = 'code' | 'cowork' | 'chatgpt' | 'codex';
+
+/** A product's name on the Spend Review pages and report. With OpenAI connected, Claude's say Claude. */
+export function surfaceName(surface: SpendReviewSurface, openai: boolean): string {
+  if (surface === 'chatgpt') return 'ChatGPT';
+  if (surface === 'codex') return 'Codex';
+  if (surface === 'code') return openai ? 'Claude Code' : 'Code';
+  return openai ? 'Claude Cowork' : 'Cowork';
+}
+
 /** "1 Oct": day and short month, as the Spend Review pages show dates. */
 export function ukDate(value: string | number | null | undefined): string {
   if (value === null || value === undefined || value === '') return '—';

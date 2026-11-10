@@ -1,11 +1,12 @@
 // Copyright 2026 Lee James
 // SPDX-License-Identifier: Apache-2.0
 
-import { getConfigValue, setConfigValue } from '@/lib/config';
+import { getAllConfig, getConfigValue, setConfigValue } from '@/lib/config';
 import { runComplianceSyncJob } from '@/lib/compliance/job';
 import { ingestAnalyticsSnapshots } from '@/lib/anthropic/analytics';
 import { runRetentionCleanup } from '@/lib/retention/cleanup';
 import { runJob, JOB_SKIPPED, JOB_DISABLED } from '@/lib/ingestion/job-runs';
+import { isDepartmentSyncActive, departmentSyncDue, runDepartmentSync } from '@/lib/directory/department-sync';
 import { deleteExpiredSessions } from '@/lib/db/admin-queries';
 import { runClassifierJob } from '@/lib/pulse/classifier';
 import { runAuditDrawJob } from '@/lib/pulse/audit/cycle';
@@ -40,6 +41,8 @@ let schedulerGeneration = 0;
 // Session descriptions run alongside the cycle, never inside it (see runCycle).
 let descriptionRunInFlight = false;
 let judgeRunInFlight = false;
+let openAiSyncInFlight = false;
+let anomalyRunInFlight = false;
 
 /**
  * Wall-clock budget per SCHEDULED classifier drain. Bounds when a pass may
@@ -116,6 +119,31 @@ async function claimUseCaseJudgeRun(): Promise<boolean> {
   }
 }
 
+/**
+ * Whether to start the daily anomaly detection run now (once a day, never
+ * while one is still in flight, never without a Claude API key: it is a model
+ * call). Marks the run as started when it returns true. Never throws.
+ */
+async function claimAnomalyDetectionRun(): Promise<boolean> {
+  try {
+    if (anomalyRunInFlight) return false;
+    if (!(await getConfigValue('anthropicAiApiKey'))) return false;
+    // Nothing to raise when every alert type the detector produces is off on
+    // Admin → Risk Scoring, so make no model call.
+    const cfg = await getAllConfig();
+    if (!cfg.riskAlertAnomalyEnabled && !cfg.riskAlertPolicyEnabled && !cfg.riskAlertAdoptionEnabled && !cfg.riskAlertRiskEnabled) return false;
+    const lastRun = await getConfigValue('anomalyDetectionLastRun');
+    const oneDayAgo = new Date(Date.now() - 24 * 60 * 60 * 1000).toISOString();
+    if (lastRun && lastRun >= oneDayAgo) return false;
+    anomalyRunInFlight = true;
+    await setConfigValue('anomalyDetectionLastRun', new Date().toISOString());
+    return true;
+  } catch (err) {
+    console.error('[Scheduler] Could not check anomaly detection:', err instanceof Error ? err.message : err);
+    return false;
+  }
+}
+
 async function runCycle(): Promise<void> {
   const generation = schedulerGeneration;
   if (!schedulerRunning) return;
@@ -143,6 +171,20 @@ async function runCycle(): Promise<void> {
   // already started under the current generation — exit now rather than run
   // the rest of this cycle's jobs beside it.
   if (generation !== schedulerGeneration) return;
+
+  // OpenAI sync (ChatGPT and Codex prompts), interval-gated inside the job and
+  // a no-op until a key and workspace are saved. STARTED, NOT AWAITED: a first
+  // backfill downloads hundreds of files, paced for OpenAI's rate limit, and
+  // must not hold up the jobs after it. runJob still records the real outcome.
+  if (!openAiSyncInFlight) {
+    openAiSyncInFlight = true;
+    void runJob('openai_sync', 'OpenAI sync', async () => {
+      const { runOpenAiSyncJob } = await import('@/lib/openai/job');
+      const r = await runOpenAiSyncJob();
+      if (r.skipped) return JOB_SKIPPED;
+      if (r.stats && r.stats.errors.length > 0) throw new Error(`OpenAI sync errors: ${r.stats.errors.join('; ')}`);
+    }).finally(() => { openAiSyncInFlight = false; });
+  }
 
   // Analytics ingestion (once per day — check if we've already run today)
   await runJob('analytics_ingest', 'Analytics ingest', async () => {
@@ -355,6 +397,15 @@ async function runCycle(): Promise<void> {
     if (result.errors.length > 0) throw new Error(`GitHub API errors: ${result.errors.join('; ')}`);
   });
 
+  // Department sync from Microsoft Entra ID — the daily lookup of everyone.
+  // Off (and absent from System health) until switched on and the first-run
+  // preview applied; then once a day.
+  await runJob('department_sync', 'Department sync', async () => {
+    if (!(await isDepartmentSyncActive())) return JOB_DISABLED;
+    if (!(await departmentSyncDue())) return JOB_SKIPPED;
+    await runDepartmentSync('daily');
+  });
+
   // Pulse aggregator — daily (function-level metrics)
   await runJob('pulse_daily_aggregation', 'Pulse daily aggregation', async () => {
     if (await getConfigValue('pulseEnabled') === 'false') return JOB_SKIPPED;
@@ -404,6 +455,19 @@ async function runCycle(): Promise<void> {
   await runJob('weekly_digest', 'Weekly Exec Digest', async () => {
     await runDigestJob();
   });
+
+  // AI anomaly detection (risk scoring), once a day. Until this it ran only
+  // when an admin pressed Analyse. STARTED, NOT AWAITED, like the other model
+  // side jobs, so a slow model call never holds up the cycle; runJob records
+  // the real outcome. Dynamic import: lib/anthropic/ai.ts imports queueAiCall
+  // from this module. It skips itself when every risk alert type is off.
+  if (await claimAnomalyDetectionRun()) {
+    void runJob('anomaly_detection', 'Anomaly detection', async () => {
+      const { runAnomalyDetection } = await import('@/lib/anthropic/ai');
+      const alerts = await runAnomalyDetection();
+      if (alerts.length) console.log(`[Scheduler] Anomaly detection: ${alerts.length} alert(s) raised`);
+    }).finally(() => { anomalyRunInFlight = false; });
+  }
 
   // System-health alerts — hourly, from job_runs (key rejected, job failing,
   // retention stale). Runs before the Slack sweep so a new alert goes out in

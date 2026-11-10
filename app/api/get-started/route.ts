@@ -40,7 +40,7 @@ export async function GET(request: NextRequest) {
  * { action: 'hide' } hides the panel for every admin on this install;
  * { action: 'show' } brings it back;
  * { action: 'rubric-reviewed' } ticks the tiers step without changing the tiers;
- * { action: 'step-done', step } ticks any of the five steps by hand.
+ * { action: 'step-done', step } ticks any of the steps by hand.
  */
 export async function POST(request: NextRequest) {
   const g = await gate(request, 'WRITE');

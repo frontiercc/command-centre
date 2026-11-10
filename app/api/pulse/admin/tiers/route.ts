@@ -33,7 +33,7 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({ error: 'Forbidden' }, { status: 403 });
   }
 
-  let body: { config: TierConfig };
+  let body: { config: TierConfig; preview?: boolean };
   try {
     body = await request.json();
   } catch {
@@ -50,9 +50,18 @@ export async function POST(request: NextRequest) {
   }
   const taxonomyError = validateTaxonomy(config.taxonomy);
   if (taxonomyError) return NextResponse.json({ error: taxonomyError }, { status: 400 });
+  if (config.evidenceRules !== undefined && (typeof config.evidenceRules !== 'string' || config.evidenceRules.length > 4000)) {
+    return NextResponse.json({ error: 'evidenceRules must be text of at most 4,000 characters' }, { status: 400 });
+  }
   if (typeof config.confidenceThreshold !== 'number' ||
       config.confidenceThreshold < 0 || config.confidenceThreshold > 1) {
     return NextResponse.json({ error: 'confidenceThreshold must be 0.0–1.0' }, { status: 400 });
+  }
+
+  // Preview prompt: the text the classifier would receive with these edits.
+  // Nothing is saved and no history row is written.
+  if (body.preview === true) {
+    return NextResponse.json({ promptPreview: buildClassifierSystemMessage(config) });
   }
 
   await setConfigValue('pulseClassifierConfig', JSON.stringify(config));

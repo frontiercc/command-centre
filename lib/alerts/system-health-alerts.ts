@@ -37,6 +37,8 @@ import { schema } from '@/lib/db/schema';
 import { insertAlert } from '@/lib/db/queries';
 import { JOB_CATALOG, jobLabel } from '@/lib/health/job-catalog';
 import { planSilenceAlerts, silenceSettingsFrom, type SilenceSurface } from '@/lib/alerts/telemetry-silence';
+import { OPENAI_SOURCES } from '@/lib/openai/sources';
+import { readOpenAiLastArrivals } from '@/lib/health/openai-arrivals';
 
 export const SYSTEM_HEALTH_ALERT_TYPE = 'system_health';
 const DAY = 24 * 3600;
@@ -46,11 +48,12 @@ export const COMBINE_AT = 4;
 
 /** Jobs whose failure can mean a rejected key, and the integration named. */
 export const KEY_JOBS: Record<string, string> = {
-  compliance_sync: 'Compliance API',
-  analytics_ingest: 'Analytics API',
+  compliance_sync: 'Anthropic Compliance API',
+  analytics_ingest: 'Anthropic Analytics API',
   github_sync: 'GitHub',
   pulse_classifier: 'Anthropic API',
   code_classifier: 'Anthropic API',
+  openai_sync: 'OpenAI Admin API',
 };
 
 /** Pure: does this error text look like a rejected credential? */
@@ -142,23 +145,42 @@ export function planSystemHealthAlerts(rows: JobRunRow[], nowS: number): Planned
 /**
  * When the hub last RECEIVED each OTel surface (ingested_at, not the client's
  * occurred_at: a late batch with old timestamps still proves delivery works).
- * Chat is a pull job, covered by the job rules.
+ * Chat is a pull job, covered by the job rules. OpenAI's Compliance API is a pull job
+ * too, whose failures the job rules cover; ChatGPT and Codex are also watched
+ * here as two separate sources (lib/health/openai-arrivals.ts), because a sync
+ * can succeed and bring nothing (an export that stopped writing files, the
+ * wrong workspace) and one product can stop while the other carries on. Never
+ * raised for a source that has not sent data, nor while the OpenAI sync is
+ * paused (openaiSyncPaused): nothing arrives then by design.
  */
 async function readSilenceSurfaces(): Promise<SilenceSurface[]> {
   const client = await getTypedClient();
   const cm = schema.coworkMessages;
   const com = schema.codeOtelMetrics;
   const num = (v: unknown) => (v === null || v === undefined ? null : Number(v));
+  // Claude's own feeds only: ChatGPT and Codex prompts share these surfaces
+  // and would otherwise hide a Claude feed that has gone quiet.
   const last = async (surface: 'cowork' | 'code') => {
-    const rows = await client.select({ v: sql<number | string | null>`MAX(${cm.ingested_at})` }).from(cm).where(eq(cm.surface, surface));
+    const rows = await client.select({ v: sql<number | string | null>`MAX(${cm.ingested_at})` }).from(cm)
+      .where(and(eq(cm.surface, surface), sql`${cm.source} NOT IN (${sql.join(OPENAI_SOURCES.map(s => sql`${s}`), sql`, `)})`));
     return num(rows[0]?.v);
   };
   const metrics = await client.select({ v: sql<number | string | null>`MAX(${com.ingested_at})` }).from(com);
-  return [
+  const surfaces: SilenceSurface[] = [
     { key: 'cowork', label: 'Cowork', lastReceivedAt: await last('cowork') },
     { key: 'code', label: 'Claude Code', lastReceivedAt: await last('code') },
     { key: 'code_metrics', label: 'Claude Code metrics', lastReceivedAt: num(metrics[0]?.v) },
   ];
+  const { getConfigValue } = await import('@/lib/config');
+  if ((await getConfigValue('openaiSyncPaused')) !== 'true') {
+    const arrivals = await readOpenAiLastArrivals();
+    const advice = (product: string) => `Check the OpenAI sync on System health, the OpenAI Admin API key and workspace ID on Access & Keys, and that people are still using ${product}. Once the cause is fixed, the sync carries on from where it stopped, as long as OpenAI still holds the files (it keeps them for 30 days).`;
+    surfaces.push(
+      { key: 'chatgpt', label: 'ChatGPT', noun: 'data', lastReceivedAt: arrivals.chatgpt, advice: advice('ChatGPT') },
+      { key: 'codex', label: 'Codex', noun: 'data', lastReceivedAt: arrivals.codex, advice: advice('Codex') },
+    );
+  }
+  return surfaces;
 }
 
 async function alreadyRaised(rule: string, subject: string, sinceS: number): Promise<boolean> {

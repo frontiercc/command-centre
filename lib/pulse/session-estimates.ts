@@ -16,8 +16,13 @@
 //   - after MAX_ATTEMPTS the session is left alone;
 //   - a model-call ERROR counts nothing: the run stops and reports it.
 // Off unless humanTimeEnabled='true'.
+//
+// ChatGPT conversations (OpenAI Compliance API) are estimated the same way, after
+// Claude Cowork's sessions in the same run, into chatgpt_session_time: their
+// working time is measured from prompt and reply times
+// (lib/pulse/chatgpt-session-time.ts). The export names no output files.
 import { createAnthropicClient } from '@/lib/anthropic/client';
-import { and, eq, gt, gte, inArray, isNull, lt, or, sql } from 'drizzle-orm';
+import { and, eq, gt, gte, inArray, isNull, lt, sql } from 'drizzle-orm';
 import { getTypedClient } from '@/lib/db/client';
 import { schema } from '@/lib/db/schema';
 import { getConfigValue } from '@/lib/config';
@@ -26,6 +31,8 @@ import { getCoreAiModel } from '@/lib/anthropic/model';
 import { redactPii } from '@/lib/pii/detect';
 import { queueAiCall } from '@/lib/ingestion/scheduler';
 import { coworkHumanTimeInstruction, parseHumanMinutes, type HumanMinutes } from '@/lib/pulse/human-time';
+import { isWorkPulseSurface } from '@/lib/pulse/work-surfaces';
+import { rollupChatgptSessionTime } from '@/lib/pulse/chatgpt-session-time';
 
 const DAY = 86400;
 export const WINDOW_DAYS = 30;
@@ -84,18 +91,18 @@ async function callRealModel(prompt: string): Promise<{ text: string }> {
   return { text: extractText(message) };
 }
 
-/** Tier 2/3 Cowork sessions in the window still needing an estimate (newest first). */
-async function candidateSessions(client: Awaited<ReturnType<typeof getTypedClient>>, nowS: number, windowDays = WINDOW_DAYS): Promise<string[]> {
+/** Tier 2/3 sessions in the window still needing an estimate (newest first): Claude Cowork's, or ChatGPT's. */
+async function candidateSessions(client: Awaited<ReturnType<typeof getTypedClient>>, nowS: number, windowDays = WINDOW_DAYS, chatgpt = false): Promise<string[]> {
   const since = nowS - windowDays * DAY;
   const pc = schema.pulseClassifications;
   const cm = schema.coworkMessages;
-  const st = schema.coworkSessionStats;
+  const st = chatgpt ? schema.chatgptSessionTime : schema.coworkSessionStats;
   const deep = await client
     .select({ session_id: cm.session_id, at: sql<number>`max(${cm.occurred_at})` })
     .from(pc)
     .innerJoin(cm, eq(cm.id, pc.cowork_message_id))
     .where(and(eq(pc.classifier_status, 'classified'), gte(pc.tier, 2), gte(cm.occurred_at, since),
-      or(eq(cm.surface, 'cowork'), isNull(cm.surface))))
+      isWorkPulseSurface(cm.surface, true)))
     .groupBy(cm.session_id);
   const latest = new Map<string, number>();
   for (const r of deep) if (r.session_id) latest.set(r.session_id, Number(r.at));
@@ -135,10 +142,17 @@ export async function runSessionEstimateJob(
   const pc = schema.pulseClassifications;
   const st = schema.coworkSessionStats;
 
-  const sessions = (await candidateSessions(client, nowS, deps?.windowDays)).slice(0, MAX_PER_RUN);
   let written = 0;
   let refused = 0;
-  for (const sessionId of sessions) {
+  // Claude Cowork's sessions first, then ChatGPT's conversations, one cap between them.
+  await rollupChatgptSessionTime(nowS);
+  const claudeSessions = (await candidateSessions(client, nowS, deps?.windowDays)).slice(0, MAX_PER_RUN);
+  const chatgptSessions = (await candidateSessions(client, nowS, deps?.windowDays, true)).slice(0, MAX_PER_RUN - claudeSessions.length);
+  const work = [
+    ...claudeSessions.map(id => ({ sessionId: id, chatgpt: false })),
+    ...chatgptSessions.map(id => ({ sessionId: id, chatgpt: true })),
+  ];
+  for (const { sessionId, chatgpt } of work) {
     const rows = await client
       .select({ user_id: cm.user_id, text: cm.content_full, preview: cm.content_preview, tier: pc.tier, task_type: pc.task_type })
       .from(cm)
@@ -173,16 +187,17 @@ export async function runSessionEstimateJob(
     } catch (err) {
       return { written, refused, skipped: false, apiError: err instanceof Error ? err.message : String(err) };
     }
+    const target = chatgpt ? schema.chatgptSessionTime : st;
     if (est) {
       written++;
-      await client.update(st).set({
+      await client.update(target).set({
         human_minutes_low: est.low, human_minutes_likely: est.likely, human_minutes_high: est.high,
-        human_minutes_attempts: sql`${st.human_minutes_attempts} + 1`,
-      }).where(eq(st.session_id, sessionId));
+        human_minutes_attempts: sql`${target.human_minutes_attempts} + 1`,
+      }).where(eq(target.session_id, sessionId));
     } else {
       refused++;
-      await client.update(st).set({ human_minutes_attempts: sql`${st.human_minutes_attempts} + 1` })
-        .where(eq(st.session_id, sessionId));
+      await client.update(target).set({ human_minutes_attempts: sql`${target.human_minutes_attempts} + 1` })
+        .where(eq(target.session_id, sessionId));
     }
   }
   return { written, refused, skipped: false };

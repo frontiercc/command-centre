@@ -20,8 +20,11 @@ import GenerateBriefingButton from '@/components/pulse/GenerateBriefingButton';
 import { cleanTitle } from '@/components/pulse/CapabilityLog';
 import HumanTimeCard, { type HumanTimeSummary } from '@/components/pulse/HumanTimeCard';
 import { PageBody, Toolbar, Panel, Tag, Notice, B } from '@/components/precision/ui';
+import { useVendor, VendorSwitch } from '@/components/shared/VendorSwitch';
+import { WORK_PULSE_VENDOR_LABELS } from '@/lib/dashboard/vendor';
 
 interface PersonalPulseData {
+  openaiPresent?: boolean;
   humanTime?: HumanTimeSummary | null;
   userId: string | null;
   displayName: string | null;
@@ -54,6 +57,8 @@ export default function UserPulsePage() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [refreshKey, setRefreshKey] = useState(0);
+  // The All / Claude / OpenAI switch, shared with the dashboard and Executive View.
+  const [vendor, setVendor] = useVendor();
 
   // Admin gate — check session before fetching
   useEffect(() => {
@@ -69,7 +74,7 @@ export default function UserPulsePage() {
 
   useEffect(() => {
     if (!userId) return;
-    fetch(`/api/pulse/me?userId=${encodeURIComponent(userId)}`)
+    fetch(`/api/pulse/me?userId=${encodeURIComponent(userId)}&vendor=${vendor}`)
       .then(r => {
         if (!r.ok) throw new Error("Couldn't load this page. Try again.");
         return r.json();
@@ -86,7 +91,7 @@ export default function UserPulsePage() {
       })
       .catch(e => setError(e.message))
       .finally(() => setLoading(false));
-  }, [userId, refreshKey]);
+  }, [userId, refreshKey, vendor]);
 
   if (loading) return (
     <>
@@ -126,20 +131,22 @@ export default function UserPulsePage() {
       <PageBody>
 
         {/* Back link */}
-        {data.department && (
+        {(data.department || data.openaiPresent || vendor !== 'all') && (
           <Toolbar
-            left={
+            left={data.department ? (
               <Link href={`/pulse/dept?dept=${encodeURIComponent(data.department)}`} className={B.link}>
                 ← {data.department} department
               </Link>
-            }
-          />
+            ) : undefined}
+          >
+            <VendorSwitch vendor={vendor} onChange={setVendor} openaiPresent={data.openaiPresent ?? false} labels={WORK_PULSE_VENDOR_LABELS} />
+          </Toolbar>
         )}
 
         {/* 1. Frontier Push hero */}
         <FrontierHero view={data.frontier} canOpenUseCases={data.frontierAccess?.canOpenUseCases ?? false} />
 
-        <HumanTimeCard summary={data.humanTime} surface="cowork" scope="Personal" />
+        <HumanTimeCard summary={data.humanTime} surface="cowork" scope="Personal" view={data.openaiPresent ? vendor : 'claude'} />
 
         {/* 2. Stat strip */}
         <StatStrip
@@ -178,7 +185,7 @@ export default function UserPulsePage() {
           <Panel
             title="Capabilities to review"
             badge={<Tag tone="warn">{data.capabilitiesDetail.pending.length}</Tag>}
-            subtitle="Claude may have taken on these types of work for the first time. Confirm to track them."
+            subtitle="AI may have taken on these types of work for the first time. Confirm to track them."
             flush
           >
             <ul className="m-0 p-0 list-none">

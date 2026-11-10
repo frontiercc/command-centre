@@ -11,6 +11,9 @@
 //
 // Real chat capture is via the Compliance API (source='compliance'), never
 // OTel — matches the capture-path rule the rest of this codebase follows.
+// Claude Chat prompts are stored as cowork_messages rows with surface 'chat',
+// one cowork_sessions row per conversation (migration 0041), the same shape
+// lib/compliance/chat-sync.ts writes.
 //
 // Marker `ff7-`. Re-running clears + reinserts its own rows first.
 // Usage: docker exec -i ccc-hub node < scripts/demo/05-chat.cjs [-- --clean]
@@ -19,7 +22,8 @@ const { Client } = require('pg');
 const MARKER = 'ff7-';
 const CLEAN_ONLY = process.argv.includes('--clean');
 const DAY = 86400;
-const N_DAYS = 60; // covers the 14-day chart window plus a longer trail
+const N_DAYS = 90; // thirteen weeks, the same as the rest of the sample
+const PREVIEW_CHARS = 250; // lib/otel/content-limits.ts CONTENT_PREVIEW_CHARS
 
 const rand = (min, max) => Math.floor(Math.random() * (max - min + 1)) + min;
 const pick = (arr) => arr[Math.floor(Math.random() * arr.length)];
@@ -83,6 +87,20 @@ const CHAT_PROMPTS = [
   'Rewrite this policy paragraph so a new starter would understand it.',
 ];
 
+// The sample's kinds of work (01-organisation.cjs), read from a prompt's words
+// as a classifier would; the same rule as 11-chatgpt-codex.ts.
+const TASK_TYPES = ['analysis', 'structured_report', 'synthesis', 'summarisation', 'basic_drafting', 'template_population', 'process_substitution'];
+function taskTypeFor(text) {
+  const t = text.toLowerCase();
+  if (/summar|recap|tl;?dr|key points/.test(t)) return 'summarisation';
+  if (/draft|email|write|reply|letter|post/.test(t)) return 'basic_drafting';
+  if (/report|brief|memo|pack|deck/.test(t)) return 'structured_report';
+  if (/analys|compare|forecast|trend|variance|why /.test(t)) return 'analysis';
+  if (/template|fill in|populate|form/.test(t)) return 'template_population';
+  if (/combine|pull together|across|synthes/.test(t)) return 'synthesis';
+  return pick(TASK_TYPES);
+}
+
 async function main() {
   const url = process.env.DATABASE_URL;
   if (!url) { console.error('DATABASE_URL not set — run inside the hub container.'); process.exit(1); }
@@ -92,7 +110,14 @@ async function main() {
   const now = Math.floor(Date.now() / 1000);
 
   try {
-    await c.query(`DELETE FROM chat_messages WHERE id LIKE $1`, [`${MARKER}%`]);
+    // Own rows only, by marker. Work Pulse grades Claude Chat prompts, so
+    // their grades go first (they reference the prompt rows).
+    await c.query(`DELETE FROM pulse_classifications WHERE cowork_message_id LIKE $1`, [`${MARKER}%`]);
+    await c.query(`DELETE FROM pulse_skill_runs WHERE cowork_message_id LIKE $1`, [`${MARKER}%`]);
+    await c.query(`DELETE FROM pulse_events WHERE cowork_message_id LIKE $1`, [`${MARKER}%`]);
+    await c.query(`DELETE FROM cowork_messages WHERE id LIKE $1 AND surface = 'chat'`, [`${MARKER}%`]);
+    await c.query(`DELETE FROM cowork_session_stats WHERE session_id LIKE $1`, [`${MARKER}%`]);
+    await c.query(`DELETE FROM cowork_sessions WHERE id LIKE $1`, [`${MARKER}%`]);
     console.log('[chat] cleared prior seed rows.');
     if (CLEAN_ONLY) { console.log('[chat] --clean complete.'); return; }
 
@@ -101,6 +126,7 @@ async function main() {
     )).rows;
 
     let n = 0;
+    let convs = 0;
     for (const u of users) {
       const intensity = intensityFor(u.department);
       const quietRecently = isRecentlyQuiet(u.id, quietChanceFor(intensity));
@@ -116,18 +142,38 @@ async function main() {
         const dayStart = dayEnd - DAY;
         const nMsgs = rand(1, 3);
         const convId = uid('conv');
+        let startedAt = null;
+        // Work deepens over the thirteen weeks, the same rule as 01-organisation.cjs.
+        const trend = (N_DAYS - daysAgo) / N_DAYS;
+        const depth = 0.25 + 0.45 * trend; // share at tier 2 or 3
+        const t3Share = 0.15 + 0.35 * trend; // of those, share at tier 3
         for (let i = 0; i < nMsgs; i++) {
           const ts = dayStart + rand(0, Math.max(1, dayEnd - dayStart - 1));
           const text = pick(CHAT_PROMPTS);
+          const msgId = uid('chat');
           await c.query(
-            `INSERT INTO chat_messages (id, conversation_id, user_id, prompt_text, prompt_length, occurred_at, ingested_at, source)
-             VALUES ($1,$2,$3,$4,$5,$6,$6,'compliance')`,
-            [uid('chat'), convId, u.id, text, text.length, ts]);
+            `INSERT INTO cowork_messages (id, session_id, user_id, message_type, surface, source, content_preview, content_full, occurred_at, ingested_at)
+             VALUES ($1,$2,$3,'cowork_user_message','chat','compliance',$4,$5,$6,$6)`,
+            [msgId, convId, u.id, text.slice(0, PREVIEW_CHARS), text, ts]);
+          // Graded at load, like the other sample prompts, so the weekly history
+          // worked out at the end of loading already counts them.
+          const tier = Math.random() < depth ? (Math.random() < t3Share ? 3 : 2) : 1;
+          await c.query(
+            `INSERT INTO pulse_classifications (cowork_message_id, user_id, tier, task_type, classifier_confidence, classifier_model, classified_at)
+             VALUES ($1,$2,$3,$4,$5,'claude-haiku-4-5-20251001',$6)`,
+            [msgId, u.id, tier, taskTypeFor(text), 0.85 + Math.random() * 0.12, ts + 30]);
+          if (startedAt === null || ts < startedAt) startedAt = ts;
           n++;
         }
+        // One session per conversation, started at its first prompt.
+        await c.query(
+          `INSERT INTO cowork_sessions (id, conversation_id, user_id, source, started_at, created_at)
+           VALUES ($1,$1,$2,'compliance',$3,$4) ON CONFLICT (id) DO NOTHING`,
+          [convId, u.id, startedAt, now]);
+        convs++;
       }
     }
-    console.log(`[chat] seeded ${n} chat_messages across ${users.length} users, trailing ${N_DAYS} days.`);
+    console.log(`[chat] seeded ${n} Claude Chat prompts in ${convs} conversations across ${users.length} users, trailing ${N_DAYS} days.`);
   } finally {
     await c.end();
   }

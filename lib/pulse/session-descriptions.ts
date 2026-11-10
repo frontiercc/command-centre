@@ -22,7 +22,7 @@
 // part of a person's data erasure. Off when pulseSessionDescriptionsEnabled='false'.
 // Who may SEE a description is decided in the API routes, not here.
 import { createAnthropicClient } from '@/lib/anthropic/client';
-import { and, eq, gte, inArray, isNull, or, sql } from 'drizzle-orm';
+import { and, eq, gte, inArray, or, sql } from 'drizzle-orm';
 import { getTypedClient } from '@/lib/db/client';
 import { schema } from '@/lib/db/schema';
 import { getConfigValue } from '@/lib/config';
@@ -31,6 +31,7 @@ import { getCoreAiModel } from '@/lib/anthropic/model';
 import { extractNumbers, ungroundedNumbers } from '@/lib/anthropic/grounded-narrative';
 import { redactPii } from '@/lib/pii/detect';
 import { queueAiCall } from '@/lib/ingestion/scheduler';
+import { isWorkPulseSurface } from '@/lib/pulse/work-surfaces';
 
 const DAY = 86400;
 export const WINDOW_DAYS = 30;
@@ -68,7 +69,21 @@ Systems used: ${input.systems.length ? input.systems.join(', ') : 'none recorded
 ${excerpts}`;
 }
 
-export type RejectReason = 'empty' | 'line_break' | 'too_long' | 'multiple_sentences' | 'ungrounded_number';
+export type RejectReason = 'empty' | 'line_break' | 'too_long' | 'multiple_sentences' | 'ungrounded_number' | 'foreign_script';
+
+/**
+ * Letters in the reply from a script other than Latin that none of the prompts
+ * use (a stray Chinese character mid-word was once stored). A script the
+ * person wrote in is allowed.
+ */
+export function foreignLetters(text: string, prompts: string[]): string[] {
+  const seen = new Set(prompts.join(' ').match(/\p{L}/gu) ?? []);
+  const out = new Set<string>();
+  for (const ch of text.match(/\p{L}/gu) ?? []) {
+    if (!/\p{Script=Latin}/u.test(ch) && !seen.has(ch)) out.add(ch);
+  }
+  return [...out];
+}
 
 export type DescriptionCheck =
   | { ok: true; text: string }
@@ -91,6 +106,9 @@ export function checkDescription(reply: string, prompts: string[]): DescriptionC
   const body = text.replace(/[.!?]$/, '');
   if (/[.!?]\s/.test(body)) {
     return { ok: false, reason: 'multiple_sentences', detail: 'The reply was more than one sentence. Write exactly one sentence, and do not use abbreviations with full stops.' };
+  }
+  if (foreignLetters(text, prompts).length > 0) {
+    return { ok: false, reason: 'foreign_script', detail: 'The reply contained characters from another writing system. Write the sentence in plain English only.' };
   }
   const allowed = new Set(prompts.flatMap(p => extractNumbers(p)));
   const bad = ungroundedNumbers(text, allowed);
@@ -136,7 +154,7 @@ async function candidateSessions(client: Awaited<ReturnType<typeof getTypedClien
     .from(pc)
     .innerJoin(cm, eq(cm.id, pc.cowork_message_id))
     .where(and(eq(pc.classifier_status, 'classified'), eq(pc.tier, 3), gte(cm.occurred_at, since),
-      or(eq(cm.surface, 'cowork'), isNull(cm.surface))))
+      isWorkPulseSurface(cm.surface, true)))
     .groupBy(cm.session_id);
   const caps = await client
     .select({ session_id: cm.session_id, at: sql<number>`max(${pe.detected_at})` })

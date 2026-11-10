@@ -23,8 +23,8 @@ export async function GET(request: NextRequest) {
     return NextResponse.json({ error: 'Forbidden' }, { status: 403 });
   }
   const surface = request.nextUrl.searchParams.get('surface');
-  if (surface !== 'code' && surface !== 'cowork') {
-    return NextResponse.json({ error: 'Invalid surface (code|cowork)' }, { status: 400 });
+  if (surface !== 'code' && surface !== 'cowork' && surface !== 'chatgpt' && surface !== 'codex') {
+    return NextResponse.json({ error: 'Invalid surface (code|cowork|chatgpt|codex)' }, { status: 400 });
   }
   const period = request.nextUrl.searchParams.get('period') || currentPeriod(Math.floor(Date.now() / 1000));
   if (!/^\d{4}-\d{2}$/.test(period)) {

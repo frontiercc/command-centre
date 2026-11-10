@@ -155,6 +155,20 @@ async function runSpec(): Promise<void> {
       },
     };
 
+    // Preview prompt returns the edited prompt and saves nothing: no config
+    // change and no version-history row.
+    const previewRes = await tiersPOST(makeRequest('/api/pulse/admin/tiers', {
+      method: 'POST',
+      body: JSON.stringify({ config: customConfig, preview: true }),
+    }));
+    expect(previewRes.status).toBe(200);
+    const previewBody = await previewRes.json();
+    expect(previewBody.ok).toBeUndefined();
+    expect(previewBody.promptPreview).toContain('Custom Tier One');
+    const afterPreview = await (await tiersGET(makeRequest('/api/pulse/admin/tiers'))).json();
+    expect(afterPreview.config.tiers.tier1.name).toBe(DEFAULT_TIER_CONFIG.tiers.tier1.name);
+    expect(await client.select({ id: schema.pulseRubricVersions.changed_by }).from(schema.pulseRubricVersions)).toHaveLength(0);
+
     const tiersPostRes = await tiersPOST(makeRequest('/api/pulse/admin/tiers', {
       method: 'POST',
       body: JSON.stringify({ config: customConfig }),

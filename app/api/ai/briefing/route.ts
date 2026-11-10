@@ -2,6 +2,7 @@
 // SPDX-License-Identifier: Apache-2.0
 
 import { getCodeWorkTypeLabeller } from '@/lib/pulse/code/tier-config';
+import { visibleOpenAi } from '@/lib/sources/openai-visibility';
 import { NextRequest, NextResponse } from 'next/server';
 import { errorResponse, logError } from '@/lib/api/errors';
 import { aiFailureOptions, createGroundedJson, pctChange, pctOf, type GroundedShape } from '@/lib/anthropic/grounded-json';
@@ -20,7 +21,6 @@ import {
   getActiveUsersLastWeek,
   getOpenAlertCount,
   getOpenAlertsBySeverity,
-  getCoworkSessionCountThisWeek,
   getSurfaceBreakdown,
   getRecentAlerts,
   getSnapshotsForPeriod,
@@ -30,6 +30,19 @@ import { isOtelConfigured } from '@/lib/config';
 import { getTypedClient } from '@/lib/db/client';
 import { schema } from '@/lib/db/schema';
 import { ORG_SCOPE_ID } from '@/lib/pulse/code/aggregator';
+import {
+  getActiveUsersByVendor,
+  getSessionsThisWeekByProduct,
+  getTierMixThisWeekByVendor,
+  hasOpenAiData,
+} from '@/lib/dashboard/queries';
+
+/** The Code snapshot without its session count, which includes Codex sessions. */
+function withoutSessionCount<T extends { session_count: unknown }>(m: T): Omit<T, 'session_count'> {
+  const { session_count: _omit, ...rest } = m;
+  void _omit;
+  return rest;
+}
 
 // Disable Next.js route caching — all API routes read live data from the database
 export const dynamic = 'force-dynamic';
@@ -61,15 +74,25 @@ export async function GET(request: NextRequest) {
   }
 
   // Gather all context
-  const [activeThisWeek, activeLastWeek, totalUsers, openAlerts, alertsBySeverity, recentAlerts, coworkSessions] = await Promise.all([
+  const [activeThisWeek, activeLastWeek, totalUsers, openAlerts, alertsBySeverity, recentAlerts, productSessions, openaiPresent, activeByVendor, tierMixByVendor] = await Promise.all([
     getActiveUsersThisWeek(),
     getActiveUsersLastWeek(),
     getUserCount(),
     getOpenAlertCount(),
     getOpenAlertsBySeverity(),
     getRecentAlerts(10),
-    getCoworkSessionCountThisWeek(),
+    getSessionsThisWeekByProduct(),
+    visibleOpenAi(hasOpenAiData()),
+    getActiveUsersByVendor(),
+    getTierMixThisWeekByVendor(),
   ]);
+  // Each product named on its own, so ChatGPT and Codex are never reported
+  // as Cowork or Claude Code. OpenAI products appear only once their data does.
+  const sessionsThisWeek = openaiPresent ? productSessions : {
+    chat: { claudeChat: productSessions.chat.claudeChat },
+    work: { claudeCowork: productSessions.work.claudeCowork },
+    code: { claudeCode: productSessions.code.claudeCode },
+  };
   const otelConfigured = await isOtelConfigured();
   const [surface, snapshots] = await Promise.all([
     getSurfaceBreakdown(),
@@ -174,23 +197,7 @@ export async function GET(request: NextRequest) {
     .where(gte(schema.githubRepoStats.date, sevenDaysAgoDateStr));
   const githubCommits7d = Number(githubRows[0]?.c ?? 0);
 
-  // Work Pulse: judged tier mix over the last 7 days + confirmed capabilities
-  const coworkTiersRows = await client
-    .select({
-      tier1: sql<number | string>`SUM(CASE WHEN ${schema.pulseClassifications.tier} = 1 THEN 1 ELSE 0 END)`,
-      tier2: sql<number | string>`SUM(CASE WHEN ${schema.pulseClassifications.tier} = 2 THEN 1 ELSE 0 END)`,
-      tier3: sql<number | string>`SUM(CASE WHEN ${schema.pulseClassifications.tier} = 3 THEN 1 ELSE 0 END)`,
-    })
-    .from(schema.pulseClassifications)
-    .innerJoin(schema.coworkMessages, eq(schema.coworkMessages.id, schema.pulseClassifications.cowork_message_id))
-    .where(and(eq(schema.pulseClassifications.classifier_status, 'classified'), gte(schema.coworkMessages.occurred_at, sevenDaysAgo)));
-  const coworkTiersRaw = coworkTiersRows[0];
-  const coworkTiers = {
-    tier1: coworkTiersRaw?.tier1 !== null && coworkTiersRaw?.tier1 !== undefined ? Number(coworkTiersRaw.tier1) : null,
-    tier2: coworkTiersRaw?.tier2 !== null && coworkTiersRaw?.tier2 !== undefined ? Number(coworkTiersRaw.tier2) : null,
-    tier3: coworkTiersRaw?.tier3 !== null && coworkTiersRaw?.tier3 !== undefined ? Number(coworkTiersRaw.tier3) : null,
-  };
-
+  // Work Pulse: confirmed capabilities (the judged tier mix is read above, per vendor)
   const capabilitiesConfirmedRows = await client
     .select({ c: sql<number | string>`COUNT(*)` })
     .from(schema.pulseEvents)
@@ -206,19 +213,24 @@ export async function GET(request: NextRequest) {
 
   const dataContext = JSON.stringify({
     derived,
-    coworkPulse: {
-      tierMixThisWeek: { tier1: coworkTiers.tier1 ?? 0, tier2: coworkTiers.tier2 ?? 0, tier3: coworkTiers.tier3 ?? 0 },
+    sessionsThisWeek,
+    ...(openaiPresent ? { activeUsersByVendor: activeByVendor } : {}),
+    workPulse: {
+      tierMixThisWeek: openaiPresent ? tierMixByVendor : tierMixByVendor.claude,
       capabilitiesConfirmedTotal: capabilitiesConfirmed,
     },
+    // session_count is left out: it counts Codex sessions too, and
+    // sessionsThisWeek.code names each product's sessions.
     codePulse: codeMetrics ? {
-      sevenDay: codeMetrics,
+      sevenDay: withoutSessionCount(codeMetrics),
       workMixAiJudged: codeWorkMix,
       githubTotalCommitsInMappedRepos: githubCommits7d > 0 ? githubCommits7d : undefined,
     } : null,
     ...(useCases ? { useCases } : {}),
     activeThisWeek, activeLastWeek, totalUsers,
-    openAlerts, alertsBySeverity, coworkSessions, otelConfigured,
-    surfaceBreakdown: surface,
+    openAlerts, alertsBySeverity, otelConfigured,
+    // Its Code count includes Codex prompts unlabelled, so it goes once OpenAI data exists.
+    ...(openaiPresent ? {} : { surfaceBreakdown: surface }),
     recentAlerts: recentAlerts.map(a => ({ severity: a.severity, title: a.title, type: a.alert_type, status: a.status })),
     snapshotSummary: {
       totalSnapshots: snapshots.length,
@@ -237,7 +249,7 @@ export async function GET(request: NextRequest) {
       model: await getCoreAiModel(),
       maxTokens: 4000, // room for six recommendations
       ...DASHBOARD_BRIEFING_SHAPE,
-      system: `You are the AI intelligence layer of Frontier Command Centre, a governance dashboard for an organisation's use of Claude. You write for IT leads and team managers at organisations rolling out Claude. You are concise, helpful, and proportionate.
+      system: `You are the AI intelligence layer of Frontier Command Centre, a governance dashboard for an organisation's use of AI: Claude, and ChatGPT and Codex where the organisation has connected them. You write for IT leads and team managers at organisations rolling out AI. You are concise, helpful, and proportionate.
 
 WRITING STYLE (mandatory):
 - Use British English spelling throughout (e.g. organisation, behaviour, categorise, licence, colour).
@@ -245,7 +257,7 @@ WRITING STYLE (mandatory):
 - Use British punctuation conventions (single quotes for speech, logical comma placement).
 - NEVER use em dashes (—) or en dashes (–). Use commas, colons, semicolons, or full stops instead.
 - Plain business language only. This rule is absolute: NEVER put an internal metric name or jargon phrase in the output. Banned phrases include (not limited to) "autonomy ratio", "DDS", "OTI", "ORS", "cache hit ratio", "tier 1/2/3", "tool actions per instruction".
-- Describe EVERY surface (Cowork, Code, and, when enabled, Chat) the same way: by concrete measured activity in plain words. Lead with things a manager can picture (sessions run, commits shipped, capabilities confirmed, flags raised, users active) and treat cost as context. NEVER present an internal ratio or score as a headline measure (no "autonomy ratio", no "N tool actions per instruction", no numeric scores). If you describe how deep, autonomous, or sophisticated the work is, say it in plain words and attribute anything Claude judged (e.g. "work Claude judged to be mostly routine admin, with a growing share of multi-step tasks"). Never use tier numbers. Say "routine admin tasks / multi-step work / high-stakes autonomous work". For efficiency, say "most context is reused, keeping costs down" NOT "cache hit ratio of 83%".
+- Describe EVERY product in the data (Claude Cowork, Claude Code, Claude Chat, and ChatGPT Chat, ChatGPT Work and Codex when present) the same way: by concrete measured activity in plain words. Lead with things a manager can picture (sessions run, commits shipped, capabilities confirmed, flags raised, users active) and treat cost as context. NEVER present an internal ratio or score as a headline measure (no "autonomy ratio", no "N tool actions per instruction", no numeric scores). If you describe how deep, autonomous, or sophisticated the work is, say it in plain words and attribute anything Claude judged (e.g. "work Claude judged to be mostly routine admin, with a growing share of multi-step tasks"). Never use tier numbers. Say "routine admin tasks / multi-step work / high-stakes autonomous work". For efficiency, say "most context is reused, keeping costs down" NOT "cache hit ratio of 83%".
 
 TONE CALIBRATION (this is critical):
 - You are a helpful advisor, NOT a threat detection system.
@@ -257,7 +269,7 @@ TONE CALIBRATION (this is critical):
 
 ALERT TYPE UNDERSTANDING. There are three distinct alert types you will see in the data:
 - "policy" alerts: PII or credential detection. Regex matched sensitive data patterns (credit cards, API keys, SSNs, etc.) in a message. These are data presence alerts.
-- "intent" alerts: Behavioural intent detection. The system detected a user requesting something risky (e.g. "extract all contacts from Salesforce", "bypass authentication", "delete all records"). These are AI-assessed with a severity and reasoning. Intent alerts indicate what someone asked Claude to do, not what data was present.
+- "intent" alerts: Behavioural intent detection. The system detected a user requesting something risky (e.g. "extract all contacts from Salesforce", "bypass authentication", "delete all records"). These are AI-assessed with a severity and reasoning. Intent alerts indicate what someone asked an AI assistant (Claude, or ChatGPT or Codex where connected) to do, not what data was present.
 - "anomaly" alerts: AI-detected unusual usage patterns from scheduled analysis.
 
 When discussing alerts, differentiate clearly:
@@ -277,7 +289,7 @@ RISK SCORE CALIBRATION:
 
 Return a JSON object with exactly these fields:
 {
-  "briefing": "4-6 sentences. ONE executive narrative covering the whole platform, in this order of usefulness: (1) adoption and governance state from Command Centre, with alerts by type, proportionate; (2) Cowork: sessions run and capabilities confirmed, plus in plain words how the character of knowledge work is shifting (attribute the judged part); (3) Code: engineering scale and shipping (sessions run and commits made in Claude sessions), with cost as context. Weave them into one story, do not write three labelled sections. British English. Conversational but professional.",
+  "briefing": "4-6 sentences. ONE executive narrative covering the whole platform, in this order of usefulness: (1) adoption and governance state from Command Centre, with alerts by type, proportionate; (2) knowledge work (Work and Chat): sessions run in each product and capabilities confirmed, plus in plain words how the character of the work is shifting (attribute the judged part); (3) Code: engineering scale and shipping (sessions run in each product and commits made in Claude Code sessions), with cost as context. Weave them into one story, do not write three labelled sections. British English. Conversational but professional.",
   "risk_score": <number 0-100>,
   "risk_label": "low" | "moderate" | "elevated" | "high" | "critical",
   "risk_reasoning": "1-2 sentences explaining the score. Be proportionate. Reference specific data points.",
@@ -292,16 +304,17 @@ Return a JSON object with exactly these fields:
   "adoption_headline": "EXACTLY ONE short sentence on adoption momentum with a number. Do not repeat a fact already in the briefing text; no advice."
 }
 
-COWORK TERMINOLOGY:
-- "coworkSessions" is the count of distinct work sessions this week in Cowork, Claude in Office (Excel, Word, PowerPoint, Outlook) and Claude in Google (Sheets, Docs, Slides) together; Claude Code sessions are not in it (each session = one conversation context in Claude). Always refer to this as "sessions", never "events". Individual messages within sessions are not counted here.
-- The dashboard stat card shows this as "Work sessions". Use that same label when referencing it.
+PRODUCTS AND SESSIONS:
+- "sessionsThisWeek" counts distinct sessions this week for each product, grouped as Chat (claudeChat = Claude Chat, chatgptChat = ChatGPT Chat), Work (claudeCowork = Claude Cowork, Claude in Office and Claude in Google together, chatgptWork = ChatGPT Work) and Code (claudeCode = Claude Code, codex = Codex). Always call them "sessions" (or "conversations" for Chat), never "events".
+- Name each product by its own name. NEVER describe ChatGPT or Codex activity as Cowork or Claude Code, and never add products together into one figure. A product that is absent from the data is not connected: do not mention it.
+- "activeUsersByVendor" (when present) is the number of people active this week with Claude and with OpenAI's products; one person can be in both, so never add them. activeThisWeek is the total across every product.
 
-WORK PULSE (CLAUDE COWORK AND CLAUDE IN OFFICE) DATA UNDERSTANDING:
-- Report Cowork by concrete activity first: coworkSessions (sessions run this week) and coworkPulse.capabilitiesConfirmedTotal (new processes Claude now handles end-to-end, confirmed by a human; this is Cowork's "shipping" signal).
-- coworkPulse.tierMixThisWeek is an AI-JUDGED read of the work's character: mostly routine admin tasks, meaningful multi-step / connector-assisted work, or high-stakes autonomous work. Use it only to describe in plain words how the character of work is shifting, always attributed ("work Claude judged to be…"). Never quote tier numbers, a score, or the phrase "DDS".
+WORK PULSE DATA UNDERSTANDING:
+- Report knowledge work by concrete activity first: the Work and Chat sessions in sessionsThisWeek, and workPulse.capabilitiesConfirmedTotal (new processes now handled end to end, confirmed by a human; this is the "shipping" signal for knowledge work).
+- workPulse.tierMixThisWeek is an AI-JUDGED read of the character of the prompts (Claude judges every product's prompts): mostly routine admin tasks, meaningful multi-step / connector-assisted work, or high-stakes autonomous work. When it has "claude" and "openai" parts, they cover prompts sent to Claude and prompts sent to ChatGPT. Use it only to describe in plain words how the character of work is shifting, always attributed ("work Claude judged to be…"). Never quote tier numbers, a score, or the phrase "DDS".
 
-DEVELOPER PULSE (CLAUDE CODE) DATA UNDERSTANDING:
-- Report Code by concrete activity: session_count (code sessions this week), commit_count (git commits shipped inside Claude sessions, Code's "shipping" signal), repo_count, and spend_usd (cost, as context not a verdict).
+DEVELOPER PULSE DATA UNDERSTANDING:
+- Report Code by concrete activity: the Code sessions in sessionsThisWeek, and from codePulse.sevenDay commit_count (git commits shipped inside Claude Code sessions, the "shipping" signal), repo_count, and spend_usd (cost, as context not a verdict). commit_count and spend_usd cover Claude Code only; Codex spend and commits are not measured yet, so never attribute them to Codex or say Codex costs nothing.
 - codePulse.sevenDay also carries internal efficiency signals (autonomy_ratio and cache_hit_ratio) that are NOT measures to report. Do NOT put them, or any per-instruction / tool-count figure, in the narrative. At most describe efficiency in plain words ("most context is reused, keeping costs down"). Never say "autonomy ratio", "tool actions per instruction", or "cache hit ratio".
 - codePulse.workMixAiJudged is an AI judgement of what kind of work the sessions were. When you cite it, attribute it (e.g. "sessions Claude judged to be mostly exploration"). All other codePulse numbers are measured, not judged.
 - codePulse.githubTotalCommitsInMappedRepos, when present, is the total commits shipped in GitHub repos mapped for the overlay; derived.aiAssistedShareOfShippedCommits, when present, is the AI-assisted share of that shipping.

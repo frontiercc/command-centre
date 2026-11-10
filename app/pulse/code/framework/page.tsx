@@ -12,9 +12,14 @@ import { FigureGrid } from '@/components/pulse/code/CodeStatStrip';
 import type { FrameworkBox } from '@/lib/pulse/code/framework';
 import type { DxFrameworkResult } from '@/lib/pulse/code/dx-framework';
 import { PageBody, Toolbar, Panel, Figure, Tag, Notice, Empty, Muted } from '@/components/precision/ui';
+import { useVendor, useOpenAiOnly, VendorSwitch } from '@/components/shared/VendorSwitch';
+import { DEVELOPER_PULSE_VENDOR_LABELS, type Vendor } from '@/lib/dashboard/vendor';
 
 interface Envelope {
   enabled: boolean;
+  /** The view the figures are for (Claude until Codex data exists and is shown). */
+  vendor?: Vendor;
+  codexPresent?: boolean;
   hasData?: boolean;
   boxes?: FrameworkBox[];
   spendContext?: { spendUsd: number | null; autonomyRatio: number | null };
@@ -24,13 +29,16 @@ interface Envelope {
 export default function FrameworkPage() {
   const [data, setData] = useState<Envelope | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const [vendor, setVendor, vendorReady] = useVendor();
+  const openaiOnly = useOpenAiOnly();
 
   useEffect(() => {
-    fetch('/api/pulse/code/framework')
+    if (!vendorReady) return; // the saved view is read after the page loads
+    fetch(`/api/pulse/code/framework?vendor=${vendor}`)
       .then(async r => { if (!r.ok) throw new Error((await r.json()).error || "Couldn't load this page. Try again."); return r.json(); })
       .then(setData)
       .catch(e => setError(e.message || 'Failed to load'));
-  }, []);
+  }, [vendor, vendorReady]);
 
   if (error) return (
     <>
@@ -50,6 +58,8 @@ export default function FrameworkPage() {
   );
 
   const isMock = data.dx?.source === 'mock';
+  const view: Vendor = data.vendor ?? 'claude';
+  const telemetry = view === 'openai' ? 'Codex' : view === 'all' ? 'Claude Code and Codex' : 'Claude Code';
 
   return (
     <>
@@ -66,10 +76,15 @@ export default function FrameworkPage() {
               <Tag>Not captured here</Tag>
             </span>
           }
-        />
+        >
+          <VendorSwitch vendor={vendor} onChange={setVendor} openaiPresent={!!data.codexPresent} labels={DEVELOPER_PULSE_VENDOR_LABELS} />
+        </Toolbar>
+        {data.codexPresent && view !== 'all' && !openaiOnly && (
+          <p className="m-0 -mt-2 text-[13px] text-[#8F8F8F]">Showing {view === 'openai' ? 'Codex' : 'Claude Code'} only.</p>
+        )}
         <div className="max-w-3xl">
           <Muted>
-            These are the AI-contribution slice of your delivery frameworks, measured from Claude Code telemetry.
+            These are the AI-contribution slice of your delivery frameworks, measured from {telemetry} telemetry.
             They inform, but do not replace, your DORA and DX Core 4 numbers, and imply no causation.
           </Muted>
         </div>
@@ -82,7 +97,7 @@ export default function FrameworkPage() {
 
         {!data.hasData && (
           <Notice tone="info">
-            Not enough measured data yet. The crosswalk below will fill in as Claude Code telemetry accrues.
+            Not enough measured data yet. The crosswalk below will fill in as {telemetry} telemetry accrues.
           </Notice>
         )}
 

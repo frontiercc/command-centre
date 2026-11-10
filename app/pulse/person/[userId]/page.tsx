@@ -25,16 +25,16 @@ interface Person360Data {
     engagedHours: number | null; linesAdded: number; editAcceptRate: number | null;
   } | null;
   chat: { messages7d: number } | null;
-  combinedSpend: { codeUsd: number | null; coworkUsd: number; totalUsd: number | null; totalIsPartial?: boolean };
+  combinedSpend: { codeUsd: number | null; coworkUsd: number; totalUsd: number | null; totalIsPartial?: boolean; chatgptUsd?: number | null; codeIncludesCodex?: boolean };
   weekly: { codeSpend: SeriesPoint[]; coworkEvents: SeriesPoint[] };
   humanTime?: { cowork: HumanTimeSummary | null; code: HumanTimeSummary | null } | null;
   canSeeSpendReview?: boolean;
 }
 
 /** Figures inside a flush panel, joined by hairlines (same grammar as Strip). */
-function FigureGrid({ children, cols }: { children: ReactNode; cols: 2 | 3 }) {
+function FigureGrid({ children, cols }: { children: ReactNode; cols: 2 | 3 | 4 }) {
   return (
-    <div className={cx('grid grid-cols-1', cols === 3 ? 'sm:grid-cols-3' : 'sm:grid-cols-2',
+    <div className={cx('grid grid-cols-1', cols === 4 ? 'sm:grid-cols-4' : cols === 3 ? 'sm:grid-cols-3' : 'sm:grid-cols-2',
       '[&>*]:border-[#EAEAEA] [&>*+*]:border-t sm:[&>*+*]:border-t-0 sm:[&>*+*]:border-l')}>
       {children}
     </div>
@@ -92,14 +92,14 @@ export default function Person360Page() {
 
   if (loading) return (
     <>
-      <TopBar title="Person 360" subtitle="Cross-surface view: Cowork, Code, Chat" />
+      <TopBar title="Person 360" subtitle="Cross-product view: Work Pulse, Developer Pulse, Chat" />
       <LoadingSpinner />
     </>
   );
 
   if (error) return (
     <>
-      <TopBar title="Person 360" subtitle="Cross-surface view: Cowork, Code, Chat" />
+      <TopBar title="Person 360" subtitle="Cross-product view: Work Pulse, Developer Pulse, Chat" />
       <PageBody>
         <Notice tone="error" title="Failed to load.">{error}</Notice>
       </PageBody>
@@ -131,15 +131,16 @@ export default function Person360Page() {
           </Link>
         </Toolbar>
 
-        <HumanTimeCard summary={data.humanTime?.cowork} surface="cowork" scope="Cowork" />
+        <HumanTimeCard summary={data.humanTime?.cowork} surface="cowork" scope="Personal" view="all" />
         <HumanTimeCard summary={data.humanTime?.code} surface="code" scope="Code" />
 
         {/* Combined AI Spend — measured, blue */}
         <Panel title="Combined AI spend" subtitle="7 days" right={<Tag tone="measured">Measured</Tag>} flush>
-          <FigureGrid cols={3}>
+          <FigureGrid cols={combinedSpend.chatgptUsd != null ? 4 : 3}>
             {fig('Total', combinedSpend.totalUsd === null ? '—' : formatCurrency(combinedSpend.totalUsd), undefined, 'measured')}
-            {fig('Code', combinedSpend.codeUsd === null ? '—' : formatCurrency(combinedSpend.codeUsd))}
-            {fig('Cowork', formatCurrency(combinedSpend.coworkUsd))}
+            {fig(combinedSpend.codeIncludesCodex ? 'Claude Code and Codex' : 'Code', combinedSpend.codeUsd === null ? '—' : formatCurrency(combinedSpend.codeUsd))}
+            {fig('Claude Cowork', formatCurrency(combinedSpend.coworkUsd))}
+            {combinedSpend.chatgptUsd != null && fig('ChatGPT', formatCurrency(combinedSpend.chatgptUsd))}
           </FigureGrid>
           {combinedSpend.totalIsPartial && (
             <PanelFoot tone="warn">Excludes unpriced models, so the total is an underestimate.</PanelFoot>
@@ -169,11 +170,11 @@ export default function Person360Page() {
                     ))}
                   </div>
                 </div>
-                <SparkBlock label="Cowork events, 8 weeks">
+                <SparkBlock label="Classified prompts, Claude and ChatGPT, 8 weeks">
                   <Sparkline
                     data={weekly.coworkEvents.map(p => p.value)}
                     partialLast={weekly.coworkEvents.at(-1)?.partial ?? false}
-                    label="Cowork events, weekly"
+                    label="Classified prompts, weekly"
                   />
                 </SparkBlock>
               </>
@@ -183,7 +184,7 @@ export default function Person360Page() {
           {/* Code column */}
           <Panel title="Developer Pulse" right={code ? <Tag tone="measured">Measured</Tag> : undefined} flush={code !== null}>
             {code === null ? (
-              <Muted>No Claude Code activity for this user yet.</Muted>
+              <Muted>No coding activity for this user yet.</Muted>
             ) : (
               <>
                 <FigureGrid cols={2}>
@@ -214,7 +215,7 @@ export default function Person360Page() {
         </div>
 
         {/* Chat */}
-        <Panel title="Chat" flush>
+        <Panel title="Chat" subtitle="Claude Chat and ChatGPT Chat" flush>
           <Figure
             label="Messages, last 7 days"
             value={chat ? chat.messages7d : <span className="text-[15px] font-medium text-[#8F8F8F] tracking-normal">Not measured</span>}

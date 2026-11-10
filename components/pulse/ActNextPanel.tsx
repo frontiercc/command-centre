@@ -37,9 +37,12 @@ const CHIP: Record<ActNextType, { label: string; tone: 'measured' | 'judged' }> 
 export default function ActNextPanel({
   items,
   deptBoxes = [],
+  fromBothVendors = false,
 }: {
   items: ActNextItem[];
   deptBoxes?: DeptProcessBoxItem[];
+  /** OpenAI data is present and shown: the suggestions are mined from Claude and OpenAI prompts together. */
+  fromBothVendors?: boolean;
 }) {
   const router = useRouter();
   if (items.length === 0 && deptBoxes.length === 0) return null;
@@ -49,6 +52,9 @@ export default function ActNextPanel({
       {deptBoxes.length > 0 && (
         <div className="p-4">
           <SubHead>Department process opportunities</SubHead>
+          {fromBothVendors && (
+            <p className="m-0 mb-2 text-[13px] text-[#8F8F8F]">Found by reading Claude, ChatGPT and Codex prompts together, so they are the same whichever view is selected.</p>
+          )}
           <DeptProcessBoxes boxes={deptBoxes} onOpen={() => router.push('/use-cases')} />
         </div>
       )}

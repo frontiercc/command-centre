@@ -19,12 +19,19 @@ import { insertAlert } from '@/lib/db/queries';
 import { assessIntent } from '@/lib/intent/assess';
 import type { IntentMatch } from '@/lib/intent/types';
 
+
 /**
- * Map surface name to the Drizzle table that holds the message.
- * Chat messages live in chat_messages; Code and Cowork live in cowork_messages.
+ * The product a prompt was typed in, for an intent alert whose caller named
+ * none: the Claude product its surface belongs to. The OpenAI sync and the
+ * Office receiver always name theirs (ChatGPT Chat, ChatGPT Work, Codex,
+ * Claude in Excel...), so this only covers the Claude Cowork, Code and Chat
+ * paths.
  */
-function tableForSurface(surface: string) {
-  return surface === 'chat' ? schema.chatMessages : schema.coworkMessages;
+export function intentProductLabel(surface: string, product?: string | null): string {
+  if (product) return product;
+  if (surface === 'code') return 'Claude Code';
+  if (surface === 'chat') return 'Claude Chat';
+  return 'Claude Cowork';
 }
 
 export async function createIntentAlerts(
@@ -33,9 +40,12 @@ export async function createIntentAlerts(
   messageId: string,
   messageText: string,
   matches: IntentMatch[],
+  /** The product the prompt was typed in; defaults to the Claude product of its surface. */
+  product?: string | null,
 ): Promise<void> {
   // Get a single AI assessment for all matches (one API call for the whole message)
   const assessment = await assessIntent(messageText, matches);
+  const productLabel = intentProductLabel(surface, product);
 
   for (const match of matches) {
     await insertAlert({
@@ -43,10 +53,14 @@ export async function createIntentAlerts(
       user_id: userId || 'unknown',
       alert_type: 'intent',
       severity: assessment.severity,
-      title: `${match.categoryName} intent detected`,
+      // The product is in the title, not only the explanation: the
+      // explanation is the AI reasoning, which viewers outside the Audit Log
+      // rule do not see (lib/alerts/evidence-visibility.ts).
+      title: `${match.categoryName} intent detected in ${productLabel}`,
       explanation: assessment.reasoning,
       raw_evidence: JSON.stringify({
         surface,
+        product: productLabel,
         message_id: messageId,
         intent_category: match.categoryId,
         matched_patterns: match.matchedPhrases,
@@ -62,7 +76,8 @@ export async function createIntentAlerts(
   // Enrich the source message's flag_reason with AI-assessed severity
   // so the audit log shows severity without jumping to the alerts page
   try {
-    const table = tableForSurface(surface);
+    // Every prompt, Claude Chat included (surface 'chat'), lives in cowork_messages.
+    const table = schema.coworkMessages;
     const categories = matches.map(m => m.categoryId).join(', ');
     const enrichedReason = `Intent detected: ${categories} (${assessment.severity})`;
 

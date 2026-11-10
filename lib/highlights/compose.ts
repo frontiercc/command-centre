@@ -28,7 +28,7 @@ export interface ComposedHighlights { subject: string; deliverables: { itemIndex
 const MAX_DELIVERABLES = 6;
 
 // Writing rules proven by hand — .claude/commands/ccc-weekly.md. Load-bearing.
-const SYSTEM_PROMPT = `You write the opening of a weekly internal post about what a team produced with Claude, from their real request text.
+const SYSTEM_PROMPT = `You write the opening of a weekly internal post about what a team produced with AI, from their real request text.
 You are given numbered WORK ITEMS: real requests people made this week. Return JSON only:
 {"subject": "...", "deliverables": [{"item": <number>, "sentence": "..."}]}
 Rules, all hard:

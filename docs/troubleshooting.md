@@ -1,6 +1,6 @@
 # Frontier Command Centre: Troubleshooting and FAQ
 
-Fixes for the problems people most often hit when installing, signing in, connecting Claude, running and updating Command Centre.
+Fixes for the problems people most often hit when installing, signing in, connecting Claude, connecting ChatGPT and Codex, using department sync, running and updating Command Centre.
 
 The commands are for Docker Compose installations: run them from the `command-centre` folder. If your problem is not listed, ask in [Discussions](https://github.com/frontiercc/command-centre/discussions), or report a bug in [Issues](https://github.com/frontiercc/command-centre/issues).
 
@@ -22,7 +22,7 @@ The commands are for Docker Compose installations: run them from the `command-ce
 
 **Pages still empty.** They fill in a few minutes after loading, once the scheduled jobs run. Reload to see new items in the sidebar.
 
-**Two demo views missing.** The FinOps Enterprise figures and Dev Framework Alignment scores are hidden by default. In `.env`, remove the `#` from `# CCC_FINOPS_ALLOW_MOCK=1` and `# CCC_DX_ALLOW_MOCK=1`, then run `docker compose up -d`. Do not do this on an installation with real data.
+**Dev Framework Alignment scores missing.** Its demo scores are hidden by default. In `.env`, remove the `#` from `# CCC_DX_ALLOW_MOCK=1`, then run `docker compose up -d`. Do not do this on an installation with real data.
 
 ## Connecting Claude
 
@@ -56,6 +56,26 @@ For many machines, deploy the same key with your device management tool.
 
 **No grading yet.** Claude Cowork work is graded every five minutes, Claude Code sessions within an hour of going idle. Grading needs the Claude API key.
 
+## Connecting ChatGPT and Codex
+
+The setup is in [Connect ChatGPT and Codex](configure-command-centre.md#connect-chatgpt-and-codex). The test button on **Admin → Access & Keys → OpenAI (ChatGPT and Codex)** reports most problems.
+
+**"Enter the ChatGPT workspace ID first".** The test needs the workspace ID as well as the key.
+
+**"Invalid key".** OpenAI did not accept the key. Copy it again from OpenAI's admin console.
+
+**"OpenAI did not find this workspace ID" or "this organisation ID".** Copy the ID again from OpenAI's admin console.
+
+**"Key is valid but cannot read …".** The key lacks the read permission for each log the message names: ChatGPT conversations, Codex logs, Codex turns or costs. Give the key those permissions in OpenAI's console, or create a key that has them, then test again.
+
+**The test passes but says spend is not checked.** No organisation ID is entered. Prompts and Codex spend will still arrive. ChatGPT spend needs the organisation ID.
+
+**The test passed but nothing arrives.** Select **Save settings** after the test: the test does not save. Then check the status line in **Admin → Ingestion → Connect ChatGPT and Codex**. "Key set, awaiting the first sync" clears within a few minutes. "The last sync reported errors" means a log could not be read: the **System health** card on **Admin → System** shows the OpenAI sync job and its error.
+
+**Only older activity has arrived.** The first sync reads the last 30 days oldest first, at most 300 files a run, so on a busy workspace the newest activity arrives last and can take some hours.
+
+**Some people's prompts are missing.** A record with no single plain email address is skipped, and so is anyone on the exclusion list on **Admin → Ingestion**.
+
 ## Settings
 
 **Where are my settings?** In `.env` in the `command-centre` folder (a hidden file). Open it with `notepad .env` on Windows, `open -e .env` on a Mac, or `nano .env` on Linux.
@@ -64,11 +84,23 @@ For many machines, deploy the same key with your device management tool.
 
 1. Make one: `docker run --rm node:22-alpine node -e "console.log(require('crypto').randomBytes(32).toString('hex'))"`
 2. Put it after `OTEL_ENDPOINT_SECRET=` in `.env`, then run `docker compose up -d`.
-3. Straight away, copy the new settings from **Admin → Ingestion** into claude.ai, and update the OTLP headers in the Claude Cowork monitoring settings. Telemetry sent with the old token is refused and lost.
+3. Straight away, copy the new settings from **Admin → Ingestion** into claude.ai, and update the OTLP headers in the Claude Cowork monitoring settings and in Office agents → Monitoring. Telemetry sent with the old token is refused and lost.
 
 On AWS or Azure, change `OTEL_ENDPOINT_SECRET` in your secret store and redeploy the collector, then update Claude's settings as in step 3.
 
-**Change the collector address.** On **Admin → Ingestion**, select **Edit** beside the collector address, enter the new one and save. Then copy the new Claude Code settings into claude.ai and update the OTLP endpoint in the Claude Cowork monitoring settings.
+**Change the collector address.** On **Admin → Ingestion**, select **Edit** beside the collector address, enter the new one and save. Then copy the new Claude Code settings into claude.ai and update the OTLP endpoint in the Claude Cowork monitoring settings and in Office agents → Monitoring.
+
+## Department sync
+
+**The Department sync section says it works with Microsoft Entra ID only, but you use Entra.** Check that the single sign-on **Issuer URL** is `https://login.microsoftonline.com/<tenant ID>/v2.0`, save the single sign-on settings, and reload the page.
+
+**After switching it on, Microsoft asks for permission or admin approval at sign-in.** Grant admin consent for **User.Read** on the app registration, as in step 1 of [Department sync](configure-command-centre.md#department-sync).
+
+**The Daily lookup says it can't read the directory.** Add **User.Read.All** as an application permission, with admin consent. Until then, departments update only when people sign in.
+
+**Someone's department doesn't update.** Look for them under **Kept manual** (their department was set by hand; select **Return to directory**) or under **Not found** (no address in Entra matches their email). Otherwise, their department is empty in Entra, which never removes one.
+
+**A new department appeared that should be an existing one.** Add the directory's name to the **Name map** and select **Save name map**. The next lookup moves those people.
 
 ## Running it
 
@@ -85,6 +117,12 @@ Back up the database, and keep a copy of `.env` with it: stored secrets, such as
 ```bash
 docker compose exec -T postgres pg_dump -U ccc -d ccc > command-centre-backup.sql
 ```
+
+### Upgrading from 1.2.0 to 1.3.0
+
+- **Back up first.** On its first start, 1.3.0 moves Claude Chat prompts into the Cowork table and deletes the old table, so a 1.2.0 Hub cannot run against the upgraded database; going back means restoring the backup.
+- **The first start can take longer** on a hub with a long Claude Chat history. On AWS or Azure, give that start a longer health-check grace period.
+- **Stored Claude Chat prompts are graded after the upgrade**, and the first 30 days of ChatGPT prompts once ChatGPT is connected, using your Claude API key. New Claude Cowork prompts wait behind them until the queue clears. **Classify ChatGPT prompts** under **Admin → Work Pulse** leaves ChatGPT prompts ungraded.
 
 ### Update
 

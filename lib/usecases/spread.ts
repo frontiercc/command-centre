@@ -25,6 +25,7 @@ import { schema } from '@/lib/db/schema';
 import { getConfigValue } from '@/lib/config';
 import { weekStart } from '@/lib/pulse/period';
 import { signalMatches } from '@/lib/usecases/signal-match';
+import { skillVendor } from '@/lib/pulse/vendor-filter';
 import { activityPhrase, type MatchedSignalEvidence } from '@/lib/usecases/spread-format';
 
 import type { UseCase } from '@/lib/usecases/queries';
@@ -146,7 +147,11 @@ async function readCodifiedSkill(ucId: string): Promise<string | null> {
   return rows[0] && rows[0].at != null ? rows[0].name : null;
 }
 
-/** Judged sessions of this use case per person, last SPREAD_ACTIVITY_WINDOW_WEEKS completed weeks. */
+/**
+ * Judged sessions of this use case per person, last SPREAD_ACTIVITY_WINDOW_WEEKS
+ * completed weeks. Claude sessions only: the skill is a Claude skill, so
+ * someone doing the work in ChatGPT or Codex is not told to use it.
+ */
 async function readWorkActivity(ucId: string, nowS: number): Promise<ActivityRow[]> {
   const client = await getTypedClient();
   const wm = schema.useCaseWeekMatches;
@@ -155,7 +160,8 @@ async function readWorkActivity(ucId: string, nowS: number): Promise<ActivityRow
   const rows = await client
     .select({ user_id: wm.user_id, n: sql<number | string>`COUNT(DISTINCT CASE WHEN ${wm.session_id} <> '' THEN ${wm.session_id} END)` })
     .from(wm)
-    .where(and(eq(wm.use_case_id, ucId), gte(wm.week_start, start), lt(wm.week_start, end)))
+    .where(and(eq(wm.use_case_id, ucId), gte(wm.week_start, start), lt(wm.week_start, end),
+      sql`${wm.session_id} NOT LIKE 'chatgpt:%'`, sql`${wm.session_id} NOT LIKE 'codex:%'`))
     .groupBy(wm.user_id);
   const meta = await getUserMeta(rows.map(r => r.user_id));
   return rows.flatMap(r => {
@@ -165,7 +171,11 @@ async function readWorkActivity(ucId: string, nowS: number): Promise<ActivityRow
   });
 }
 
-/** Everyone who has ever run the skill (exact or marketplace-prefixed name), with a per-department count. */
+/**
+ * Everyone who has ever run the skill (exact or marketplace-prefixed name), with a per-department count.
+ * The skill is the use case's own Claude skill, so a ChatGPT skill that happens
+ * to share its name does not count as having used it.
+ */
 async function readSkillUsers(skillName: string): Promise<{ users: Set<string>; adoptersByDept: Map<string, number> }> {
   const client = await getTypedClient();
   const si = schema.coworkSkillInvocations;
@@ -173,7 +183,10 @@ async function readSkillUsers(skillName: string): Promise<{ users: Set<string>; 
   const rows = await client
     .selectDistinct({ user_id: si.user_id, name: si.skill_name })
     .from(si)
-    .where(sql`lower(${si.skill_name}) = ${lc} OR lower(${si.skill_name}) LIKE ${'%:' + lc}`);
+    .where(and(
+      sql`(lower(${si.skill_name}) = ${lc} OR lower(${si.skill_name}) LIKE ${'%:' + lc})`,
+      skillVendor('claude'),
+    ));
   const users = new Set(
     rows.filter(r => r.user_id && signalMatches(new Set([skillName]), r.name)).map(r => r.user_id as string),
   );

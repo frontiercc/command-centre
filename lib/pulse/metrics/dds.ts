@@ -7,6 +7,8 @@
 import { and, eq, gte, inArray, sql } from 'drizzle-orm';
 import { getTypedClient } from '@/lib/db/client';
 import { schema } from '@/lib/db/schema';
+import { messageVendor } from '@/lib/pulse/vendor-filter';
+import type { Vendor } from '@/lib/dashboard/vendor';
 
 // ─── Per-user DDS ─────────────────────────────────────────────────────────────
 
@@ -61,7 +63,7 @@ export async function computeUserDds(userId: string): Promise<number | null> {
  * they are mapped to null explicitly so every requested id is present in the
  * returned Map.
  */
-export async function computeDdsForUsers(userIds: string[]): Promise<Map<string, number | null>> {
+export async function computeDdsForUsers(userIds: string[], vendor: Vendor = 'all'): Promise<Map<string, number | null>> {
   const result = new Map<string, number | null>();
   if (userIds.length === 0) return result;
 
@@ -85,7 +87,7 @@ export async function computeDdsForUsers(userIds: string[]): Promise<Map<string,
     })
     .from(pc)
     .innerJoin(cm, eq(cm.id, pc.cowork_message_id))
-    .where(and(inArray(pc.user_id, userIds), eq(pc.classifier_status, 'classified'), gte(cm.occurred_at, windowStart)))
+    .where(and(inArray(pc.user_id, userIds), eq(pc.classifier_status, 'classified'), gte(cm.occurred_at, windowStart), messageVendor(vendor)))
     .groupBy(pc.user_id);
 
   for (const row of rows) {

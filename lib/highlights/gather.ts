@@ -23,13 +23,15 @@
  * as lib/digest/build.ts and lib/reports/*-sections.ts).
  */
 import { getCodeWorkTypeLabeller } from '@/lib/pulse/code/tier-config';
-import { and, desc, eq, gte, isNotNull, isNull, lt, ne, notLike, or, sql } from 'drizzle-orm';
+import { inArray, and, desc, eq, gte, isNotNull, isNull, lt, ne, notLike, or, sql } from 'drizzle-orm';
 import { getTypedClient } from '@/lib/db/client';
 import { schema } from '@/lib/db/schema';
 import { weekStart } from '@/lib/pulse/period';
 import { stripIdentity } from '@/lib/usecases/prompt-text';
 import { ORG_SCOPE_ID } from '@/lib/pulse/code/aggregator';
 import { readOrgHumanTime } from '@/lib/pulse/human-time-summary';
+import { getConnectedProducts } from '@/lib/sources/connected';
+import { openaiShown } from '@/lib/sources/openai-visibility';
 
 const WEEK = 7 * 86400;
 const MAX_WORK_ITEMS = 18;
@@ -47,8 +49,15 @@ export interface HighlightsInput {
   workItems: HighlightsWorkItem[];   // tier-3, content-bearing, stripped+redacted, longest-first, max 18
   engineeringMix: { workType: string; sessions: number }[];
   systems: { totalCalls: number; distinctSystems: number; top: { server: string; calls: number; people: number }[] };
-  codeOutput: { linesChanged: number; handsOnHours: number; changesKept: number; changesProposed: number; basis: 'week' | 'rolling' } | null;
+  /**
+   * From Claude Code's own telemetry only (Codex sends no lines, hands-on time
+   * or edit decisions). `claudeCodeLabel` is set when OpenAI is connected, so
+   * the post names the tool rather than read as every coding tool's output.
+   */
+  codeOutput: { linesChanged: number; handsOnHours: number; changesKept: number; changesProposed: number; basis: 'week' | 'rolling'; claudeCodeLabel?: boolean } | null;
   tier3Count: number;
+  /** 'AI' when ChatGPT or Codex work is in the week, so the post never credits Claude with it; else 'Claude'. */
+  assistant?: 'Claude' | 'AI';
   /** Org totals for the week; injected by render, never model-written. Null when off or empty. */
   humanTime?: { humanMinutes: number; claudeMinutes: number; sessions: number } | null;
   shoutouts: { skills: HighlightsShoutout | null; systems: HighlightsShoutout | null } | null;  // null unless includeNames
@@ -198,10 +207,18 @@ export async function gatherHighlights(opts?: { nowS?: number; includeNames?: bo
     };
   }
 
+  const openaiConnected = codeRow ? (await getConnectedProducts()).openaiConnected === true : false;
+
+  const openaiRows = await client
+    .select({ n: sql<number | string>`count(*)` })
+    .from(cm)
+    .where(and(inWindow, inArray(cm.source, ['chatgpt_chat', 'chatgpt_work', 'codex'])));
+
   return {
     weekStart: wkStart,
     weekEnd: wkEnd,
     headcount: toNum(headcountRows[0]?.n),
+    assistant: toNum(openaiRows[0]?.n) > 0 ? 'AI' : 'Claude',
     workItems,
     engineeringMix: engRows.map(r => ({ workType: codeLabel(r.workType ?? 'other'), sessions: toNum(r.sessions) })),
     systems: {
@@ -215,9 +232,12 @@ export async function gatherHighlights(opts?: { nowS?: number; includeNames?: bo
       changesKept: toNum(codeRow.edit_accept_count),
       changesProposed: toNum(codeRow.edit_accept_count) + toNum(codeRow.edit_reject_count),
       basis: codeBasis,
+      ...(openaiConnected ? { claudeCodeLabel: true } : {}),
     } : null,
     tier3Count: toNum(tier3Rows[0]?.n),
-    humanTime: (await readOrgHumanTime(wkStart, wkEnd))?.total ?? null,
+    // ChatGPT conversations and Codex sessions count too, unless hidden: the
+    // same totals as the weekly digest's line.
+    humanTime: (await readOrgHumanTime(wkStart, wkEnd, { openai: await openaiShown() }))?.total ?? null,
     shoutouts,
   };
 }

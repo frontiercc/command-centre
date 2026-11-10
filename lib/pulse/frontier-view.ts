@@ -22,6 +22,8 @@
 import { and, desc, eq, gte, inArray, notInArray, sql } from 'drizzle-orm';
 import { getTypedClient } from '@/lib/db/client';
 import { schema } from '@/lib/db/schema';
+import { messageVendor } from '@/lib/pulse/vendor-filter';
+import type { Vendor } from '@/lib/dashboard/vendor';
 import { MECHANISM_TASK_TYPES } from '@/lib/finance/model-efficiency';
 import { readDescriptions } from '@/lib/pulse/session-descriptions';
 
@@ -252,10 +254,10 @@ export function countRepeatsSince(item: SessionSummary, personSessions: SessionS
 
 // ─── Reads ───────────────────────────────────────────────────────────────────
 
-async function readClassRows(client: Client, userIds: string[], sinceS?: number): Promise<ClassRow[]> {
+async function readClassRows(client: Client, userIds: string[], sinceS?: number, vendor: Vendor = 'all'): Promise<ClassRow[]> {
   const pc = schema.pulseClassifications;
   const cm = schema.coworkMessages;
-  const conds = [inArray(pc.user_id, userIds), eq(pc.classifier_status, 'classified')];
+  const conds = [inArray(pc.user_id, userIds), eq(pc.classifier_status, 'classified'), messageVendor(vendor)];
   if (sinceS !== undefined) conds.push(gte(cm.occurred_at, sinceS));
   const rows = await client
     .select({
@@ -417,6 +419,8 @@ export async function buildFrontierView(
   target: { userId: string } | { dept: string },
   nowS = Math.floor(Date.now() / 1000),
   viewer: FrontierViewer = { seeAllDetail: false, ownUserId: null },
+  /** The Claude / OpenAI switch: only that vendor's sessions can fill the boxes. */
+  vendor: Vendor = 'all',
 ): Promise<FrontierView> {
   const client = await getTypedClient();
   const scope: FrontierView['scope'] = 'userId' in target ? 'person' : 'dept';
@@ -426,7 +430,7 @@ export async function buildFrontierView(
   if (!userIds.length) return empty;
 
   // Whole history for these people (step-ups need it); everything else is windowed below.
-  const rows = await readClassRows(client, userIds);
+  const rows = await readClassRows(client, userIds, undefined, vendor);
   const byPerson = new Map<string, SessionSummary[]>();
   for (const s of groupSessions(rows)) {
     const list = byPerson.get(s.userId);
@@ -493,7 +497,7 @@ export async function buildFrontierView(
       list = allSessions.filter(s => s.occurredAt >= monthSince);
     } else {
       const members = await readDeptMembers(client, dept);
-      list = members.length ? groupSessions(await readClassRows(client, members, monthSince)) : [];
+      list = members.length ? groupSessions(await readClassRows(client, members, monthSince, vendor)) : [];
     }
     peerSessionsByDept.set(dept, list);
     return list;

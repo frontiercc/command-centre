@@ -117,7 +117,7 @@ describe('text outputs', () => {
   it('builds the digest/Highlights sentence from computed figures', async () => {
     const { humanTimeSentence } = await import('@/lib/pulse/human-time');
     expect(humanTimeSentence({ total }, 'Last week')).toBe(
-      'Last week: about 310 hours of Tier 2 and 3 work by hand (AI estimate), done in 44 hours with Claude (measured), across 42 sessions.');
+      'Last week: about 310 hours of Tier 2 and 3 work by hand (AI estimate), done in 44 hours with AI (measured), across 42 sessions.');
   });
   it('renders the Reports section, estimate labelled in words, null as not measured', async () => {
     const { renderHumanTimeSection } = await import('@/lib/reports/human-time-sections');
@@ -132,7 +132,26 @@ describe('text outputs', () => {
     expect(md).toContain('**The by-hand figures are AI estimates**');
     expect(md).toContain('| Code | 6 | about 10 (range 5.0–20) | 2.0 |');
     expect(md).toContain('| Cowork | 0 | not measured | not measured |');
-    expect(md).toContain('- feature: about 8.3 hours by hand against 1.7 hours with Claude, 5 sessions');
+    expect(md).toContain('- feature: about 8.3 hours by hand against 1.7 hours with AI, 5 sessions');
+    // No ChatGPT split returned: no product lines, Cowork described as Claude Cowork.
+    expect(md).not.toContain('of which');
+    expect(md).toContain('Cowork covers Claude Cowork.');
+    expect(md).toContain('working alongside Claude.');
+  });
+  it('splits the Cowork row into Claude Cowork and ChatGPT when the summary returns both', async () => {
+    const { renderHumanTimeSection } = await import('@/lib/reports/human-time-sections');
+    const empty = { sessions: 0, humanMinutes: { low: 0, likely: 0, high: 0 }, claudeMinutes: 0, ratio: null, byKind: [], windowDays: 7 };
+    const md = renderHumanTimeSection({
+      code: empty,
+      cowork: { ...empty, sessions: 3, humanMinutes: { low: 240, likely: 360, high: 540 }, claudeMinutes: 90,
+        byProduct: { claude: { sessions: 2, humanMinutes: 240, claudeMinutes: 60 }, openai: { sessions: 1, humanMinutes: 120, claudeMinutes: 30 } } },
+      total: { sessions: 3, humanMinutes: 360, claudeMinutes: 90 },
+    });
+    expect(md).toContain('| Cowork | 3 | about 6.0 (range 4.0–9.0) | 1.5 |');
+    expect(md).toContain('| of which Claude Cowork | 2 | about 4.0 | 1.0 |');
+    expect(md).toContain('| of which ChatGPT | 1 | about 2.0 | 0.5 |');
+    expect(md).toContain('Cowork covers Claude Cowork and ChatGPT, each also shown on its own line.');
+    expect(md).toContain('working alongside the AI.');
   });
   it('adds a Highlights line only when there are figures', async () => {
     const { renderHighlightsPost: renderHighlights } = await import('@/lib/highlights/render');
@@ -143,6 +162,21 @@ describe('text outputs', () => {
     const composed = { subject: 'A week of work', deliverables: [] };
     expect(renderHighlights({ ...base }, composed)).not.toContain('by hand');
     expect(renderHighlights({ ...base, humanTime: total }, composed)).toContain('About 310 hours of work by hand (AI estimate), done in 44 hours with Claude, across 42 sessions');
+    // A week with ChatGPT or Codex work never credits Claude with it.
+    const withOpenAi = renderHighlights({ ...base, assistant: 'AI', humanTime: total }, composed);
+    expect(withOpenAi).toContain('What a week of AI actually produced');
+    expect(withOpenAi).toContain('3 of our people used AI this week');
+    expect(withOpenAi).toContain('done in 44 hours with AI');
+    expect(withOpenAi).not.toMatch(/used Claude|week of Claude|with Claude,/);
+  });
+
+  it('names Claude and ChatGPT in the classifier and anomaly prompts', async () => {
+    const { buildClassifierSystemMessage, DEFAULT_TIER_CONFIG } = await import('@/lib/pulse/tier-config');
+    const classifier = buildClassifierSystemMessage(DEFAULT_TIER_CONFIG);
+    expect(classifier).toContain('an AI assistant (Claude or ChatGPT)');
+    expect(classifier).not.toContain('Cowork Operating System');
+    const { CODE_ESTIMATE_ONLY_SYSTEM } = await import('@/lib/pulse/human-time');
+    expect(CODE_ESTIMATE_ONLY_SYSTEM).toContain('(Claude Code or Codex)');
   });
 });
 

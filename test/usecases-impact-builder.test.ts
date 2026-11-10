@@ -197,7 +197,7 @@ describe('buildUseCaseImpact', () => {
 
     // code surfaces now 2: wi-b-cd-1 (valid object models_json) + wi-b-cd-2
     // (array-shaped, contributes to the surface count but not to model names).
-    expect(impact.participation.surfaces).toEqual({ cowork: 1, code: 2 });
+    expect(impact.participation.surfaces).toEqual({ cowork: 1, code: 2, chatgpt: 0, codex: 0 });
     expect(impact.participation.cappedAt).toBeNull();
   });
 

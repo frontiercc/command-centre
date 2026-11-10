@@ -15,11 +15,15 @@
 // getCoworkFrictionIndex's COUNT(*) FILTER (WHERE ...) idiom (native on
 // Postgres).
 import { NextRequest, NextResponse } from 'next/server';
-import { and, desc, eq, gt, gte, inArray, lt, lte, notInArray, sql } from 'drizzle-orm';
+import { visibleVendor, visibleOpenAi } from '@/lib/sources/openai-visibility';
+import { and, desc, eq, gte, inArray, isNotNull, lt, lte, notInArray, sql } from 'drizzle-orm';
 import { getAdminSession, isDeptScoped, canAccessCoworkPulse, canAccessPulseAdmin } from '@/lib/auth/admin-auth';
 import { buildFrontierView, resolveViewerUserId } from '@/lib/pulse/frontier-view';
 import { getTypedClient } from '@/lib/db/client';
 import { schema } from '@/lib/db/schema';
+import { getDocSessions } from '@/lib/pulse/cowork/doc-sessions';
+import { hasOpenAiData } from '@/lib/dashboard/queries';
+import { messageVendor, skillVendor, connectorVendor } from '@/lib/pulse/vendor-filter';
 import { getCoworkCostUsd } from '@/lib/pulse/aggregator';
 import { weekStart, weekStarts } from '@/lib/pulse/period';
 import {
@@ -28,6 +32,7 @@ import {
 } from '@/lib/pulse/delegation';
 import { getDeptCoachingPrompts } from '@/lib/usecases/spread';
 import { readHumanTime } from '@/lib/pulse/human-time-summary';
+import { chatgptSpend } from '@/lib/openai/spend';
 
 export const dynamic = 'force-dynamic';
 
@@ -71,14 +76,19 @@ export async function GET(
   const twoWeeksAgo = now - 14 * 24 * 3600;
 
   const u = schema.users;
-  const pm = schema.pulseMetrics;
+  // The Claude / OpenAI switch: a vendor view narrows classifications, skills
+  // and connectors by source and reads the aggregator's per-vendor figures.
+  const vendor = await visibleVendor(request.nextUrl.searchParams.get('vendor'));
+  const pmv = schema.pulseMetricsVendor;
+  const pm = vendor === 'all' ? schema.pulseMetrics : pmv as unknown as typeof schema.pulseMetrics;
+  const pmOnly = vendor === 'all' ? sql`TRUE` : eq(pmv.vendor, vendor);
+  const metricsTable = vendor === 'all' ? sql`pulse_metrics` : sql`pulse_metrics_vendor`;
+  const metricsOnly = vendor === 'all' ? sql`` : sql`AND vendor = ${vendor}`;
   const pc = schema.pulseClassifications;
   const cm = schema.coworkMessages;
   const csi = schema.coworkSkillInvocations;
   const cmi = schema.coworkMcpInvocations;
   const pb = schema.pulseBriefings;
-  const css = schema.coworkSessionStats;
-  const cs = schema.coworkSessions;
 
   // Department members
   const members = await client
@@ -168,17 +178,28 @@ export async function GET(
       ors_breadth: pm.ors_breadth, ors_overlap: pm.ors_overlap, ors_propagation: pm.ors_propagation,
     })
     .from(pm)
-    .where(and(eq(pm.scope_type, 'function'), eq(pm.scope_id, dept), eq(pm.granularity, 'rolling')))
+    .where(and(pmOnly, eq(pm.scope_type, 'function'), eq(pm.scope_id, dept), eq(pm.granularity, 'rolling')))
     .orderBy(desc(pm.computed_at))
     .limit(1);
-  const metrics = metricsRows[0];
+  // Resilience is written by the hourly run; the daily run writes the same
+  // department row without it. Take resilience from the latest row that has
+  // it, so the All view never falls back to "Pending data" after the daily run.
+  const orsRows = metricsRows[0] && metricsRows[0].ors === null
+    ? await client
+      .select({ ors: pm.ors, ors_breadth: pm.ors_breadth, ors_overlap: pm.ors_overlap, ors_propagation: pm.ors_propagation })
+      .from(pm)
+      .where(and(pmOnly, eq(pm.scope_type, 'function'), eq(pm.scope_id, dept), eq(pm.granularity, 'rolling'), isNotNull(pm.ors)))
+      .orderBy(desc(pm.computed_at))
+      .limit(1)
+    : [];
+  const metrics = metricsRows[0] && orsRows[0] ? { ...metricsRows[0], ...orsRows[0] } : metricsRows[0];
 
   // Prior period dept metrics: row closest to 7 days ago for meaningful week-over-week delta
   const sevenDaysAgo = now - 7 * 24 * 3600;
   const priorMetricsRows = await client
     .select({ oti: pm.oti, dds: pm.dds, psr: pm.psr, ors: pm.ors, computed_at: pm.computed_at })
     .from(pm)
-    .where(and(eq(pm.scope_type, 'function'), eq(pm.scope_id, dept), eq(pm.granularity, 'rolling'), lte(pm.computed_at, sevenDaysAgo)))
+    .where(and(pmOnly, eq(pm.scope_type, 'function'), eq(pm.scope_id, dept), eq(pm.granularity, 'rolling'), lte(pm.computed_at, sevenDaysAgo)))
     .orderBy(desc(pm.computed_at))
     .limit(1);
   const priorMetrics = priorMetricsRows[0];
@@ -194,16 +215,19 @@ export async function GET(
        u.email,
        pm.dds,
        pm.oti,
-       (SELECT MAX(classified_at) FROM pulse_classifications
-        WHERE user_id = u.id AND classifier_status = 'classified') AS last_active
+       -- When they last worked: the time of their latest classified prompt, not
+       -- when the classifier got to it (on a fresh install that is everyone at once).
+       (SELECT MAX(cm.occurred_at) FROM pulse_classifications pc
+        JOIN cowork_messages cm ON cm.id = pc.cowork_message_id
+        WHERE pc.user_id = u.id AND pc.classifier_status = 'classified') AS last_active
      FROM users u
      LEFT JOIN (
        SELECT scope_id AS user_id, dds, oti
-       FROM pulse_metrics
-       WHERE scope_type = 'user' AND granularity = 'rolling'
+       FROM ${metricsTable}
+       WHERE scope_type = 'user' AND granularity = 'rolling' ${metricsOnly}
          AND (scope_id, computed_at) IN (
-           SELECT scope_id, MAX(computed_at) FROM pulse_metrics
-           WHERE scope_type = 'user' AND granularity = 'rolling' GROUP BY scope_id
+           SELECT scope_id, MAX(computed_at) FROM ${metricsTable}
+           WHERE scope_type = 'user' AND granularity = 'rolling' ${metricsOnly} GROUP BY scope_id
          )
      ) pm ON pm.user_id = u.id
      WHERE u.department = ${dept}
@@ -219,7 +243,7 @@ export async function GET(
     .select({ tier: pc.tier, occurred_at: cm.occurred_at })
     .from(pc)
     .innerJoin(cm, eq(cm.id, pc.cowork_message_id))
-    .where(and(inArray(pc.user_id, memberIds), eq(pc.classifier_status, 'classified'), gte(cm.occurred_at, sixWeeksAgo)))
+    .where(and(inArray(pc.user_id, memberIds), eq(pc.classifier_status, 'classified'), gte(cm.occurred_at, sixWeeksAgo), messageVendor(vendor)))
     .orderBy(cm.occurred_at);
 
   const heatmapMap = new Map<string, number>();
@@ -239,7 +263,7 @@ export async function GET(
     .select({ user_id: pc.user_id, task_type: pc.task_type, cnt: sql<number | string>`COUNT(*)` })
     .from(pc)
     .innerJoin(cm, eq(cm.id, pc.cowork_message_id))
-    .where(and(inArray(pc.user_id, memberIds), eq(pc.tier, 3), eq(pc.classifier_status, 'classified'), gte(cm.occurred_at, twoWeeksAgo)))
+    .where(and(inArray(pc.user_id, memberIds), eq(pc.tier, 3), eq(pc.classifier_status, 'classified'), gte(cm.occurred_at, twoWeeksAgo), messageVendor(vendor)))
     .groupBy(pc.user_id, pc.task_type);
 
   const typeUsersMap = new Map<string, Set<string>>();
@@ -288,7 +312,7 @@ export async function GET(
   const skillInvocationRows = await client
     .select({ user_id: csi.user_id, skill_name: csi.skill_name })
     .from(csi)
-    .where(and(inArray(csi.user_id, memberIds), gte(csi.occurred_at, thirtyDaysAgo)))
+    .where(and(inArray(csi.user_id, memberIds), gte(csi.occurred_at, thirtyDaysAgo), skillVendor(vendor)))
     .groupBy(csi.user_id, csi.skill_name);
 
   const skillUsersMap = new Map<string, Set<string>>();
@@ -324,7 +348,7 @@ export async function GET(
   const deptSkillsRows = await client
     .select({ name: csi.skill_name, cnt: sql<number | string>`COUNT(*)` })
     .from(csi)
-    .where(and(inArray(csi.user_id, memberIds), gte(csi.occurred_at, sevenDaysAgoTools)))
+    .where(and(inArray(csi.user_id, memberIds), gte(csi.occurred_at, sevenDaysAgoTools), skillVendor(vendor)))
     .groupBy(csi.skill_name);
   const deptSkills = deptSkillsRows.map(r => ({ name: r.name, cnt: Number(r.cnt) }));
 
@@ -335,6 +359,7 @@ export async function GET(
       inArray(cmi.user_id, memberIds),
       gte(cmi.occurred_at, sevenDaysAgoTools),
       notInArray(cmi.mcp_server, ['workspace', 'cowork']),
+      connectorVendor(vendor),
     ))
     .groupBy(cmi.mcp_server);
   const deptConnectors = deptConnectorsRows.map(r => ({ name: r.name, cnt: Number(r.cnt) }));
@@ -351,7 +376,7 @@ export async function GET(
     frontier = await buildFrontierView({ dept }, now, {
       seeAllDetail: canAccessPulseAdmin(session.role),
       ownUserId: await resolveViewerUserId(session.email),
-    });
+    }, vendor);
   } catch (err) {
     console.error('[pulse/dept] frontier view failed', err);
   }
@@ -364,23 +389,13 @@ export async function GET(
     .limit(1);
   const deptBriefing = deptBriefingRows[0];
 
-  // Document-upload sessions for dept members (30 days)
-  const deptDocSessionRows = await client
-    .select({
-      sessions_with_uploads: sql<number | string>`COUNT(*)`,
-      total_uploads: sql<number | string>`COALESCE(SUM(${css.upload_count}), 0)`,
-    })
-    .from(css)
-    .innerJoin(cs, eq(cs.id, css.session_id))
-    .where(and(gt(css.upload_count, 0), gte(cs.started_at, thirtyDaysAgo), inArray(cs.user_id, memberIds)));
-  const docSessions = {
-    sessions_with_uploads: Number(deptDocSessionRows[0]?.sessions_with_uploads ?? 0),
-    total_uploads: Number(deptDocSessionRows[0]?.total_uploads ?? 0),
-  };
+  // Document-upload sessions for dept members (30 days), Claude Cowork and ChatGPT alike.
+  const docSessions = await getDocSessions({ since: thirtyDaysAgo, memberIds, vendor });
 
   // OTel cowork enrichments — sum cost and aggregate friction across dept members
   const sevenDaysAgoOtel = now - 7 * 24 * 3600;
   let deptCoworkCostUsd = 0;
+  const openaiPresent = await visibleOpenAi(hasOpenAiData());
   let deptFailedTools = 0;
   let deptTotalTools = 0;
   for (const memberId of memberIds) {
@@ -419,7 +434,7 @@ export async function GET(
     })
     .from(pm)
     .where(and(
-      eq(pm.granularity, 'week'), eq(pm.scope_type, 'function'), eq(pm.scope_id, dept),
+      pmOnly, eq(pm.granularity, 'week'), eq(pm.scope_type, 'function'), eq(pm.scope_id, dept),
       gte(pm.period_start, delegationWeeks[0]), lt(pm.period_start, weekStart(now)),
     ));
   const deptWeekRows: DelegationWeekRow[] = deptWeekRowsRaw.map(r => ({
@@ -438,7 +453,7 @@ export async function GET(
     })
     .from(pm)
     .where(and(
-      eq(pm.granularity, 'week'), eq(pm.scope_type, 'user'), inArray(pm.scope_id, memberIds),
+      pmOnly, eq(pm.granularity, 'week'), eq(pm.scope_type, 'user'), inArray(pm.scope_id, memberIds),
       gte(pm.period_start, delegationWeeks[0]), lt(pm.period_start, weekStart(now)),
     ));
   const personRows: DelegationWeekRow[] = personRowsRaw.map(r => ({
@@ -481,8 +496,9 @@ export async function GET(
   // this call is safe unconditionally, same as every other caller.
   const coachingPrompts = await getDeptCoachingPrompts(dept, now);
 
-  const humanTime = await readHumanTime('cowork', memberIds);
+  const humanTime = await readHumanTime('cowork', memberIds, vendor);
 
+  const deptChatgpt = vendor === 'claude' || !openaiPresent ? undefined : await chatgptSpend({ since: sevenDaysAgoOtel, userIds: memberIds });
   return NextResponse.json({
     humanTime,
     dept,
@@ -502,8 +518,13 @@ export async function GET(
     frontierAccess: { canReview: session.role === 'admin', canOpenUseCases: canAccessPulseAdmin(session.role) },
     toolsUsed: deptToolsUsed,
     deptBriefing: deptBriefing ?? null,
-    coworkCostUsd: deptCoworkCostUsd,
-    coworkFrictionIndex: deptCoworkFrictionIndex,
+    // Claude Cowork only (no ChatGPT spend or tool calls are recorded): absent in the OpenAI view.
+    coworkCostUsd: vendor === 'openai' ? undefined : deptCoworkCostUsd,
+    chatgptCostUsd: deptChatgpt === undefined ? undefined : deptChatgpt?.usd ?? null,
+    chatgptUnpricedModels: deptChatgpt?.unpricedModels ?? [],
+    coworkFrictionIndex: vendor === 'openai' ? undefined : deptCoworkFrictionIndex,
+    vendor,
+    openaiPresent,
     docSessions,
     delegation: { window: delegationWindow, bands, bandsDataWeeks, people },
     coaching: { prompts: coachingPrompts },

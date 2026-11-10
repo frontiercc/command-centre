@@ -74,7 +74,11 @@ async function runSpec(): Promise<void> {
     await db.insert(schema.coworkSkillInvocations).values({ id: 'sk1', user_id: 'u1', session_id: 's1', skill_name: 'test-skill', occurred_at: NOW });
     await db.insert(schema.coworkMcpInvocations).values({ id: 'mc1', user_id: 'u1', session_id: 's1', mcp_server: 'slack', mcp_tool: 'send', occurred_at: NOW });
     await db.insert(schema.codeAssistantMeta).values({ id: 'ca1', user_id: 'u1', session_id: 's1', occurred_at: NOW });
-    await db.insert(schema.chatMessages).values({ id: 'ch1', user_id: 'u1', prompt_text: 'hi', prompt_length: 2, occurred_at: NOW });
+    // A Claude Chat prompt: a cowork_messages row with surface 'chat' (migration 0041).
+    await db.insert(schema.coworkMessages).values({
+      id: 'ch1', session_id: 'conv1', user_id: 'u1', message_type: 'cowork_user_message',
+      surface: 'chat', source: 'compliance', content_preview: 'hi', content_full: 'hi', occurred_at: NOW,
+    });
     await db.insert(schema.alerts).values({ id: 'a1', alert_type: 'anomaly', severity: 'high', title: 't', explanation: 'e' });
     // Preserve checks — NOT in CLEARED_TABLES, must survive the clear.
     await db.insert(schema.complianceEvents).values({ id: 'ce1', event_type: 'access', surface: 'cowork', occurred_at: NOW });
@@ -85,9 +89,11 @@ async function runSpec(): Promise<void> {
     // pulse_skill_runs weren't seeded — those two just prove the atomic
     // multi-table transaction completes across ALL CLEARED_TABLES, including
     // ones that start empty).
-    for (const table of ['pulse_classifications', 'cowork_skill_invocations', 'cowork_mcp_invocations', 'code_assistant_meta', 'cowork_messages', 'chat_messages', 'alerts'] as const) {
+    for (const table of ['pulse_classifications', 'cowork_skill_invocations', 'cowork_mcp_invocations', 'code_assistant_meta', 'cowork_messages', 'alerts'] as const) {
       expect(counts[table]).toBeGreaterThanOrEqual(1);
     }
+    // cowork_messages held the Cowork prompt AND the Claude Chat prompt.
+    expect(counts.cowork_messages).toBe(2);
     expect(CLEARED_TABLES).toContain('pulse_events');
     expect(CLEARED_TABLES).toContain('pulse_skill_runs');
 
@@ -97,7 +103,7 @@ async function runSpec(): Promise<void> {
     expect((await db.select().from(schema.coworkSkillInvocations)).length).toBe(0);
     expect((await db.select().from(schema.coworkMcpInvocations)).length).toBe(0);
     expect((await db.select().from(schema.codeAssistantMeta)).length).toBe(0);
-    expect((await db.select().from(schema.chatMessages)).length).toBe(0);
+    expect((await db.select().from(schema.coworkMessages).where(eq(schema.coworkMessages.surface, 'chat'))).length).toBe(0);
 
     // Preserved — NOT cleared.
     expect((await db.select().from(schema.complianceEvents)).length).toBe(1);

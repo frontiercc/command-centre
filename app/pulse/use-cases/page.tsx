@@ -18,10 +18,24 @@ interface GovernanceBet {
   departments: string[];
   lifecycle: string;
   weeksInLifecycle: number | null;
-  measured: { distinctUsers: number; sessions: number; hours: number | null };
+  measured: {
+    distinctUsers: number; sessions: number; hours: number | null;
+    platformSessions?: PlatformSessions;
+    platformHours?: { claude: number | null; openai: number | null };
+    productSessions?: ProductSessions;
+    productHours?: ProductHours;
+  };
   estimated: { hoursRecovered: number };
   series: Array<number | null>;
 }
+
+/** Matched sessions per vendor, 13 completed weeks; openai null while ChatGPT and Codex are hidden. */
+interface PlatformSessions { claude: number; openai: number | null }
+
+/** The same sessions, and their measured hours, per product; ChatGPT and Codex null while hidden. */
+interface ProductSessions { cowork: number; code: number; chatgpt: number | null; codex: number | null }
+interface ProductHours { cowork: number | null; code: number | null; chatgpt: number | null; codex: number | null }
+
 
 interface GovernanceWorkflow {
   id: string;
@@ -30,6 +44,8 @@ interface GovernanceWorkflow {
   series: Array<number | null>;
   measuredHours: number | null;
   distinctUsers: number;
+  platformSessions?: PlatformSessions;
+  productSessions?: ProductSessions;
 }
 
 interface GovernanceRollup {
@@ -71,6 +87,42 @@ function fmtHours(n: number): string {
   return n.toLocaleString('en-US', { maximumFractionDigits: 1 });
 }
 
+function fmtSplitHours(n: number): string {
+  return `${n.toLocaleString('en-GB', { minimumFractionDigits: 1, maximumFractionDigits: 1 })}h`;
+}
+
+const PRODUCTS: Array<[keyof ProductSessions, string]> = [
+  ['cowork', 'Claude Cowork'], ['code', 'Claude Code'], ['chatgpt', 'ChatGPT'], ['codex', 'Codex'],
+];
+
+/** The products with sessions, in the order Claude Cowork, Claude Code, ChatGPT, Codex. */
+function productsWithSessions(p: ProductSessions | undefined): Array<[keyof ProductSessions, string, number]> {
+  if (!p) return [];
+  return PRODUCTS.flatMap(([k, label]) => {
+    const n = p[k];
+    return n !== null && n > 0 ? [[k, label, n] as [keyof ProductSessions, string, number]] : [];
+  });
+}
+
+/** "Claude Cowork 40 · Claude Code 6 · ChatGPT 13", the register's wording; null when no product has sessions. */
+function sessionsSplit(p: ProductSessions | undefined): string | null {
+  const with_ = productsWithSessions(p);
+  return with_.length > 0 ? with_.map(([, label, n]) => `${label} ${n.toLocaleString('en-GB')}`).join(' · ') : null;
+}
+
+/**
+ * "Claude Cowork 12.5h · Claude Code 3.0h", for each product with sessions;
+ * one whose sessions carry no measured time reads "not measured".
+ */
+function hoursSplit(h: ProductHours | undefined, s: ProductSessions | undefined): string | null {
+  const with_ = productsWithSessions(s);
+  if (!h || with_.length === 0) return null;
+  return with_.map(([k, label]) => {
+    const hours = h[k];
+    return hours !== null ? `${label} ${fmtSplitHours(hours)}` : `${label} not measured`;
+  }).join(' · ');
+}
+
 function LifecyclePill({ lifecycle }: { lifecycle: string }) {
   return <Pill tone={LIFECYCLE_TONE[lifecycle] ?? 'neutral'}>{LIFECYCLE_LABEL[lifecycle] ?? lifecycle}</Pill>;
 }
@@ -86,6 +138,8 @@ function GroupRow({ lifecycle, count, colSpan }: { lifecycle: string; count: num
 }
 
 function BetsPanel({ bets, minutesPerSession }: { bets: GovernanceBet[]; minutesPerSession: number }) {
+  // The per-product lines say which products did the work, so Claude Code and Codex work is visible.
+  const split = (bet: GovernanceBet) => productsWithSessions(bet.measured.productSessions).length > 0;
   const groups = LIFECYCLE_ORDER
     .map(lifecycle => ({ lifecycle, bets: bets.filter(b => b.lifecycle === lifecycle) }))
     .filter(g => g.bets.length > 0);
@@ -135,11 +189,17 @@ function BetsPanel({ bets, minutesPerSession }: { bets: GovernanceBet[]; minutes
                     </td>
                     <td className={cx(T.tdRight, 'text-[#05073F] whitespace-nowrap')}>
                       {bet.measured.sessions} {bet.measured.sessions === 1 ? 'session' : 'sessions'} · {bet.measured.distinctUsers} {bet.measured.distinctUsers === 1 ? 'user' : 'users'}
+                      {split(bet) && (
+                        <div className="text-[13px] tabular-nums mt-0.5">{sessionsSplit(bet.measured.productSessions)}</div>
+                      )}
                     </td>
                     <td className={cx(T.tdRight, 'whitespace-nowrap')}>
                       {bet.measured.hours != null
                         ? <span className="text-[#05073F]">{fmtHours(bet.measured.hours)} h</span>
                         : <span className="text-[#8F8F8F]">Not measured</span>}
+                      {split(bet) && (
+                        <div className="text-[13px] tabular-nums text-[#05073F] mt-0.5">{hoursSplit(bet.measured.productHours, bet.measured.productSessions)}</div>
+                      )}
                     </td>
                     <td className={cx(T.tdRight, 'whitespace-nowrap text-[#2451F3]')}>
                       ≈ {fmtHours(bet.estimated.hoursRecovered)} hrs
@@ -175,13 +235,14 @@ function WorkflowsByLifecycle({ workflows, total }: { workflows: GovernanceWorkf
               <th scope="col" className={T.th}>Title</th>
               <th scope="col" className={T.th}>Lifecycle</th>
               <th scope="col" className={T.th}>13-week trend</th>
+              <th scope="col" className={T.th} title="Matched sessions in the last 13 completed weeks, by vendor">Sessions, 13 weeks</th>
               <th scope="col" className={T.thRight}>Measured hours</th>
               <th scope="col" className={T.thRight}>Users</th>
             </tr>
           </thead>
           {groups.map(group => (
             <tbody key={group.lifecycle}>
-              <GroupRow lifecycle={group.lifecycle} count={group.workflows.length} colSpan={5} />
+              <GroupRow lifecycle={group.lifecycle} count={group.workflows.length} colSpan={6} />
               {group.workflows.map(wf => (
                 <tr key={wf.id} className={T.row}>
                   <td className={cx(T.td, 'max-w-[280px]')}>
@@ -192,6 +253,9 @@ function WorkflowsByLifecycle({ workflows, total }: { workflows: GovernanceWorkf
                   <td className={T.td}><LifecyclePill lifecycle={wf.lifecycle} /></td>
                   <td className={T.td}>
                     <span role="img" aria-label={`${wf.title} weekly sessions`}><Spark data={wf.series} width={96} /></span>
+                  </td>
+                  <td className={cx(T.td, 'text-[13px] tabular-nums whitespace-nowrap')}>
+                    {sessionsSplit(wf.productSessions) ?? <span className="text-[#8F8F8F]">—</span>}
                   </td>
                   <td className={cx(T.tdRight, 'whitespace-nowrap')}>
                     {wf.measuredHours != null ? (

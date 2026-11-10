@@ -66,9 +66,13 @@ services:
       # the Secure flag off. Remove both once the hub is served over HTTPS.
       - CCC_INSECURE_COOKIES=${CCC_INSECURE_COOKIES:-}
       - CCC_ALLOW_INSECURE_COOKIES=${CCC_ALLOW_INSECURE_COOKIES:-}
-      # Sample data only: allow the DEMO-badged FinOps Enterprise figures and Dev
-      # Framework Alignment scores. Empty by default, so a real installation never
-      # shows demo data; set both to 1 in .env only for exploring with sample data.
+      # Testing only: points the OpenAI sync (ChatGPT and Codex) at the localhost
+      # stand-in for OpenAI's export (scripts/openai-mock), for example
+      # http://host.docker.internal:4010/v1. Empty means OpenAI's own address.
+      - CCC_OPENAI_API_BASE_URL=${CCC_OPENAI_API_BASE_URL:-}
+      # Sample data only: CCC_DX_ALLOW_MOCK=1 allows the DEMO-badged Dev Framework
+      # Alignment scores. Empty by default, so a real installation never shows demo
+      # data. CCC_FINOPS_ALLOW_MOCK is no longer used by the sample data.
       - CCC_FINOPS_ALLOW_MOCK=${CCC_FINOPS_ALLOW_MOCK:-}
       - CCC_DX_ALLOW_MOCK=${CCC_DX_ALLOW_MOCK:-}
     depends_on:
@@ -102,7 +106,7 @@ services:
       - hub
     restart: unless-stopped
 
-  # Sample data (optional): a fictional organisation with nine weeks of activity,
+  # Sample data (optional): a fictional organisation with up to thirteen weeks of activity,
   # for exploring Command Centre before connecting Claude. Runs only when asked:
   #   docker compose --profile demo run --rm demo-data
   # Run it after creating your admin account. See scripts/demo/load.cjs.

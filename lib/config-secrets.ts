@@ -45,6 +45,10 @@ export const SECRET_KEYS: Record<string, SecretKeyDef> = {
   ssoClientSecret: { label: 'SSO client secret', associatedKeys: [] },
   dxApiKey: { label: 'DX API token', associatedKeys: [] },
   githubToken: { label: 'GitHub API token', associatedKeys: ['githubSyncLastRun'] },
+  openaiAdminApiKey: {
+    label: 'OpenAI Admin API key',
+    associatedKeys: ['openaiSyncCursors', 'openaiLastSyncAt', 'openaiLastSyncStats'],
+  },
 };
 
 export const SENSITIVE_KEYS = Object.keys(SECRET_KEYS) as (keyof AppConfig)[];

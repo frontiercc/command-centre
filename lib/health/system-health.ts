@@ -20,6 +20,8 @@ import { getTypedClient } from '@/lib/db/client';
 import { schema } from '@/lib/db/schema';
 import { getConfigValue, getUnreadableSecretKeys } from '@/lib/config';
 import { JOB_CATALOG } from '@/lib/health/job-catalog';
+import { OPENAI_SOURCES } from '@/lib/openai/sources';
+import { readOpenAiLastArrivals } from '@/lib/health/openai-arrivals';
 
 export type JobStatus = 'ok' | 'failing' | 'not_run';
 
@@ -34,7 +36,7 @@ export interface JobHealth {
 }
 
 export interface SurfaceHealth {
-  key: 'cowork' | 'code' | 'code_metrics' | 'chat';
+  key: 'cowork' | 'code' | 'code_metrics' | 'chat' | 'chatgpt' | 'codex';
   label: string;
   lastEventAt: number | null;
 }
@@ -72,12 +74,13 @@ const num = (v: unknown): number | null => (v === null || v === undefined ? null
  * reports a rejected key (the classifiers, analytics ingest and
  * GitHub sync do so); empty means the row reads "not tracked yet".
  */
-const INTEGRATIONS: { key: 'complianceAccessKey' | 'anthropicAiApiKey' | 'anthropicAnalyticsApiKey' | 'anthropicAdminApiKey' | 'githubToken' | 'smtpHost'; label: string; jobs: string[] }[] = [
+const INTEGRATIONS: { key: 'complianceAccessKey' | 'anthropicAiApiKey' | 'anthropicAnalyticsApiKey' | 'anthropicAdminApiKey' | 'githubToken' | 'smtpHost' | 'openaiAdminApiKey'; label: string; jobs: string[] }[] = [
   { key: 'anthropicAiApiKey', label: 'Anthropic API (AI features)', jobs: ['pulse_classifier', 'code_classifier'] },
-  { key: 'complianceAccessKey', label: 'Compliance API', jobs: ['compliance_sync'] },
-  { key: 'anthropicAnalyticsApiKey', label: 'Analytics API', jobs: ['analytics_ingest'] },
+  { key: 'complianceAccessKey', label: 'Anthropic Compliance API', jobs: ['compliance_sync'] },
+  { key: 'anthropicAnalyticsApiKey', label: 'Anthropic Analytics API', jobs: ['analytics_ingest'] },
   { key: 'anthropicAdminApiKey', label: 'Admin API', jobs: [] },
   { key: 'githubToken', label: 'GitHub', jobs: ['github_sync'] },
+  { key: 'openaiAdminApiKey', label: 'OpenAI (ChatGPT and Codex)', jobs: ['openai_sync'] },
   { key: 'smtpHost', label: 'Email (SMTP)', jobs: [] },
 ];
 
@@ -114,17 +117,19 @@ export async function getSystemHealth(nowS: number = Math.floor(Date.now() / 100
 
   // ── Telemetry received ────────────────────────────────────────────
   const cm = schema.coworkMessages;
+  // Claude's own feeds only: ChatGPT and Codex prompts share these surfaces
+  // and are listed on rows of their own below.
+  const openAiList = sql.join(OPENAI_SOURCES.map(s => sql`${s}`), sql`, `);
   const maxOccurred = async (surface: 'cowork' | 'code') => {
     const rows = await client
       .select({ v: sql<number | string | null>`MAX(${cm.occurred_at})` })
       .from(cm)
-      .where(eq(cm.surface, surface));
+      .where(and(eq(cm.surface, surface), sql`${cm.source} NOT IN (${openAiList})`));
     return num(rows[0]?.v);
   };
   const com = schema.codeOtelMetrics;
   const metricsRows = await client.select({ v: sql<number | string | null>`MAX(${com.occurred_at})` }).from(com);
-  const chat = schema.chatMessages;
-  const chatRows = await client.select({ v: sql<number | string | null>`MAX(${chat.ingested_at})` }).from(chat);
+  const chatRows = await client.select({ v: sql<number | string | null>`MAX(${cm.ingested_at})` }).from(cm).where(eq(cm.surface, 'chat'));
 
   const surfaces: SurfaceHealth[] = [
     { key: 'cowork', label: 'Cowork', lastEventAt: await maxOccurred('cowork') },
@@ -134,7 +139,15 @@ export async function getSystemHealth(nowS: number = Math.floor(Date.now() / 100
   const chatLast = num(chatRows[0]?.v);
   const complianceKey = await getConfigValue('complianceAccessKey');
   if (complianceKey || chatLast !== null) {
-    surfaces.push({ key: 'chat', label: 'Chat (Compliance API)', lastEventAt: chatLast });
+    surfaces.push({ key: 'chat', label: 'Claude Chat (Anthropic Compliance API)', lastEventAt: chatLast });
+  }
+  // ChatGPT and Codex as two sources, each from everything the sync writes for
+  // it (prompts, replies or turns and actions, spend), by when it arrived: the
+  // same reading the telemetry-silence alert uses.
+  const { chatgpt: chatgptLast, codex: codexLast } = await readOpenAiLastArrivals();
+  if ((await getConfigValue('openaiAdminApiKey')) || chatgptLast !== null || codexLast !== null) {
+    surfaces.push({ key: 'chatgpt', label: 'ChatGPT (OpenAI Compliance API)', lastEventAt: chatgptLast });
+    surfaces.push({ key: 'codex', label: 'Codex (OpenAI Compliance API)', lastEventAt: codexLast });
   }
 
   // ── Ingest failures ───────────────────────────────────────────────

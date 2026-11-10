@@ -60,11 +60,11 @@ export function humanTimeSentence(
   h: { total: { sessions: number; humanMinutes: number; claudeMinutes: number } },
   period: string,
 ): string {
-  return `${period}: about ${formatHours(h.total.humanMinutes)} hours of Tier 2 and 3 work by hand (AI estimate), done in ${formatHours(h.total.claudeMinutes)} hours with Claude (measured), across ${h.total.sessions.toLocaleString('en-GB')} sessions.`;
+  return `${period}: about ${formatHours(h.total.humanMinutes)} hours of Tier 2 and 3 work by hand (AI estimate), done in ${formatHours(h.total.claudeMinutes)} hours with AI (measured), across ${h.total.sessions.toLocaleString('en-GB')} sessions.`;
 }
 
 /** Code backfill: size already-classified sessions without reclassifying them. */
-export const CODE_ESTIMATE_ONLY_SYSTEM = `You size finished Claude Code engineering sessions from their telemetry digests. Every session below was already judged to be meaningful delegated work.
+export const CODE_ESTIMATE_ONLY_SYSTEM = `You size finished engineering sessions run in an AI coding tool (Claude Code or Codex) from their telemetry digests. Every session below was already judged to be meaningful delegated work.
 
 For each session, estimate how long an experienced engineer on this codebase would take to produce the same result by hand, without AI: reading the code, making the changes, testing and review, excluding meetings and waiting. Use the lines changed, commits, pull requests, tool actions and prompts as evidence of how much work was done. Give three whole numbers of minutes, with low <= likely <= high and high at most ${MAX_HUMAN_MINUTES}.
 

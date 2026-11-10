@@ -39,6 +39,18 @@ describe('planSilenceAlerts', () => {
     expect(p[0].explanation).toContain('Monday to Friday, 08:00 to 18:00 Europe/London time');
   });
 
+  it('a surface with its own advice and noun uses them in place of the OTel text', () => {
+    const now = at('2026-09-30T12:00:00Z');
+    const p = planSilenceAlerts([{
+      key: 'codex', label: 'Codex', noun: 'data', advice: 'Check the OpenAI sync.',
+      lastReceivedAt: at('2026-09-30T08:00:00Z'),
+    }], now, LON);
+    expect(p).toHaveLength(1);
+    expect(p[0].title).toBe('No Codex data for 4 working hours');
+    expect(p[0].explanation).toContain('Check the OpenAI sync. See System health on /admin/system.');
+    expect(p[0].explanation).not.toContain('OTel');
+  });
+
   it('a quiet weekend is not a Monday-morning alert', () => {
     // Last event Fri 17:30 BST; Mon 09:00 BST = 0.5 + 1 = 1.5 working hours.
     expect(planSilenceAlerts([surface(at('2026-10-02T16:30:00Z'))], at('2026-10-05T08:00:00Z'), LON)).toEqual([]);

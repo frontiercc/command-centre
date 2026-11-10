@@ -108,3 +108,20 @@ describe('findSpreadCandidates', () => {
     expect(JSON.stringify(await spread.getCoachingCountsByDept(NOW))).not.toContain('ANNA');
   });
 });
+
+describe('findSpreadCandidates with ChatGPT and Codex', () => {
+  it('work done in ChatGPT or Codex does not make someone a candidate for the Claude skill', async () => {
+    await user('erin', 'Finance'); await user('fay', 'Finance');
+    const uc = await finance();
+    await withSkill(uc.id, 'variance-commentary');
+    const wk = weekStart(NOW) - 7 * DAY;
+    for (let i = 0; i < 4; i++) {
+      await sql.run(`INSERT INTO use_case_week_matches (use_case_id, week_start, user_id, session_id) VALUES (?, ?, 'erin', ?)`, [uc.id, wk, `chatgpt:e${i}`]);
+      await sql.run(`INSERT INTO use_case_week_matches (use_case_id, week_start, user_id, session_id) VALUES (?, ?, 'erin', ?)`, [uc.id, wk, `codex:e${i}`]);
+    }
+    await judgedSessions(uc.id, 'fay', 3);
+    const res = await spread.findSpreadCandidates(uc, NOW);
+    if (!res || 'unsupported' in res) throw new Error('expected departments');
+    expect(res.departments[0].users.map(u => u.userId)).toEqual(['fay']);
+  });
+});

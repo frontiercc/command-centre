@@ -30,6 +30,8 @@ import { listUseCases } from '@/lib/usecases/queries';
 import { getMeasuredCompletedWeeks } from '@/lib/usecases/weeks';
 import { getCoachingCountsByDept } from '@/lib/usecases/spread';
 import { SEVERITY_RANK } from '@/lib/alerts/severity';
+import { openaiShown } from '@/lib/sources/openai-visibility';
+import { hasCodexData } from '@/lib/pulse/code/vendor-view';
 
 const DAY = 86400;
 const WEEK = 7 * DAY;
@@ -57,6 +59,12 @@ export interface DigestData {
     prs: number;
     engagedHours: number | null;
     activeUsers: number;
+    /**
+     * Each tool's share of spendUsd, set only when Codex is shown and both
+     * Claude Code and Codex had spend in the week. Absent otherwise: spendUsd
+     * is then the one tool's figure.
+     */
+    spendByProduct?: { claudeCodeUsd: number; codexUsd: number } | null;
   } | null;
   cowork: {
     classifiedEvents: number;
@@ -85,8 +93,25 @@ export interface DigestData {
   humanTime?: OrgHumanTime | null;
 }
 
+/**
+ * Codex counted in the Code block: shown, present, and the week's all-tools
+ * org row written (code_metrics_vendor, see lib/pulse/code/vendor-view.ts).
+ */
+async function codexWeekShown(periodStart: number): Promise<boolean> {
+  if (!(await openaiShown()) || !(await hasCodexData())) return false;
+  const db = await getTypedClient();
+  const rows = await rawAll<{ x: number }>(db, sql`SELECT 1 AS x FROM code_metrics_vendor
+    WHERE vendor = 'all' AND scope_type = 'organisation' AND scope_id = ${ORG_SCOPE_ID} AND granularity = 'week' AND period_start = ${periodStart} LIMIT 1`);
+  return rows.length > 0;
+}
+
 async function buildCode(periodStart: number, periodEnd: number, now: number): Promise<DigestData['code']> {
   const db = await getTypedClient();
+  // With Codex shown, the block reads the all-tools figures (Claude Code plus
+  // Codex); otherwise code_metrics, which is Claude Code's spend.
+  const withCodex = await codexWeekShown(periodStart);
+  const table = withCodex ? sql.raw('code_metrics_vendor') : sql.raw('code_metrics');
+  const vendorAll = withCodex ? sql`AND vendor = 'all'` : sql``;
 
   // spend_usd is `numeric` on Postgres → returned as a STRING; the integer
   // columns come back native. Number()-coerce spend_usd
@@ -100,20 +125,20 @@ async function buildCode(periodStart: number, periodEnd: number, now: number): P
   }>(
     db,
     sql`SELECT spend_usd, commit_count, pr_count, active_time_user_s, session_count
-     FROM code_metrics
-     WHERE scope_type = 'organisation' AND scope_id = ${ORG_SCOPE_ID} AND granularity = 'week' AND period_start = ${periodStart}`
+     FROM ${table}
+     WHERE scope_type = 'organisation' AND scope_id = ${ORG_SCOPE_ID} AND granularity = 'week' AND period_start = ${periodStart} ${vendorAll}`
   );
   const row = rows[0];
 
   if (!row) return null;
 
-  const spendDelta = await getWeeklyDelta('code_metrics', 'organisation', ORG_SCOPE_ID, 'spend_usd', 4, now);
+  const spendDelta = await getWeeklyDelta('code_metrics', 'organisation', ORG_SCOPE_ID, 'spend_usd', 4, now, withCodex ? 'all' : undefined);
 
   // COUNT(*) → bigint → STRING on Postgres; Number()-coerce.
   const activeUsersRows = await rawAll<{ c: number | string }>(
     db,
-    sql`SELECT COUNT(*) AS c FROM code_metrics
-     WHERE scope_type = 'user' AND granularity = 'week' AND period_start = ${periodStart} AND session_count > 0`
+    sql`SELECT COUNT(*) AS c FROM ${table}
+     WHERE scope_type = 'user' AND granularity = 'week' AND period_start = ${periodStart} AND session_count > 0 ${vendorAll}`
   );
   const activeUsersC = Number(activeUsersRows[0]?.c ?? 0);
 
@@ -142,7 +167,22 @@ async function buildCode(periodStart: number, periodEnd: number, now: number): P
   const spendIsPartlyEstimated = computeSpendIsPartlyEstimated(Array.from(modelsInWeek), rates);
   const unpricedModelCount = (await getCodePulseHealth()).unpricedModels.length;
 
+  // Each tool's spend, when both had some in the week.
+  let spendByProduct: { claudeCodeUsd: number; codexUsd: number } | null = null;
+  if (withCodex) {
+    const split = await rawAll<{ vendor: string; spend_usd: number | string | null }>(db, sql`SELECT vendor, spend_usd FROM code_metrics_vendor
+      WHERE vendor IN ('claude', 'openai') AND scope_type = 'organisation' AND scope_id = ${ORG_SCOPE_ID} AND granularity = 'week' AND period_start = ${periodStart}`);
+    const of = (v: string) => {
+      const r = split.find(x => x.vendor === v);
+      return r && r.spend_usd !== null && r.spend_usd !== undefined ? Number(r.spend_usd) : null;
+    };
+    const claudeCodeUsd = of('claude');
+    const codexUsd = of('openai');
+    if (claudeCodeUsd !== null && codexUsd !== null && claudeCodeUsd > 0 && codexUsd > 0) spendByProduct = { claudeCodeUsd, codexUsd };
+  }
+
   return {
+    spendByProduct,
     spendUsd: row.spend_usd === null || row.spend_usd === undefined ? null : Number(row.spend_usd),
     spendDeltaPct: spendDelta.pct,
     spendIsPartlyEstimated,
@@ -300,6 +340,7 @@ export async function buildDigest(now: number = Math.floor(Date.now() / 1000)): 
     briefingExcerpt: await buildBriefingExcerpt(periodStart),
     useCases: await buildUseCases(periodStart, periodEnd, now),
     coaching: await buildCoaching(now),
-    humanTime: await readOrgHumanTime(periodStart, periodEnd),
+    // ChatGPT conversations and Codex sessions count too, unless hidden.
+    humanTime: await readOrgHumanTime(periodStart, periodEnd, { openai: await openaiShown() }),
   };
 }

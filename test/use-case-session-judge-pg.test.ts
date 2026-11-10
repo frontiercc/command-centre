@@ -59,7 +59,7 @@ afterAll(async () => cleanup());
 beforeEach(async () => {
   await sql.exec(`DELETE FROM use_case_session_judgements; DELETE FROM use_case_week_matches; DELETE FROM use_case_activation_weeks;
     DELETE FROM use_case_skill_drafts; DELETE FROM use_cases; DELETE FROM cowork_skill_invocations; DELETE FROM cowork_mcp_invocations;
-    DELETE FROM cowork_session_stats; DELETE FROM code_session_stats; DELETE FROM cowork_messages; DELETE FROM cowork_sessions; DELETE FROM admin_users; DELETE FROM users;`);
+    DELETE FROM cowork_session_stats; DELETE FROM code_session_stats; DELETE FROM chatgpt_session_time; DELETE FROM codex_actions; DELETE FROM cowork_messages; DELETE FROM cowork_sessions; DELETE FROM admin_users; DELETE FROM users;`);
   mockCreate.mockReset();
   await setConfigValue('useCasesEnabled', 'true');
   await setConfigValue('useCasesSuggestUseContent', 'true');
@@ -252,5 +252,45 @@ describe('runUseCaseJudgeJob', () => {
     await judge.runUseCaseJudgeJob({ nowS: NOW });
     expect(mockCreate).toHaveBeenCalledTimes(1);
     expect(await matchedSessions(uc.id)).toEqual([]);
+  });
+});
+
+describe('ChatGPT and Codex', () => {
+  async function chatgptConversation(id: string, userId: string, firstAt: number, lastAt: number, activeSecs: number, prompts: string[]) {
+    await sql.run(`INSERT INTO chatgpt_session_time (session_id, user_id, source, first_at, last_at, active_secs, computed_at) VALUES (?, ?, 'chatgpt_chat', ?, ?, ?, ?)`,
+      [id, userId, firstAt, lastAt, activeSecs, NOW]);
+    for (const [i, p] of prompts.entries()) {
+      await sql.run(`INSERT INTO cowork_messages (id, session_id, user_id, message_type, surface, source, content_full, occurred_at)
+        VALUES (?, ?, ?, 'cowork_user_message', 'cowork', 'chatgpt_chat', ?, ?)`, [`${id}-m${i}`, id, userId, p, firstAt + i]);
+    }
+  }
+
+  it('judges ChatGPT conversations as Work, and their time counts in the week', async () => {
+    await user('anna', 'Finance');
+    const uc = await financeUseCase();
+    await chatgptConversation('chatgpt:c1', 'anna', NOW - 3 * DAY, NOW - 3 * DAY + HOUR, 1200, ['draft the variance commentary for the board']);
+    mockCreate.mockImplementationOnce(answerBy(t => (t.includes('variance') ? ['U1'] : [])));
+
+    const r = await judge.runUseCaseJudgeJob({ nowS: NOW });
+    expect(r).toMatchObject({ considered: 1, judged: 1, matchedSessions: 1 });
+    expect(await matchedSessions(uc.id)).toEqual(['chatgpt:c1']);
+    const wk = await sql.get<{ session_count: number; measured_duration_secs: number | null }>(
+      `SELECT session_count, measured_duration_secs FROM use_case_activation_weeks WHERE use_case_id = ? AND week_start = ?`, [uc.id, weekStart(NOW - 3 * DAY)]);
+    expect(wk).toMatchObject({ session_count: 1, measured_duration_secs: 1200 });
+  });
+
+  it("a Code-only use case takes Codex sessions, and Codex's failed actions count as errors", async () => {
+    await user('ben', 'Engineering');
+    const uc = await createUseCase({ title: 'Release notes', description: 'Engineering writes the release notes each sprint.',
+      departments: ['Engineering'], surfaces: ['code'], keywords: ['release notes'], status: 'confirmed' } as never);
+    await codeSession('codex:x1', 'ben', NOW - 2 * DAY, NOW - 2 * DAY + HOUR, ['write the release notes for this sprint']);
+    await sql.run(`INSERT INTO codex_actions (id, user_id, session_id, tool_name, failed, occurred_at) VALUES ('a1', 'ben', 'codex:x1', 'shell', 1, ?), ('a2', 'ben', 'codex:x1', 'shell', 0, ?)`, [NOW - 2 * DAY, NOW - 2 * DAY]);
+    mockCreate.mockImplementationOnce(answerBy(t => (t.includes('release notes') ? ['U1'] : [])));
+
+    await judge.runUseCaseJudgeJob({ nowS: NOW });
+    expect(await matchedSessions(uc.id)).toEqual(['codex:x1']);
+    const wk = await sql.get<{ tool_error_count: number | null }>(
+      `SELECT tool_error_count FROM use_case_activation_weeks WHERE use_case_id = ? AND week_start = ?`, [uc.id, weekStart(NOW - 2 * DAY)]);
+    expect(wk?.tool_error_count).toBe(1);
   });
 });

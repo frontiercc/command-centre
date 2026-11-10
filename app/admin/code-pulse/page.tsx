@@ -82,6 +82,8 @@ interface CodeHealth {
   aggregatorLastRun: string | null;
   lastOtelIngest: number | null;
   lastMetaIngest: number | null;
+  /** Codex's latest record, once OpenAI is connected; null otherwise. */
+  codex?: { lastRecordAt: number | null } | null;
 }
 
 // ── Shared with the Work Pulse admin look ──────────────────────────────────
@@ -352,6 +354,7 @@ function FrameworkAdminPanel() {
           <Field label="DX API token" className="flex-1">
             <input
               type="password"
+              autoComplete="new-password"
               value={token}
               onChange={e => setToken(e.target.value)}
               placeholder={tokenConfigured ? 'Token configured. Paste to replace' : 'Read-scoped org token'}
@@ -439,7 +442,10 @@ function RatesPanel({ prefillModel }: { prefillModel: string | null }) {
           Overrides and additions to the built-in Anthropic list rates. A model with no entry here (and no
           normalisable Bedrock/Vertex match) prices as unpriced, never silently zero. Add the exact
           provider-decorated model ID (e.g. <code className={inlineCode}>us.anthropic.claude-opus-4-6-v1</code>)
-          for real AWS/GCP cost instead of the Anthropic list-rate estimate.
+          for real AWS/GCP cost instead of the Anthropic list-rate estimate. ChatGPT and Codex are priced from this
+          table too, at OpenAI&apos;s published USD rates for token-based Enterprise contracts (built in, read
+          1 November 2026). Customers on credit-based contracts are priced at the same list rates, as Claude is.
+          If a ChatGPT or Codex model is listed below as having no rate, add it under its exact name.
         </p>
 
         {data.unpricedModels.length > 0 && (
@@ -647,6 +653,8 @@ function HealthPanel({ onAddRate }: { onAddRate: (model: string) => void }) {
           { label: 'Aggregator last run', ts: health.aggregatorLastRun, warn: 2 },
           { label: 'Last OTel ingest', ts: health.lastOtelIngest, warn: 2 },
           { label: 'Last meta ingest', ts: health.lastMetaIngest, warn: 26 },
+          // Codex (OpenAI export files, read on the OpenAI sync's interval), once OpenAI is connected.
+          ...(health.codex ? [{ label: 'Last Codex record', ts: health.codex.lastRecordAt, warn: 26 }] : []),
         ] as const).map(r => (
           <div key={r.label} className="flex items-center justify-between gap-3 px-4 py-2.5 border-t border-[#F2F2F2]">
             <span className="text-[14px] text-[#333333]">{r.label}</span>
@@ -686,6 +694,7 @@ function CodePulseAdminContent() {
   const [clfIncludePrompt, setClfIncludePrompt] = useState(true);
   const [briefingModel, setBriefingModel] = useState('');
   const [humanTimeCode, setHumanTimeCode] = useState<boolean | null>(null);
+  const [classifyCodex, setClassifyCodex] = useState(true);
   // The organisation briefing model a blank Code briefing model falls back to
   // (getOrgBriefingModel) — named on the page so it never shows a guess.
   const [orgBriefingModel, setOrgBriefingModel] = useState('');
@@ -739,6 +748,7 @@ function CodePulseAdminContent() {
       .then(d => {
         setBriefingModel(d.codeBriefingModel ?? ''); setOrgBriefingModel(d.pulseBriefingModel ?? '');
         setHumanTimeCode(effectiveCodeHumanTime(d.humanTimeCodeEnabled, d.humanTimeEnabled));
+        setClassifyCodex(d.codeClassifyCodex !== 'false');
       })
       .catch(() => {});
   }, []);
@@ -753,6 +763,7 @@ function CodePulseAdminContent() {
           codeClassifierEnabled: String(clfEnabled),
           codeClassifierModel: clfModel,
           codeClassifierIncludePrompt: String(clfIncludePrompt),
+          codeClassifyCodex: String(classifyCodex),
           codeBriefingModel: briefingModel,
           // Code's own human-time switch; once saved it no longer follows Cowork's.
           ...(humanTimeCode !== null ? { humanTimeCodeEnabled: humanTimeCode ? 'true' : 'false' } : {}),
@@ -839,12 +850,18 @@ function CodePulseAdminContent() {
               />
               {humanTimeCode !== null && (
                 <ToggleRow
-                  label="Human time vs Claude time · Code"
+                  label="Human time vs AI time · Code"
                   hint="For each Tier 2 and 3 Code session, an AI estimate of how long an experienced engineer would take by hand, shown beside the measured Claude time on Developer Pulse, and in the weekly digest, Highlights, Reports and the Metrics Connector. Independent of the Cowork switch on Admin → Work Pulse. Off stops new Code estimates and hides the Code figures."
                   checked={humanTimeCode}
                   onChange={setHumanTimeCode}
                 />
               )}
+              <ToggleRow
+                label="Classify Codex sessions"
+                hint={<>The classifier judges Codex sessions from OpenAI&apos;s Compliance API the same way as Claude Code sessions, using the Anthropic API key and the classifier model below, so Work mix and the delegation journey cover Codex too. With Include first prompt on, a Codex session&apos;s first prompt is sent as well. Off stops new Codex sessions being judged; those already judged stay. Applies once Codex sessions arrive.</>}
+                checked={classifyCodex}
+                onChange={setClassifyCodex}
+              />
               <ToggleRow
                 label="Include first prompt"
                 hint="Adds the session's first prompt as intent context for classification. Turn off for a metadata-only privacy posture."
@@ -924,6 +941,7 @@ function CodePulseAdminContent() {
                 <div className="flex items-center gap-2 flex-wrap">
                   <input
                     type="password"
+                    autoComplete="new-password"
                     value={token}
                     onChange={e => setToken(e.target.value)}
                     placeholder={data?.tokenConfigured ? 'Token configured. Paste to replace' : 'github_pat_…'}

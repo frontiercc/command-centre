@@ -4,7 +4,7 @@
 'use client';
 
 import type { ReactNode } from 'react';
-import GenerateBriefingButton from '@/components/pulse/GenerateBriefingButton';
+import GenerateBriefingButton, { useCanGenerateBriefings } from '@/components/pulse/GenerateBriefingButton';
 import { Panel, Tag, Muted, Notice } from '@/components/precision/ui';
 
 interface WeeklyPulseProps {
@@ -18,6 +18,8 @@ interface WeeklyPulseProps {
   onGenerate?: () => void;
   /** Optional control for the panel header (e.g. a regenerate button). */
   action?: ReactNode;
+  /** The signed-in person's own Weekly Pulse, which anyone may generate. */
+  own?: boolean;
 }
 
 function formatDate(ts: number): string {
@@ -33,7 +35,8 @@ function briefingAge(ts: number): string {
   return `Generated ${days} days ago`;
 }
 
-export default function WeeklyPulse({ briefing, userId, onGenerate, action }: WeeklyPulseProps) {
+export default function WeeklyPulse({ briefing, userId, onGenerate, action, own = false }: WeeklyPulseProps) {
+  const canGenerate = useCanGenerateBriefings(own);
   if (!briefing) {
     return (
       <Panel
@@ -41,15 +44,17 @@ export default function WeeklyPulse({ briefing, userId, onGenerate, action }: We
         right={
           <>
             {userId && onGenerate && (
-              <GenerateBriefingButton type="user" userId={userId} onComplete={onGenerate} />
+              <GenerateBriefingButton type="user" userId={userId} onComplete={onGenerate} own={own} />
             )}
             {action}
           </>
         }
       >
         <Muted>
-          {userId
+          {userId && canGenerate
             ? 'No briefing generated yet. Click the button to generate one now, or wait for the automatic Sunday run.'
+            : userId
+            ? 'No briefing generated yet. It is written automatically each Sunday.'
             : 'Your first Weekly Pulse will appear here after the first Sunday briefing run. Check back on Monday.'
           }
         </Muted>

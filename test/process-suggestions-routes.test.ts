@@ -81,6 +81,7 @@ async function seedSuggestion(overrides: {
   department?: string;
   canvas?: ProcessCanvas;
   keywords?: string[];
+  citedSessions?: string[];
 }) {
   const { upsertOpenSuggestion, setSuggestionStatus, listOpenSuggestions } = await import('@/lib/usecases/suggestion-store');
   await upsertOpenSuggestion({
@@ -98,6 +99,7 @@ async function seedSuggestion(overrides: {
     nowS: Math.floor(Date.now() / 1000),
     department: overrides.department,
     canvas: overrides.canvas,
+    citedSessions: overrides.citedSessions,
   });
   const created = (await listOpenSuggestions()).find(s => s.signalKey === overrides.signalKey)!;
   if (overrides.status && overrides.status !== 'open') {
@@ -124,6 +126,22 @@ describe('GET /api/use-cases/suggestions — department + canvas fields', () => 
     expect(row).toBeDefined();
     expect(row.department).toBe('Finance');
     expect(row.canvas).toEqual(SAMPLE_CANVAS);
+  });
+
+  it('says which products a suggestion was found in, and drops that line while ChatGPT and Codex are hidden', async () => {
+    await enableUseCases();
+    await seedSuggestion({
+      signalKey: 'dept-products', title: 'Architecture decision record drafting', department: 'Engineering',
+      canvas: SAMPLE_CANVAS, citedSessions: ['ff-cw-1', 'chatgpt:x', 'ff-cw-2'],
+    });
+    const { GET } = await import('../app/api/use-cases/suggestions/route');
+    const shown = (await (await GET(makeRequest('/api/use-cases/suggestions'))).json())[0];
+    expect(shown.products).toEqual({ cowork: 2, code: 0, chatgpt: 1, codex: 0 });
+
+    const { saveConfig } = await import('@/lib/config');
+    await saveConfig({ openaiShown: 'false' });
+    const hidden = (await (await GET(makeRequest('/api/use-cases/suggestions'))).json())[0];
+    expect(hidden.products).toBeNull();
   });
 
   it('hides the retired org-wide tray rows (department null)', async () => {

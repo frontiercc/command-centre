@@ -267,7 +267,7 @@ async function runSpec(): Promise<void> {
     expect(org.highFrictionSessions[0]).toMatchObject({ session_id: 's1', error_count: 8, tool_use_count: 20 });
 
     // Judged-layer work mix — JOIN + CASE-SUM tier breakdown.
-    expect(org.workMix).toEqual([{ work_type: 'feature', label: 'New functionality', definition: 'new functionality', sessions: 1, tier3: 1, tier2: 0, tier1: 0, provisional: 0 }]);
+    expect(org.workMix).toEqual([{ work_type: 'feature', label: 'New functionality', definition: 'new functionality', sessions: 1, tier3: 1, tier2: 0, tier1: 0, provisional: 0, claude: 1, openai: 0 }]);
 
     // Trends — sanity shape (values come from 'week' rows, none seeded here).
     expect(org.trends.spend.series).toHaveLength(8);

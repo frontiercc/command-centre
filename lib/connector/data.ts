@@ -13,6 +13,8 @@ import { getWeeklySeries, assertPulseMetricsColumn, type WeeklyPoint } from '@/l
 import { weekStart, weekStarts } from '@/lib/pulse/period';
 import { ORG_SCOPE_ID } from '@/lib/pulse/code/aggregator';
 import { getCodePulseHealth } from '@/lib/pulse/code/health';
+import { hasCodexData, trendVendor } from '@/lib/pulse/code/vendor-view';
+import { visibleOpenAi } from '@/lib/sources/openai-visibility';
 
 // ─── Phase 3 raw-execution facade (mirrors lib/db/queries.ts's rawAll) ────────
 interface RawFacade {
@@ -145,6 +147,18 @@ async function getPulseSumSeries(metric: string, weeks: number, now: number): Pr
   }));
 }
 
+async function codeTrendSeries(metric: string, weeks: number, now: number): Promise<WeeklyPoint[]> {
+  const claude = await getWeeklySeries('code_metrics', 'organisation', ORG_SCOPE_ID, metric, weeks, now);
+  const allVendor = trendVendor('all', await visibleOpenAi(hasCodexData()));
+  if (!allVendor) return claude;
+  const all = await getWeeklySeries('code_metrics', 'organisation', ORG_SCOPE_ID, metric, weeks, now, allVendor);
+  const byWeek = new Map(all.map(p => [p.weekStart, p]));
+  return claude.map(p => {
+    const a = byWeek.get(p.weekStart);
+    return a && a.value !== null ? a : p;
+  });
+}
+
 /** Org-level weekly trend for one allowlisted metric. Throws InvalidMetricError otherwise. */
 export async function getConnectorTrend(
   metric: string,
@@ -157,8 +171,13 @@ export async function getConnectorTrend(
 
   const clampedWeeks = clampWeeks(weeks);
 
+  // Code figures are the all-tools ones (Claude Code plus Codex) once Codex
+  // data exists and is shown, the same totals the summary's code block reads.
+  // The all-tools rows are only rebuilt for recent weeks, so a week without
+  // one keeps Claude Code's own figure, the same per-week rule the digest
+  // uses (codexWeekShown), rather than turning into a gap.
   const series = isCodeMetricsMetric(metric)
-    ? await getWeeklySeries('code_metrics', 'organisation', ORG_SCOPE_ID, metric, clampedWeeks, now)
+    ? await codeTrendSeries(metric, clampedWeeks, now)
     : isPulseSumMetric(metric)
       ? await getPulseSumSeries(metric, clampedWeeks, now)
       : (() => { throw new InvalidMetricError(metric); })();

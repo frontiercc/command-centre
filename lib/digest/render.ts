@@ -68,6 +68,13 @@ function formatDateRange(weekStart: number, weekEnd: number): string {
   return `${fmt(start)}–${fmt(end)}`;
 }
 
+/** "Claude Code $X · Codex $Y" when both tools had spend in the week, else null. */
+function spendSplitText(code: NonNullable<DigestData['code']>): string | null {
+  const split = code.spendByProduct;
+  if (!split) return null;
+  return `Claude Code ${formatUsd(split.claudeCodeUsd)} · Codex ${formatUsd(split.codexUsd)}`;
+}
+
 function estimateCaveatLines(code: NonNullable<DigestData['code']>): string[] {
   const lines: string[] = [];
   if (code.spendIsPartlyEstimated) {
@@ -97,12 +104,15 @@ function renderCodeRowHtml(code: DigestData['code']): string {
 
   const spendLine = `${formatUsd(code.spendUsd)}${formatDeltaPhrase(code.spendDeltaPct)}`;
   const engagedHoursText = code.engagedHours === null ? '—' : `${code.engagedHours.toLocaleString('en-US')} hrs`;
+  const split = spendSplitText(code);
+  const splitHtml = split ? `
+        <p style="margin:0 0 4px 0;font-size:13px;color:${COLOR_MUTED};">${escapeHtml(split)}</p>` : '';
 
   return `
     <tr>
       <td style="padding:16px 24px;border-bottom:1px solid ${COLOR_BORDER};">
         <p style="margin:0 0 8px 0;font-size:14px;font-weight:bold;color:${COLOR_TEXT};">Developer Pulse</p>
-        <p style="margin:0 0 4px 0;font-size:14px;color:${COLOR_TEXT};">Spend: <strong>${spendLine}</strong></p>
+        <p style="margin:0 0 4px 0;font-size:14px;color:${COLOR_TEXT};">Spend: <strong>${spendLine}</strong></p>${splitHtml}
         <p style="margin:0 0 4px 0;font-size:14px;color:${COLOR_TEXT};">Commits: <strong>${formatNumber(code.commits)}</strong> &nbsp;|&nbsp; PRs: <strong>${formatNumber(code.prs)}</strong></p>
         <p style="margin:0 0 4px 0;font-size:14px;color:${COLOR_TEXT};">Engaged hours: <strong>${engagedHoursText}</strong></p>
         <p style="margin:0;font-size:14px;color:${COLOR_TEXT};">Active users: <strong>${formatNumber(code.activeUsers)}</strong></p>
@@ -266,7 +276,8 @@ interface SlackBlock {
 function slackCodeFields(code: DigestData['code']): SlackBlock[] {
   if (!code) return [];
 
-  const spendLine = `*Spend:*\n${escapeMrkdwn(formatUsd(code.spendUsd))}${escapeMrkdwn(formatDeltaPhrase(code.spendDeltaPct))}`;
+  const split = spendSplitText(code);
+  const spendLine = `*Spend:*\n${escapeMrkdwn(formatUsd(code.spendUsd))}${escapeMrkdwn(formatDeltaPhrase(code.spendDeltaPct))}${split ? `\n${escapeMrkdwn(split)}` : ''}`;
   const engagedHoursText = code.engagedHours === null ? '—' : `${code.engagedHours.toLocaleString('en-US')} hrs`;
 
   return [

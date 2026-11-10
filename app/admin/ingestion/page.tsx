@@ -4,12 +4,14 @@
 'use client';
 
 import { useEffect, useState } from 'react';
+import Link from 'next/link';
 import TopBar from '@/components/layout/TopBar';
 import LoadingSpinner from '@/components/shared/LoadingSpinner';
 import { useToast } from '@/components/shared/ToastProvider';
 import IdentityConflictsCard from '@/components/admin/IdentityConflictsCard';
 import CollectorConnection from '@/components/setup/CollectorConnection';
-import { PageBody, Panel, Muted, T, B, C, cx } from '@/components/precision/ui';
+import { PageBody, Panel, Muted, T, B, C, Tag, cx } from '@/components/precision/ui';
+import { firstSeenLabel } from '@/lib/sources/first-seen';
 
 interface OtelStatus {
   collectorTokenSet: boolean;
@@ -17,7 +19,21 @@ interface OtelStatus {
   lastOtelEventAt: number | null;
   otelUserCount: number;
   newUsersToday: number;
-  recentOtelUsers: Array<{ id: string; display_name: string | null; email: string | null; department: string | null; last_seen_at: number | null }>;
+  /** first_seen_in: the product of the person's earliest surviving prompt, else their arrival route. */
+  recentOtelUsers: Array<{ id: string; display_name: string | null; email: string | null; department: string | null; last_seen_at: number | null; source: string | null; first_seen_in?: string }>;
+  openai: {
+    keySet: boolean;
+    lastSyncAt: number | null;
+    lastSync: { prompts: number; excluded: number; errors: number } | null;
+    lastRecordAt: number | null;
+    people: number;
+    newToday: number;
+    intervalMinutes: number;
+    /** Pause sync is on (Access & Keys). */
+    paused?: boolean;
+    /** Show ChatGPT and Codex is on (Access & Keys). */
+    shown?: boolean;
+  };
 }
 
 
@@ -75,6 +91,19 @@ export default function IngestionPage() {
     return ageMs < 10 * 60 * 1000 ? 'green' : 'amber';
   })();
 
+  // OpenAI Compliance API status: not connected is a choice, not a fault.
+  const openaiStatus = (() => {
+    const o = otelStatus?.openai;
+    if (!o || !o.keySet) return { tone: 'off' as const, text: 'Not connected' };
+    if (o.paused) return { tone: 'amber' as const, text: 'Sync paused: nothing new is collected until it is switched back on' };
+    if (!o.lastSyncAt) return { tone: 'amber' as const, text: 'Key set, awaiting the first sync' };
+    if (o.lastSync && o.lastSync.errors > 0) return { tone: 'red' as const, text: 'The last sync reported errors' };
+    // A sync is late after three missed runs.
+    const late = Date.now() - o.lastSyncAt * 1000 > (o.intervalMinutes * 3 + 10) * 60 * 1000;
+    if (late) return { tone: 'amber' as const, text: 'No sync recently' };
+    return { tone: 'green' as const, text: o.lastRecordAt ? 'Syncing, ChatGPT and Codex records arriving' : 'Syncing, no records yet' };
+  })();
+
   const handlePrepopulate = async () => {
     const lines = csvInput.trim().split('\n').filter(Boolean);
     const users = lines.map(line => {
@@ -130,7 +159,7 @@ export default function IngestionPage() {
 
   return (
     <>
-      <TopBar title="Ingestion" subtitle="OpenTelemetry + Enterprise API ingestion, the primary capture paths" />
+      <TopBar title="Ingestion" subtitle="Claude through OpenTelemetry and Anthropic's APIs, ChatGPT and Codex through OpenAI's Compliance API" />
       <PageBody className="max-w-[1000px]">
 
         {pageLoading && <LoadingSpinner />}
@@ -146,9 +175,9 @@ export default function IngestionPage() {
               )}
             </Panel>
 
-            {/* Collector Status Card */}
+            {/* Claude collector status (OpenTelemetry only; ChatGPT and Codex have their own panel below) */}
             <Panel
-              title="Collector status"
+              title="Claude collector (OpenTelemetry)"
               right={
                 <button type="button" className={B.secondary} onClick={fetchOtelStatus}>
                   Refresh
@@ -166,23 +195,69 @@ export default function IngestionPage() {
                     collectorStatus === 'amber' ? 'text-[#B54708]' :
                     'text-[#B42318]')}>
                     {collectorStatus === 'green' ? 'Collector active, OTel events flowing' :
-                     collectorStatus === 'amber' ? (otelStatus?.lastOtelEventAt ? 'Collector token set, no recent events' : 'Awaiting first OTel event') :
+                     collectorStatus === 'amber' ? (otelStatus?.lastOtelEventAt ? 'Collector token set, no events in the last 10 minutes' : 'Awaiting first OTel event') :
                      'Collector token not configured'}
                   </p>
                   <p className="m-0 mt-0.5 text-[13px] text-[#8F8F8F] tabular-nums">
-                    {otelStatus?.otelUserCount ?? 0} OTel users &middot; {otelStatus?.newUsersToday ?? 0} new today
-                    {otelStatus?.lastOtelEventAt ? ` · Last event ${new Date(otelStatus.lastOtelEventAt * 1000).toLocaleString()}` : ''}
+                    People seen through Claude telemetry: {otelStatus?.otelUserCount ?? 0} &middot; {otelStatus?.newUsersToday ?? 0} new today
+                    {otelStatus?.lastOtelEventAt ? ` · Last event ${new Date(otelStatus.lastOtelEventAt * 1000).toLocaleString('en-GB')}` : ''}
                   </p>
+                </div>
+              </div>
+            </Panel>
+
+            {/* Connect ChatGPT and Codex: what OpenAI's Compliance API needs, where to enter it, then its status */}
+            <Panel title="Connect ChatGPT and Codex" badge={<Tag tone="neutral" title="ChatGPT and Codex support is in preview">Preview</Tag>} subtitle="OpenAI's Compliance API, read with an admin key. Nothing is set on people's computers.">
+              <p className="m-0 text-[13px] text-[#4D4D4D]">
+                ChatGPT Chat and ChatGPT Work prompts join Work Pulse, Codex prompts join Developer Pulse, and their spend joins FinOps,
+                a few hours behind. It needs ChatGPT Enterprise or Edu, and three things from OpenAI&apos;s admin console:
+              </p>
+              <ol className="mt-2 mb-0 pl-5 list-decimal text-[13px] text-[#4D4D4D] flex flex-col gap-1">
+                <li><span className="font-medium text-[#0A0A0A]">An OpenAI Admin API key</span>, created by a ChatGPT workspace owner under Credentials → Admin keys, with read access to conversation messages, Codex logs, Codex turns and costs.</li>
+                <li><span className="font-medium text-[#0A0A0A]">The ChatGPT workspace ID</span>, shown in the workspace settings.</li>
+                <li><span className="font-medium text-[#0A0A0A]">The OpenAI organisation ID</span> (org-…), which ChatGPT spend needs. Codex spend needs only the workspace ID.</li>
+              </ol>
+              <div className="mt-3">
+                <Link href="/admin/security" className={B.secondary}>Enter them in Access &amp; Keys</Link>
+              </div>
+              <div className="mt-4 pt-3 border-t border-[#F2F2F2]">
+                <div className="flex items-start gap-3">
+                  <span
+                    className="mt-1 h-2.5 w-2.5 rounded-full flex-shrink-0"
+                    style={{ background: openaiStatus.tone === 'green' ? C.good : openaiStatus.tone === 'amber' ? C.medium : openaiStatus.tone === 'red' ? C.high : C.input }}
+                  />
+                  <div className="min-w-0">
+                    <p className={cx('m-0 text-[14px] font-semibold',
+                      openaiStatus.tone === 'green' ? 'text-[#1A7F37]' :
+                      openaiStatus.tone === 'amber' ? 'text-[#B54708]' :
+                      openaiStatus.tone === 'red' ? 'text-[#B42318]' : 'text-[#333333]')}>
+                      {openaiStatus.text}
+                    </p>
+                    {otelStatus?.openai.keySet ? (
+                      <p className="m-0 mt-0.5 text-[13px] text-[#8F8F8F] tabular-nums">
+                        {otelStatus.openai.people} {otelStatus.openai.people === 1 ? 'person' : 'people'} seen &middot; {otelStatus.openai.newToday} new today
+                        {otelStatus.openai.lastSyncAt ? ` · Last sync ${new Date(otelStatus.openai.lastSyncAt * 1000).toLocaleString('en-GB')}` : ''}
+                        {otelStatus.openai.lastSync ? ` · ${otelStatus.openai.lastSync.prompts} new prompt${otelStatus.openai.lastSync.prompts === 1 ? '' : 's'} in it` : ''}
+                        {otelStatus.openai.lastSync && otelStatus.openai.lastSync.excluded > 0 ? `, ${otelStatus.openai.lastSync.excluded} excluded` : ''}
+                        {otelStatus.openai.lastRecordAt ? ` · Latest record ${new Date(otelStatus.openai.lastRecordAt * 1000).toLocaleString('en-GB')}` : ''}
+                      </p>
+                    ) : null}
+                    {otelStatus?.openai.keySet && otelStatus.openai.shown === false && (
+                      <p className="m-0 mt-1 text-[13px] text-[#666666]">
+                        Hidden from the analytics screens: Show ChatGPT and Codex is off on Access &amp; Keys. Collection carries on, and the Audit Log lists every prompt.
+                      </p>
+                    )}
+                  </div>
                 </div>
               </div>
             </Panel>
 
             <IdentityConflictsCard />
 
-            {/* Recent OTel Users */}
-            <Panel title="Recent OTel users" flush>
+            {/* Recent users, from every capture path */}
+            <Panel title="Recent users" subtitle="First seen through Claude's telemetry, Anthropic's Compliance API or OpenAI's Compliance API" flush>
               {(otelStatus?.recentOtelUsers ?? []).length === 0 ? (
-                <div className="p-4"><Muted>No OTel users yet.</Muted></div>
+                <div className="p-4"><Muted>No users yet.</Muted></div>
               ) : (
                 <div className="overflow-x-auto">
                   <table className={T.table}>
@@ -191,6 +266,7 @@ export default function IngestionPage() {
                         <th className={T.th}>Name</th>
                         <th className={T.th}>Email</th>
                         <th className={T.th}>Department</th>
+                        <th className={T.th}>First seen in</th>
                         <th className={T.th}>Last seen</th>
                       </tr>
                     </thead>
@@ -200,8 +276,9 @@ export default function IngestionPage() {
                           <td className={T.td}>{u.display_name || '—'}</td>
                           <td className={cx(T.tdMute, 'font-mono text-[13px]')}>{u.email || '—'}</td>
                           <td className={T.tdMute}>{u.department || '—'}</td>
+                          <td className={cx(T.tdMute, 'whitespace-nowrap')}>{u.first_seen_in ?? firstSeenLabel(null, null, u.source)}</td>
                           <td className={cx(T.tdMute, 'tabular-nums whitespace-nowrap')}>
-                            {u.last_seen_at ? new Date(u.last_seen_at * 1000).toLocaleString() : '—'}
+                            {u.last_seen_at ? new Date(u.last_seen_at * 1000).toLocaleString('en-GB') : '—'}
                           </td>
                         </tr>
                       ))}
@@ -212,11 +289,12 @@ export default function IngestionPage() {
             </Panel>
 
             {/* Pre-populate Users */}
-            <Panel title="Pre-populate OTel users">
+            <Panel title="Pre-populate users">
               <div className="flex flex-col gap-3">
                 <label htmlFor="otel-prepopulate" className="text-[13px] text-[#666666] leading-5">
                   Paste a CSV list of users (one per line: <code className="text-[12px] font-mono bg-[#F2F2F2] px-1 rounded-[6px]">email,display_name,department</code>).
-                  Rows where the email already exists are skipped.
+                  Rows where the email already exists are skipped. Each person is matched by email when they first appear in
+                  Claude&apos;s telemetry or OpenAI&apos;s Compliance API, so their name and department are in place from the start.
                 </label>
                 <textarea
                   id="otel-prepopulate"
@@ -245,10 +323,11 @@ export default function IngestionPage() {
             </Panel>
 
             {/* Exclude OTel Users */}
-            <Panel title="Exclude users from OTel monitoring">
+            <Panel title="Exclude people from monitoring">
               <div className="flex flex-col gap-3">
                 <label htmlFor="otel-excluded" className="text-[13px] text-[#666666] leading-5">
-                  OTel events arriving for these email addresses will be silently dropped: no data written, no alerts fired.
+                  Claude records (telemetry, and Claude Chat from the Compliance API) and ChatGPT and Codex records from OpenAI&apos;s Compliance API
+                  for these email addresses are silently dropped: no data written, no alerts fired. The match ignores capital letters.
                   Use this for executives, risk teams, or other roles that should not be monitored.
                   One email address per line.
                 </label>

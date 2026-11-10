@@ -15,6 +15,7 @@ import { and, eq, gte, inArray, lt, sql } from 'drizzle-orm';
 import { getTypedClient } from '@/lib/db/client';
 import { schema } from '@/lib/db/schema';
 import { getConfigValue } from '@/lib/config';
+import { messageVendor } from '@/lib/pulse/vendor-filter';
 import { PRODUCT_ORDER, productFullName, type WorkProduct } from '@/lib/pulse/cowork/products';
 
 export interface ProductActivity { product: WorkProduct; sessions: number; people: number }
@@ -33,6 +34,9 @@ export async function readWorkByProduct(userIds: string[] | null, sinceS: number
     .from(cm)
     .where(and(
       sql`COALESCE(${cm.surface}, 'cowork') = 'cowork'`,
+      // Claude's only: ChatGPT Work prompts share the surface and a NULL product,
+      // and must never be counted as Cowork. The briefings' product facts cover ChatGPT.
+      messageVendor('claude'),
       eq(cm.message_type, 'cowork_user_message'),
       gte(cm.occurred_at, sinceS),
       lt(cm.occurred_at, untilS),

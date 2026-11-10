@@ -1,6 +1,8 @@
 // Copyright 2026 Lee James
 // SPDX-License-Identifier: Apache-2.0
 
+import { productFactsBlock, PRODUCT_NAMING_RULE } from '@/lib/pulse/briefings/product-facts';
+
 export interface WeeklyBriefingContext {
   user_id: string;
   display_name: string | null;
@@ -14,6 +16,8 @@ export interface WeeklyBriefingContext {
   /** Measured deep-work lines (best work, mainstay, capabilities) — never names, summaries or file names. */
   deep_work: string[];
   task_types_used: string[];      // distinct task_types classified this week
+  /** Per-product facts for this person; empty when they used no ChatGPT this week. */
+  products?: string[];
 }
 
 export const WEEKLY_BRIEFING_SYSTEM = `You are a trusted advisor writing a personal weekly briefing for a professional who uses AI in their daily work.
@@ -36,6 +40,7 @@ Tone constraints:
 - Never use em dashes
 - Use British spelling throughout
 - Never use acronyms DDS, OTI, TCS, ORS in the output. Use plain language: "delegation depth", "output quality", "resilience", "governance score"
+- ${PRODUCT_NAMING_RULE}
 - Never refer to "tiers" as tier numbers. Say "routine tasks" (Tier 1), "complex multi-step work" (Tier 2), "autonomous high-stakes work" (Tier 3)
 
 SUGGESTION: One concrete, specific action grounded in the actual data above. It must reference something specific from this week (a particular task type, a metric trend, or a piece of deep work). Never suggest running the same task N times. Never suggest "documenting" something unless there is a clear reason. If the week was uneventful, suggest trying a specific task type from the list that the person hasn't done in a while. Keep it to one sentence.`;
@@ -68,6 +73,6 @@ Output quality index (ratio vs baseline, above 1.0 = improvement): ${ctx.oti !==
 
 DEEP WORK (measured)
 ${deepWork}
-
+${productFactsBlock(ctx.products ?? [])}
 Write the briefing now. Return only the JSON object.`;
 }

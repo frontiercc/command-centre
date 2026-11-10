@@ -12,6 +12,7 @@ import { getAdminSession, canAccessPulseAdmin } from '@/lib/auth/admin-auth';
 import { promptTextVisibleFor, logPromptRead } from '@/lib/auth/content-access';
 import { getTypedClient } from '@/lib/db/client';
 import { schema } from '@/lib/db/schema';
+import { isWorkPulseSurface, classifiableSource, classifyChatgptOn } from '@/lib/pulse/work-surfaces';
 
 export const dynamic = 'force-dynamic';
 
@@ -107,8 +108,9 @@ export async function GET(
 
   const pendingCountRow = await rawGet<{ cnt: number | string }>(client, sql`
      SELECT COUNT(*) as cnt FROM cowork_messages
-     WHERE user_id = ${userId} AND surface = 'cowork'
+     WHERE user_id = ${userId} AND ${isWorkPulseSurface(sql`surface`)}
        AND message_type = 'cowork_user_message'
+       AND ${classifiableSource(sql`source`, await classifyChatgptOn())}
        AND id NOT IN (
          SELECT cowork_message_id FROM pulse_classifications
          WHERE classifier_status = 'classified' OR classifier_attempts >= 5

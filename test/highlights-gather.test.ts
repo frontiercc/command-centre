@@ -142,6 +142,15 @@ describe('gatherHighlights', () => {
     });
   });
 
+  it('labels the code output as Claude Code once OpenAI is connected', async () => {
+    await seed();
+    const { setConfigValue } = await import('@/lib/config');
+    await setConfigValue('openaiAdminApiKey', 'sk-admin-test-not-real');
+    const { gatherHighlights } = await import('@/lib/highlights/gather');
+    const input = await gatherHighlights({ nowS: NOW });
+    expect(input.codeOutput).toMatchObject({ linesChanged: 700, basis: 'week', claudeCodeLabel: true });
+  });
+
   it('falls back to the latest rolling row (basis="rolling") when no weekly row exists for the completed week', async () => {
     const { getTypedClient } = await import('@/lib/db/client');
     const { schema } = await import('@/lib/db/schema');

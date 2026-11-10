@@ -9,14 +9,20 @@
 // are decisions someone has to make.
 //
 // All figures here are MEASURED — counts of observed invocations and registry
-// rows. No classifier is involved.
+// rows. No classifier is involved. Uses are counted per product (Claude,
+// ChatGPT, Codex: lib/dashboard/product-sql.ts toolTagExpr), and the product
+// is named once ChatGPT or Codex appears, so a name used in two products is
+// never merged into one row.
 import { and, desc, eq, gte, lte, sql } from 'drizzle-orm';
 import { getTypedClient } from '@/lib/db/client';
 import { schema } from '@/lib/db/schema';
 import { classifyMcpTool } from '@/lib/pulse/mcp-classify';
+import { toolTagExpr } from '@/lib/dashboard/product-sql';
 
 export interface ToolUsage {
   name: string;
+  /** Claude, ChatGPT or Codex. */
+  product?: string;
   invocations: number;
   users: number;
   departments: number;
@@ -40,8 +46,23 @@ function int(n: number): string {
   return n.toLocaleString('en-GB');
 }
 
-function usageTable(rows: ToolUsage[], emptyMessage: string): string {
+/** True once any tool use comes from ChatGPT or Codex: products are then named. */
+function namesProducts(rows: ToolUsage[]): boolean {
+  return rows.some(r => r.product && r.product !== 'Claude');
+}
+
+/** A tool's name, with its product once products are named ("linear (Codex)"). */
+function toolName(r: ToolUsage, withProduct: boolean): string {
+  return withProduct && r.product ? `${r.name} (${r.product})` : r.name;
+}
+
+function usageTable(rows: ToolUsage[], emptyMessage: string, withProduct = false): string {
   if (rows.length === 0) return emptyMessage;
+  if (withProduct) {
+    return `| Name | Product | Invocations | Users | Departments |
+|---|---|---|---|---|
+${rows.map(r => `| ${r.name} | ${r.product ?? 'Claude'} | ${int(r.invocations)} | ${int(r.users)} | ${int(r.departments)} |`).join('\n')}`;
+  }
   return `| Name | Invocations | Users | Departments |
 |---|---|---|---|
 ${rows.map(r => `| ${r.name} | ${int(r.invocations)} | ${int(r.users)} | ${int(r.departments)} |`).join('\n')}`;
@@ -51,7 +72,7 @@ export function renderScBoardSection(f: ScBoardFacts): string {
   if (!f.hasData) {
     return `## Skills & Connectors
 
-No skills or connectors have been observed in telemetry for this period.`;
+No skills or connectors have been observed in this period.`;
   }
 
   const newBlock = f.newEntries.length === 0
@@ -62,6 +83,7 @@ No skills or connectors have been observed in telemetry for this period.`;
     ? `All ${int(f.totalEntries)} registered entries have a named owner.`
     : `**${int(f.unclaimed.length)} of ${int(f.totalEntries)} registered entries have no named owner**, meaning tooling is in use with nobody accountable for it: ${f.unclaimed.slice(0, 20).map(e => `${e.name} (${e.type})`).join(', ')}${f.unclaimed.length > 20 ? ', and others' : ''}.`;
 
+  const withProduct = namesProducts([...f.topSkills, ...f.topConnectors]);
   const totalConnectorCalls = f.connectorReads + f.connectorWrites + f.connectorUnknown;
   const dataMovement = totalConnectorCalls === 0
     ? 'No connector invocations were recorded in this period.'
@@ -87,11 +109,11 @@ ${unclaimedBlock}
 
 ### Most used skills
 
-${usageTable(f.topSkills, 'No skill invocations were recorded in this period.')}
+${usageTable(f.topSkills, 'No skill invocations were recorded in this period.', withProduct)}
 
 ### Most used connectors
 
-${usageTable(f.topConnectors, 'No connector invocations were recorded in this period.')}
+${usageTable(f.topConnectors, 'No connector invocations were recorded in this period.', withProduct)}
 
 ${dataMovement}
 
@@ -123,6 +145,7 @@ export async function buildScBoardSection(periodStart: string, periodEnd: string
     db
       .select({
         name: csi.skill_name,
+        product: sql<string>`${sql.raw(toolTagExpr('cowork_skill_invocations.'))}`,
         invocations: sql<number | string>`count(*)`,
         users: sql<number | string>`count(distinct ${csi.user_id})`,
         departments: sql<number | string>`count(distinct ${u.department})`,
@@ -130,11 +153,12 @@ export async function buildScBoardSection(periodStart: string, periodEnd: string
       .from(csi)
       .leftJoin(u, eq(u.id, csi.user_id))
       .where(and(gte(csi.occurred_at, startS), lte(csi.occurred_at, endS)))
-      .groupBy(csi.skill_name)
+      .groupBy(csi.skill_name, sql`2`)
       .orderBy(desc(sql`count(*)`)),
     db
       .select({
         name: cmi.mcp_server,
+        product: sql<string>`${sql.raw(toolTagExpr('cowork_mcp_invocations.'))}`,
         invocations: sql<number | string>`count(*)`,
         users: sql<number | string>`count(distinct ${cmi.user_id})`,
         departments: sql<number | string>`count(distinct ${u.department})`,
@@ -142,7 +166,7 @@ export async function buildScBoardSection(periodStart: string, periodEnd: string
       .from(cmi)
       .leftJoin(u, eq(u.id, cmi.user_id))
       .where(and(gte(cmi.occurred_at, startS), lte(cmi.occurred_at, endS)))
-      .groupBy(cmi.mcp_server)
+      .groupBy(cmi.mcp_server, sql`2`)
       .orderBy(desc(sql`count(*)`)),
     db
       .select({ tool: cmi.mcp_tool, count: sql<number | string>`count(*)` })
@@ -160,8 +184,9 @@ export async function buildScBoardSection(periodStart: string, periodEnd: string
     else unknown += n;
   }
 
-  const toUsage = (r: { name: string; invocations: number | string; users: number | string; departments: number | string }): ToolUsage => ({
+  const toUsage = (r: { name: string; product: string; invocations: number | string; users: number | string; departments: number | string }): ToolUsage => ({
     name: r.name,
+    product: r.product,
     invocations: Number(r.invocations),
     users: Number(r.users),
     departments: Number(r.departments),
@@ -181,7 +206,7 @@ export async function buildScBoardSection(periodStart: string, periodEnd: string
     connectorReads: reads,
     connectorWrites: writes,
     connectorUnknown: unknown,
-    singleUserTools: all.filter(t => t.users === 1).map(t => t.name),
-    crossDeptTools: all.filter(t => t.departments > 1).map(t => t.name),
+    singleUserTools: all.filter(t => t.users === 1).map(t => toolName(t, namesProducts(all))),
+    crossDeptTools: all.filter(t => t.departments > 1).map(t => toolName(t, namesProducts(all))),
   });
 }

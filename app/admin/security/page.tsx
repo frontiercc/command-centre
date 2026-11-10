@@ -11,6 +11,8 @@ import { useToast } from '@/components/shared/ToastProvider';
 import SecretRemoveButton from '@/components/admin/SecretRemoveButton';
 import { MIN_PASSWORD_LENGTH, PASSWORD_TOO_SHORT } from '@/lib/auth/password-policy';
 import { PageBody, Panel, Pill, Tag, Muted, T, B, cx } from '@/components/precision/ui';
+import { ToggleRow } from '@/components/admin/precision-admin';
+import DepartmentSyncPanel from '@/components/admin/DepartmentSyncPanel';
 
 type TestStatus = 'idle' | 'testing' | 'success' | 'error';
 
@@ -21,7 +23,7 @@ type TestStatus = 'idle' | 'testing' | 'success' | 'error';
 // updated whenever /api/config is (re-)fetched.
 const SECURITY_SAVE_SECRET_FIELDS = [
   'anthropicAiApiKey', 'anthropicAdminApiKey', 'anthropicAnalyticsApiKey',
-  'complianceAccessKey', 'otelEndpointSecret',
+  'complianceAccessKey', 'otelEndpointSecret', 'openaiAdminApiKey',
 ] as const;
 
 function trackLoadedSecrets(ref: { current: Set<string> }, data: Record<string, unknown>) {
@@ -96,6 +98,20 @@ export default function SecurityPage() {
   const [complianceLastSyncAt, setComplianceLastSyncAt] = useState('');
   const [complianceLastSyncStats, setComplianceLastSyncStats] = useState('');
   const [otelEndpointSecret, setOtelEndpointSecret] = useState('');
+  // --- OpenAI Compliance API (ChatGPT and Codex) ---
+  const [openaiAdminApiKey, setOpenaiAdminApiKey] = useState('');
+  const [openaiWorkspaceId, setOpenaiWorkspaceId] = useState('');
+  const [openaiOrganizationId, setOpenaiOrganizationId] = useState('');
+  const [openaiLastSyncAt, setOpenaiLastSyncAt] = useState('');
+  const [openaiLastSyncStats, setOpenaiLastSyncStats] = useState('');
+  // Pause the sync (key and data kept) and show or hide ChatGPT and Codex on the analytics screens.
+  const [openaiSyncPaused, setOpenaiSyncPaused] = useState(false);
+  const [openaiShown, setOpenaiShown] = useState(true);
+  // A saved key comes back masked; a typed, unsaved key is plain.
+  const openaiKeySaved = openaiAdminApiKey.includes('••••••••');
+  const [openaiTestStatus, setOpenaiTestStatus] = useState<TestStatus>('idle');
+  const [openaiTestMessage, setOpenaiTestMessage] = useState('');
+  const [openaiTestOk, setOpenaiTestOk] = useState(false);
   // Which of SECURITY_SAVE_SECRET_FIELDS currently have a stored (non-empty,
   // masked) value. See the note above trackLoadedSecrets().
   const loadedSecretsRef = useRef<Set<string>>(new Set());
@@ -185,6 +201,7 @@ export default function SecurityPage() {
   const [ssoProviderLabel, setSsoProviderLabel] = useState('SSO');
   const [ssoRedirectBaseUrl, setSsoRedirectBaseUrl] = useState('');
   const [savingSso, setSavingSso] = useState(false);
+  const [ssoSaveCount, setSsoSaveCount] = useState(0);
   const [ssoTestStatus, setSsoTestStatus] = useState<TestStatus>('idle');
   const [ssoTestMessage, setSsoTestMessage] = useState('');
 
@@ -204,6 +221,13 @@ export default function SecurityPage() {
         setComplianceAccessKey(String(data.complianceAccessKey || ''));
         setComplianceLastSyncAt(String(data.complianceLastSyncAt || ''));
         setComplianceLastSyncStats(String(data.complianceLastSyncStats || ''));
+        setOpenaiAdminApiKey(String(data.openaiAdminApiKey || ''));
+        setOpenaiWorkspaceId(String(data.openaiWorkspaceId || ''));
+        setOpenaiOrganizationId(String(data.openaiOrganizationId || ''));
+        setOpenaiLastSyncAt(String(data.openaiLastSyncAt || ''));
+        setOpenaiLastSyncStats(String(data.openaiLastSyncStats || ''));
+        setOpenaiSyncPaused(String(data.openaiSyncPaused ?? 'false') === 'true');
+        setOpenaiShown(String(data.openaiShown ?? 'true') !== 'false');
         trackLoadedSecrets(loadedSecretsRef, data);
         setOtelEndpointSecret(String(data.otelEndpointSecret || ''));
         setSmtpHost(String(data.smtpHost || ''));
@@ -267,6 +291,11 @@ export default function SecurityPage() {
           anthropicAnalyticsApiKey,
           complianceAccessKey,
           otelEndpointSecret,
+          openaiAdminApiKey,
+          openaiWorkspaceId,
+          openaiOrganizationId,
+          openaiSyncPaused: openaiSyncPaused ? 'true' : 'false',
+          openaiShown: openaiShown ? 'true' : 'false',
         }),
       });
       if (res.ok) {
@@ -296,6 +325,7 @@ export default function SecurityPage() {
           setAnthropicAnalyticsApiKey(String(cfg.anthropicAnalyticsApiKey || ''));
           setComplianceAccessKey(String(cfg.complianceAccessKey || ''));
           setOtelEndpointSecret(String(cfg.otelEndpointSecret || ''));
+          setOpenaiAdminApiKey(String(cfg.openaiAdminApiKey || ''));
           trackLoadedSecrets(loadedSecretsRef, cfg);
         } catch { /* refresh is cosmetic; the save itself succeeded */ }
       } else {
@@ -324,6 +354,32 @@ export default function SecurityPage() {
       setTestStatuses(prev => ({ ...prev, [key]: 'error' }));
     }
     setTimeout(() => setTestStatuses(prev => ({ ...prev, [key]: 'idle' })), 5000);
+  };
+
+  // OpenAI's test also needs the workspace ID, and says why a key failed
+  // (which log type it cannot read), so it has its own handler.
+  const testOpenAi = async () => {
+    setOpenaiTestStatus('testing');
+    setOpenaiTestMessage('');
+    try {
+      const isUnchangedMask = openaiAdminApiKey.includes('••••••••');
+      const res = await fetch('/api/config/test', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ key: 'openaiAdminApiKey', value: isUnchangedMask ? undefined : openaiAdminApiKey, workspaceId: openaiWorkspaceId, organizationId: openaiOrganizationId }),
+      });
+      const result = await res.json();
+      setOpenaiTestStatus(result.ok ? 'success' : 'error');
+      setOpenaiTestOk(Boolean(result.ok));
+      setOpenaiTestMessage(result.ok
+        ? `The key can read ChatGPT conversations, Codex logs and Codex turns${result.note ? `. ${result.note}` : ', and costs.'}`
+        : String(result.error || 'The test failed.'));
+    } catch {
+      setOpenaiTestStatus('error');
+      setOpenaiTestOk(false);
+      setOpenaiTestMessage('Could not reach the server.');
+    }
+    setTimeout(() => setOpenaiTestStatus('idle'), 5000);
   };
 
   const handleChangeRole = async (user: AdminUser, newRole: AdminUser['role']) => {
@@ -506,6 +562,7 @@ export default function SecurityPage() {
       });
       if (res.ok) {
         showToast('SSO settings saved', 'success');
+        setSsoSaveCount(n => n + 1);
       } else {
         const data = await res.json();
         showToast(data.error || 'Failed to save SSO settings', 'error');
@@ -785,6 +842,7 @@ export default function SecurityPage() {
                 <FormField label={<>Password <span className="text-[#B42318]">*</span></>}>
                   <input
                     type="password"
+                    autoComplete="new-password"
                     value={newPassword}
                     onChange={e => setNewPassword(e.target.value)}
                     className={cx(B.input, 'w-full')}
@@ -802,7 +860,7 @@ export default function SecurityPage() {
                     <option value="viewer">Viewer</option>
                     <option value="cowork">Work Pulse</option>
                     <option value="code">Developer Pulse</option>
-                    <option value="pulse">Pulse (Cowork + Code)</option>
+                    <option value="pulse">Pulse (Work and Developer)</option>
                   </select>
                 </FormField>
                 {(newRole === 'viewer' || newRole === 'cowork') && (
@@ -1023,7 +1081,7 @@ export default function SecurityPage() {
                                 <option value="viewer">Viewer</option>
                                 <option value="cowork">Work Pulse</option>
                                 <option value="code">Developer Pulse</option>
-                                <option value="pulse">Pulse (Cowork + Code)</option>
+                                <option value="pulse">Pulse (Work and Developer)</option>
                               </select>
                               <button
                                 type="button"
@@ -1122,6 +1180,7 @@ export default function SecurityPage() {
                 <FormField label="New password">
                   <input
                     type="password"
+                    autoComplete="new-password"
                     autoFocus
                     value={newPw}
                     onChange={e => setNewPw(e.target.value)}
@@ -1132,6 +1191,7 @@ export default function SecurityPage() {
                 <FormField label="Confirm password">
                   <input
                     type="password"
+                    autoComplete="new-password"
                     value={confirmPw}
                     onChange={e => setConfirmPw(e.target.value)}
                     className={cx(B.input, 'w-full')}
@@ -1350,6 +1410,7 @@ export default function SecurityPage() {
             <div className="flex flex-col gap-3">
               <input
                 type="password"
+                autoComplete="new-password"
                 autoFocus
                 value={disableMfaPassword}
                 onChange={e => setDisableMfaPassword(e.target.value)}
@@ -1392,8 +1453,8 @@ export default function SecurityPage() {
           />
         </Panel>
 
-        {/* Enterprise APIs */}
-        <Panel title="Enterprise APIs">
+        {/* Claude Enterprise APIs */}
+        <Panel title="Claude Enterprise APIs">
           <div className="flex flex-col gap-5">
             <div className="flex flex-col gap-2">
               <ApiKeyField
@@ -1419,7 +1480,7 @@ export default function SecurityPage() {
               {complianceLastSyncAt && (
                 <p className="m-0 text-[13px] text-[#666666] tabular-nums">
                   Last sync: {new Date(parseInt(complianceLastSyncAt, 10) * 1000).toLocaleString()}
-                  {(() => { try { const s = JSON.parse(complianceLastSyncStats || '{}'); return ` (${s.chatsProcessed ?? 0} chats, ${s.prompts ?? 0} prompts, ${s.connectors ?? 0} connectors, ${s.activities ?? 0} activities${(s.errors?.length ?? 0) > 0 ? `, ${s.errors.length} error(s)` : ''})`; } catch { return ''; } })()}
+                  {(() => { try { const s = JSON.parse(complianceLastSyncStats || '{}'); return ` (${s.chatsProcessed ?? 0} chats, ${s.prompts ?? 0} prompts, ${s.connectors ?? 0} connectors, ${s.activities ?? 0} activities${(s.excluded ?? 0) > 0 ? `, ${s.excluded} excluded` : ''}${(s.errors?.length ?? 0) > 0 ? `, ${s.errors.length} error(s)` : ''})`; } catch { return ''; } })()}
                 </p>
               )}
             </div>
@@ -1460,6 +1521,86 @@ export default function SecurityPage() {
                 onRemoved={() => { setAnthropicAnalyticsApiKey(''); loadedSecretsRef.current.delete('anthropicAnalyticsApiKey'); }}
               />
             </div>
+          </div>
+        </Panel>
+
+        {/* OpenAI Compliance API: ChatGPT and Codex */}
+        <Panel title="OpenAI (ChatGPT and Codex)" badge={<Tag tone="neutral" title="ChatGPT and Codex support is in preview">Preview</Tag>}>
+          <div className="flex flex-col gap-4">
+            <ApiKeyField
+              label="OpenAI Admin API Key"
+              value={openaiAdminApiKey}
+              onChange={setOpenaiAdminApiKey}
+              testStatus={openaiTestStatus}
+              onTest={testOpenAi}
+              placeholder="OpenAI admin key"
+              hint="Created by a ChatGPT workspace owner at admin.openai.com under Credentials → Admin keys. ChatGPT Enterprise or Edu only. Give it read access to conversation messages, Codex logs, Codex turns and costs. Brings ChatGPT prompts into Work Pulse, Codex prompts into Developer Pulse, and their spend into FinOps."
+              configKey="openaiAdminApiKey"
+              resetsNote="sync position, last-sync status"
+              onRemoved={() => {
+                setOpenaiAdminApiKey('');
+                setOpenaiTestStatus('idle');
+                setOpenaiTestMessage('');
+                setOpenaiLastSyncAt('');
+                setOpenaiLastSyncStats('');
+                loadedSecretsRef.current.delete('openaiAdminApiKey');
+              }}
+            />
+            {openaiTestMessage && (
+              <p className={cx('m-0 text-[13px]', openaiTestOk ? 'text-[#1A7F37]' : 'text-[#B42318]')}>{openaiTestMessage}</p>
+            )}
+            <FormField label="ChatGPT workspace ID">
+              <input
+                type="text"
+                value={openaiWorkspaceId}
+                onChange={e => setOpenaiWorkspaceId(e.target.value)}
+                className={cx(B.input, 'w-full font-mono')}
+                placeholder="Shown in admin.openai.com under your workspace settings"
+              />
+            </FormField>
+            <FormField label="OpenAI organisation ID">
+              <input
+                type="text"
+                value={openaiOrganizationId}
+                onChange={e => setOpenaiOrganizationId(e.target.value)}
+                className={cx(B.input, 'w-full font-mono')}
+                placeholder="org-…, needed for ChatGPT spend"
+              />
+            </FormField>
+            <div className="-mx-4 border-y border-[#F2F2F2]">
+              {/* Pause sync only once a key is saved: before then there is no sync to pause. */}
+              {openaiKeySaved && (
+              <ToggleRow
+                first
+                label="Pause sync"
+                hint={<>Stops collecting ChatGPT and Codex activity without removing the key. Everything already collected stays on screen, and switching it back on carries on from where it stopped, missing nothing that OpenAI still keeps. Removing the key stops the sync for good.</>}
+                checked={openaiSyncPaused}
+                onChange={setOpenaiSyncPaused}
+              />
+              )}
+              <ToggleRow
+                first={!openaiKeySaved}
+                label="Show ChatGPT and Codex"
+                hint={<>Shows ChatGPT and Codex on the dashboard, Work Pulse, Developer Pulse, FinOps, Spend Review, the S&amp;C Board, use cases, reports and briefings. Off makes those screens show Claude only; collection carries on, so switching it back on shows everything with no gap. The Audit Log always lists ChatGPT and Codex prompts.</>}
+                checked={openaiShown}
+                onChange={setOpenaiShown}
+              />
+            </div>
+            {openaiSyncPaused && openaiKeySaved && (
+              <p className="m-0 text-[13px] text-[#666666]">Sync paused. Nothing new is collected until it is switched back on and saved.</p>
+            )}
+            {openaiLastSyncAt && (
+              <p className="m-0 text-[13px] text-[#666666] tabular-nums">
+                {openaiSyncPaused ? 'Last sync before pausing: ' : 'Last sync: '}{new Date(parseInt(openaiLastSyncAt, 10) * 1000).toLocaleString('en-GB')}
+                {(() => {
+                  try {
+                    const s = JSON.parse(openaiLastSyncStats || '{}');
+                    const p = s.prompts ?? {};
+                    return ` (${s.files ?? 0} files, ${p.chatgpt_chat ?? 0} ChatGPT Chat, ${p.chatgpt_work ?? 0} ChatGPT Work and ${p.codex ?? 0} Codex prompts${(s.errors?.length ?? 0) > 0 ? `, ${s.errors.length} error(s)` : ''})`;
+                  } catch { return ''; }
+                })()}
+              </p>
+            )}
           </div>
         </Panel>
 
@@ -1553,6 +1694,7 @@ export default function SecurityPage() {
                   <input
                     id="sso-client-secret"
                     type="password"
+                    autoComplete="new-password"
                     value={ssoClientSecret}
                     onChange={e => setSsoClientSecret(e.target.value)}
                     className={cx(B.input, 'flex-1 min-w-0')}
@@ -1625,6 +1767,9 @@ export default function SecurityPage() {
           </div>
         </Panel>
 
+        {/* Department sync: follows the single sign-on provider above (Microsoft Entra ID today) */}
+        <DepartmentSyncPanel reloadKey={ssoSaveCount} />
+
         {/* Email / SMTP */}
         <Panel title="Email (SMTP)" flush>
           <p className="m-0 px-4 pt-3 text-[13px] text-[#666666] leading-5">
@@ -1656,6 +1801,7 @@ export default function SecurityPage() {
             <FormField label="SMTP username">
               <input
                 type="text"
+                autoComplete="off"
                 value={smtpUser}
                 onChange={e => setSmtpUser(e.target.value)}
                 className={cx(B.input, 'w-full')}
@@ -1668,6 +1814,7 @@ export default function SecurityPage() {
                 <input
                   id="smtp-password"
                   type="password"
+                  autoComplete="new-password"
                   value={smtpPassword}
                   onChange={e => setSmtpPassword(e.target.value)}
                   className={cx(B.input, 'flex-1 min-w-0')}
@@ -1825,6 +1972,7 @@ function ApiKeyField({
   configKey,
   resetsNote,
   onRemoved,
+  placeholder = 'sk-ant-...',
 }: {
   label: string;
   value: string;
@@ -1835,6 +1983,7 @@ function ApiKeyField({
   configKey?: string;
   resetsNote?: string;
   onRemoved?: () => void;
+  placeholder?: string;
 }) {
   const inputId = useId();
   return (
@@ -1847,7 +1996,7 @@ function ApiKeyField({
             value={value}
             onChange={e => onChange(e.target.value)}
             className={cx(B.input, 'flex-1 min-w-0 font-mono')}
-            placeholder="sk-ant-..."
+            placeholder={placeholder}
           />
           <button
             type="button"

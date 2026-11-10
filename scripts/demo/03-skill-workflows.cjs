@@ -317,9 +317,10 @@ async function clean(c) {
   // can write for a seeded person: alerts (a PII alert on a seeded prompt
   // fired overnight on a demo install and blocked the users delete on
   // once, leaving the use cases deleted and nothing reinserted),
-  // classifications / skill runs keyed by user, and analytics snapshots.
+  // skill runs keyed by user, and analytics snapshots. Grades are cleared on
+  // this step's own prompts only (above): clearing them by user also wiped the
+  // grades step 01 gave these people's Cowork prompts.
   await c.query(`DELETE FROM alerts WHERE user_id LIKE $1`, [`${MARKER}%`]);
-  await c.query(`DELETE FROM pulse_classifications WHERE user_id LIKE $1`, [`${MARKER}%`]);
   await c.query(`DELETE FROM pulse_skill_runs WHERE user_id LIKE $1`, [`${MARKER}%`]);
   await c.query(`DELETE FROM analytics_snapshots WHERE user_id LIKE $1`, [`${MARKER}%`]);
   await c.query(`DELETE FROM otel_events WHERE user_id LIKE $1`, [`${MARKER}%`]);
@@ -337,7 +338,8 @@ async function clean(c) {
   // The nine seeded people are deliberately NOT deleted. Other daily seeders
   // (chat, alert evidence) attach rows to whichever users exist, and every one
   // of those tables carries a NO ACTION FK to users.id — an earlier run
-  // failed on chat_messages after the earlier fix covered alerts. Keeping the
+  // failed on chat_messages after the earlier fix covered alerts (Claude Chat
+  // prompts are now cowork_messages rows, surface 'chat'). Keeping the
   // users (re-upserted below, ON CONFLICT DO NOTHING) removes the whole class.
   // SEED_CLEAN=1 / --clean also leaves them; a genuine removal is a manual
   // step that deletes their dependants first.

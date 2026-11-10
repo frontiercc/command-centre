@@ -74,8 +74,14 @@ beforeAll(async () => {
     body: 'org doing well', model: 'haiku', generated_at: NOW,
   });
 
-  await client.insert(schema.chatMessages).values({
-    id: 'chatmsg1', user_id: 'u1', prompt_text: 'hi there', prompt_length: 8, occurred_at: NOW - DAY,
+  // A Claude Chat prompt: a cowork_messages row with surface 'chat' plus its
+  // conversation's cowork_sessions row (the shape migration 0041 writes).
+  await client.insert(schema.coworkMessages).values({
+    id: 'chatmsg1', session_id: 'chatconv1', user_id: 'u1', message_type: 'cowork_user_message', surface: 'chat',
+    source: 'compliance', content_preview: 'hi there', content_full: 'hi there', occurred_at: NOW - DAY,
+  });
+  await client.insert(schema.coworkSessions).values({
+    id: 'chatconv1', conversation_id: 'chatconv1', user_id: 'u1', source: 'compliance', started_at: NOW - DAY,
   });
 
   await client.insert(schema.coworkSessions).values({
@@ -109,8 +115,9 @@ describe('GET /api/pulse/admin/users/[userId]', () => {
     expect(body.user.display_name).toBe('Ada Lovelace');
     expect(body.classifications).toHaveLength(1);
     expect(body.classifications[0].content_preview).toBe('hello');
-    // cm2 is unclassified and counts toward pendingCount.
-    expect(body.pendingCount).toBe(1);
+    // cm2 (Cowork) and chatmsg1 (Claude Chat) are unclassified Work Pulse
+    // prompts and both count toward pendingCount; the Code row does not.
+    expect(body.pendingCount).toBe(2);
   });
 
   it('404s for an unknown user', async () => {
@@ -128,7 +135,8 @@ describe('GET /api/pulse/admin/users', () => {
     const body = await res.json();
     const u1 = body.users.find((u: { id: string }) => u.id === 'u1');
     expect(u1).toBeTruthy();
-    expect(u1.pending_count).toBe(1);
+    // cm2 (Cowork) + chatmsg1 (Claude Chat), both unclassified.
+    expect(u1.pending_count).toBe(2);
     expect(typeof u1.pending_count).toBe('number');
     expect(u1.failed_count).toBe(0);
 
@@ -151,7 +159,7 @@ describe('POST /api/pulse/admin/classify', () => {
     const res = await POST(makeRequest('/api/pulse/admin/classify', { method: 'POST' }));
     expect(res.status).toBe(200);
     const body = await res.json();
-    // cm2 is unclassified, so the queue is NOT empty — classified will attempt at least one batch.
+    // cm2 and chatmsg1 are unclassified, so the queue is NOT empty — classified will attempt at least one batch.
     expect(body.ok).toBe(true);
     vi.doUnmock('@/lib/config');
     vi.doUnmock('@/lib/pulse/classifier');

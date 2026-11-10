@@ -1,6 +1,8 @@
 // Copyright 2026 Lee James
 // SPDX-License-Identifier: Apache-2.0
 
+import { productFactsBlock, PRODUCT_NAMING_RULE } from '@/lib/pulse/briefings/product-facts';
+
 export interface CioBriefingContext {
   period_label: string;           // e.g. "May 2026"
   weekly_active_users: number;
@@ -23,6 +25,8 @@ export interface CioBriefingContext {
   // never invent names or contents for them). Empty when the feature or its
   // content switch is off — the prompt then omits the section entirely.
   dept_process_opportunities: Array<{ department: string; count: number }>;
+  /** Per-product facts (lib/pulse/briefings/product-facts.ts); empty on a Claude-only hub. */
+  products?: string[];
 }
 
 export const CIO_BRIEFING_SYSTEM = `You are a trusted senior advisor writing a monthly AI Intelligence Briefing for a Chief Information Officer or executive sponsor.
@@ -48,7 +52,8 @@ Tone constraints:
 - Never use em dashes
 - Use British spelling throughout
 - Address the reader as "the organisation" not "your organisation"
-- Use only the numbers given, exactly as written. Never calculate new ones (no sums, differences or percentages of your own)`;
+- Use only the numbers given, exactly as written. Never calculate new ones (no sums, differences or percentages of your own)
+- ${PRODUCT_NAMING_RULE}`;
 
 export function buildCioBriefingUserMessage(ctx: CioBriefingContext): string {
   const concentrationNote = ctx.concentration_risk_count > 0
@@ -80,7 +85,7 @@ Average Delegation Depth Score: ${ctx.avg_dds !== null ? ctx.avg_dds.toFixed(2) 
 Average Output Throughput Index: ${ctx.avg_oti !== null ? `${ctx.avg_oti.toFixed(2)}x` : 'no data'}
 Confirmed capability creation events this month: ${ctx.confirmed_capability_creation_count}
 ${ctx.deep_work.join('\n')}
-
+${productFactsBlock(ctx.products ?? [])}
 RESILIENCE
 ${concentrationNote}
 ${orsNote}

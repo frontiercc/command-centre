@@ -15,6 +15,8 @@ import AiBriefing from '@/components/dashboard/AiBriefing';
 import { DataSourceIndicator } from '@/components/dashboard/DataSourceIndicator';
 import Link from 'next/link';
 import { PageBody, Toolbar, Strip, Panel, Tag, Notice, B } from '@/components/precision/ui';
+import { useVendor, VendorSwitch, formatSplit } from '@/components/shared/VendorSwitch';
+import { PRODUCTS, dashboardProducts, type Vendor, type VendorSplit, type ProductCounts, type ProductId } from '@/lib/dashboard/vendor';
 import PulseBand from '@/components/pulse/PulseBand';
 import CodePulseBand from '@/components/pulse/code/CodePulseBand';
 import { useCorePlatformGuard } from '@/components/shared/useCorePlatformGuard';
@@ -33,23 +35,24 @@ interface DashboardData {
     coworkFlagged: number;
     codeEvents: number;
     codeFlagged: number;
+    /** cowork is the Work box: Claude Cowork and ChatGPT Work. */
     avgSessionsPerWeek: { cowork: number; code: number; chat: number };
     otelConfigured: boolean;
   };
-  adoptionTrend: Array<{
-    date: string;
-    surface_chat: number;
-    surface_code: number;
-    surface_cowork: number;
-  }>;
+  vendor: Vendor;
+  openaiPresent: boolean;
+  products: {
+    sessions: Record<'chat' | 'work' | 'code', VendorSplit>;
+    flagged: Record<'chat' | 'work' | 'code', VendorSplit>;
+    activeUsers: { claude: number; openai: number };
+  };
+  adoptionTrend: Array<{ date: string; products: ProductCounts }>;
   surfaceBreakdown: { chat: number; code: number; cowork: number };
   departmentBreakdown: Array<{
     department: string;
     user_count: number;
     active_users: number;
-    surface_chat: number;
-    surface_code: number;
-    surface_cowork: number;
+    products: ProductCounts;
   }>;
   topUsers: Array<{
     id: string;
@@ -57,10 +60,12 @@ interface DashboardData {
     email: string;
     department: string | null;
     total_activity: number;
-    surface_chat: number;
-    surface_code: number;
-    surface_cowork: number;
+    products: ProductCounts;
   }>;
+  /** Product ids the charts show, in display order. */
+  productsShown: ProductId[];
+  /** Claude in Office and Google shown: Claude Cowork reads "Claude Cowork and apps". */
+  officeShown?: boolean;
   securityMetrics: {
     openAlerts: number;
     resolvedThisWeek: number;
@@ -83,6 +88,7 @@ interface DashboardData {
     complianceApi: boolean;
     analyticsApi: boolean;
     aiFeatures: boolean;
+    openai?: boolean;
     mode: 'max' | 'enterprise';
   };
   licensedSeats: number | null;
@@ -106,6 +112,10 @@ function formatChange(current: number, previous: number): string {
   return 'no change';
 }
 
+function flaggedLine(n: number): string {
+  return n > 0 ? `${n} flagged for PII` : 'no PII flags';
+}
+
 function formatAlertSeverity(bySeverity: Record<string, number>): string {
   const parts: string[] = [];
   if (bySeverity.critical) parts.push(`${bySeverity.critical} critical`);
@@ -124,6 +134,8 @@ export default function DashboardPage() {
   const [briefingRefreshKey, setBriefingRefreshKey] = useState(0);
   const [, setTick] = useState(0);
   const [pulseEnabled, setPulseEnabled] = useState(false);
+  // The vendor switch, remembered per browser and shared with Work Pulse.
+  const [vendor, setVendor, vendorReady] = useVendor();
 
   // Manual Refresh click refreshes both dashboard data AND briefing
   const refreshDashboard = () => {
@@ -132,17 +144,21 @@ export default function DashboardPage() {
   };
 
   useEffect(() => {
-    fetch('/api/dashboard')
+    if (!vendorReady) return; // the saved view is read after the page loads
+    fetch(`/api/dashboard?vendor=${vendor}`)
       .then(r => {
+        // A role without the dashboard is refused here and sent to its own
+        // Pulse page by useCorePlatformGuard; that is not an error to log.
+        if (r.status === 403) return null;
         if (!r.ok) throw new Error("Couldn't load this page. Try again.");
         return r.json();
       })
       .then(d => {
-        if (d.stats) { setData(d); setLastRefreshed(new Date()); }
+        if (d?.stats) { setData(d); setLastRefreshed(new Date()); }
       })
       .catch(console.error)
       .finally(() => setLoading(false));
-  }, [refreshKey]);
+  }, [refreshKey, vendor, vendorReady]);
 
   useEffect(() => {
     fetch('/api/config')
@@ -160,14 +176,14 @@ export default function DashboardPage() {
 
   if (loading) return (
     <>
-      <TopBar title="Dashboard" subtitle="How Claude is changing the work across your organisation" />
+      <TopBar title="Dashboard" subtitle="How AI is changing the work across your organisation" />
       <LoadingSpinner />
     </>
   );
 
   if (!data) return (
     <>
-      <TopBar title="Dashboard" subtitle="How Claude is changing the work across your organisation" />
+      <TopBar title="Dashboard" subtitle="How AI is changing the work across your organisation" />
       <PageBody>
         <Notice tone="error">Failed to load dashboard data.</Notice>
       </PageBody>
@@ -175,10 +191,23 @@ export default function DashboardPage() {
   );
 
   const { stats } = data;
+  // The switch shows once OpenAI data exists (or while a narrowed view is chosen).
+  const split = vendor === 'all' && data.openaiPresent;
+  // The products the charts show, in display order.
+  const shownProducts = dashboardProducts(PRODUCTS.filter(p => data.productsShown.includes(p.id)), data.officeShown !== false);
+  const allProducts = vendor === 'all' ? '' : ' · all products';
+  const seats = data.licensedSeats;
+  const activeSub = seats == null
+    ? 'this week'
+    : vendor === 'openai'
+      ? 'this week'
+      : split
+        ? `${data.products.activeUsers.claude} of ${seats} Claude seats`
+        : `${stats.activeUsersThisWeek} of ${seats} seats`;
 
   return (
     <>
-      <TopBar title="Dashboard" subtitle="How Claude is changing the work across your organisation" />
+      <TopBar title="Dashboard" subtitle="How AI is changing the work across your organisation" />
       <PageBody>
         {/* Last refreshed + data source status */}
         <Toolbar
@@ -196,7 +225,10 @@ export default function DashboardPage() {
             </span>
           }
         >
-          <DataSourceIndicator status={data.dataSourceStatus} />
+          <span className="flex flex-wrap items-center justify-end gap-3">
+            <VendorSwitch vendor={vendor} onChange={setVendor} openaiPresent={data.openaiPresent} />
+            <DataSourceIndicator status={data.dataSourceStatus} />
+          </span>
         </Toolbar>
 
         {/* Setup steps for a new install (admins only; renders nothing otherwise) */}
@@ -213,7 +245,7 @@ export default function DashboardPage() {
             />
           </Panel>
         ) : (
-          <AiBriefing refreshKey={briefingRefreshKey} />
+          <AiBriefing refreshKey={briefingRefreshKey} coversBoth={data.openaiPresent === true} />
         )}
 
         {/* Headline figures */}
@@ -222,48 +254,37 @@ export default function DashboardPage() {
             title="Active users"
             value={stats.activeUsersThisWeek}
             change={formatChange(stats.activeUsersThisWeek, stats.activeUsersLastWeek)}
-            subtitle={data.licensedSeats != null ? `${stats.activeUsersThisWeek} of ${data.licensedSeats} seats` : 'this week'}
+            subtitle={activeSub}
+            action={split ? formatSplit(data.products.activeUsers, 'ChatGPT and Codex') : undefined}
           />
           <StatCard
             title="Events ingested"
             value={stats.eventsLast24h}
-            subtitle="last 24 hours"
+            subtitle={`last 24 hours${allProducts}`}
           />
           <StatCard
             title="Open alerts"
             value={stats.openAlertCount}
-            subtitle={formatAlertSeverity(stats.alertsBySeverity)}
+            subtitle={`${formatAlertSeverity(stats.alertsBySeverity)}${allProducts}`}
           />
         </Strip>
+        {/* Chat, Work and Code: in the All view each box splits into Claude and its own OpenAI product */}
         <Strip cols={3}>
+          <StatCard
+            title="Chat conversations"
+            value={stats.avgSessionsPerWeek.chat}
+            change="avg / week"
+            subtitle={flaggedLine(stats.chatFlagged)}
+            action={split ? formatSplit(data.products.sessions.chat, 'ChatGPT') : undefined}
+          />
           <StatCard
             title="Work sessions"
             value={stats.avgSessionsPerWeek.cowork}
             change="avg / week"
-            subtitle={stats.coworkFlagged > 0 ? `${stats.coworkFlagged} flagged for PII` : 'no PII flags'}
-            pill={
-              data.dataSourceStatus.otelCowork
-                ? 'Prompts, skills + connectors'
-                : data.dataSourceStatus.coworkContent
-                ? 'Messages + tools'
-                : undefined
-            }
-            pillVariant={
-              data.dataSourceStatus.otelCowork
-                ? 'blue'
-                : data.dataSourceStatus.coworkContent
-                ? 'green'
-                : undefined
-            }
-            pillTooltip={
-              data.dataSourceStatus.otelCowork
-                ? 'Cowork, Claude in Office and Claude in Google sessions, captured via OpenTelemetry.'
-                : data.dataSourceStatus.coworkContent
-                ? 'User messages, MCP connector activity, and skill invocations captured from Claude Code sessions.'
-                : 'Cowork conversation content is not available. Tool calls and file access are captured via OpenTelemetry.'
-            }
+            subtitle={flaggedLine(stats.coworkFlagged)}
             action={
-              !data.dataSourceStatus.otelCowork ? (
+              split ? formatSplit(data.products.sessions.work, 'ChatGPT')
+                : !data.dataSourceStatus.otelCowork && vendor !== 'openai' ? (
                 <span>Connect OpenTelemetry for Cowork visibility</span>
               ) : undefined
             }
@@ -272,19 +293,8 @@ export default function DashboardPage() {
             title="Code sessions"
             value={stats.avgSessionsPerWeek.code}
             change="avg / week"
-            subtitle={stats.codeFlagged > 0 ? `${stats.codeFlagged} flagged for PII` : 'no PII flags'}
-            pill="Prompts, skills + connectors"
-            pillVariant="purple"
-            pillTooltip="User prompts, MCP connector activity, and skill invocations from Claude Code project sessions."
-          />
-          <StatCard
-            title="Chat conversations"
-            value={stats.avgSessionsPerWeek.chat}
-            change="avg / week"
-            subtitle={stats.chatFlagged > 0 ? `${stats.chatFlagged} flagged for PII` : 'no PII flags'}
-            pill="Prompts only"
-            pillVariant="blue"
-            pillTooltip="Chat prompts captured from Claude Desktop. User input only. Responses are not stored."
+            subtitle={flaggedLine(stats.codeFlagged)}
+            action={split ? formatSplit(data.products.sessions.code, 'Codex') : undefined}
           />
         </Strip>
 
@@ -301,10 +311,10 @@ export default function DashboardPage() {
                 />
               </Panel>
             ) : (
-              <AdoptionChart data={data.adoptionTrend} />
+              <AdoptionChart data={data.adoptionTrend} products={shownProducts} />
             )}
           </div>
-          <StickinessCard />
+          <StickinessCard vendor={vendor} openaiPresent={data.openaiPresent} officeShown={data.officeShown !== false} />
         </div>
 
         {/* Department adoption (2/3) + top users this week (1/3) */}
@@ -320,19 +330,19 @@ export default function DashboardPage() {
                 />
               </Panel>
             ) : (
-              <DepartmentHeatmap data={data.departmentBreakdown} />
+              <DepartmentHeatmap data={data.departmentBreakdown} products={shownProducts} />
             )}
           </div>
-          <TopUsers users={data.topUsers} />
+          <TopUsers users={data.topUsers} products={shownProducts} />
         </div>
 
         {/* Work Pulse band with the Developer Pulse strip nested directly below its signal strip */}
         {pulseEnabled ? (
-          <PulseBand>
-            <CodePulseBand />
+          <PulseBand vendor={vendor} showVendor={data.openaiPresent}>
+            <CodePulseBand vendor={vendor} />
           </PulseBand>
         ) : (
-          <CodePulseBand />
+          <CodePulseBand vendor={vendor} />
         )}
       </PageBody>
     </>

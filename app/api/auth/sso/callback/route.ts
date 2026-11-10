@@ -20,6 +20,7 @@ import { getOidcSettings, completeSsoLogin, SSO_PENDING_COOKIE, type SsoRefusal 
 import { mintSession } from '@/lib/auth/session-mint';
 import { logAccess } from '@/lib/audit/log';
 import { findAdminById } from '@/lib/db/admin-queries';
+import { syncDepartmentAtSignIn } from '@/lib/directory/department-sync';
 
 export const dynamic = 'force-dynamic';
 
@@ -112,6 +113,11 @@ export async function GET(request: NextRequest) {
   });
 
   clearPendingCookie(response);
+
+  // Department sync, when switched on: reads this person's department from
+  // the directory. Not awaited, so it can never slow down or stop a sign-in;
+  // it never throws, and a failure keeps their department as it was.
+  void syncDepartmentAtSignIn(account.email, result.accessToken);
 
   return response;
 }

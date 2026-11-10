@@ -77,6 +77,7 @@ export default function ResetPasswordPage() {
               <input
                 id="password"
                 type="password"
+                autoComplete="new-password"
                 required
                 autoFocus
                 value={password}
@@ -93,6 +94,7 @@ export default function ResetPasswordPage() {
               <input
                 id="confirm"
                 type="password"
+                autoComplete="new-password"
                 required
                 value={confirm}
                 onChange={e => setConfirm(e.target.value)}

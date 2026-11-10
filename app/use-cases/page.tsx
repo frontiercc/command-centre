@@ -8,11 +8,12 @@ import { useRouter } from 'next/navigation';
 import Link from 'next/link';
 import TopBar from '@/components/layout/TopBar';
 import LoadingSpinner from '@/components/shared/LoadingSpinner';
-import { formatSuggestionEvidenceLine } from '@/lib/usecases/suggestion-format';
+import { formatSuggestionEvidenceLine, formatSuggestionProducts, type SuggestionProducts } from '@/lib/usecases/suggestion-format';
 import DeptProcessBoxes from '@/components/usecases/DeptProcessBoxes';
 import ProcessCanvasCard from '@/components/usecases/ProcessCanvasCard';
 import type { ProcessCanvas } from '@/lib/usecases/suggestion-store';
-import { groupDeptBoxes } from '@/lib/usecases/dept-boxes';
+import { groupDeptBoxes, surfaceLabels } from '@/lib/usecases/dept-boxes';
+import { useConnectedProducts } from '@/components/shared/VendorSwitch';
 import { PageBody, Toolbar, Panel, PanelFoot, SubHead, T, Tag, Pill, B, Notice, Empty, cx } from '@/components/precision/ui';
 
 interface UseCase {
@@ -27,7 +28,13 @@ interface UseCase {
   lifecycle: 'not_seen' | 'piloting' | 'adopted' | 'at_risk';
   lastActivatedAt: number | null;
   strategic: number;
+  /** Sessions per vendor, last 13 completed weeks; openai null when ChatGPT and Codex are hidden. */
+  platformSessions?: { claude: number; openai: number | null };
+  /** The same sessions per product, which the register column shows. */
+  productSessions?: ProductSessions;
 }
+
+interface ProductSessions { cowork: number; code: number; chatgpt: number | null; codex: number | null }
 
 interface SuggestionDraft {
   id: string;
@@ -38,6 +45,8 @@ interface SuggestionDraft {
   department: string | null;
   canvas: ProcessCanvas | null;
   surface?: 'cowork' | 'code' | null;
+  /** Sessions by product; null while ChatGPT and Codex are hidden or on older rows. */
+  products?: SuggestionProducts | null;
 }
 
 const STATUS_ORDER: UseCase['status'][] = ['confirmed', 'candidate', 'archived'];
@@ -69,6 +78,26 @@ const LIFECYCLE_DOT: Record<LifecycleTone, string> = {
 };
 
 const LIFECYCLE_FACETS: Array<UseCase['lifecycle']> = ['adopted', 'piloting', 'at_risk', 'not_seen'];
+
+/**
+ * "Claude Cowork 40", "Claude Code 21", "Codex 13", one per line: a use
+ * case's matched sessions in the last 13 weeks, by product, listing only products with
+ * sessions. ChatGPT and Codex count only once OpenAI is connected and shown;
+ * a use case with no sessions reads 0.
+ */
+function PlatformCell({ p, showOpenAi }: { p?: ProductSessions; showOpenAi: boolean }) {
+  if (!p) return <span className="text-[#8F8F8F]">—</span>;
+  const all: Array<[string, number | null]> = [
+    ['Claude Cowork', p.cowork],
+    ['Claude Code', p.code],
+    ['ChatGPT', showOpenAi ? p.chatgpt : null],
+    ['Codex', showOpenAi ? p.codex : null],
+  ];
+  const parts = all.filter((x): x is [string, number] => x[1] !== null && x[1] > 0).map(([label, n]) => `${label} ${n}`);
+  if (parts.length === 0) return <span className="text-[#8F8F8F]">0</span>;
+  // One product per line, so the column stays narrow however many products did the work.
+  return <span className="flex flex-col text-[#333333]">{parts.map(t => <span key={t} className="whitespace-nowrap">{t}</span>)}</span>;
+}
 
 export default function UseCasesRegisterPage() {
   const router = useRouter();
@@ -199,15 +228,16 @@ export default function UseCasesRegisterPage() {
   };
 
   const visibleSuggestions = suggestions ?? [];
+  const connected = useConnectedProducts();
 
-  // One box per department; Cowork and Claude Code suggestions are lists inside it.
+  // One box per department; Work and Code suggestions are lists inside it.
   const { deptBoxes, orgSuggestions } = useMemo(() => {
     return {
-      deptBoxes: groupDeptBoxes(visibleSuggestions),
+      deptBoxes: groupDeptBoxes(visibleSuggestions, surfaceLabels(connected)),
       orgSuggestions: visibleSuggestions.filter(s => !s.department),
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [suggestions]);
+  }, [suggestions, connected]);
 
   const openSuggestion = suggestions?.find(s => s.id === openSuggestionId) ?? null;
 
@@ -301,6 +331,9 @@ export default function UseCasesRegisterPage() {
                           )}
                         </button>
                         <span className="text-[13px] text-[#05073F] tabular-nums">{formatSuggestionEvidenceLine(s)}</span>
+                        {s.products && formatSuggestionProducts(s.products) && (
+                          <span className="text-[13px] text-[#05073F] tabular-nums">Found in {formatSuggestionProducts(s.products)}</span>
+                        )}
                         <div className="flex items-center gap-2 pt-1">
                           <button
                             type="button"
@@ -384,10 +417,11 @@ export default function UseCasesRegisterPage() {
             flush
           >
             <div className="overflow-x-auto">
-              <table className={cx(T.table, 'table-fixed min-w-[640px]')}>
+              <table className={cx(T.table, 'table-fixed min-w-[810px]')}>
                 <thead>
                   <tr className={T.headRow}>
                     <th scope="col" className={T.th}>Use case</th>
+                    <th scope="col" className={cx(T.th, 'w-[170px]')} title="Matched sessions in the last 13 completed weeks, by vendor">Sessions, 13 weeks</th>
                     <th scope="col" className={cx(T.th, 'w-[120px]')}>Lifecycle</th>
                     <th scope="col" className={cx(T.th, 'w-[240px]')}>Departments</th>
                   </tr>
@@ -419,6 +453,7 @@ export default function UseCasesRegisterPage() {
                             <p className="m-0 mt-0.5 text-[#666666] truncate" title={uc.description}>{uc.description}</p>
                           )}
                         </td>
+                        <td className={cx(T.td, 'text-[13px] tabular-nums')}><PlatformCell p={uc.productSessions} showOpenAi={!!connected?.openai} /></td>
                         <td className={T.td}>{pill ? <Pill tone={pill.tone}>{pill.label}</Pill> : <span className="text-[#8F8F8F]">—</span>}</td>
                         <td className={cx(T.tdMute, 'text-[13px] truncate')} title={uc.departments.join(', ')}>
                           {uc.departments.length > 0 ? uc.departments.join(', ') : '—'}

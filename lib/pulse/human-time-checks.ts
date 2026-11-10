@@ -8,14 +8,35 @@
 // cards then say how many of the latest month's checks were judged about right,
 // or "not yet checked". The draw is deterministic for a month (md5 order), so
 // drawing twice gives the same sample.
+//
+// The Work draw takes ChatGPT conversations (chatgpt_session_time) beside
+// Claude Cowork's sessions while Cowork human time is on, ChatGPT prompts are
+// classified and ChatGPT and Codex are shown; the Code draw takes Codex
+// sessions ('codex:' ids in code_session_stats) while ChatGPT and Codex are
+// shown. Each item names its product.
 import { and, desc, eq, isNotNull, sql } from 'drizzle-orm';
 import { getTypedClient } from '@/lib/db/client';
 import { schema } from '@/lib/db/schema';
+import { humanTimeOn } from '@/lib/pulse/human-time-flags';
+import { classifyChatgptOn } from '@/lib/pulse/work-surfaces';
+import { openaiShown } from '@/lib/sources/openai-visibility';
 
 export const CHECKS_PER_MONTH = 20;
 export const VERDICTS = ['about_right', 'too_high', 'too_low'] as const;
 export type Verdict = typeof VERDICTS[number];
 export type Surface = 'code' | 'cowork';
+/** The product a drawn session belongs to, from its id. */
+export type CheckProduct = 'claude_cowork' | 'chatgpt' | 'claude_code' | 'codex';
+
+export function checkProduct(surface: Surface, sessionId: string): CheckProduct {
+  if (surface === 'code') return sessionId.startsWith('codex:') ? 'codex' : 'claude_code';
+  return sessionId.startsWith('chatgpt:') ? 'chatgpt' : 'claude_cowork';
+}
+
+/** Whether the Work draw takes ChatGPT conversations: Cowork human time on, ChatGPT classified, ChatGPT and Codex shown. */
+async function drawChatgpt(): Promise<boolean> {
+  return (await humanTimeOn('cowork')) && (await classifyChatgptOn()) && (await openaiShown());
+}
 
 const DAY = 86400;
 
@@ -28,16 +49,30 @@ export async function drawChecks(surface: Surface, period: string, nowS = Math.f
   const client = await getTypedClient();
   const since = nowS - 30 * DAY;
   const order = sql`md5(session_id || ${period})`;
+  // Codex sessions ('codex:' ids) only while ChatGPT and Codex are shown, as the Work draw's ChatGPT.
+  const codexClause = surface === 'code' && !(await openaiShown()) ? sql`AND s.session_id NOT LIKE 'codex:%'` : sql``;
   const picked = surface === 'code'
     ? await client.execute(sql`
         SELECT s.session_id, k.human_minutes_likely AS likely
         FROM code_session_stats s JOIN code_session_classifications k ON k.session_id = s.session_id
         WHERE k.human_minutes_likely IS NOT NULL AND s.active_secs > 0 AND s.first_at >= ${since}
+          ${codexClause}
         ORDER BY md5(s.session_id || ${period}) LIMIT ${CHECKS_PER_MONTH}`)
-    : await client.execute(sql`
-        SELECT session_id, human_minutes_likely AS likely FROM cowork_session_stats
-        WHERE human_minutes_likely IS NOT NULL AND active_secs > 0 AND first_event_at >= ${since}
-        ORDER BY ${order} LIMIT ${CHECKS_PER_MONTH}`);
+    : (await drawChatgpt())
+      ? await client.execute(sql`
+          SELECT session_id, likely FROM (
+            SELECT session_id, human_minutes_likely AS likely FROM cowork_session_stats
+            WHERE human_minutes_likely IS NOT NULL AND active_secs > 0 AND first_event_at >= ${since}
+            UNION ALL
+            SELECT session_id, human_minutes_likely AS likely FROM chatgpt_session_time
+            WHERE human_minutes_likely IS NOT NULL AND active_secs > 0 AND first_at >= ${since}
+              AND session_id LIKE 'chatgpt:%'
+          ) w
+          ORDER BY ${order} LIMIT ${CHECKS_PER_MONTH}`)
+      : await client.execute(sql`
+          SELECT session_id, human_minutes_likely AS likely FROM cowork_session_stats
+          WHERE human_minutes_likely IS NOT NULL AND active_secs > 0 AND first_event_at >= ${since}
+          ORDER BY ${order} LIMIT ${CHECKS_PER_MONTH}`);
   const rows = (picked as unknown as { rows: Array<{ session_id: string; likely: number | string }> }).rows;
   const t = schema.humanTimeChecks;
   for (const r of rows) {
@@ -52,9 +87,13 @@ export async function drawChecks(surface: Surface, period: string, nowS = Math.f
 export interface CheckItem {
   id: number;
   sessionId: string;
+  /** Claude Cowork or ChatGPT (Work), Claude Code or Codex (Code). */
+  product: CheckProduct;
   firstPrompt: string | null;
   prompts: number;
-  toolCalls: number;
+  /** Null when the product reports no tool calls (ChatGPT's export). */
+  toolCalls: number | null;
+  /** Measured working time with the product (Claude, ChatGPT or Codex); the name predates OpenAI's products. */
   claudeMinutes: number | null;
   estimate: { low: number | null; likely: number; high: number | null };
   verdict: Verdict | null;
@@ -72,7 +111,8 @@ export async function listChecks(surface: Surface, period: string): Promise<Chec
     const cm = schema.coworkMessages;
     const prompts = await client.select({ text: cm.content_preview }).from(cm)
       .where(and(eq(cm.session_id, c.session_id), eq(cm.message_type, msgType))).orderBy(cm.occurred_at);
-    let toolCalls = 0; let claudeSecs: number | null = null; let low: number | null = null; let high: number | null = null;
+    const product = checkProduct(surface, c.session_id);
+    let toolCalls: number | null = 0; let claudeSecs: number | null = null; let low: number | null = null; let high: number | null = null;
     if (surface === 'code') {
       const r = await client.select({
         tools: schema.codeSessionStats.tool_use_count, secs: schema.codeSessionStats.active_secs,
@@ -81,6 +121,13 @@ export async function listChecks(surface: Surface, period: string): Promise<Chec
         .leftJoin(schema.codeSessionClassifications, eq(schema.codeSessionClassifications.session_id, schema.codeSessionStats.session_id))
         .where(eq(schema.codeSessionStats.session_id, c.session_id)).limit(1);
       if (r[0]) { toolCalls = Number(r[0].tools); claudeSecs = r[0].secs === null ? null : Number(r[0].secs); low = r[0].low; high = r[0].high; }
+    } else if (product === 'chatgpt') {
+      // ChatGPT's export carries no tool calls: not measured, never 0.
+      toolCalls = null;
+      const ct = schema.chatgptSessionTime;
+      const r = await client.select({ secs: ct.active_secs, low: ct.human_minutes_low, high: ct.human_minutes_high })
+        .from(ct).where(eq(ct.session_id, c.session_id)).limit(1);
+      if (r[0]) { claudeSecs = r[0].secs === null ? null : Number(r[0].secs); low = r[0].low; high = r[0].high; }
     } else {
       const st = schema.coworkSessionStats;
       const r = await client.select({ tools: st.tool_call_count, secs: st.active_secs, low: st.human_minutes_low, high: st.human_minutes_high })
@@ -90,6 +137,7 @@ export async function listChecks(surface: Surface, period: string): Promise<Chec
     out.push({
       id: Number(c.id),
       sessionId: c.session_id,
+      product,
       firstPrompt: prompts[0]?.text ?? null,
       prompts: prompts.length,
       toolCalls,

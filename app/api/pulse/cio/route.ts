@@ -10,6 +10,7 @@
 // aggregate is Number()-coerced (bigint/numeric come back as
 // STRINGS on Postgres).
 import { NextRequest, NextResponse } from 'next/server';
+import { visibleVendor, visibleOpenAi } from '@/lib/sources/openai-visibility';
 import { and, desc, eq, gte, isNotNull, lt, sql } from 'drizzle-orm';
 import { getAdminSession, canAccessOrgOverview } from '@/lib/auth/admin-auth';
 import { promptTextVisibleFor, logPromptRead } from '@/lib/auth/content-access';
@@ -25,6 +26,11 @@ import {
 } from '@/lib/pulse/delegation';
 import { buildActNext, buildDeptProcessBoxes, type ActNextRow } from '@/lib/pulse/act-next';
 import type { DeptProcessBox } from '@/lib/usecases/suggestion-store';
+import { type Vendor } from '@/lib/dashboard/vendor';
+import { hasOpenAiData } from '@/lib/dashboard/queries';
+import { vendorClause } from '@/lib/dashboard/product-sql';
+import { messageVendor } from '@/lib/pulse/vendor-filter';
+import { chatgptSpend } from '@/lib/openai/spend';
 
 export const dynamic = 'force-dynamic';
 
@@ -55,104 +61,92 @@ export async function GET(request: NextRequest) {
   const pm = schema.pulseMetrics;
   const pe = schema.pulseEvents;
 
-  // ── Adoption hero numbers (current 30-day window) ─────────────────────────
+  const cm = schema.coworkMessages;
+  const pmv = schema.pulseMetricsVendor;
 
-  // People using Cowork weekly (distinct user_ids with at least one classification this week)
-  const weeklyActiveRows = await client
-    .select({ cnt: sql<number | string>`COUNT(DISTINCT ${pc.user_id})` })
-    .from(pc)
-    .where(and(gte(pc.classified_at, sevenDaysAgo), eq(pc.classifier_status, 'classified')));
-  const weeklyActive = Number(weeklyActiveRows[0]?.cnt ?? 0);
+  // The Claude / OpenAI switch. 'all' reads every product, as before; a vendor
+  // narrows classifications by their prompt's source and reads the aggregator's
+  // per-vendor figures (pulse_metrics_vendor).
+  const vendor = await visibleVendor(request.nextUrl.searchParams.get('vendor'));
+  const openaiPresent = await visibleOpenAi(hasOpenAiData());
 
-  // Prior period weekly active (week before last)
-  const priorWeekStart = now - 14 * 24 * 3600;
-  const priorWeekActiveRows = await client
-    .select({ cnt: sql<number | string>`COUNT(DISTINCT ${pc.user_id})` })
-    .from(pc)
-    .where(and(gte(pc.classified_at, priorWeekStart), lt(pc.classified_at, sevenDaysAgo), eq(pc.classifier_status, 'classified')));
-  const priorWeeklyActive = Number(priorWeekActiveRows[0]?.cnt ?? 0);
+  // Same columns in both tables, so a vendor view reads pulse_metrics_vendor
+  // through pulse_metrics' column set, narrowed to that vendor.
+  const metricsFor = (v: Vendor) => v === 'all'
+    ? { t: pm, only: sql`TRUE` }
+    : { t: pmv as unknown as typeof pm, only: eq(pmv.vendor, v) };
 
-  // Total active users in past 14 days
-  const totalActiveRows = await client
-    .select({ cnt: sql<number | string>`COUNT(DISTINCT ${pc.user_id})` })
-    .from(pc)
-    .where(and(gte(pc.classified_at, fourteenDaysAgo), eq(pc.classifier_status, 'classified')));
-  const totalActive = Number(totalActiveRows[0]?.cnt ?? 0);
+  const round2 = (v: number | string | null | undefined): number | null =>
+    v !== null && v !== undefined ? Math.round(Number(v) * 100) / 100 : null;
 
-  // % of time on Tier 2+ (current 30 days)
-  const tierBreakdown = await client
-    .select({ tier: pc.tier, cnt: sql<number | string>`COUNT(*)` })
-    .from(pc)
-    .where(and(gte(pc.classified_at, thirtyDaysAgo), eq(pc.classifier_status, 'classified')))
-    .groupBy(pc.tier);
-
-  const tierCounts = { 1: 0, 2: 0, 3: 0 };
-  for (const row of tierBreakdown) {
-    if (row.tier === 1 || row.tier === 2 || row.tier === 3) tierCounts[row.tier] = Number(row.cnt);
+  /** People with classified work between `from` and `to` (classified_at). */
+  async function distinctPeople(v: Vendor, from: number, to?: number): Promise<number> {
+    const rows = await client
+      .select({ cnt: sql<number | string>`COUNT(DISTINCT ${pc.user_id})` })
+      .from(pc)
+      .innerJoin(cm, eq(cm.id, pc.cowork_message_id))
+      .where(and(gte(pc.classified_at, from), to !== undefined ? lt(pc.classified_at, to) : undefined,
+        eq(pc.classifier_status, 'classified'), messageVendor(v)));
+    return Number(rows[0]?.cnt ?? 0);
   }
-  const totalTier = tierCounts[1] + tierCounts[2] + tierCounts[3];
-  const meaningfulWorkPct = totalTier > 0
-    ? Math.round(((tierCounts[2] + tierCounts[3]) / totalTier) * 100)
-    : 0;
 
-  // % of time on Tier 2+ (prior 30 days: days 31-60)
-  const priorTierBreakdown = await client
-    .select({ tier: pc.tier, cnt: sql<number | string>`COUNT(*)` })
-    .from(pc)
-    .where(and(gte(pc.classified_at, sixtyDaysAgo), lt(pc.classified_at, thirtyDaysAgo), eq(pc.classifier_status, 'classified')))
-    .groupBy(pc.tier);
-  const priorTierCounts = { 1: 0, 2: 0, 3: 0 };
-  for (const row of priorTierBreakdown) {
-    if (row.tier === 1 || row.tier === 2 || row.tier === 3) priorTierCounts[row.tier] = Number(row.cnt);
+  /** Share of classified work at Tier 2 or 3, whole per cent; null with no work. */
+  async function meaningfulPct(v: Vendor, from: number, to?: number): Promise<number | null> {
+    const rows = await client
+      .select({ tier: pc.tier, cnt: sql<number | string>`COUNT(*)` })
+      .from(pc)
+      .innerJoin(cm, eq(cm.id, pc.cowork_message_id))
+      .where(and(gte(pc.classified_at, from), to !== undefined ? lt(pc.classified_at, to) : undefined,
+        eq(pc.classifier_status, 'classified'), messageVendor(v)))
+      .groupBy(pc.tier);
+    const counts = { 1: 0, 2: 0, 3: 0 };
+    for (const row of rows) {
+      if (row.tier === 1 || row.tier === 2 || row.tier === 3) counts[row.tier] = Number(row.cnt);
+    }
+    const total = counts[1] + counts[2] + counts[3];
+    return total > 0 ? Math.round(((counts[2] + counts[3]) / total) * 100) : null;
   }
-  const priorTotalTier = priorTierCounts[1] + priorTierCounts[2] + priorTierCounts[3];
-  const priorMeaningfulWorkPct = priorTotalTier > 0
-    ? Math.round(((priorTierCounts[2] + priorTierCounts[3]) / priorTotalTier) * 100)
+
+  /** Average of a person-level rolling figure (DDS or OTI) computed in the window. */
+  async function avgUserMetric(v: Vendor, col: 'dds' | 'oti', from: number, to?: number): Promise<number | null> {
+    const { t, only } = metricsFor(v);
+    const rows = await client
+      .select({ v: sql<number | string | null>`AVG(${t[col]})` })
+      .from(t)
+      .where(and(only, eq(t.scope_type, 'user'), isNotNull(t[col]), eq(t.granularity, 'rolling'),
+        gte(t.computed_at, from), to !== undefined ? lt(t.computed_at, to) : undefined));
+    return round2(rows[0]?.v);
+  }
+
+  /** The headline strip for one view. */
+  async function heroFor(v: Vendor) {
+    return {
+      weeklyActive: await distinctPeople(v, sevenDaysAgo),
+      priorWeeklyActive: await distinctPeople(v, fourteenDaysAgo, sevenDaysAgo),
+      totalActive: await distinctPeople(v, fourteenDaysAgo),
+      meaningfulWorkPct: await meaningfulPct(v, thirtyDaysAgo),
+      priorMeaningfulWorkPct: await meaningfulPct(v, sixtyDaysAgo, thirtyDaysAgo),
+      avgDds: await avgUserMetric(v, 'dds', sevenDaysAgo),
+      priorAvgDds: await avgUserMetric(v, 'dds', sixtyDaysAgo, sevenDaysAgo),
+      avgOti: await avgUserMetric(v, 'oti', sevenDaysAgo),
+      priorAvgOti: await avgUserMetric(v, 'oti', sixtyDaysAgo, sevenDaysAgo),
+    };
+  }
+
+  // ── Adoption hero numbers ─────────────────────────────────────────────────
+  const hero = await heroFor(vendor);
+  // In the All view with both vendors present, each headline figure also
+  // carries its Claude and OpenAI parts.
+  const heroSplit = vendor === 'all' && openaiPresent
+    ? { claude: await heroFor('claude'), openai: await heroFor('openai') }
     : null;
-
-  // Average DDS across org
-  const avgDdsRows = await client
-    .select({ avg_dds: sql<number | string | null>`AVG(${pm.dds})` })
-    .from(pm)
-    .where(and(eq(pm.scope_type, 'user'), isNotNull(pm.dds), eq(pm.granularity, 'rolling'), gte(pm.computed_at, sevenDaysAgo)));
-  const avgDdsRaw = avgDdsRows[0]?.avg_dds;
-  const avgDds = avgDdsRaw !== null && avgDdsRaw !== undefined
-    ? Math.round(Number(avgDdsRaw) * 100) / 100
-    : null;
-
-  // Prior avg DDS
-  const priorAvgDdsRows = await client
-    .select({ avg_dds: sql<number | string | null>`AVG(${pm.dds})` })
-    .from(pm)
-    .where(and(eq(pm.scope_type, 'user'), isNotNull(pm.dds), eq(pm.granularity, 'rolling'), gte(pm.computed_at, sixtyDaysAgo), lt(pm.computed_at, sevenDaysAgo)));
-  const priorAvgDdsRaw = priorAvgDdsRows[0]?.avg_dds;
-  const priorAvgDds = priorAvgDdsRaw !== null && priorAvgDdsRaw !== undefined
-    ? Math.round(Number(priorAvgDdsRaw) * 100) / 100 : null;
-
-  // Average OTI across org
-  const avgOtiRows = await client
-    .select({ avg_oti: sql<number | string | null>`AVG(${pm.oti})` })
-    .from(pm)
-    .where(and(eq(pm.scope_type, 'user'), isNotNull(pm.oti), eq(pm.granularity, 'rolling'), gte(pm.computed_at, sevenDaysAgo)));
-  const avgOtiRaw = avgOtiRows[0]?.avg_oti;
-  const avgOti = avgOtiRaw !== null && avgOtiRaw !== undefined
-    ? Math.round(Number(avgOtiRaw) * 100) / 100
-    : null;
-
-  // Prior avg OTI
-  const priorAvgOtiRows = await client
-    .select({ avg_oti: sql<number | string | null>`AVG(${pm.oti})` })
-    .from(pm)
-    .where(and(eq(pm.scope_type, 'user'), isNotNull(pm.oti), eq(pm.granularity, 'rolling'), gte(pm.computed_at, sixtyDaysAgo), lt(pm.computed_at, sevenDaysAgo)));
-  const priorAvgOtiRaw = priorAvgOtiRows[0]?.avg_oti;
-  const priorAvgOti = priorAvgOtiRaw !== null && priorAvgOtiRaw !== undefined
-    ? Math.round(Number(priorAvgOtiRaw) * 100) / 100 : null;
 
   // Capability concentration risk — % of Tier 3 tasks on top 3 users
   const tier3UserCounts = await client
     .select({ user_id: pc.user_id, cnt: sql<number | string>`COUNT(*)` })
     .from(pc)
-    .where(and(eq(pc.tier, 3), eq(pc.classifier_status, 'classified'), gte(pc.classified_at, fourteenDaysAgo)))
+    .innerJoin(cm, eq(cm.id, pc.cowork_message_id))
+    .where(and(eq(pc.tier, 3), eq(pc.classifier_status, 'classified'), gte(pc.classified_at, fourteenDaysAgo), messageVendor(vendor)))
     .groupBy(pc.user_id)
     .orderBy(desc(sql`COUNT(*)`));
 
@@ -164,22 +158,17 @@ export async function GET(request: NextRequest) {
 
   // ── Org-level signal cards ─────────────────────────────────────────────────
 
-  const orgOtiRows = await client
-    .select({ v: sql<number | string | null>`AVG(${pm.oti})` })
-    .from(pm)
-    .where(and(eq(pm.scope_type, 'user'), isNotNull(pm.oti), eq(pm.granularity, 'rolling'), gte(pm.computed_at, sevenDaysAgo)));
-  const orgOtiRaw = orgOtiRows[0]?.v;
-
-  const orgDdsRows = await client
-    .select({ v: sql<number | string | null>`AVG(${pm.dds})` })
-    .from(pm)
-    .where(and(eq(pm.scope_type, 'user'), isNotNull(pm.dds), eq(pm.granularity, 'rolling'), gte(pm.computed_at, sevenDaysAgo)));
-  const orgDdsRaw = orgDdsRows[0]?.v;
-
-  const orgPsrRows = await client
-    .select({ v: sql<number | string>`COUNT(*)` })
-    .from(pe)
-    .where(and(eq(pe.event_type, 'capability_creation'), eq(pe.status, 'confirmed')));
+  // Confirmed capabilities; in a vendor view, those detected on that vendor's prompts.
+  const orgPsrRows = vendor === 'all'
+    ? await client
+      .select({ v: sql<number | string>`COUNT(*)` })
+      .from(pe)
+      .where(and(eq(pe.event_type, 'capability_creation'), eq(pe.status, 'confirmed')))
+    : await client
+      .select({ v: sql<number | string>`COUNT(*)` })
+      .from(pe)
+      .innerJoin(cm, eq(cm.id, pe.cowork_message_id))
+      .where(and(eq(pe.event_type, 'capability_creation'), eq(pe.status, 'confirmed'), messageVendor(vendor)));
   const orgPsr = Number(orgPsrRows[0]?.v ?? 0);
 
   // ORS is only ever computed at group level (scope_type='team' keyed by
@@ -187,34 +176,29 @@ export async function GET(request: NextRequest) {
   // — see lib/pulse/aggregator.ts). users.team_id is never populated in any
   // real deployment (no admin UI, no ingest default),
   // so 'team' rows never exist; 'function' (department) is the
-  // scope that's actually written and populated.
+  // scope that's actually written and populated. The composite and its three
+  // components are averages of the per-department figures.
+  const orsTable = metricsFor(vendor);
   const orgOrsRows = await client
-    .select({ v: sql<number | string | null>`AVG(${pm.ors})` })
-    .from(pm)
-    .where(and(eq(pm.scope_type, 'function'), isNotNull(pm.ors), eq(pm.granularity, 'rolling'), gte(pm.computed_at, sevenDaysAgo)));
-  const orgOrsRaw = orgOrsRows[0]?.v;
-
-  // ORS explainability — average the same three components across
-  // departments, consistent with how the composite org ORS above is itself
-  // an average of per-department ors.
-  const orgOrsComponentsRows = await client
     .select({
-      breadth: sql<number | string | null>`AVG(${pm.ors_breadth})`,
-      overlap: sql<number | string | null>`AVG(${pm.ors_overlap})`,
-      propagation: sql<number | string | null>`AVG(${pm.ors_propagation})`,
+      ors: sql<number | string | null>`AVG(${orsTable.t.ors})`,
+      breadth: sql<number | string | null>`AVG(${orsTable.t.ors_breadth})`,
+      overlap: sql<number | string | null>`AVG(${orsTable.t.ors_overlap})`,
+      propagation: sql<number | string | null>`AVG(${orsTable.t.ors_propagation})`,
     })
-    .from(pm)
-    .where(and(eq(pm.scope_type, 'function'), isNotNull(pm.ors), eq(pm.granularity, 'rolling'), gte(pm.computed_at, sevenDaysAgo)));
-  const orgOrsComponents = orgOrsComponentsRows[0];
+    .from(orsTable.t)
+    .where(and(orsTable.only, eq(orsTable.t.scope_type, 'function'), isNotNull(orsTable.t.ors),
+      eq(orsTable.t.granularity, 'rolling'), gte(orsTable.t.computed_at, sevenDaysAgo)));
+  const orgOrs = orgOrsRows[0];
 
   const signalCards = {
-    oti: orgOtiRaw !== null && orgOtiRaw !== undefined ? Math.round(Number(orgOtiRaw) * 100) / 100 : null,
-    dds: orgDdsRaw !== null && orgDdsRaw !== undefined ? Math.round(Number(orgDdsRaw) * 100) / 100 : null,
+    oti: hero.avgOti,
+    dds: hero.avgDds,
     psr: orgPsr,
-    ors: orgOrsRaw !== null && orgOrsRaw !== undefined ? Math.round(Number(orgOrsRaw) * 100) / 100 : null,
-    orsBreadth: orgOrsComponents?.breadth !== null && orgOrsComponents?.breadth !== undefined ? Math.round(Number(orgOrsComponents.breadth) * 100) / 100 : null,
-    orsOverlap: orgOrsComponents?.overlap !== null && orgOrsComponents?.overlap !== undefined ? Math.round(Number(orgOrsComponents.overlap) * 100) / 100 : null,
-    orsPropagation: orgOrsComponents?.propagation !== null && orgOrsComponents?.propagation !== undefined ? Math.round(Number(orgOrsComponents.propagation) * 100) / 100 : null,
+    ors: round2(orgOrs?.ors),
+    orsBreadth: round2(orgOrs?.breadth),
+    orsOverlap: round2(orgOrs?.overlap),
+    orsPropagation: round2(orgOrs?.propagation),
   };
 
   // ── Adoption funnel (Priority 6) ─────────────────────────────────────────
@@ -230,15 +214,17 @@ export async function GET(request: NextRequest) {
   const classificationsByMonth = await rawAll<{
     user_id: string; month: string; tier: number; cnt: number | string;
   }>(client, sql`
-     SELECT user_id,
+     SELECT pulse_classifications.user_id,
             ${monthExpr} AS month,
             tier,
             COUNT(*) AS cnt
      FROM pulse_classifications
+     JOIN cowork_messages ON cowork_messages.id = pulse_classifications.cowork_message_id
      WHERE classifier_status = 'classified'
        AND classified_at >= ${sixMonthsAgo}
-     GROUP BY user_id, month, tier
-     ORDER BY user_id, month, cnt DESC
+       AND ${sql.raw(vendorClause(vendor, 'cowork_messages.'))}
+     GROUP BY pulse_classifications.user_id, month, tier
+     ORDER BY pulse_classifications.user_id, month, cnt DESC
   `);
 
   // For each user+month, keep only the dominant tier (first row per user+month after sort)
@@ -297,7 +283,8 @@ export async function GET(request: NextRequest) {
     .from(pe)
     .leftJoin(schema.users, eq(schema.users.id, pe.user_id))
     .leftJoin(schema.coworkMessages, eq(schema.coworkMessages.id, pe.cowork_message_id))
-    .where(and(eq(pe.event_type, 'capability_creation'), eq(pe.status, 'confirmed')))
+    .where(and(eq(pe.event_type, 'capability_creation'), eq(pe.status, 'confirmed'),
+      vendor === 'all' ? undefined : messageVendor(vendor)))
     .orderBy(desc(pe.confirmed_at))
     .limit(50);
 
@@ -329,15 +316,16 @@ export async function GET(request: NextRequest) {
 
   const orgWeeks = weekStarts(now, 8);
   const orgCurrentWeek = weekStart(now);
+  const wm = metricsFor(vendor);
   const weeklyUserRows = await client
     .select({
-      period_start: pm.period_start,
-      event_count: sql<number | string | null>`SUM(${pm.event_count})`,
-      tier_3_count: sql<number | string | null>`SUM(${pm.tier_3_count})`,
+      period_start: wm.t.period_start,
+      event_count: sql<number | string | null>`SUM(${wm.t.event_count})`,
+      tier_3_count: sql<number | string | null>`SUM(${wm.t.tier_3_count})`,
     })
-    .from(pm)
-    .where(and(eq(pm.granularity, 'week'), eq(pm.scope_type, 'user'), gte(pm.period_start, orgWeeks[0])))
-    .groupBy(pm.period_start);
+    .from(wm.t)
+    .where(and(wm.only, eq(wm.t.granularity, 'week'), eq(wm.t.scope_type, 'user'), gte(wm.t.period_start, orgWeeks[0])))
+    .groupBy(wm.t.period_start);
   const weeklyByWeek = new Map(weeklyUserRows.map(r => [r.period_start, {
     event_count: r.event_count !== null ? Number(r.event_count) : null,
     tier_3_count: r.tier_3_count !== null ? Number(r.tier_3_count) : null,
@@ -364,12 +352,14 @@ export async function GET(request: NextRequest) {
   const priorTier3 = completedVolume.length > 1 ? completedVolume[completedVolume.length - 2].tier3Count : null;
   const tier3Pct = priorTier3 !== null && priorTier3 !== 0 && currentTier3 !== null ? (currentTier3 - priorTier3) / priorTier3 : null;
 
-  // OTel cowork enrichments — org-wide 7-day cost
+  // OTel cowork enrichments — org-wide 7-day cost, Claude Cowork only.
+  // ChatGPT's spend comes from OpenAI's cost records, read apart below.
   const orgCoworkCostRows = await client
     .select({ cowork_cost: sql<number | string>`COALESCE(SUM(${schema.coworkMessages.cost_usd}), 0)` })
     .from(schema.coworkMessages)
     .where(and(eq(schema.coworkMessages.message_type, 'cowork_api_request'), gte(schema.coworkMessages.occurred_at, sevenDaysAgo)));
   const orgCoworkCostUsd = Number(orgCoworkCostRows[0]?.cowork_cost ?? 0);
+  const orgChatgpt = vendor === 'claude' || !openaiPresent ? undefined : await chatgptSpend({ since: sevenDaysAgo });
 
   // ── Files touched by category — org-wide, 30-day window ────────────────────
   const fileCategoryMix = await getFileCategoryMix(30);
@@ -384,13 +374,13 @@ export async function GET(request: NextRequest) {
 
   const deptWeekRowsRaw = await client
     .select({
-      scope_id: pm.scope_id, period_start: pm.period_start,
-      t1: pm.tier_1_count, t2: pm.tier_2_count, t3: pm.tier_3_count,
+      scope_id: wm.t.scope_id, period_start: wm.t.period_start,
+      t1: wm.t.tier_1_count, t2: wm.t.tier_2_count, t3: wm.t.tier_3_count,
     })
-    .from(pm)
+    .from(wm.t)
     .where(and(
-      eq(pm.granularity, 'week'), eq(pm.scope_type, 'function'),
-      gte(pm.period_start, delegationWeeks[0]), lt(pm.period_start, weekStart(now)),
+      wm.only, eq(wm.t.granularity, 'week'), eq(wm.t.scope_type, 'function'),
+      gte(wm.t.period_start, delegationWeeks[0]), lt(wm.t.period_start, weekStart(now)),
     ));
   const deptWeekRows: DelegationWeekRow[] = deptWeekRowsRaw.map(r => ({
     scopeId: r.scope_id, periodStart: Number(r.period_start),
@@ -409,17 +399,17 @@ export async function GET(request: NextRequest) {
   // the weeklyVolume block above, which also aggregates the 'user' scope.
   const userWeekRowsRaw = await client
     .select({
-      period_start: pm.period_start,
-      t1: sql<number | string | null>`SUM(${pm.tier_1_count})`,
-      t2: sql<number | string | null>`SUM(${pm.tier_2_count})`,
-      t3: sql<number | string | null>`SUM(${pm.tier_3_count})`,
+      period_start: wm.t.period_start,
+      t1: sql<number | string | null>`SUM(${wm.t.tier_1_count})`,
+      t2: sql<number | string | null>`SUM(${wm.t.tier_2_count})`,
+      t3: sql<number | string | null>`SUM(${wm.t.tier_3_count})`,
     })
-    .from(pm)
+    .from(wm.t)
     .where(and(
-      eq(pm.granularity, 'week'), eq(pm.scope_type, 'user'),
-      gte(pm.period_start, delegationWeeks[0]), lt(pm.period_start, weekStart(now)),
+      wm.only, eq(wm.t.granularity, 'week'), eq(wm.t.scope_type, 'user'),
+      gte(wm.t.period_start, delegationWeeks[0]), lt(wm.t.period_start, weekStart(now)),
     ))
-    .groupBy(pm.period_start);
+    .groupBy(wm.t.period_start);
   const ORG_DELEGATION_SCOPE = '__org__';
   const orgWeekRows: DelegationWeekRow[] = userWeekRowsRaw.map(r => ({
     scopeId: ORG_DELEGATION_SCOPE, periodStart: Number(r.period_start),
@@ -496,24 +486,17 @@ export async function GET(request: NextRequest) {
   }
 
   return NextResponse.json({
+    vendor,
+    openaiPresent,
     adoptionFunnel,
-    adoptionHero: {
-      weeklyActive,
-      totalActive,
-      meaningfulWorkPct,
-      avgDds,
-      avgOti,
-      concentrationPct,
-      // Prior period for deltas
-      priorWeeklyActive,
-      priorMeaningfulWorkPct,
-      priorAvgDds,
-      priorAvgOti,
-    },
+    adoptionHero: { ...hero, concentrationPct },
+    heroSplit,
     signalCards,
     briefing: briefing ?? null,
     capabilityLog,
-    coworkCostUsd: orgCoworkCostUsd,
+    coworkCostUsd: vendor === 'openai' ? undefined : orgCoworkCostUsd,
+    chatgptCostUsd: orgChatgpt === undefined ? undefined : orgChatgpt?.usd ?? null,
+    chatgptUnpricedModels: orgChatgpt?.unpricedModels ?? [],
     fileCategoryMix,
     weeklyVolume: {
       series: weeklyVolume,

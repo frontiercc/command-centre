@@ -6,12 +6,16 @@
 import { useEffect, useState } from 'react';
 import Link from 'next/link';
 import { Panel, Strip, Figure, BarRow, Tag, Muted, Empty } from '@/components/precision/ui';
+import { WORK_PULSE_VENDOR_LABELS, type Vendor } from '@/lib/dashboard/vendor';
+import { useOpenAiOnly } from '@/components/shared/VendorSwitch';
+
+type RowVendor = Exclude<Vendor, 'all'>;
 
 interface OrgSummary {
   signalCards: { oti: number | null; dds: number | null; psr: number | null; ors: number | null };
   tierCounts: { t1: number; t2: number; t3: number };
-  topSkills: Array<{ skill_name: string; usage_count: number; user_count: number }>;
-  topConnectors: Array<{ mcp_server: string; usage_count: number; user_count: number }>;
+  topSkills: Array<{ skill_name: string; vendor: RowVendor; tag?: string; usage_count: number; user_count: number }>;
+  topConnectors: Array<{ mcp_server: string; vendor: RowVendor; tag?: string; usage_count: number; user_count: number }>;
 }
 
 // ── Helpers ────────────────────────────────────────────────────────────────────
@@ -75,12 +79,15 @@ function InvocationList({
   nameKey,
   emptyMessage,
   formatName,
+  showVendor,
 }: {
   title: string;
-  items: Array<{ usage_count: number; user_count: number; [k: string]: unknown }>;
+  items: Array<{ usage_count: number; user_count: number; vendor?: RowVendor; tag?: string; [k: string]: unknown }>;
   nameKey: string;
   emptyMessage: string;
   formatName: (n: string) => string;
+  /** Tag each row with its product (Claude, ChatGPT or Codex), on installs that hold OpenAI data. */
+  showVendor?: boolean;
 }) {
   return (
     <Panel title={title} subtitle="Org, 30 days" flush={items.length > 0}>
@@ -94,9 +101,14 @@ function InvocationList({
             const barPct = Math.round((item.usage_count / maxUsage) * 100);
             return (
               <BarRow
-                key={name}
+                key={`${item.tag ?? item.vendor ?? ''}:${name}`}
                 rank={i + 1}
-                label={formatName(name)}
+                label={showVendor && item.vendor ? (
+                  <span className="inline-flex items-center gap-1.5 min-w-0">
+                    <span className="truncate">{formatName(name)}</span>
+                    <Tag tone="neutral">{item.tag ?? WORK_PULSE_VENDOR_LABELS[item.vendor]}</Tag>
+                  </span>
+                ) : formatName(name)}
                 value={`${item.usage_count}× · ${item.user_count} ${item.user_count === 1 ? 'user' : 'users'}`}
                 pct={barPct}
                 tone="measured"
@@ -111,17 +123,25 @@ function InvocationList({
 
 // ── Main component ─────────────────────────────────────────────────────────────
 
-export default function PulseBand({ children }: { children?: React.ReactNode }) {
+export default function PulseBand({ children, vendor = 'all', showVendor = false }: {
+  children?: React.ReactNode;
+  /** The dashboard's vendor switch: narrows the tier mix and the top skills and connectors. */
+  vendor?: Vendor;
+  /** Tag top skills and connectors Claude or OpenAI. */
+  showVendor?: boolean;
+}) {
+  // Only OpenAI connected: no note saying the band shows OpenAI only.
+  const openaiOnly = useOpenAiOnly();
   const [data, setData] = useState<OrgSummary | null>(null);
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
-    fetch('/api/pulse/org-summary')
+    fetch(`/api/pulse/org-summary?vendor=${vendor}`)
       .then(r => r.ok ? r.json() : Promise.reject())
       .then(setData)
       .catch(() => setData(null))
       .finally(() => setLoading(false));
-  }, []);
+  }, [vendor]);
 
   const hasData = data && (
     data.signalCards.oti !== null ||
@@ -136,7 +156,7 @@ export default function PulseBand({ children }: { children?: React.ReactNode }) 
       {/* Section header */}
       <div className="flex items-baseline gap-2 flex-wrap">
         <h2 className="m-0 text-[14px] font-semibold text-[#0A0A0A]"><span aria-hidden="true">⚡</span> Work Pulse</h2>
-        <span className="text-[13px] text-[#8F8F8F]">How deeply people hand work to Claude</span>
+        <span className="text-[13px] text-[#8F8F8F]">How deeply people hand work to AI</span>
         <Link href="/pulse/cio" className="ml-auto text-[13px] font-medium text-[#245BF3] hover:underline">
           Open Work Pulse
         </Link>
@@ -156,6 +176,11 @@ export default function PulseBand({ children }: { children?: React.ReactNode }) 
       {!loading && hasData && data && (
         <>
           {/* Row 1: the four Cowork signals in plain English + tier bar */}
+          {vendor !== 'all' && !openaiOnly && (
+            <p className="m-0 -mb-2 text-[13px] text-[#8F8F8F]">
+              Work Pulse shows {WORK_PULSE_VENDOR_LABELS[vendor]} only{vendor === 'openai' ? ', and Developer Pulse below shows Codex only' : ', and Developer Pulse below shows Claude Code only'}.
+            </p>
+          )}
           <div className="grid grid-cols-1 lg:grid-cols-[minmax(0,3fr)_minmax(0,1fr)] gap-4">
             <Strip cols={4}>
               {signalFigure({
@@ -171,7 +196,7 @@ export default function PulseBand({ children }: { children?: React.ReactNode }) 
               {signalFigure({
                 label: 'Capabilities created',
                 value: data.signalCards.psr !== null ? String(Math.round(data.signalCards.psr)) : null,
-                sub: 'Repeatable tasks now owned by Claude, confirmed.',
+                sub: 'Repeatable tasks now owned by AI, confirmed.',
               })}
               {signalFigure({
                 label: 'Resilience',
@@ -197,6 +222,7 @@ export default function PulseBand({ children }: { children?: React.ReactNode }) 
               nameKey="skill_name"
               emptyMessage="No skill invocations captured yet."
               formatName={formatSkillName}
+              showVendor={showVendor}
             />
             <InvocationList
               title="Top connectors"
@@ -204,6 +230,7 @@ export default function PulseBand({ children }: { children?: React.ReactNode }) 
               nameKey="mcp_server"
               emptyMessage="No connector invocations captured yet."
               formatName={formatConnectorName}
+              showVendor={showVendor}
             />
           </div>
         </>

@@ -20,6 +20,9 @@ import GenerateBriefingButton from '@/components/pulse/GenerateBriefingButton';
 import { cleanTitle } from '@/components/pulse/CapabilityLog';
 import HumanTimeCard, { type HumanTimeSummary } from '@/components/pulse/HumanTimeCard';
 import { PageBody, Toolbar, Panel, Strip, Figure, BarRow, Tag, Notice, Dot, B, C } from '@/components/precision/ui';
+import { useVendor, useOpenAiOnly, VendorSwitch } from '@/components/shared/VendorSwitch';
+import { WORK_PULSE_VENDOR_LABELS } from '@/lib/dashboard/vendor';
+import { workSpendFigure } from '@/lib/pulse/spend-figure';
 
 interface PersonalPulseData {
   humanTime?: HumanTimeSummary | null;
@@ -55,9 +58,12 @@ interface PersonalPulseData {
   } | null;
   teamMetrics: { ors: number | null } | null;
   coworkCostUsd?: number;
+  chatgptCostUsd?: number | null;
+  chatgptUnpricedModels?: string[];
   coworkFrictionIndex?: number | null;
   topNativeTools?: Array<{ tool_name: string; usage_count: number }>;
   otiUnderReview?: boolean;
+  openaiPresent?: boolean;
 }
 
 const TITLE = 'My Pulse';
@@ -80,11 +86,17 @@ export default function PersonalPulsePage() {
   const [error, setError] = useState<string | null>(null);
   const [refreshKey, setRefreshKey] = useState(0);
   const [pulseStartAt, setPulseStartAt] = useState<number | null>(null);
+  // The All / Claude / OpenAI switch, shared with the dashboard and Executive View.
+  const [vendor, setVendor, vendorReady] = useVendor();
+  const openaiOnly = useOpenAiOnly();
 
   useEffect(() => {
+    if (!vendorReady) return; // the saved view is read after the page loads
     setLoading(true);
     setError(null);
-    const meUrl = viewingUserId ? `/api/pulse/me?userId=${encodeURIComponent(viewingUserId)}` : '/api/pulse/me';
+    const meUrl = viewingUserId
+      ? `/api/pulse/me?userId=${encodeURIComponent(viewingUserId)}&vendor=${vendor}`
+      : `/api/pulse/me?vendor=${vendor}`;
     Promise.all([
       fetch(meUrl).then(r => { if (!r.ok) throw new Error("Couldn't load this page. Try again."); return r.json(); }),
       fetch('/api/pulse/user-prefs').then(r => r.ok ? r.json() : { pulse_start_at: null }),
@@ -104,7 +116,7 @@ export default function PersonalPulsePage() {
       })
       .catch(e => setError(e.message))
       .finally(() => setLoading(false));
-  }, [refreshKey, viewingUserId]);
+  }, [refreshKey, viewingUserId, vendor, vendorReady]);
 
   if (loading) return (
     <>
@@ -135,6 +147,7 @@ export default function PersonalPulsePage() {
 
   const pending = data.capabilitiesDetail?.pending ?? [];
   const topTools = data.topNativeTools ?? [];
+  const mySpend = workSpendFigure(vendor, data.coworkCostUsd, data.chatgptCostUsd, data.chatgptUnpricedModels?.length ?? 0);
 
   return (
     <>
@@ -142,7 +155,7 @@ export default function PersonalPulsePage() {
       <PageBody>
 
         {/* Active since + Spend Review link */}
-        {(pulseStartAt || (data.canSeeSpendReview && data.userId)) && (
+        {(pulseStartAt || (data.canSeeSpendReview && data.userId) || data.openaiPresent || vendor !== 'all') && (
           <Toolbar
             left={pulseStartAt ? (
               <Dot color={C.good}>
@@ -155,13 +168,19 @@ export default function PersonalPulsePage() {
                 {viewingUserId ? 'Spend review' : 'Your spend review'}
               </Link>
             )}
+            <VendorSwitch vendor={vendor} onChange={setVendor} openaiPresent={data.openaiPresent ?? false} labels={WORK_PULSE_VENDOR_LABELS} />
           </Toolbar>
+        )}
+        {vendor !== 'all' && !openaiOnly && (
+          <p className="m-0 -mt-2 text-[13px] text-[#8F8F8F]">
+            Showing {WORK_PULSE_VENDOR_LABELS[vendor]} only{vendor === 'openai' ? ': ChatGPT Chat and ChatGPT Work' : ': Claude Chat, Claude Cowork and Claude in Office/Google'}.
+          </p>
         )}
 
         {/* 1. Frontier Push hero */}
         <FrontierHero view={data.frontier} canOpenUseCases={data.frontierAccess?.canOpenUseCases ?? false} />
 
-        <HumanTimeCard summary={data.humanTime} surface="cowork" scope="Personal" />
+        <HumanTimeCard summary={data.humanTime} surface="cowork" scope="Personal" view={data.openaiPresent ? vendor : 'claude'} />
 
         {/* 2. Stat strip with deltas */}
         <StatStrip
@@ -189,10 +208,12 @@ export default function PersonalPulsePage() {
           briefing={data.weeklyPulse}
           userId={data.userId ?? undefined}
           onGenerate={() => setRefreshKey(k => k + 1)}
+          own
           action={data.weeklyPulse && data.userId ? (
             <GenerateBriefingButton
               type="user"
               userId={data.userId}
+              own
               onComplete={() => setRefreshKey(k => k + 1)}
             />
           ) : undefined}
@@ -202,13 +223,16 @@ export default function PersonalPulsePage() {
         <SkillExchange skills={skillExchangeData} />
 
         {/* 6b. OTel cowork enrichments — cost + friction */}
-        {(data.coworkCostUsd !== undefined || data.coworkFrictionIndex !== undefined) && (
-          <Strip cols={2}>
-            <Figure
-              label="Cowork spend, 7 days"
-              value={spendValue(data.coworkCostUsd)}
-              sub="API cost of Cowork (OTel) sessions"
-            />
+        {(mySpend || data.coworkFrictionIndex !== undefined) && (
+          <Strip cols={mySpend && data.coworkFrictionIndex !== undefined ? 2 : undefined}>
+            {mySpend && (
+              <Figure
+                label={`${mySpend.label}, 7 days`}
+                value={mySpend.notPriced ? <span className="text-[15px] font-medium text-[#8F8F8F] tracking-normal">Not priced</span> : spendValue(mySpend.usd)}
+                sub={mySpend.sub}
+              />
+            )}
+            {data.coworkFrictionIndex !== undefined && (
             <Figure
               label="Friction index, 7 days"
               value={data.coworkFrictionIndex == null
@@ -216,6 +240,7 @@ export default function PersonalPulsePage() {
                 : `${(data.coworkFrictionIndex * 100).toFixed(1)}%`}
               sub="Tool failures ÷ total tool calls"
             />
+            )}
           </Strip>
         )}
 
@@ -242,7 +267,7 @@ export default function PersonalPulsePage() {
           <Panel
             title="Capabilities to review"
             badge={<Tag tone="warn">{pending.length}</Tag>}
-            subtitle="Claude may have taken on these types of work for the first time. Confirm to track them."
+            subtitle="AI may have taken on these types of work for the first time. Confirm to track them."
             flush
           >
             <ul className="m-0 p-0 list-none">

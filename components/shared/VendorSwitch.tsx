@@ -1,0 +1,107 @@
+// Copyright 2026 Lee James
+// SPDX-License-Identifier: Apache-2.0
+
+'use client';
+
+// The All / Claude / ChatGPT switch shared by the dashboard, Work Pulse and
+// Developer Pulse. One remembered choice per browser, so a view picked on one
+// page carries to the others. An install with only OpenAI connected has no
+// switch: every page shows the OpenAI view.
+import { useEffect, useState } from 'react';
+import { Segmented } from '@/components/precision/ui';
+import { VENDORS, VENDOR_LABELS, parseVendor, type Vendor, type VendorSplit } from '@/lib/dashboard/vendor';
+import { isOpenAiOnly, openAiConnected, type ConnectedProducts } from '@/lib/sources/connected-shared';
+import { fetchConfigOnce } from '@/lib/client/config-once';
+
+const VENDOR_KEY = 'ccc-dashboard-vendor';
+const CONNECTED_KEY = 'ccc-connected-products';
+
+// One read per page load (lib/client/config-once.ts). The last answer is kept
+// in the browser, so a returning visitor's first render is already right.
+function readStoredConnected(): ConnectedProducts | null {
+  try {
+    const v = JSON.parse(window.localStorage.getItem(CONNECTED_KEY) || 'null');
+    return v && typeof v.claude === 'boolean' && typeof v.openai === 'boolean' ? v : null;
+  } catch { return null; }
+}
+function fetchConnected(): Promise<ConnectedProducts | null> {
+  return fetchConfigOnce().then((d) => {
+    const c = d?.connectedProducts as ConnectedProducts | undefined;
+    if (!c || typeof c.claude !== 'boolean' || typeof c.openai !== 'boolean') return null;
+    try { window.localStorage.setItem(CONNECTED_KEY, JSON.stringify(c)); } catch { /* not remembered */ }
+    return c;
+  });
+}
+
+/**
+ * Which vendors are connected; null until known. The stored answer is read
+ * after the page loads, never during the first render, so the browser's first
+ * render matches the server's (no hydration mismatch, React error #418).
+ */
+export function useConnectedProducts(): ConnectedProducts | null {
+  const [connected, setConnected] = useState<ConnectedProducts | null>(null);
+  useEffect(() => {
+    let live = true;
+    const stored = readStoredConnected();
+    if (stored) setConnected(stored);
+    fetchConnected().then((c) => { if (live && c) setConnected(c); });
+    return () => { live = false; };
+  }, []);
+  return connected;
+}
+
+/** True when OpenAI is connected and Claude is not (lib/sources/connected-shared.ts). */
+export function useOpenAiOnly(): boolean {
+  return isOpenAiOnly(useConnectedProducts());
+}
+
+/**
+ * The switch's view, its setter, and whether the saved view has been read.
+ * The saved view is read after the page loads (the first render matches the
+ * server's), so a page waits for the third value before fetching, and never
+ * loads one view and then another.
+ */
+export function useVendor(): [Vendor, (v: Vendor) => void, boolean] {
+  const [vendor, setVendorState] = useState<Vendor>('all');
+  const [ready, setReady] = useState(false);
+  useEffect(() => {
+    try { setVendorState(parseVendor(window.localStorage.getItem(VENDOR_KEY))); } catch { /* All */ }
+    setReady(true);
+  }, []);
+  const connected = useConnectedProducts();
+  const openaiOnly = isOpenAiOnly(connected);
+  // ChatGPT and Codex hidden (the OpenAI panel): a remembered vendor view gives way to All, which the server reads as Claude.
+  const openaiHidden = !!connected && openAiConnected(connected) && !connected.openai;
+  const setVendor = (v: Vendor) => {
+    setVendorState(v);
+    try { window.localStorage.setItem(VENDOR_KEY, v); } catch { /* not remembered */ }
+  };
+  return [openaiOnly ? 'openai' : openaiHidden ? 'all' : vendor, setVendor, ready];
+}
+
+/** Shown once both vendors have data, or while a vendor view is still chosen. */
+export function VendorSwitch({ vendor, onChange, openaiPresent, labels = VENDOR_LABELS }: {
+  vendor: Vendor;
+  onChange: (v: Vendor) => void;
+  openaiPresent: boolean;
+  /** All / Claude / ChatGPT on every page. */
+  labels?: Record<Vendor, string>;
+}) {
+  const openaiOnly = useOpenAiOnly();
+  if (openaiOnly) return null;
+  if (!openaiPresent && vendor === 'all') return null;
+  return (
+    <Segmented
+      label="Show products from"
+      options={VENDORS.map(v => ({ value: v, label: labels[v] }))}
+      value={vendor}
+      onChange={onChange}
+    />
+  );
+}
+
+/** "Claude 12 · OpenAI 4" under a figure in the All view ("ChatGPT" in Work Pulse). */
+export function formatSplit(s: Pick<VendorSplit, 'claude' | 'openai'>, openaiLabel = 'OpenAI'): string {
+  const n = (v: number) => v.toLocaleString('en-GB');
+  return `Claude ${n(s.claude)} · ${openaiLabel} ${n(s.openai)}`;
+}

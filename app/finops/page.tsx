@@ -13,6 +13,7 @@ import InsightCard, { type InsightFacts } from '@/components/finance/InsightCard
 import ModelEfficiencySection from '@/components/finance/ModelEfficiencySection';
 import OfficeSpendPanel, { type OfficeSpendData } from '@/components/finance/OfficeSpendPanel';
 import { PageBody, Toolbar, Panel, Tag, Pill, T, B, Notice, Empty, Bar, cx } from '@/components/precision/ui';
+import { useOpenAiOnly } from '@/components/shared/VendorSwitch';
 
 interface CodeTokens {
   input: number;
@@ -26,6 +27,9 @@ interface ChargebackUser {
   displayName: string;
   codeUsd: number;
   coworkUsd: number;
+  /** ChatGPT and Codex, present when OpenAI's Compliance API is connected. */
+  chatgptUsd?: number;
+  codexUsd?: number;
   totalUsd: number;
   tokens?: CodeTokens;
 }
@@ -36,6 +40,9 @@ interface ChargebackCentre {
   totalUsd: number;
   codeUsd: number;
   coworkUsd: number;
+  /** ChatGPT and Codex, present when OpenAI's Compliance API is connected. */
+  chatgptUsd?: number;
+  codexUsd?: number;
   users: ChargebackUser[];
 }
 
@@ -60,6 +67,8 @@ interface ChargebackReport {
   leaderboard?: LeaderboardEntry[];
   /** Server-computed month-end run-rate projection. null for historical periods; absent on old closed snapshots. */
   projection?: { projected: number; daysElapsed: number; daysInMonth: number } | null;
+  /** Claude's and OpenAI's projected month-end spend, each from its own month-to-date spend. null without the vendor split. */
+  projectionByVendor?: { claudeUsd: number; openaiUsd: number } | null;
   /** Server-computed deterministic facts + optional grounded narrative. Absent on old closed snapshots. */
   insight?: { facts: InsightFacts; narrative: string | null };
   /** Wasted-seats estimate (licensed vs active-in-30d). null when licensedSeats is unset/invalid. Absent on old closed snapshots. */
@@ -69,6 +78,17 @@ interface ChargebackReport {
     unused: number;
     monthlyPriceUsd: number | null;
     estUnusedUsd: number | null;
+  } | null;
+  /** Claude / OpenAI split; present when OpenAI's Compliance API has sent data. */
+  vendors?: { claudeUsd: number; openaiUsd: number };
+  openaiUnpricedModels?: string[];
+  /** The ChatGPT licence: seats x monthly price, charged apart from usage. null when no seat count is set. */
+  chatgptSeats?: {
+    licensed: number;
+    activeUsers30d: number;
+    unused: number;
+    monthlyPriceUsd: number | null;
+    monthlyLicenceUsd: number | null;
   } | null;
   /** Claude in Office, estimated from tokens; never in the totals. null without Office activity. */
   office?: OfficeSpendData | null;
@@ -95,6 +115,12 @@ function surfaceTokensTitle(surfaces: SurfaceSummary): string {
     s.basis === 'dormant'
       ? `${label}: dormant (not captured)`
       : `${label}: ${fmtTokensCompact(tokensTotal(s.tokens))} tokens, ${tokensBreakdown(s.tokens)}`;
+  if (surfaces.chatgpt && surfaces.codex) {
+    return [
+      line('Claude Chat', surfaces.chat), line('Claude Code', surfaces.code), line('Claude Cowork', surfaces.cowork),
+      line('ChatGPT', surfaces.chatgpt), line('Codex', surfaces.codex),
+    ].join('\n');
+  }
   return [line('Chat', surfaces.chat), line('Code', surfaces.code), line('Cowork', surfaces.cowork)].join('\n');
 }
 
@@ -109,6 +135,14 @@ function buildDataQualityNotes(report: ChargebackReport): string[] {
       report.unpricedModels.length === 1
         ? `1 model has no rate set: add "${report.unpricedModels[0]}" in Admin.`
         : `${report.unpricedModels.length} models have no rate set: add them in Admin.`
+    );
+  }
+  const openaiUnpriced = report.openaiUnpricedModels ?? [];
+  if (openaiUnpriced.length > 0) {
+    notes.push(
+      openaiUnpriced.length === 1
+        ? `1 ChatGPT or Codex model has no rate set, so its usage is not counted: add "${openaiUnpriced[0]}" in Admin → Developer Pulse → Rates.`
+        : `${openaiUnpriced.length} ChatGPT or Codex models have no rate set, so their usage is not counted: add them in Admin → Developer Pulse → Rates.`
     );
   }
   const gap = report.coworkCostCoverage.total - report.coworkCostCoverage.withCost;
@@ -143,15 +177,19 @@ function buildMonthOptions(): { value: string; label: string }[] {
 }
 
 /** The people inside one cost centre, as a nested flush table under its row. */
-function UserTable({ users }: { users: ChargebackUser[] }) {
+function UserTable({ users, openai, openaiOnly }: { users: ChargebackUser[]; openai: boolean; openaiOnly: boolean }) {
+  const claude = !openai || !openaiOnly;
+  const cell = 'px-2 py-2 text-right text-[#666666] tabular-nums';
   return (
     <table className={cx(T.table, 'text-[13px]')}>
       <thead>
         <tr className={cx(T.headRow, 'bg-[#FAFAFA]')}>
           <th scope="col" className={cx(T.th, '!pl-10')}>Person</th>
-          <th scope="col" className={T.thRight}>Tokens</th>
-          <th scope="col" className={T.thRight}>Code</th>
-          <th scope="col" className={T.thRight}>Cowork</th>
+          {claude && <th scope="col" className={T.thRight}>{openai ? 'Claude Code tokens' : 'Tokens'}</th>}
+          {claude && <th scope="col" className={T.thRight}>{openai ? 'Claude Code' : 'Code'}</th>}
+          {claude && <th scope="col" className={T.thRight}>{openai ? 'Claude Cowork' : 'Cowork'}</th>}
+          {openai && <th scope="col" className={T.thRight}>ChatGPT</th>}
+          {openai && <th scope="col" className={T.thRight}>Codex</th>}
           <th scope="col" className={T.thRight}>Total</th>
         </tr>
       </thead>
@@ -159,14 +197,18 @@ function UserTable({ users }: { users: ChargebackUser[] }) {
         {users.map(u => (
           <tr key={u.userId} className="border-t border-[#F2F2F2]">
             <td className="px-2 py-2 pl-10 text-[#0A0A0A]">{u.displayName}</td>
-            <td
-              className="px-2 py-2 text-right text-[#8F8F8F] tabular-nums"
-              title={u.tokens ? tokensBreakdown(u.tokens) : undefined}
-            >
-              {u.tokens && tokensTotal(u.tokens) > 0 ? fmtTokensCompact(tokensTotal(u.tokens)) : '—'}
-            </td>
-            <td className="px-2 py-2 text-right text-[#666666] tabular-nums">{fmtUsd(u.codeUsd)}</td>
-            <td className="px-2 py-2 text-right text-[#666666] tabular-nums">{fmtUsd(u.coworkUsd)}</td>
+            {claude && (
+              <td
+                className="px-2 py-2 text-right text-[#8F8F8F] tabular-nums"
+                title={u.tokens ? tokensBreakdown(u.tokens) : undefined}
+              >
+                {u.tokens && tokensTotal(u.tokens) > 0 ? fmtTokensCompact(tokensTotal(u.tokens)) : '—'}
+              </td>
+            )}
+            {claude && <td className={cell}>{fmtUsd(u.codeUsd)}</td>}
+            {claude && <td className={cell}>{fmtUsd(u.coworkUsd)}</td>}
+            {openai && <td className={cell}>{fmtUsd(u.chatgptUsd ?? 0)}</td>}
+            {openai && <td className={cell}>{fmtUsd(u.codexUsd ?? 0)}</td>}
             <td className="px-2 py-2 pr-4 text-right font-medium text-[#0A0A0A] tabular-nums">{fmtUsd(u.totalUsd)}</td>
           </tr>
         ))}
@@ -184,6 +226,8 @@ function CentreRow({
   unallocated = false,
   open,
   onToggle,
+  openai,
+  openaiOnly,
 }: {
   name: string;
   code?: string | null;
@@ -193,6 +237,8 @@ function CentreRow({
   unallocated?: boolean;
   open: boolean;
   onToggle: () => void;
+  openai: boolean;
+  openaiOnly: boolean;
 }) {
   const share = grandTotalUsd > 0 ? totalUsd / grandTotalUsd : 0;
   return (
@@ -222,7 +268,7 @@ function CentreRow({
       {open && (
         <tr className="border-t border-[#F2F2F2]">
           <td colSpan={5} className="p-0">
-            <div className="overflow-x-auto"><UserTable users={users} /></div>
+            <div className="overflow-x-auto"><UserTable users={users} openai={openai} openaiOnly={openaiOnly} /></div>
           </td>
         </tr>
       )}
@@ -246,6 +292,8 @@ export default function CostChargebackPage() {
   const [closeError, setCloseError] = useState<string | null>(null);
   const [trend, setTrend] = useState<SpendTrend | null>(null);
   const [openCentres, setOpenCentres] = useState<Set<string>>(() => new Set());
+  // Only OpenAI connected: no Claude tiles, columns or notes.
+  const openaiOnly = useOpenAiOnly();
 
   useEffect(() => {
     fetch('/api/admin/session').then(r => r.json())
@@ -346,6 +394,13 @@ export default function CostChargebackPage() {
   ];
   const allOpen = centreKeys.length > 0 && centreKeys.every(k => openCentres.has(k));
   const centreCount = report.costCentres.length;
+  const openai = report.vendors !== undefined;
+  const claudeShown = !openai || !openaiOnly;
+  const basisTag = !openai
+    ? 'Code estimated · Cowork actual'
+    : openaiOnly
+      ? "ChatGPT and Codex at OpenAI's USD token rates"
+      : "Claude Code estimated · Claude Cowork actual · ChatGPT and Codex at OpenAI's USD token rates";
 
   return (
     <>
@@ -383,7 +438,7 @@ export default function CostChargebackPage() {
                     {fmtTokensCompact(tokensTotal(report.surfaces.total.tokens))} tokens
                   </span>
                 )}
-                {report.surfaces && <Tag>Code estimated · Cowork actual</Tag>}
+                {report.surfaces && <Tag>{basisTag}</Tag>}
                 {report.status === 'closed' && <Pill>Closed</Pill>}
                 {report.estimated && (
                   <Tag tone="measured">
@@ -391,25 +446,43 @@ export default function CostChargebackPage() {
                   </Tag>
                 )}
               </div>
+              {openai && !openaiOnly && report.vendors && (
+                <p className="m-0 text-[13px] text-[#4D4D4D] tabular-nums">
+                  Claude {fmtUsd(report.vendors.claudeUsd)} · ChatGPT and Codex {fmtUsd(report.vendors.openaiUsd)}
+                </p>
+              )}
               {report.status === 'closed' && report.closedAt && (
                 <p className="m-0 text-[13px] text-[#8F8F8F]">
                   Closed on {new Date(report.closedAt * 1000).toLocaleDateString()}
                 </p>
               )}
-              {((report.cacheSavingsUsd != null && report.cacheSavingsUsd > 0) || (report.seats != null && isCurrentMonth)) && (
+              {report.chatgptSeats != null && isCurrentMonth && (
+                <p className="m-0 text-[13px] text-[#4D4D4D]">
+                  {report.chatgptSeats.monthlyLicenceUsd != null ? (
+                    <>
+                      ChatGPT licence: {report.chatgptSeats.licensed} seats at {fmtUsd(report.chatgptSeats.monthlyPriceUsd ?? 0)} a month, {fmtUsd(report.chatgptSeats.monthlyLicenceUsd)}.
+                      OpenAI charges it apart from usage, so it is not in the figures above.
+                    </>
+                  ) : (
+                    <>ChatGPT: {report.chatgptSeats.licensed} seats. Add the seat price in Admin → System → FinOps to see the licence cost.</>
+                  )}
+                  {' '}{report.chatgptSeats.activeUsers30d} of {report.chatgptSeats.licensed} seats used ChatGPT in the last 30 days.
+                </p>
+              )}
+              {((report.cacheSavingsUsd != null && report.cacheSavingsUsd > 0) || (report.seats != null && isCurrentMonth && claudeShown)) && (
                 <div className="flex gap-x-5 gap-y-1 flex-wrap text-[13px]">
                   {report.cacheSavingsUsd != null && report.cacheSavingsUsd > 0 && (
                     <span className="text-[#245BF3]">
                       Prompt caching saved about {fmtUsd(report.cacheSavingsUsd)} this month (estimate, at list rates)
                     </span>
                   )}
-                  {report.seats != null && isCurrentMonth && (
+                  {report.seats != null && isCurrentMonth && claudeShown && (
                     <span className="text-[#4D4D4D]">
                       {report.seats.unused === 0 ? (
-                        'All licensed seats active in the last 30 days.'
+                        openai ? 'All licensed Claude seats active in the last 30 days.' : 'All licensed seats active in the last 30 days.'
                       ) : (
                         <>
-                          {report.seats.unused} of {report.seats.licensed} licensed seats unused in the last 30 days
+                          {report.seats.unused} of {report.seats.licensed} licensed {openai ? 'Claude ' : ''}seats unused in the last 30 days
                           {report.seats.estUnusedUsd != null && (
                             <span className="text-[#2451F3]">
                               {' '}(about {fmtUsd(report.seats.estUnusedUsd)} a month, estimate, for visibility, not billing)
@@ -423,14 +496,23 @@ export default function CostChargebackPage() {
               )}
               <details className="text-[13px] text-[#8F8F8F]">
                 <summary className="cursor-pointer select-none hover:text-[#4D4D4D] w-fit">
-                  Why this differs from your Anthropic invoice
+                  {!openai ? 'Why this differs from your Anthropic invoice' : openaiOnly ? 'Why this differs from your OpenAI invoice' : 'Why this differs from your Anthropic and OpenAI invoices'}
                 </summary>
-                <p className="m-0 mt-1.5 leading-5 max-w-2xl">
-                  Code spend is estimated from token usage at published list rates. Actual Anthropic, Bedrock, or
-                  Vertex billing may include volume discounts, credits, or different regional pricing. Cowork spend
-                  reflects the actual per-request API cost recorded at the time. Neither figure includes non-Claude
-                  usage, taxes, or account-level adjustments.
-                </p>
+                {claudeShown && (
+                  <p className="m-0 mt-1.5 leading-5 max-w-2xl">
+                    {openai ? 'Claude Code' : 'Code'} spend is estimated from token usage at published list rates. Actual Anthropic, Bedrock, or
+                    Vertex billing may include volume discounts, credits, or different regional pricing. {openai ? 'Claude Cowork' : 'Cowork'} spend
+                    reflects the actual per-request API cost recorded at the time. Neither figure includes {openai ? '' : 'non-Claude usage, '}taxes or
+                    account-level adjustments.
+                  </p>
+                )}
+                {openai && (
+                  <p className="m-0 mt-1.5 leading-5 max-w-2xl">
+                    ChatGPT and Codex spend is priced from token usage at OpenAI&apos;s published USD rates for token-based
+                    Enterprise contracts. A credit-based contract, negotiated discounts, seat fees, taxes and account-level
+                    adjustments are not reflected. The ChatGPT licence is shown on its own line, never added to usage.
+                  </p>
+                )}
               </details>
             </div>
 
@@ -443,7 +525,7 @@ export default function CostChargebackPage() {
             )}
 
             {/* By-surface strip */}
-            {report.surfaces && <SurfaceTiles surfaces={report.surfaces} />}
+            {report.surfaces && <SurfaceTiles surfaces={report.surfaces} openaiOnly={openaiOnly} />}
 
             {/* Claude in Office: an estimate beside the strip, never in its totals */}
             <OfficeSpendPanel data={report.office} />
@@ -456,12 +538,14 @@ export default function CostChargebackPage() {
               trend={trend}
               monthToDate={report.monthToDate}
               projection={report.projection ?? null}
-              costCentreTotals={report.costCentres.map(c => c.totalUsd)}
+              projectionByVendor={report.projectionByVendor ?? null}
+              costCentres={report.costCentres}
+              openaiOnly={openaiOnly}
             />
 
             {/* Top spenders + this-month insight */}
             <div className="grid grid-cols-1 lg:grid-cols-[minmax(0,3fr)_minmax(0,2fr)] gap-4">
-              <Leaderboard leaderboard={report.leaderboard ?? []} period={period} />
+              <Leaderboard leaderboard={report.leaderboard ?? []} period={period} openaiOnly={openaiOnly} />
               <InsightCard insight={report.insight ?? null} dataQualityNotes={dataQualityNotes} />
             </div>
 
@@ -503,6 +587,8 @@ export default function CostChargebackPage() {
                           grandTotalUsd={report.grandTotalUsd}
                           open={openCentres.has(`centre:${centre.name}`)}
                           onToggle={() => toggleCentre(`centre:${centre.name}`)}
+                          openai={openai}
+                          openaiOnly={openaiOnly}
                         />
                       ))}
                       {report.unallocated.users.length > 0 && (
@@ -514,6 +600,8 @@ export default function CostChargebackPage() {
                           unallocated
                           open={openCentres.has('unallocated')}
                           onToggle={() => toggleCentre('unallocated')}
+                          openai={openai}
+                          openaiOnly={openaiOnly}
                         />
                       )}
                     </tbody>

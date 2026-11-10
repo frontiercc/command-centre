@@ -2,11 +2,12 @@
 // SPDX-License-Identifier: Apache-2.0
 
 /**
- * Records when the first real Claude Code or Cowork telemetry reached this
- * install, for the dashboard's "Get started" panel (lib/setup/status.ts).
+ * Records when the first real Claude Code, Cowork, Claude Chat or OpenAI
+ * prompts reached this install, for the dashboard's "Get started" panel
+ * (lib/setup/status.ts).
  *
- * Called only by the OTel ingest route, so sample data, which is written
- * straight into the tables, never sets it. The first arrival is kept: the
+ * Called only by the OTel ingest route and the Compliance and OpenAI syncs,
+ * so sample data, which is written straight into the tables, never sets it. The first arrival is kept: the
  * insert does nothing once the key exists, and each process stops writing
  * after its first success.
  */
@@ -14,11 +15,13 @@ import { getTypedClient } from '@/lib/db/client';
 import { schema } from '@/lib/db/schema';
 import { logError } from '@/lib/api/errors';
 
-export type SetupProduct = 'code' | 'cowork';
+export type SetupProduct = 'code' | 'cowork' | 'chat' | 'openai';
 
 export const FIRST_TELEMETRY_KEYS: Record<SetupProduct, string> = {
   code: 'setup_first_code_at',
   cowork: 'setup_first_cowork_at',
+  chat: 'setup_first_chat_at',
+  openai: 'setup_first_openai_at',
 };
 
 const noted = new Set<SetupProduct>();

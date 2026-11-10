@@ -1,11 +1,12 @@
 // Copyright 2026 Lee James
 // SPDX-License-Identifier: Apache-2.0
 
+import { OPENAI_USER_SOURCE } from '@/lib/openai/sources';
 import { and, eq, gte, sql } from 'drizzle-orm';
 import { getConfigValue, getDataSourceStatus } from '@/lib/config';
 import { getTypedClient } from '@/lib/db/client';
 import { schema } from '@/lib/db/schema';
-import { getOpenAlertsBySeverity, getSurfaceBreakdown, getChatFlaggedCount } from '@/lib/db/queries';
+import { getOpenAlertsBySeverity, getSurfaceBreakdown } from '@/lib/db/queries';
 import { PII_PATTERNS } from '@/lib/pii/detect';
 
 // ─── Helpers ──────────────────────────────────────────────────────────────
@@ -20,26 +21,29 @@ function capitalize(s: string): string {
 }
 
 /**
- * Count PII detections in the report period (occurred_at >= startUnix):
- *   1. chat_messages flagged
- *   2. cowork_messages flagged (Cowork and Code)
- * Each PII alert is raised from one of these flagged prompts, so the alerts
- * table is deliberately NOT added — it would count the same detection twice.
- * (A query against a non-existent compliance_events.alert_type column used to
- * sit here; it always failed silently and added 0. Removed, along
- * with the chat count ignoring the report period.)
+ * Count personal-data detections in the report period [startUnix, endUnix):
+ * prompts whose flag reason records a personal-data match ("PII detected: …",
+ * lib/pii/flag-reason.ts), from every product, Claude's and OpenAI's. A prompt
+ * flagged only for risky intent ("Intent detected: …") is not a personal-data
+ * detection and is not counted. Each PII alert is raised from one of these
+ * prompts, so the alerts table is deliberately NOT added: it would count the
+ * same detection twice. A match the confirmation check dismissed is still
+ * counted: the pattern matched and was reviewed.
  */
-async function countPiiDetections(startUnix: number): Promise<number> {
+async function countPiiDetections(startUnix: number, endUnix: number = Number.MAX_SAFE_INTEGER): Promise<number> {
   let total = 0;
-
-  total += await getChatFlaggedCount(startUnix);
 
   try {
     const db = await getTypedClient();
     const rows = await db
       .select({ count: sql<number | string>`count(*)` })
       .from(schema.coworkMessages)
-      .where(and(eq(schema.coworkMessages.flagged, 1), gte(schema.coworkMessages.occurred_at, startUnix)));
+      .where(and(
+        eq(schema.coworkMessages.flagged, 1),
+        sql`${schema.coworkMessages.flag_reason} LIKE 'PII detected:%'`,
+        gte(schema.coworkMessages.occurred_at, startUnix),
+        sql`${schema.coworkMessages.occurred_at} < ${endUnix}`,
+      ));
     total += Number(rows[0]?.count ?? 0);
   } catch { /* table may not exist */ }
 
@@ -61,7 +65,7 @@ export async function buildGdprSection(periodStart: string, periodEnd: string): 
   const retentionMode = await getConfigValue('retentionMode') || 'strip';
   const archiveEnabled = await getConfigValue('archiveEnabled') === 'true';
 
-  const piiCount = await countPiiDetections(startUnix);
+  const piiCount = await countPiiDetections(startUnix, toUnix(periodEnd) + 86400);
 
   const dpoStatus = dpo ? dpo : '**Not declared**';
 
@@ -122,7 +126,7 @@ export async function buildLgpdSection(periodStart: string, periodEnd: string): 
   const retentionMode = await getConfigValue('retentionMode') || 'strip';
   const archiveEnabled = await getConfigValue('archiveEnabled') === 'true';
 
-  const piiCount = await countPiiDetections(startUnix);
+  const piiCount = await countPiiDetections(startUnix, toUnix(periodEnd) + 86400);
 
   const encarregadoStatus = encarregado ? encarregado : '**Not declared**';
 
@@ -249,8 +253,9 @@ export async function buildIso27001Section(periodStart: string, periodEnd: strin
   const totalOpen = Object.values(alertCounts).reduce((a, b) => a + b, 0);
   const incidentStatus = `${totalOpen} open (${alertCounts.high ?? 0} high, ${alertCounts.medium ?? 0} medium)`;
 
-  // Access control: OTel users
+  // Access control: people first seen through Claude's telemetry, and through OpenAI's Compliance API.
   let otelUserCount = 0;
+  let openaiUserCount = 0;
   try {
     const db = await getTypedClient();
     const otelRows = await db
@@ -258,10 +263,17 @@ export async function buildIso27001Section(periodStart: string, periodEnd: strin
       .from(schema.users)
       .where(eq(schema.users.source, 'otel'));
     otelUserCount = Number(otelRows[0]?.count ?? 0);
+    const openaiRows = await db
+      .select({ count: sql<number | string>`count(*)` })
+      .from(schema.users)
+      .where(eq(schema.users.source, OPENAI_USER_SOURCE));
+    openaiUserCount = Number(openaiRows[0]?.count ?? 0);
   } catch { /* users table may not exist */ }
 
-  const accessControlStatus = otelUserCount > 0
-    ? `${otelUserCount} OTel user${otelUserCount !== 1 ? 's' : ''}`
+  const otelPart = otelUserCount > 0 ? `${otelUserCount} OTel user${otelUserCount !== 1 ? 's' : ''}` : null;
+  const openaiPart = openaiUserCount > 0 ? `${openaiUserCount} first seen through OpenAI's Compliance API` : null;
+  const accessControlStatus = otelPart || openaiPart
+    ? [otelPart, openaiPart].filter(Boolean).join('; ')
     : 'No OTel users registered';
 
   // Audit logging — count surfaces with data
@@ -271,11 +283,13 @@ export async function buildIso27001Section(periodStart: string, periodEnd: strin
     surfaceData = await getSurfaceBreakdown();
   } catch { /* graceful degradation */ }
 
-  const surfaces = [];
+  const surfaces: string[] = [];
   if (surfaceData.chat > 0) surfaces.push('Chat');
   if (surfaceData.code > 0) surfaces.push('Code');
   if (surfaceData.agentCowork > 0) surfaces.push('Cowork (Agent)');
   if (surfaceData.otelCowork > 0) surfaces.push('Cowork (OTel)');
+  const products = await productsWithData();
+  if (products) surfaces.splice(0, surfaces.length, ...products);
 
   const auditStatus = surfaces.length > 0
     ? `Logging active on ${surfaces.length} surface${surfaces.length !== 1 ? 's' : ''}: ${surfaces.join(', ')}`
@@ -327,6 +341,19 @@ export async function buildIso27001Section(periodStart: string, periodEnd: strin
   ].join('\n');
 }
 
+/**
+ * With ChatGPT or Codex captured, the products that have logged prompts, by
+ * name (Claude Chat, Claude Cowork, Claude Code, ChatGPT Chat, ChatGPT Work,
+ * Codex). Null on a Claude-only installation, which keeps its surface list.
+ */
+async function productsWithData(): Promise<string[] | null> {
+  try {
+    const { getProductFigures } = await import('@/lib/reports/product-figures');
+    const figures = await getProductFigures(0, 0);
+    return figures.some(f => f.vendor === 'openai') ? figures.map(f => f.label) : null;
+  } catch { return null; }
+}
+
 // ─── ISO/IEC 42001:2023 Section ─────────────────────────────────────────
 
 /**
@@ -339,7 +366,7 @@ export async function buildIso42001Section(periodStart: string, periodEnd: strin
   const assessmentStatus = await getConfigValue('iso42001AssessmentStatus') || 'not-started';
   const acceptableUsePolicy = await getConfigValue('acceptableUsePolicy');
 
-  const piiCount = await countPiiDetections(startUnix);
+  const piiCount = await countPiiDetections(startUnix, toUnix(periodEnd) + 86400);
 
   // Surface tracking
   let surfaceData: { chat: number; code: number; agentCowork: number; otelCowork: number } = { chat: 0, code: 0, agentCowork: 0, otelCowork: 0 };
@@ -348,11 +375,14 @@ export async function buildIso42001Section(periodStart: string, periodEnd: strin
     surfaceData = await getSurfaceBreakdown();
   } catch { /* graceful degradation */ }
 
-  const surfacesWithData = [];
+  const surfacesWithData: string[] = [];
   if (surfaceData.chat > 0) surfacesWithData.push('Chat');
   if (surfaceData.code > 0) surfacesWithData.push('Code');
   if (surfaceData.agentCowork > 0) surfacesWithData.push('Cowork (Agent)');
   if (surfaceData.otelCowork > 0) surfacesWithData.push('Cowork (OTel)');
+  // With ChatGPT or Codex captured, every AI product in use, by name.
+  const products = await productsWithData();
+  if (products) surfacesWithData.splice(0, surfacesWithData.length, ...products);
 
   // Alert system
   let alertCounts: Record<string, number> = { low: 0, medium: 0, high: 0, critical: 0 };
@@ -367,7 +397,9 @@ export async function buildIso42001Section(periodStart: string, periodEnd: strin
     ? '**Not started**'
     : capitalize(assessmentStatus);
   const policyStatus = acceptableUsePolicy ? 'Declared' : '**Not declared**';
-  const inventoryStatus = `${surfacesWithData.length} surface${surfacesWithData.length !== 1 ? 's' : ''} active`;
+  const inventoryStatus = products
+    ? `${products.length} AI product${products.length !== 1 ? 's' : ''} in use: ${products.join(', ')}`
+    : `${surfacesWithData.length} surface${surfacesWithData.length !== 1 ? 's' : ''} active`;
   const dataQualityStatus = `${PII_PATTERNS.length} detection patterns (${piiCount} detection${piiCount !== 1 ? 's' : ''} in period)`;
   const loggingStatus = surfacesWithData.length > 0
     ? `Active on ${surfacesWithData.join(', ')}`

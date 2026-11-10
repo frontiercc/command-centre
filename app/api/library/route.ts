@@ -24,6 +24,8 @@
 //
 // Case-insensitive search: the `q` name/description search uses
 // ILIKE, since Postgres LIKE is case-sensitive.
+import { entryProducts } from '@/lib/library/products';
+import { boardUses, hideOpenAiOnlyEntries } from '@/lib/library/visible-uses';
 import { NextRequest, NextResponse } from 'next/server';
 import { normaliseSourceUrl, SOURCE_URL_ERROR } from '@/lib/library/source-url';
 import { callerPersonId } from '@/lib/library/author';
@@ -117,7 +119,10 @@ export async function GET(req: NextRequest) {
     ? sql`(${sql.join(callerDepts.map(d => sql`e.department = ${d}`), sql` OR `)})`
     : sql`false`;
 
+  // ChatGPT and Codex hidden (the OpenAI panel): the Board counts Claude's uses only.
+  const uses = await boardUses();
   const conditions: SQL[] = [];
+  if (!uses.shown) conditions.push(hideOpenAiOnlyEntries());
   if (type) conditions.push(sql`e.type = ${type}`);
   if (surface && surface !== 'both') conditions.push(sql`(e.surface = ${surface} OR e.surface = 'both')`);
   if (surface === 'both') conditions.push(sql`e.surface = 'both'`);
@@ -169,7 +174,7 @@ export async function GET(req: NextRequest) {
     LEFT JOIN users u ON u.id = e.author_user_id
     LEFT JOIN (
       SELECT skill_name, COUNT(*) AS cnt, COUNT(DISTINCT user_id) AS ucnt
-      FROM cowork_skill_invocations
+      FROM ${uses.skills}
       GROUP BY skill_name
     ) inv ON inv.skill_name = e.name
     LEFT JOIN (
@@ -180,13 +185,13 @@ export async function GET(req: NextRequest) {
     ) mv ON mv.entry_id = e.id
     LEFT JOIN (
       SELECT skill_name, COUNT(*) AS wcnt
-      FROM cowork_skill_invocations
+      FROM ${uses.skills}
       WHERE occurred_at >= ${weekAgo}
       GROUP BY skill_name
     ) wk ON wk.skill_name = e.name
     LEFT JOIN (
       SELECT skill_name, COUNT(*) AS pcnt
-      FROM cowork_skill_invocations
+      FROM ${uses.skills}
       WHERE occurred_at >= ${twoWeeksAgo} AND occurred_at < ${weekAgo}
       GROUP BY skill_name
     ) pw ON pw.skill_name = e.name
@@ -257,7 +262,7 @@ export async function GET(req: NextRequest) {
   const weekInvRows = await client
     .select({ cnt: sql<number | string>`COUNT(*)` })
     .from(csi)
-    .where(gte(csi.occurred_at, weekAgo));
+    .where(and(gte(csi.occurred_at, weekAgo), uses.claudeOnly));
   const weekInvCount = Number(weekInvRows[0]?.cnt ?? 0);
 
   const newThisWeekRows = await client
@@ -281,8 +286,8 @@ export async function GET(req: NextRequest) {
       COALESCE(c.connector_count, 0) AS connector_count,
       COALESCE(s.skill_count, 0) + COALESCE(c.connector_count, 0) AS total_count
     FROM users u
-    LEFT JOIN (SELECT user_id, COUNT(*) AS skill_count FROM cowork_skill_invocations GROUP BY user_id) s ON s.user_id = u.id
-    LEFT JOIN (SELECT user_id, COUNT(*) AS connector_count FROM cowork_mcp_invocations WHERE mcp_server NOT IN ('workspace', 'cowork', 'Claude_in_Chrome') GROUP BY user_id) c ON c.user_id = u.id
+    LEFT JOIN (SELECT user_id, COUNT(*) AS skill_count FROM ${uses.skills} GROUP BY user_id) s ON s.user_id = u.id
+    LEFT JOIN (SELECT user_id, COUNT(*) AS connector_count FROM ${uses.connectors} WHERE mcp_server NOT IN ('workspace', 'cowork', 'Claude_in_Chrome') GROUP BY user_id) c ON c.user_id = u.id
     WHERE COALESCE(s.skill_count, 0) + COALESCE(c.connector_count, 0) > 0
     ORDER BY total_count DESC
     LIMIT 5
@@ -301,7 +306,7 @@ export async function GET(req: NextRequest) {
     ? await client
         .select({ user_id: csi.user_id, skill_name: csi.skill_name, cnt: sql<number | string>`COUNT(*)` })
         .from(csi)
-        .where(inArray(csi.user_id, leaderboardIds))
+        .where(and(inArray(csi.user_id, leaderboardIds), uses.claudeOnly))
         .groupBy(csi.user_id, csi.skill_name)
         .orderBy(csi.user_id, desc(sql`COUNT(*)`))
     : [];
@@ -311,7 +316,7 @@ export async function GET(req: NextRequest) {
     ? await client
         .select({ user_id: cmi.user_id, mcp_server: cmi.mcp_server, cnt: sql<number | string>`COUNT(*)` })
         .from(cmi)
-        .where(and(inArray(cmi.user_id, leaderboardIds), notInArray(cmi.mcp_server, EXCLUDED_MCP_SERVERS)))
+        .where(and(inArray(cmi.user_id, leaderboardIds), notInArray(cmi.mcp_server, EXCLUDED_MCP_SERVERS), uses.claudeOnly))
         .groupBy(cmi.user_id, cmi.mcp_server)
         .orderBy(cmi.user_id, desc(sql`COUNT(*)`))
     : [];
@@ -348,8 +353,8 @@ export async function GET(req: NextRequest) {
         COALESCE(s.skill_count, 0) + COALESCE(c.connector_count, 0) AS total_count,
         ROW_NUMBER() OVER (ORDER BY COALESCE(s.skill_count, 0) + COALESCE(c.connector_count, 0) DESC) AS rank
       FROM users u
-      LEFT JOIN (SELECT user_id, COUNT(*) AS skill_count FROM cowork_skill_invocations GROUP BY user_id) s ON s.user_id = u.id
-      LEFT JOIN (SELECT user_id, COUNT(*) AS connector_count FROM cowork_mcp_invocations WHERE mcp_server NOT IN ('workspace', 'cowork', 'Claude_in_Chrome') GROUP BY user_id) c ON c.user_id = u.id
+      LEFT JOIN (SELECT user_id, COUNT(*) AS skill_count FROM ${uses.skills} GROUP BY user_id) s ON s.user_id = u.id
+      LEFT JOIN (SELECT user_id, COUNT(*) AS connector_count FROM ${uses.connectors} WHERE mcp_server NOT IN ('workspace', 'cowork', 'Claude_in_Chrome') GROUP BY user_id) c ON c.user_id = u.id
       WHERE COALESCE(s.skill_count, 0) + COALESCE(c.connector_count, 0) > 0
     ) ranked
     WHERE ranked.user_id = ${userId}
@@ -375,13 +380,13 @@ export async function GET(req: NextRequest) {
     FROM skill_library_entries e
     JOIN (
       SELECT skill_name, COUNT(*) AS cnt, COUNT(DISTINCT user_id) AS ucnt
-      FROM cowork_skill_invocations
+      FROM ${uses.skills}
       GROUP BY skill_name
     ) inv ON inv.skill_name = e.name
     WHERE e.is_published = 1 AND e.source = 'org'
     AND (e.department IS NULL OR ${deptOr})
     AND e.name NOT IN (
-      SELECT DISTINCT skill_name FROM cowork_skill_invocations WHERE user_id = ${userId}
+      SELECT DISTINCT skill_name FROM ${uses.skills} WHERE user_id = ${userId}
     )
     ORDER BY invocation_count DESC
     LIMIT 5
@@ -439,12 +444,12 @@ export async function GET(req: NextRequest) {
     FROM users u
     LEFT JOIN (
       SELECT user_id, COUNT(*) AS skill_count
-      FROM cowork_skill_invocations
+      FROM ${uses.skills}
       GROUP BY user_id
     ) s ON s.user_id = u.id
     LEFT JOIN (
       SELECT user_id, COUNT(*) AS connector_count
-      FROM cowork_mcp_invocations
+      FROM ${uses.connectors}
       WHERE mcp_server NOT IN ('workspace', 'cowork', 'Claude_in_Chrome')
       GROUP BY user_id
     ) c ON c.user_id = u.id
@@ -463,6 +468,8 @@ export async function GET(req: NextRequest) {
   }));
 
   const readWriteCounts = await getConnectorReadWriteCounts();
+  // Which products each entry is used in (Claude, ChatGPT, Codex), for its tags.
+  const products = await entryProducts(rows, uses.shown);
 
   const entries = rows.map(r => {
     const rw = r.type === 'connector' ? readWriteCounts.get(r.name) : undefined;
@@ -474,6 +481,7 @@ export async function GET(req: NextRequest) {
         ? Math.round(((weekCountNum - prevWeekCountNum) / prevWeekCountNum) * 100)
         : weekCountNum > 0 ? 100 : 0,
       ...(rw ? { reads: rw.reads, writes: rw.writes } : {}),
+      products: products.get(r.name) ?? [],
     };
   });
 

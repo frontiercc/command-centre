@@ -10,20 +10,31 @@
  */
 import { useCallback, useEffect, useState } from 'react';
 import { Panel, Muted, Notice, Segmented, Chip, Tag, B, cx } from '@/components/precision/ui';
+import { useConnectedProducts } from '@/components/shared/VendorSwitch';
 
 type Surface = 'cowork' | 'code';
 type Verdict = 'about_right' | 'too_high' | 'too_low';
+type Product = 'claude_cowork' | 'chatgpt' | 'claude_code' | 'codex';
 interface Item {
   id: number;
   sessionId: string;
+  product?: Product;
   firstPrompt: string | null;
   prompts: number;
-  toolCalls: number;
+  toolCalls: number | null;
   claudeMinutes: number | null;
   estimate: { low: number | null; likely: number; high: number | null };
   verdict: Verdict | null;
   correctedMinutes: number | null;
 }
+
+const PRODUCT_LABEL: Record<Product, string> = {
+  claude_cowork: 'Claude Cowork', chatgpt: 'ChatGPT', claude_code: 'Claude Code', codex: 'Codex',
+};
+/** Who the measured time was spent with: "with Claude", "with ChatGPT", "with Codex". */
+const WITH_LABEL: Record<Product, string> = {
+  claude_cowork: 'Claude', chatgpt: 'ChatGPT', claude_code: 'Claude', codex: 'Codex',
+};
 
 const VERDICT_LABEL: Record<Verdict, string> = { about_right: 'About right', too_high: 'Too high', too_low: 'Too low' };
 
@@ -40,6 +51,8 @@ export default function HumanTimeChecks() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [corrected, setCorrected] = useState<Record<number, string>>({});
+  // Once ChatGPT and Codex are shown, the Work sample takes ChatGPT conversations too, and each item names its product.
+  const openai = !!useConnectedProducts()?.openai;
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -92,7 +105,7 @@ export default function HumanTimeChecks() {
           label="Surface"
           value={surface}
           onChange={setSurface}
-          options={[{ value: 'cowork', label: 'Cowork' }, { value: 'code', label: 'Code' }]}
+          options={[{ value: 'cowork', label: openai ? 'Work' : 'Claude Cowork' }, { value: 'code', label: 'Code' }]}
         />
       }
       flush
@@ -119,7 +132,9 @@ export default function HumanTimeChecks() {
               <div key={i.id} className="px-4 py-3 border-t border-[#F2F2F2]">
                 <p className="m-0 text-[14px] text-[#0A0A0A] whitespace-pre-wrap break-words">{i.firstPrompt ?? <span className="text-[#8F8F8F]">No readable prompt (removed by retention)</span>}</p>
                 <p className="m-0 mt-1.5 text-[13px] text-[#8F8F8F] tabular-nums">
-                  {i.prompts} prompts · {i.toolCalls} tool calls · <span className="text-[#05073F] font-medium">{hrs(i.claudeMinutes)} with Claude</span> ·{' '}
+                  {openai && i.product && <>{PRODUCT_LABEL[i.product]} · </>}
+                  {i.prompts} prompts · {i.toolCalls !== null ? `${i.toolCalls} tool calls` : 'tool calls not measured'} ·{' '}
+                  <span className="text-[#05073F] font-medium">{hrs(i.claudeMinutes)} with {i.product ? WITH_LABEL[i.product] : 'Claude'}</span> ·{' '}
                   <span className="text-[#2451F3]">estimate {hrs(i.estimate.likely)} by hand{i.estimate.low !== null && i.estimate.high !== null ? ` (${hrs(i.estimate.low)}–${hrs(i.estimate.high)})` : ''}</span>
                 </p>
                 <div className="flex items-center gap-2 mt-2 flex-wrap">

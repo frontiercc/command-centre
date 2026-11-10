@@ -7,6 +7,7 @@ import { useEffect, useState } from 'react';
 import Link from 'next/link';
 import GenerateBriefingButton from '@/components/pulse/GenerateBriefingButton';
 import { Panel, Muted, Tag, B, T, cx } from '@/components/precision/ui';
+import { PRODUCTS } from '@/lib/dashboard/vendor';
 
 interface UserRow {
   id: string;
@@ -23,6 +24,8 @@ interface UserRow {
   last_briefing_at: number | null;
   last_active_at: number | null;
   pending_count: number;
+  /** Work Pulse products used in the last 30 days. */
+  products?: string[];
   failed_count: number;
 }
 
@@ -106,6 +109,8 @@ export default function UsersTab() {
   });
 
   const sorted = sortUsers(filtered, sortKey, sortAsc);
+  // Product tags only once someone has used ChatGPT, so a Claude-only hub looks as before.
+  const showProducts = users.some(u => (u.products ?? []).some(p => p.startsWith('chatgpt')));
 
   const SortHdr = ({ k, label, right = false }: { k: SortKey; label: string; right?: boolean }) => (
     <th
@@ -164,6 +169,13 @@ export default function UsersTab() {
                   <div className="min-w-0">
                     <p className="m-0 font-medium text-[#0A0A0A]">{u.display_name ?? u.email}</p>
                     {u.display_name && <p className="m-0 text-[13px] text-[#8F8F8F]">{u.email}</p>}
+                    {showProducts && (u.products ?? []).length > 0 && (
+                      <p className="m-0 mt-1 flex flex-wrap gap-1">
+                        {PRODUCTS.filter(p => (u.products ?? []).includes(p.id)).map(p => (
+                          <Tag key={p.id} tone="neutral">{p.label}</Tag>
+                        ))}
+                      </p>
+                    )}
                   </div>
                 </td>
                 <td className={T.tdMute}>{u.department ?? '—'}</td>

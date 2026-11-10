@@ -14,6 +14,10 @@ import { getTypedClient } from '@/lib/db/client';
 import { schema } from '@/lib/db/schema';
 import { getWeeklySeries, type WeeklyPoint } from '@/lib/pulse/trends';
 import { getCoworkCostUsd } from '@/lib/pulse/aggregator';
+import { readCodeMetrics, hasCodexData } from '@/lib/pulse/code/vendor-view';
+import { chatgptCostUsd } from '@/lib/openai/spend';
+import { openaiShown } from '@/lib/sources/openai-visibility';
+import { kindClause } from '@/lib/dashboard/product-sql';
 
 export type SeriesPoint = WeeklyPoint;
 
@@ -27,7 +31,13 @@ export interface Person360 {
     engagedHours: number | null; linesAdded: number; editAcceptRate: number | null;
   } | null;
   chat: { messages7d: number } | null;
-  combinedSpend: { codeUsd: number | null; coworkUsd: number; totalUsd: number | null; totalIsPartial?: boolean };
+  combinedSpend: {
+    codeUsd: number | null; coworkUsd: number; totalUsd: number | null; totalIsPartial?: boolean;
+    /** ChatGPT spend, 7 days; null when ChatGPT is not connected or hidden, or has no cost records. */
+    chatgptUsd?: number | null;
+    /** True when the Code figure includes Codex as well as Claude Code. */
+    codeIncludesCodex?: boolean;
+  };
   weekly: { codeSpend: SeriesPoint[]; coworkEvents: SeriesPoint[] };
 }
 
@@ -73,9 +83,11 @@ export async function getPerson360(userId: string): Promise<Person360> {
       }
     : null;
 
-  // Code — latest user-scope rolling code_metrics row.
-  const cm = schema.codeMetrics;
-  const codeRows = await client
+  // Code — latest user-scope rolling row: Claude Code and, once it has
+  // arrived, Codex (Developer Pulse's All view, lib/pulse/code/vendor-view.ts).
+  const shown = await openaiShown();
+  const codexPresent = shown && await hasCodexData();
+  const codeRows = await readCodeMetrics('all', codexPresent, (cm, only) => client
     .select({
       spend_usd: cm.spend_usd,
       session_count: cm.session_count,
@@ -88,9 +100,9 @@ export async function getPerson360(userId: string): Promise<Person360> {
       edit_reject_count: cm.edit_reject_count,
     })
     .from(cm)
-    .where(and(eq(cm.scope_type, 'user'), eq(cm.scope_id, userId), eq(cm.granularity, 'rolling')))
+    .where(and(eq(cm.scope_type, 'user'), eq(cm.scope_id, userId), eq(cm.granularity, 'rolling'), only))
     .orderBy(desc(cm.computed_at))
-    .limit(1);
+    .limit(1));
   const codeRow = codeRows[0];
 
   const code = codeRow
@@ -108,33 +120,38 @@ export async function getPerson360(userId: string): Promise<Person360> {
       }
     : null;
 
-  // Chat — message count in the last 7 days.
-  const chat_t = schema.chatMessages;
+  // Chat — message count in the last 7 days: Claude Chat (surface 'chat') and
+  // ChatGPT Chat (source 'chatgpt_chat'), the dashboard's Chat kind of work.
+  const chat_t = schema.coworkMessages;
   const chatRows = await client
     .select({ cnt: sql<number | string>`count(*)` })
     .from(chat_t)
-    .where(and(eq(chat_t.user_id, userId), gte(chat_t.occurred_at, sevenDaysAgo)));
+    .where(and(eq(chat_t.user_id, userId), sql.raw(kindClause('chat', 'cowork_messages.')), gte(chat_t.occurred_at, sevenDaysAgo)));
   // Policy B: COUNT(*) comes back as a string on pg.
   const chat = { messages7d: Number(chatRows[0]?.cnt ?? 0) };
 
-  // Combined spend: code (priced) + cowork (OTel-priced), 7-day window.
+  // Combined spend, 7-day window: code (Claude Code and Codex, priced) +
+  // Claude Cowork (OTel-priced) + ChatGPT (priced from its cost records).
   const codeUsd = code?.spendUsd ?? null;
   const coworkUsd = await getCoworkCostUsd(userId, sevenDaysAgo, now);
+  const chatgptUsd = shown ? await chatgptCostUsd({ since: sevenDaysAgo, userIds: [userId] }) : null;
+  const known = coworkUsd + (chatgptUsd ?? 0);
 
   let totalUsd: number | null;
   let totalIsPartial: boolean | undefined;
   if (codeUsd !== null) {
-    totalUsd = codeUsd + coworkUsd;
-  } else if (coworkUsd > 0) {
-    // Code spend unknown (unpriced model or no code data) but cowork spend is
-    // real — total is a known underestimate; the UI must flag this.
-    totalUsd = coworkUsd;
-    totalIsPartial = true;
+    totalUsd = codeUsd + known;
+  } else if (known > 0) {
+    // Code spend unknown but other spend is real. Only a person with coding
+    // activity on an unpriced model makes the total an underestimate; someone
+    // with no coding activity at all has nothing missing from it.
+    totalUsd = known;
+    totalIsPartial = code !== null;
   } else {
     totalUsd = null;
   }
 
-  const combinedSpend: Person360['combinedSpend'] = { codeUsd, coworkUsd, totalUsd };
+  const combinedSpend: Person360['combinedSpend'] = { codeUsd, coworkUsd, totalUsd, chatgptUsd, codeIncludesCodex: codexPresent };
   if (totalIsPartial) combinedSpend.totalIsPartial = true;
 
   // Weekly 8-week sparkline series.

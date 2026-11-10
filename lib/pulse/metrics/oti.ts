@@ -20,6 +20,8 @@
 import { and, eq, inArray } from 'drizzle-orm';
 import { getTypedClient } from '@/lib/db/client';
 import { schema } from '@/lib/db/schema';
+import { messageVendor } from '@/lib/pulse/vendor-filter';
+import type { Vendor } from '@/lib/dashboard/vendor';
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
@@ -114,7 +116,7 @@ export function computeOtiFromEvents(events: ClassifiedEvent[], nowS: number): O
 // ─── DB access ───────────────────────────────────────────────────────────────
 
 /** Fetch all classified events (occurred_at + tier) for a set of users, grouped by user. */
-async function getClassifiedEventsForUsers(userIds: string[]): Promise<Map<string, ClassifiedEvent[]>> {
+async function getClassifiedEventsForUsers(userIds: string[], vendor: Vendor = 'all'): Promise<Map<string, ClassifiedEvent[]>> {
   const result = new Map<string, ClassifiedEvent[]>();
   if (userIds.length === 0) return result;
 
@@ -126,7 +128,7 @@ async function getClassifiedEventsForUsers(userIds: string[]): Promise<Map<strin
     .select({ user_id: pc.user_id, occurred_at: cm.occurred_at, tier: pc.tier })
     .from(pc)
     .innerJoin(cm, eq(cm.id, pc.cowork_message_id))
-    .where(and(inArray(pc.user_id, userIds), eq(pc.classifier_status, 'classified')));
+    .where(and(inArray(pc.user_id, userIds), eq(pc.classifier_status, 'classified'), messageVendor(vendor)));
 
   for (const row of rows) {
     const list = result.get(row.user_id) ?? [];
@@ -156,14 +158,14 @@ export async function computeUserOti(userId: string): Promise<OtiResult | null> 
  * identical to calling computeUserOti(id) for each id: users with no classified
  * events map to null. Users not present in the input map to null too.
  */
-export async function computeOtiForUsers(userIds: string[]): Promise<Map<string, OtiResult | null>> {
+export async function computeOtiForUsers(userIds: string[], vendor: Vendor = 'all'): Promise<Map<string, OtiResult | null>> {
   const result = new Map<string, OtiResult | null>();
   if (userIds.length === 0) return result;
 
   for (const id of userIds) result.set(id, null);
 
   const nowS = Math.floor(Date.now() / 1000);
-  const byUser = await getClassifiedEventsForUsers(userIds);
+  const byUser = await getClassifiedEventsForUsers(userIds, vendor);
   for (const id of userIds) {
     const events = byUser.get(id);
     result.set(id, events && events.length > 0 ? computeOtiFromEvents(events, nowS) : null);

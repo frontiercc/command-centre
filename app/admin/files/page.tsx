@@ -9,6 +9,8 @@ import LoadingSpinner from '@/components/shared/LoadingSpinner';
 import type { FileUploadRow } from '@/app/api/admin/files/route';
 import FileCategoryMixCard, { type FileCategoryMixItem } from '@/components/pulse/FileCategoryMixCard';
 import { PageBody, Toolbar, Panel, Segmented, Tag, T, B, Empty, Notice, cx } from '@/components/precision/ui';
+import { useConnectedProducts } from '@/components/shared/VendorSwitch';
+import { openAiConnected } from '@/lib/sources/connected-shared';
 
 const DAY_OPTIONS = [
   { label: '7 days', value: 7 },
@@ -46,11 +48,13 @@ export default function AdminFilesPage() {
   const [files, setFiles] = useState<FileUploadRow[]>([]);
   const [categoryMix, setCategoryMix] = useState<FileCategoryMixItem[]>([]);
   const [depts, setDepts] = useState<string[]>([]);
+  const [products, setProducts] = useState<Array<{ id: string; label: string }>>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
   const [days, setDays] = useState(30);
   const [deptFilter, setDeptFilter] = useState('');
+  const [productFilter, setProductFilter] = useState('');
   const [search, setSearch] = useState('');
   const [searchInput, setSearchInput] = useState('');
 
@@ -59,15 +63,24 @@ export default function AdminFilesPage() {
     setError(null);
     const params = new URLSearchParams({ days: String(days) });
     if (deptFilter) params.set('dept', deptFilter);
+    if (productFilter) params.set('product', productFilter);
     if (search) params.set('search', search);
     fetch(`/api/admin/files?${params}`)
       .then(r => { if (!r.ok) throw new Error('load failed'); return r.json(); })
-      .then(d => { setFiles(d.files ?? []); setDepts(d.depts ?? []); setCategoryMix(d.fileCategoryMix ?? []); })
+      .then(d => { setFiles(d.files ?? []); setDepts(d.depts ?? []); setProducts(d.products ?? []); setCategoryMix(d.fileCategoryMix ?? []); })
       .catch(() => setError("Couldn't load this page. Try again."))
       .finally(() => setLoading(false));
-  }, [days, deptFilter, search]);
+  }, [days, deptFilter, productFilter, search]);
 
   useEffect(() => { load(); }, [load]);
+
+  // Where files come from on this hub. ChatGPT files are listed even while
+  // "Show ChatGPT and Codex" is off (like the Audit Log), so the raw
+  // connected fact is read, not the shown one.
+  const connected = useConnectedProducts();
+  const openai = openAiConnected(connected);
+  const claude = !connected || connected.claude || !openai;
+  const where = claude && openai ? 'Claude Cowork and ChatGPT' : openai ? 'ChatGPT' : 'Claude Cowork';
 
   // Group by date for display
   const grouped = files.reduce<Record<string, FileUploadRow[]>>((acc, row) => {
@@ -82,7 +95,7 @@ export default function AdminFilesPage() {
     <>
       <TopBar
         title="File Uploads"
-        subtitle="Files attached to Claude Cowork sessions across the org"
+        subtitle={`Files attached in ${where}`}
       />
       <PageBody className="max-w-[1000px]">
 
@@ -106,6 +119,19 @@ export default function AdminFilesPage() {
             >
               <option value="">All departments</option>
               {depts.map(d => <option key={d} value={d}>{d}</option>)}
+            </select>
+          )}
+
+          {/* Product filter: the products with any attached file */}
+          {products.length > 1 && (
+            <select
+              value={productFilter}
+              onChange={e => setProductFilter(e.target.value)}
+              aria-label="Product"
+              className={B.select}
+            >
+              <option value="">All products</option>
+              {products.map(p => <option key={p.id} value={p.id}>{p.label}</option>)}
             </select>
           )}
 
@@ -152,7 +178,7 @@ export default function AdminFilesPage() {
 
         {!loading && !error && files.length === 0 && (
           <Empty title="No file uploads found" icon="📎">
-            Files appear here when users attach documents to Cowork sessions via OTel.
+            Files appear here when people attach documents in {where === 'Claude Cowork and ChatGPT' ? 'Claude Cowork or ChatGPT' : where}.
           </Empty>
         )}
 
@@ -166,6 +192,7 @@ export default function AdminFilesPage() {
                       <tr className={T.headRow}>
                         <th scope="col" className={cx(T.th, 'w-14')}>Type</th>
                         <th scope="col" className={T.th}>Filename</th>
+                        <th scope="col" className={T.th}>Product</th>
                         <th scope="col" className={T.th}>User</th>
                         <th scope="col" className={T.th}>Department</th>
                         <th scope="col" className={T.th}>Project</th>
@@ -189,6 +216,7 @@ export default function AdminFilesPage() {
                             <td className={T.td}>
                               <span className="font-medium text-[#0A0A0A] font-mono text-[13px] break-all">{row.filename}</span>
                             </td>
+                            <td className={cx(T.tdMute, 'whitespace-nowrap')}>{row.product_label}</td>
                             <td className={T.tdMute}>
                               {row.display_name ?? row.email ?? row.user_id}
                             </td>

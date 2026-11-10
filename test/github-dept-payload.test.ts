@@ -93,7 +93,7 @@ describe('GET /api/pulse/code/dept/[dept] — githubRepos', () => {
     expect(res.status).toBe(200);
     const data = await res.json();
 
-    expect(data.githubRepos).toEqual({ count7d: 2, names7d: ['org/a', 'org/b'] });
+    expect(data.githubRepos).toEqual({ count7d: 2, names7d: ['org/a', 'org/b'], basis: 'all' });
 
     const memberA = data.members.find((m: { user_id: string }) => m.user_id === 'u1');
     const memberB = data.members.find((m: { user_id: string }) => m.user_id === 'u2');
@@ -131,11 +131,101 @@ describe('GET /api/pulse/code/dept/[dept] — githubRepos', () => {
     expect(res.status).toBe(200);
     const data = await res.json();
 
-    expect(data.githubRepos).toEqual({ count7d: 0, names7d: [] });
+    expect(data.githubRepos).toEqual({ count7d: 0, names7d: [], basis: 'all' });
 
     const memberA = data.members.find((m: { user_id: string }) => m.user_id === 'u1');
     const memberB = data.members.find((m: { user_id: string }) => m.user_id === 'u2');
     expect(memberA.github_repo_count).toBe(0);
     expect(memberB.github_repo_count).toBe(0);
+  });
+
+  it('on the Codex tab counts only repos with commits matched to Codex, dept-wide and per member', async () => {
+    await sql.run(
+      `INSERT INTO cowork_messages (id, session_id, user_id, message_type, surface, source, occurred_at)
+       VALUES ('codex:gh-dept-1', 'codex:s1', 'u1', 'code_user_message', 'code', 'codex', ?) ON CONFLICT DO NOTHING`, [NOW]
+    );
+    const insertSplit = (...params: unknown[]) => sql.run(
+      `INSERT INTO github_user_repo_stats (user_id, repo, date, commit_count, synced_at, claude_commit_count, codex_commit_count, no_tool_commit_count)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?)`, params
+    );
+    await insertSplit('u1', 'org/a', TODAY, 3, NOW, 3, 0, 0);
+    await insertSplit('u2', 'org/b', THREE_DAYS_AGO, 2, NOW, 0, 2, 0);
+    try {
+      const route = await import('../app/api/pulse/code/dept/[dept]/route');
+      const read = async (vendor: string) => (await route.GET(makeRequest(`/api/pulse/code/dept/Engineering?vendor=${vendor}`), {
+        params: Promise.resolve({ dept: 'Engineering' }),
+      })).json();
+      const codex = await read('openai');
+      expect(codex.githubRepos).toEqual({ count7d: 1, names7d: ['org/b'], basis: 'openai' });
+      const count = (d: { members: Array<{ user_id: string; github_repo_count?: number }> }, id: string) =>
+        d.members.find(m => m.user_id === id)?.github_repo_count;
+      expect(count(codex, 'u1')).toBe(0);
+      expect(count(codex, 'u2')).toBe(1);
+      const claude = await read('claude');
+      expect(claude.githubRepos).toEqual({ count7d: 1, names7d: ['org/a'], basis: 'claude' });
+      const all = await read('all');
+      expect(all.githubRepos).toEqual({ count7d: 2, names7d: ['org/a', 'org/b'], basis: 'all' });
+    } finally {
+      await sql.exec(`DELETE FROM cowork_messages WHERE id = 'codex:gh-dept-1'`);
+    }
+  });
+
+  it('on the tool tabs, rows synced before the tool split leave the card and member counts not measured', async () => {
+    await sql.run(
+      `INSERT INTO cowork_messages (id, session_id, user_id, message_type, surface, source, occurred_at)
+       VALUES ('codex:gh-dept-2', 'codex:s2', 'u1', 'code_user_message', 'code', 'codex', ?) ON CONFLICT DO NOTHING`, [NOW]
+    );
+    const insertStats = (...params: unknown[]) => sql.run(
+      `INSERT INTO github_user_repo_stats (user_id, repo, date, commit_count, synced_at) VALUES (?, ?, ?, ?, ?)`, params
+    );
+    // Recent days synced before the split; an older day (inside 35, outside 7) with it.
+    await insertStats('u1', 'org/a', TODAY, 3, NOW);
+    await insertStats('u2', 'org/b', THREE_DAYS_AGO, 2, NOW);
+    await sql.run(
+      `INSERT INTO github_user_repo_stats (user_id, repo, date, commit_count, synced_at, claude_commit_count, codex_commit_count, no_tool_commit_count)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?)`, ['u1', 'org/b', TWENTY_DAYS_AGO, 2, NOW, 1, 1, 0]
+    );
+    try {
+      const route = await import('../app/api/pulse/code/dept/[dept]/route');
+      const read = async (vendor: string) => (await route.GET(makeRequest(`/api/pulse/code/dept/Engineering?vendor=${vendor}`), {
+        params: Promise.resolve({ dept: 'Engineering' }),
+      })).json();
+      const count = (d: { members: Array<{ user_id: string; github_repo_count?: number }> }, id: string) =>
+        d.members.find(m => m.user_id === id)?.github_repo_count;
+      for (const vendor of ['claude', 'openai']) {
+        const d = await read(vendor);
+        expect(d.githubRepos).toBeNull();
+        expect(count(d, 'u1')).toBeUndefined();
+        expect(count(d, 'u2')).toBeUndefined();
+      }
+      const all = await read('all');
+      expect(all.githubRepos).toEqual({ count7d: 2, names7d: ['org/a', 'org/b'], basis: 'all' });
+      expect(count(all, 'u1')).toBe(1);
+      expect(count(all, 'u2')).toBe(1);
+    } finally {
+      await sql.exec(`DELETE FROM cowork_messages WHERE id = 'codex:gh-dept-2'`);
+    }
+  });
+
+  it('on the tool tabs, a recent row matched to no tool is a measured 0', async () => {
+    await sql.run(
+      `INSERT INTO cowork_messages (id, session_id, user_id, message_type, surface, source, occurred_at)
+       VALUES ('codex:gh-dept-3', 'codex:s3', 'u1', 'code_user_message', 'code', 'codex', ?) ON CONFLICT DO NOTHING`, [NOW]
+    );
+    await sql.run(
+      `INSERT INTO github_user_repo_stats (user_id, repo, date, commit_count, synced_at, claude_commit_count, codex_commit_count, no_tool_commit_count)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?)`, ['u1', 'org/a', THREE_DAYS_AGO, 2, NOW, 0, 0, 2]
+    );
+    try {
+      const route = await import('../app/api/pulse/code/dept/[dept]/route');
+      const codex = await (await route.GET(makeRequest('/api/pulse/code/dept/Engineering?vendor=openai'), {
+        params: Promise.resolve({ dept: 'Engineering' }),
+      })).json();
+      expect(codex.githubRepos).toEqual({ count7d: 0, names7d: [], basis: 'openai' });
+      const memberA = codex.members.find((m: { user_id: string }) => m.user_id === 'u1');
+      expect(memberA.github_repo_count).toBe(0);
+    } finally {
+      await sql.exec(`DELETE FROM cowork_messages WHERE id = 'codex:gh-dept-3'`);
+    }
   });
 });

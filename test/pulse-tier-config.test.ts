@@ -124,4 +124,47 @@ describe('Pulse tier configuration', () => {
       expect(prompt).toContain('capability_creation');
     });
   });
+
+  describe('connector and skill evidence', () => {
+    it('sends the same evidence rules as before by default, between the tiers and the taxonomy', async () => {
+      vi.resetModules();
+      const { buildClassifierSystemMessage, DEFAULT_TIER_CONFIG, DEFAULT_EVIDENCE_RULES } = await import('@/lib/pulse/tier-config');
+      const prompt = buildClassifierSystemMessage(DEFAULT_TIER_CONFIG);
+      const t3 = DEFAULT_TIER_CONFIG.tiers.tier3;
+      expect(prompt).toContain(`Tier 3 (${t3.name}): ${t3.description}
+
+CONNECTOR AND SKILL EVIDENCE
+
+${DEFAULT_EVIDENCE_RULES}
+
+THE TASK TYPE TAXONOMY`);
+      expect(DEFAULT_EVIDENCE_RULES).toContain('Any connector or skill use is qualifying evidence for Tier 2 or above.');
+    });
+
+    it('sends the rules an admin wrote instead, and none at all when cleared', async () => {
+      vi.resetModules();
+      const { buildClassifierSystemMessage, DEFAULT_TIER_CONFIG } = await import('@/lib/pulse/tier-config');
+      const edited = buildClassifierSystemMessage({ ...DEFAULT_TIER_CONFIG, evidenceRules: 'Connector use alone never decides the tier.' });
+      expect(edited).toContain('CONNECTOR AND SKILL EVIDENCE\n\nConnector use alone never decides the tier.\n\nTHE TASK TYPE TAXONOMY');
+      expect(edited).not.toContain('qualifying evidence for Tier 2 or above');
+      const cleared = buildClassifierSystemMessage({ ...DEFAULT_TIER_CONFIG, evidenceRules: '  ' });
+      expect(cleared).not.toContain('CONNECTOR AND SKILL EVIDENCE');
+      const t3 = DEFAULT_TIER_CONFIG.tiers.tier3;
+      expect(cleared).toContain(`Tier 3 (${t3.name}): ${t3.description}
+
+THE TASK TYPE TAXONOMY`);
+    });
+
+    it('reads the default rules for a config saved before they were editable', async () => {
+      vi.resetModules();
+      const { saveConfig } = await import('@/lib/config');
+      const { DEFAULT_TIER_CONFIG, DEFAULT_EVIDENCE_RULES } = await import('@/lib/pulse/tier-config');
+      const saved: Record<string, unknown> = { ...DEFAULT_TIER_CONFIG };
+      delete saved.evidenceRules;
+      await saveConfig({ pulseClassifierConfig: JSON.stringify(saved) });
+      vi.resetModules();
+      const { getTierConfig } = await import('@/lib/pulse/tier-config');
+      expect((await getTierConfig()).evidenceRules).toBe(DEFAULT_EVIDENCE_RULES);
+    });
+  });
 });

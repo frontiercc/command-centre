@@ -20,11 +20,12 @@
  * aggregates are STRINGS on Postgres (bigint) — Number()-coerced at every
  * read site (Policy B).
  */
-import { and, eq, gte, isNull, lte, sql } from 'drizzle-orm';
+import { and, isNotNull, eq, gte, isNull, lte, sql } from 'drizzle-orm';
 import { getTypedClient } from '@/lib/db/client';
 import { schema } from '@/lib/db/schema';
 import { getConfigValue } from '@/lib/config';
 import { getCodeModelRates, isEstimatedPricing } from '@/lib/pulse/code/rates';
+import { getConnectedProducts, openAiConnected } from '@/lib/sources/connected';
 
 const THIRTY_DAYS_S = 30 * 24 * 60 * 60;
 
@@ -37,6 +38,16 @@ export interface CodeHealth {
   aggregatorLastRun: string | null;
   lastOtelIngest: number | null;
   lastMetaIngest: number | null;
+  /**
+   * Codex beside the Claude Code rows above, once OpenAI is connected (shown
+   * or hidden: this is an admin check); null otherwise. Codex records always
+   * carry a person (the OpenAI sync skips a record with no single plain email
+   * and stores nothing for it), so there is no unmatched-person count.
+   */
+  codex: {
+    /** Latest Codex record received: a turn, a tool call or a prompt (by ingest time); null when none yet. */
+    lastRecordAt: number | null;
+  } | null;
 }
 
 interface ModelUsage {
@@ -84,6 +95,24 @@ export async function getCodePulseHealth(): Promise<CodeHealth> {
       entry.totalTokens += (usage.input ?? 0) + (usage.output ?? 0)
         + (usage.cache_creation ?? 0) + (usage.cache_read ?? 0);
     }
+  }
+
+  // Codex turns (OpenAI Compliance API), priced from the same rate table.
+  const ct = schema.codexTurns;
+  const codexRows = await client
+    .select({
+      model: ct.model,
+      session_id: ct.session_id,
+      tokens: sql<number | string>`SUM(${ct.uncached_input_tokens} + ${ct.cached_input_tokens} + ${ct.output_tokens})`,
+    })
+    .from(ct)
+    .where(and(gte(ct.started_at, since), isNotNull(ct.model)))
+    .groupBy(ct.model, ct.session_id);
+  for (const r of codexRows) {
+    const entry = perModel.get(r.model as string) ?? { sessions: new Set<string>(), totalTokens: 0 };
+    entry.sessions.add(r.session_id);
+    entry.totalTokens += Number(r.tokens ?? 0);
+    perModel.set(r.model as string, entry);
   }
 
   const unpricedModels: CodeHealth['unpricedModels'] = [];
@@ -143,6 +172,19 @@ export async function getCodePulseHealth(): Promise<CodeHealth> {
     .from(cam);
   const lastMetaIngest = lastMetaRows[0]?.m != null ? Number(lastMetaRows[0].m) : null;
 
+  // ─── Codex: latest record received, once OpenAI is connected ───────────────
+  let codex: CodeHealth['codex'] = null;
+  if (openAiConnected(await getConnectedProducts())) {
+    const lastCodexRows = await client.execute(sql`
+      SELECT GREATEST(
+        (SELECT MAX(ingested_at) FROM codex_turns),
+        (SELECT MAX(ingested_at) FROM codex_actions),
+        (SELECT MAX(ingested_at) FROM cowork_messages WHERE source = 'codex')
+      ) AS m`);
+    const m = (lastCodexRows as unknown as { rows: Array<{ m: number | string | null }> }).rows[0]?.m;
+    codex = { lastRecordAt: m != null ? Number(m) : null };
+  }
+
   return {
     unpricedModels,
     estimatedModels,
@@ -152,5 +194,6 @@ export async function getCodePulseHealth(): Promise<CodeHealth> {
     aggregatorLastRun,
     lastOtelIngest,
     lastMetaIngest,
+    codex,
   };
 }

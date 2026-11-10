@@ -24,6 +24,9 @@ import DelegationBands, { type BandSegment, type PersonDelegation } from '@/comp
 import CoachingPrompts, { type CoachingPromptItem } from '@/components/pulse/CoachingPrompts';
 import HumanTimeCard, { type HumanTimeSummary } from '@/components/pulse/HumanTimeCard';
 import { PageBody, Toolbar, Strip, Figure, Notice, B, cx } from '@/components/precision/ui';
+import { useVendor, useOpenAiOnly, useConnectedProducts, VendorSwitch } from '@/components/shared/VendorSwitch';
+import { WORK_PULSE_VENDOR_LABELS } from '@/lib/dashboard/vendor';
+import { workSpendFigure } from '@/lib/pulse/spend-figure';
 
 // Based on DeptPulseData from app/pulse/dept/[dept]/page.tsx (a redirect-only
 // legacy page) but intentionally diverges: `delegation?` exists only here.
@@ -51,7 +54,10 @@ interface DeptData {
   concentrationDetail: Array<{ user_id: string; display_name: string | null; task_types: string[] }>;
   deptBriefing: { body: string; suggestion: string | null; generated_at: number } | null;
   coworkCostUsd?: number;
+  chatgptCostUsd?: number | null;
+  chatgptUnpricedModels?: string[];
   coworkFrictionIndex?: number | null;
+  openaiPresent?: boolean;
   docSessions?: { sessions_with_uploads: number; total_uploads: number };
   delegation?: {
     window: 13 | 26 | 52;
@@ -76,6 +82,15 @@ function spendValue(usd: number | null | undefined) {
   return usd >= 100 ? `$${usd.toFixed(0)}` : `$${usd.toFixed(2)}`;
 }
 
+/** The Document sessions caption, naming what the figure covers in the switch's view. */
+function docSessionsCaption(vendor: 'all' | 'claude' | 'openai', openaiConnected: boolean): string {
+  if (vendor === 'openai') return 'ChatGPT conversations where one or more files were attached';
+  if (vendor === 'claude') return 'Claude sessions where one or more files were attached';
+  return openaiConnected
+    ? 'Sessions where one or more files were attached, Claude and ChatGPT'
+    : 'Sessions where one or more files were attached';
+}
+
 export default function DeptPickerPage() {
   const searchParams = useSearchParams();
   const router = useRouter();
@@ -86,6 +101,10 @@ export default function DeptPickerPage() {
   const [dataLoading, setDataLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [delegationWeeks, setDelegationWeeks] = useState<13 | 26 | 52>(13);
+  // The All / Claude / OpenAI switch, shared with the dashboard and Executive View.
+  const [vendor, setVendor, vendorReady] = useVendor();
+  const connected = useConnectedProducts();
+  const openaiOnly = useOpenAiOnly();
 
   const selectedDept = searchParams.get('dept') ?? '';
 
@@ -116,18 +135,23 @@ export default function DeptPickerPage() {
   // click does not blank the whole page or lose the scroll position.
   const loadedDeptRef = useRef<string | null>(null);
   const loadDept = useCallback((dept: string) => {
+    if (!vendorReady) return; // the saved view is read after the page loads
     if (!dept) return;
     if (loadedDeptRef.current !== dept) setDataLoading(true);
     setError(null);
-    fetch(`/api/pulse/dept/${encodeURIComponent(dept)}?weeks=${delegationWeeks}`)
-      .then(r => {
-        if (!r.ok) throw new Error("Couldn't load this page. Try again.");
-        return r.json();
+    fetch(`/api/pulse/dept/${encodeURIComponent(dept)}?weeks=${delegationWeeks}&vendor=${vendor}`)
+      .then(async r => {
+        if (r.ok) return r.json();
+        // A refusal says why, so nobody retries what can never load; the
+        // previous department's figures are cleared, not left under this name.
+        const body = await r.json().catch(() => ({}));
+        if (r.status === 403) throw new Error('You can only view your own department.');
+        throw new Error(body.message || "Couldn't load this page. Try again.");
       })
       .then(d => { loadedDeptRef.current = dept; setDeptData(d); })
-      .catch(e => setError(e.message))
+      .catch(e => { loadedDeptRef.current = null; setDeptData(null); setError(e.message); })
       .finally(() => setDataLoading(false));
-  }, [delegationWeeks]);
+  }, [delegationWeeks, vendor, vendorReady]);
 
   useEffect(() => {
     if (selectedDept) loadDept(selectedDept);
@@ -172,25 +196,32 @@ export default function DeptPickerPage() {
               ))}
             </select>
           )}
+          <VendorSwitch vendor={vendor} onChange={setVendor} openaiPresent={deptData?.openaiPresent ?? false} labels={WORK_PULSE_VENDOR_LABELS} />
         </Toolbar>
+        {vendor !== 'all' && !openaiOnly && (
+          <p className="m-0 -mt-2 text-[13px] text-[#8F8F8F]">
+            Showing {WORK_PULSE_VENDOR_LABELS[vendor]} only{vendor === 'openai' ? ': ChatGPT Chat and ChatGPT Work' : ': Claude Chat, Claude Cowork and Claude in Office/Google'}.
+          </p>
+        )}
 
         {/* Content */}
         {dataLoading && <LoadingSpinner />}
 
         {error && (
-          <Notice tone="error" title="Failed to load.">{error}</Notice>
+          <Notice tone="error" title={error.startsWith('You can only') ? 'Not available.' : 'Failed to load.'}>{error}</Notice>
         )}
 
         {deptData && !dataLoading && (() => {
           const d = deptData;
-          const showSpend = d.coworkCostUsd !== undefined || d.coworkFrictionIndex !== undefined;
+          const spend = workSpendFigure(vendor, d.coworkCostUsd, d.chatgptCostUsd, d.chatgptUnpricedModels?.length ?? 0);
+          const showFriction = d.coworkFrictionIndex !== undefined;
           const showDocs = !!d.docSessions && d.docSessions.sessions_with_uploads > 0;
-          const activityCols = (showSpend ? 2 : 0) + (showDocs ? 2 : 0);
+          const activityCols = (spend ? 1 : 0) + (showFriction ? 1 : 0) + (showDocs ? 2 : 0);
           return (
             <>
               <FrontierHero view={d.frontier} canOpenUseCases={d.frontierAccess?.canOpenUseCases ?? false} />
 
-              <HumanTimeCard summary={d.humanTime} surface="cowork" scope={d.dept} />
+              <HumanTimeCard summary={d.humanTime} surface="cowork" scope={d.dept} view={d.openaiPresent ? vendor : 'claude'} />
 
               <StatStrip
                 oti={d.metrics?.oti ?? null}
@@ -247,15 +278,15 @@ export default function DeptPickerPage() {
 
               {/* Cowork spend, friction and document sessions: measured, one strip. */}
               {activityCols > 0 && (
-                <Strip cols={activityCols as 2 | 4}>
-                  {showSpend && (
+                <Strip cols={activityCols === 1 ? undefined : activityCols as 2 | 3 | 4}>
+                  {spend && (
                     <Figure
-                      label="Dept Cowork spend, 7 days"
-                      value={spendValue(d.coworkCostUsd)}
-                      sub="Total API cost of Cowork (OTel) sessions"
+                      label={`Dept ${spend.label === 'Spend' ? 'spend' : spend.label}, 7 days`}
+                      value={spend.notPriced ? <span className="text-[15px] font-medium text-[#8F8F8F] tracking-normal">Not priced</span> : spendValue(spend.usd)}
+                      sub={spend.sub}
                     />
                   )}
-                  {showSpend && (
+                  {showFriction && (
                     <Figure
                       label="Dept friction index, 7 days"
                       value={d.coworkFrictionIndex == null
@@ -269,7 +300,7 @@ export default function DeptPickerPage() {
                       label="Document sessions, 30 days"
                       value={d.docSessions!.sessions_with_uploads}
                       unit="sessions with uploads"
-                      sub="Cowork sessions where one or more files were attached"
+                      sub={docSessionsCaption(vendor, connected?.openai === true)}
                     />
                   )}
                   {showDocs && (

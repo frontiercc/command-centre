@@ -41,6 +41,7 @@ import { resolveOtelUser } from '@/lib/otel/resolve-user';
 import { recordIngestFailure } from '@/lib/otel/ingest-failure';
 import { otelEventKey, claimOtelEvent } from '@/lib/otel/event-key';
 import { displayNameFromEmail, type ProcessResult } from '@/lib/otel/cowork-receiver';
+import { PRODUCT_ORDER, productFullName, type WorkProduct } from '@/lib/pulse/cowork/products';
 
 /** service.name the Office add-in reports. */
 export const OFFICE_SERVICE_NAME = 'office-agent';
@@ -95,6 +96,15 @@ export function officeProduct(surface: string | undefined, vendor?: string): str
   const key = surface.trim().toLowerCase();
   if (vendor?.trim().toLowerCase() === 'g') return GOOGLE_BY_SURFACE[key] ?? null;
   return MICROSOFT_BY_SURFACE[key] ?? null;
+}
+
+/**
+ * How an alert names the product a prompt came from: "Claude in Excel",
+ * "Claude in Google Sheets"; "Claude in Office" for an app not yet known.
+ */
+export function officeProductLabel(product: string | null): string {
+  if (!product || product === 'cowork' || !(PRODUCT_ORDER as readonly string[]).includes(product)) return 'Claude in Office';
+  return `Claude in ${productFullName(product as WorkProduct)}`;
 }
 
 /**
@@ -336,7 +346,7 @@ export async function processOfficeSpans(payload: unknown): Promise<ProcessResul
           }
 
           if (intentMatches.length) {
-            createIntentAlerts(userId, 'cowork', messageId, prompt, intentMatches).catch((e: Error) => {
+            createIntentAlerts(userId, 'cowork', messageId, prompt, intentMatches, officeProductLabel(product)).catch((e: Error) => {
               console.error('[office-receiver] intent alert error:', e.message);
             });
           }

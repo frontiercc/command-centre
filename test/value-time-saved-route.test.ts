@@ -41,7 +41,6 @@ beforeEach(async () => {
   await sql.exec(`DELETE FROM code_assistant_meta;
            DELETE FROM code_metrics;
            DELETE FROM cowork_messages;
-           DELETE FROM chat_messages;
            DELETE FROM config WHERE key IN (
              'code_value_enabled', 'time_saved_min_per_pr', 'time_saved_min_per_commit',
              'time_saved_min_per_cowork_session', 'time_saved_min_per_chat_conversation'
@@ -66,9 +65,11 @@ async function seedCoworkMessage(sessionId: string, occurredAt: number) {
      VALUES (?, 'user-1', ?, 'cowork_user_message', 'user', 'cowork', ?, ?)`, [`cm-${sessionId}-${Math.random().toString(36).slice(2)}`, sessionId, occurredAt, NOW]);
 }
 
+// A Claude Chat prompt: a cowork_messages row with surface 'chat', whose
+// session_id is the conversation id (migration 0041).
 async function seedChatMessage(conversationId: string, occurredAt: number) {
-  await sql.run(`INSERT INTO chat_messages (id, user_id, conversation_id, prompt_text, prompt_length, occurred_at, ingested_at)
-     VALUES (?, 'user-1', ?, 'hi', 2, ?, ?)`, [`chm-${conversationId}-${Math.random().toString(36).slice(2)}`, conversationId, occurredAt, NOW]);
+  await sql.run(`INSERT INTO cowork_messages (id, user_id, session_id, message_type, surface, source, content_preview, content_full, occurred_at, ingested_at)
+     VALUES (?, 'user-1', ?, 'cowork_user_message', 'chat', 'compliance', 'hi', 'hi', ?, ?)`, [`chm-${conversationId}-${Math.random().toString(36).slice(2)}`, conversationId, occurredAt, NOW]);
 }
 
 function makeRequest(): NextRequest {
@@ -89,6 +90,9 @@ describe('GET /api/pulse/code/value — timeSaved', () => {
     await seedCoworkMessage('sess-a', NOW - DAY);
     await seedCoworkMessage('sess-b', NOW - 2 * DAY);
     await seedChatMessage('conv-a', NOW - DAY);
+    // A second prompt in the same conversation: still one conversation, and
+    // Chat prompts never count as Cowork sessions.
+    await seedChatMessage('conv-a', NOW - DAY + 60);
 
     const res = await route.GET(makeRequest());
     expect(res.status).toBe(200);

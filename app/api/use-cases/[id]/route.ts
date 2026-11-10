@@ -55,7 +55,9 @@ export async function GET(
 
   const { id } = await params;
   const uc = await getUseCase(decodeURIComponent(id));
-  if (!uc) return NextResponse.json({ error: 'Not found' }, { status: 404 });
+  // A missing use case says so, apart from the feature switch's 404 above,
+  // so the page never tells an admin to enable a feature that is on.
+  if (!uc) return NextResponse.json({ error: 'use_case_not_found' }, { status: 404 });
 
   const nowS = Math.floor(Date.now() / 1000);
   const currentWeek = await getCurrentWeek(uc.id, nowS);

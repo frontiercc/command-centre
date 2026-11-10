@@ -54,13 +54,21 @@ function surfaceLine(label: string, s: SurfaceSpend): string {
     return `| ${label} | not captured on this deployment | — |`;
   }
   const spend = s.usd === null ? 'not measured' : usd(s.usd);
-  const suffix = s.basis === 'estimate' ? ' (estimated)' : '';
+  const suffix = s.basis === 'estimate' ? ' (estimated)' : s.basis === 'openai_rates' ? " (at OpenAI's USD token rates)" : '';
   return `| ${label} | ${spend}${suffix} | ${tokens(total)} |`;
 }
 
 function costCentreTable(report: ChargebackReport): string {
   if (report.costCentres.length === 0) {
     return 'No cost centres are configured. All spend appears under Unallocated.';
+  }
+  if (report.vendors) {
+    const rows = report.costCentres
+      .map(c => `| ${c.name} | ${c.code ?? '—'} | ${usd(c.totalUsd)} | ${usd(c.codeUsd)} | ${usd(c.coworkUsd)} | ${usd(c.chatgptUsd ?? 0)} | ${usd(c.codexUsd ?? 0)} |`)
+      .join('\n');
+    return `| Cost centre | GL code | Total | Claude Code | Claude Cowork | ChatGPT | Codex |
+|---|---|---|---|---|---|---|
+${rows}`;
   }
   const rows = report.costCentres
     .map(c => `| ${c.name} | ${c.code ?? '—'} | ${usd(c.totalUsd)} | ${usd(c.codeUsd)} | ${usd(c.coworkUsd)} |`)
@@ -104,6 +112,18 @@ function dataQualityNotes(report: ChargebackReport, effs: ModelEfficiencyReport[
     notes.push(
       `- ${unpriced.size} model${unpriced.size === 1 ? '' : 's'} in use ${unpriced.size === 1 ? 'has' : 'have'} no configured rate and ${unpriced.size === 1 ? 'is' : 'are'} excluded from spend rather than counted as zero: ${[...unpriced].join(', ')}.`,
     );
+  }
+
+  if (report.vendors) {
+    notes.push(
+      "- ChatGPT and Codex spend is priced from token usage at OpenAI's published USD rates for token-based Enterprise contracts; credit-based contracts, negotiated discounts and seat fees are not reflected.",
+    );
+    const openaiUnpriced = report.openaiUnpricedModels ?? [];
+    if (openaiUnpriced.length > 0) {
+      notes.push(
+        `- ${openaiUnpriced.length} ChatGPT or Codex model${openaiUnpriced.length === 1 ? '' : 's'} ${openaiUnpriced.length === 1 ? 'has' : 'have'} no configured rate and ${openaiUnpriced.length === 1 ? 'is' : 'are'} excluded from spend rather than counted as zero: ${openaiUnpriced.join(', ')}.`,
+      );
+    }
   }
 
   const cov = report.coworkCostCoverage;
@@ -162,6 +182,7 @@ export function renderFinopsSection(
   coworkEff: ModelEfficiencyReport,
   periodStart: string,
   periodEnd: string,
+  openaiEff: { chatgpt: ModelEfficiencyReport; codex: ModelEfficiencyReport } | null = null,
   office: OfficeSpendSummary | null = null,
 ): string {
   const period = monthOf(periodEnd);
@@ -177,15 +198,15 @@ export function renderFinopsSection(
 
 ${scopeNote}
 
-**Total attributed spend: ${usd(report.grandTotalUsd)}**${report.estimated ? ' (partly estimated; see data quality below)' : ''}
+**Total attributed spend: ${usd(report.grandTotalUsd)}**${report.estimated ? ' (partly estimated; see data quality below)' : ''}${report.vendors ? `: Claude ${usd(report.vendors.claudeUsd)}, OpenAI ${usd(report.vendors.openaiUsd)}` : ''}
 
 ### Spend by surface
 
 | Surface | Spend | Tokens |
 |---|---|---|
-${surfaceLine('Chat', s.chat)}
-${surfaceLine('Code', s.code)}
-${surfaceLine('Cowork', s.cowork)}
+${s.chatgpt && s.codex
+    ? [surfaceLine('Claude Chat', s.chat), surfaceLine('Claude Code', s.code), surfaceLine('Claude Cowork', s.cowork), surfaceLine('ChatGPT', s.chatgpt), surfaceLine('Codex', s.codex)].join('\n')
+    : [surfaceLine('Chat', s.chat), surfaceLine('Code', s.code), surfaceLine('Cowork', s.cowork)].join('\n')}
 | **Total** | **${usd(s.total.usd)}** | **${tokens(s.total.tokens.input + s.total.tokens.output + s.total.tokens.cacheWrite + s.total.tokens.cacheRead)}** |
 
 ${officeText ? `${officeText}\n` : ''}### Spend by cost centre
@@ -196,15 +217,19 @@ Unallocated (users with no department or no matching cost centre): **${usd(repor
 
 ### Model efficiency
 
-${modelEfficiencyBlock('Code', codeEff)}
+${modelEfficiencyBlock(openaiEff ? 'Claude Code' : 'Code', codeEff)}
 
-${modelEfficiencyBlock('Cowork', coworkEff)}
+${modelEfficiencyBlock(openaiEff ? 'Claude Cowork' : 'Cowork', coworkEff)}
+${openaiEff ? `
+${modelEfficiencyBlock('ChatGPT (spend by kind of work estimated: OpenAI reports cost per hour)', openaiEff.chatgpt)}
 
+${modelEfficiencyBlock('Codex', openaiEff.codex)}
+` : ''}
 Cache savings this period: ${usdOrNone(report.cacheSavingsUsd)}.
 
 ### Data quality
 
-${dataQualityNotes(report, [codeEff, coworkEff])}`;
+${dataQualityNotes(report, openaiEff ? [codeEff, coworkEff, openaiEff.chatgpt, openaiEff.codex] : [codeEff, coworkEff])}`;
 }
 
 /**
@@ -218,7 +243,10 @@ export async function buildFinopsSection(periodStart: string, periodEnd: string)
     buildModelEfficiency('code', period),
     buildModelEfficiency('cowork', period),
   ]);
-  return renderFinopsSection(report, codeEff, coworkEff, periodStart, periodEnd, await reportOfficeSpend(period));
+  const openaiEff = report.vendors
+    ? { chatgpt: await buildModelEfficiency('chatgpt', period), codex: await buildModelEfficiency('codex', period) }
+    : null;
+  return renderFinopsSection(report, codeEff, coworkEff, periodStart, periodEnd, openaiEff, await reportOfficeSpend(period));
 }
 
 /** The month's Office estimate for a report, or null when hidden (Admin → Work Pulse) or failing. */

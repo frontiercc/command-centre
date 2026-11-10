@@ -13,7 +13,9 @@ import { randomUUID } from 'node:crypto';
 import { and, desc, eq, inArray, isNotNull, isNull, sql } from 'drizzle-orm';
 import { getTypedClient } from '@/lib/db/client';
 import { schema } from '@/lib/db/schema';
-import { groupDeptBoxes, type DeptBox, type SuggestionSurface } from '@/lib/usecases/dept-boxes';
+import { groupDeptBoxes, surfaceLabels, type DeptBox, type SuggestionSurface } from '@/lib/usecases/dept-boxes';
+import { getConnectedProducts } from '@/lib/sources/connected';
+import { productsOfSessions, type SuggestionProducts } from '@/lib/usecases/suggestion-format';
 
 export interface SignalSet { skills: string[]; connectors: string[]; taskTypes: string[] }
 export interface SuggestionEvidence { distinctUsers: number; sessionCount: number; departments: string[] }
@@ -24,6 +26,8 @@ export interface SuggestionDraft {
   department: string | null; canvas: ProcessCanvas | null;
   /** Where a mined suggestion was found; null on older rows, all from Cowork. */
   surface: SuggestionSurface | null;
+  /** Its sessions by product (Claude, ChatGPT, Codex); null on rows stored without their sessions. */
+  products: SuggestionProducts | null;
 }
 
 /** Department Process Transformation (migration 077/0018) — a content-first
@@ -64,13 +68,37 @@ function parseCanvas(raw: string | null): ProcessCanvas | null {
     return null;
   }
 }
-function toDraft(r: Row): SuggestionDraft {
+function citedIds(raw: string | null): string[] | null {
+  if (!raw) return null;
+  try {
+    const ids = JSON.parse(raw);
+    return Array.isArray(ids) ? ids.filter((x): x is string => typeof x === 'string') : null;
+  } catch {
+    return null;
+  }
+}
+/** Which of the rows' cited Claude sessions are Claude Code sessions: one query for all the rows. */
+async function claudeCodeIdsOf(rows: Row[]): Promise<Set<string>> {
+  const ids = [...new Set(rows.flatMap(r => citedIds(r.cited_sessions) ?? []))]
+    .filter(id => !id.startsWith('chatgpt:') && !id.startsWith('codex:'));
+  if (ids.length === 0) return new Set();
+  const client = await getTypedClient();
+  const t = schema.codeSessionStats;
+  const found = (await client.select({ id: t.session_id }).from(t).where(inArray(t.session_id, ids))) as Array<{ id: string }>;
+  return new Set(found.map(f => f.id));
+}
+async function toDrafts(rows: Row[]): Promise<SuggestionDraft[]> {
+  const codeIds = await claudeCodeIdsOf(rows);
+  return rows.map(r => toDraft(r, codeIds));
+}
+function toDraft(r: Row, claudeCodeIds: ReadonlySet<string>): SuggestionDraft {
   return {
     id: r.id, signalKey: r.signal_key, title: r.title, description: r.description,
     matchingRule: JSON.parse(r.matching_rule), evidence: JSON.parse(r.evidence),
     status: r.status as SuggestionDraft['status'], generatedAt: r.generated_at,
     department: r.department, canvas: parseCanvas(r.canvas_json),
     surface: r.surface === 'code' ? 'code' : r.surface === 'cowork' ? 'cowork' : null,
+    products: (() => { const ids = citedIds(r.cited_sessions); return ids ? productsOfSessions(ids, claudeCodeIds) : null; })(),
   };
 }
 
@@ -130,14 +158,14 @@ export async function listOpenSuggestions(): Promise<SuggestionDraft[]> {
     .from(t)
     .where(eq(t.status, 'open'))
     .orderBy(desc(t.generated_at), desc(t.id))) as Row[];
-  return rows.map(toDraft);
+  return toDrafts(rows);
 }
 
 export async function getSuggestionById(id: string): Promise<SuggestionDraft | undefined> {
   const client = await getTypedClient();
   const t = schema.useCaseSuggestions;
   const rows = (await client.select().from(t).where(eq(t.id, id)).limit(1)) as Row[];
-  return rows[0] ? toDraft(rows[0]) : undefined;
+  return rows[0] ? (await toDrafts([rows[0]]))[0] : undefined;
 }
 
 export async function setSuggestionStatus(id: string, status: 'open' | 'dismissed' | 'added'): Promise<void> {
@@ -151,7 +179,7 @@ export async function getSuggestionBySignalKey(signalKey: string): Promise<Sugge
   const client = await getTypedClient();
   const t = schema.useCaseSuggestions;
   const rows = (await client.select().from(t).where(eq(t.signal_key, signalKey)).limit(1)) as Row[];
-  return rows[0] ? toDraft(rows[0]) : undefined;
+  return rows[0] ? (await toDrafts([rows[0]]))[0] : undefined;
 }
 
 export async function resolvedSignalKeys(): Promise<Set<string>> {
@@ -229,5 +257,5 @@ export async function listSuggestionTitlesByDepartment(department: string): Prom
 /** Open department suggestions, one box per department, alphabetical; Cowork and Claude Code
  *  suggestions are separate lists inside it, each ranked by people then sessions. */
 export async function listOpenDeptBoxes(): Promise<DeptProcessBox[]> {
-  return groupDeptBoxes(await listOpenSuggestions());
+  return groupDeptBoxes(await listOpenSuggestions(), surfaceLabels(await getConnectedProducts()));
 }

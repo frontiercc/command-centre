@@ -13,11 +13,12 @@ import { NextRequest, NextResponse } from 'next/server';
 import { and, desc, eq } from 'drizzle-orm';
 import { getAdminSession, canAccessOrgOverview } from '@/lib/auth/admin-auth';
 import { getTypedClient } from '@/lib/db/client';
-import { schema } from '@/lib/db/schema';
+import { hasCodexData, readCodeMetrics } from '@/lib/pulse/code/vendor-view';
 import { getAllConfig } from '@/lib/config';
 import { buildCrosswalk, computeEngagedHours, type CodeSignals } from '@/lib/pulse/code/framework';
 import { getDxFramework } from '@/lib/pulse/code/dx-framework';
 import { ORG_SCOPE_ID } from '@/lib/pulse/code/aggregator';
+import { visibleVendor, visibleOpenAi } from '@/lib/sources/openai-visibility';
 
 export const dynamic = 'force-dynamic';
 
@@ -36,31 +37,23 @@ export async function GET(request: NextRequest) {
   }
 
   const client = await getTypedClient();
-  const cm = schema.codeMetrics;
-
-  // Latest rolling org-scope code_metrics row — same source + column set as
-  // app/api/pulse/code/org-summary/route.ts.
-  const metricsCols = {
-    spend_usd: cm.spend_usd,
-    autonomy_ratio: cm.autonomy_ratio,
-    cache_hit_ratio: cm.cache_hit_ratio,
-    commit_count: cm.commit_count,
-    pr_count: cm.pr_count,
-    lines_added: cm.lines_added,
-    lines_removed: cm.lines_removed,
-    edit_accept_count: cm.edit_accept_count,
-    edit_reject_count: cm.edit_reject_count,
-    friction_index: cm.friction_index,
-    active_time_user_s: cm.active_time_user_s,
-    active_time_cli_s: cm.active_time_cli_s,
-  };
-
-  const metricsRows = await client
-    .select(metricsCols)
-    .from(cm)
-    .where(and(eq(cm.scope_type, 'organisation'), eq(cm.scope_id, ORG_SCOPE_ID), eq(cm.granularity, 'rolling')))
-    .orderBy(desc(cm.computed_at))
-    .limit(1);
+  // Developer Pulse's All / Claude / Codex switch (?vendor=), as its other
+  // pages: once Codex data exists and is shown, the view's own row in
+  // code_metrics_vendor; before then Claude Code's code_metrics row.
+  const codexPresent = await visibleOpenAi(hasCodexData());
+  const requested = await visibleVendor(request.nextUrl.searchParams.get('vendor'));
+  const vendor = codexPresent ? requested : 'claude';
+  const metricsRows = await readCodeMetrics(vendor, codexPresent, (t, only) => client
+    .select({
+      spend_usd: t.spend_usd, autonomy_ratio: t.autonomy_ratio, cache_hit_ratio: t.cache_hit_ratio,
+      commit_count: t.commit_count, pr_count: t.pr_count, lines_added: t.lines_added, lines_removed: t.lines_removed,
+      edit_accept_count: t.edit_accept_count, edit_reject_count: t.edit_reject_count, friction_index: t.friction_index,
+      active_time_user_s: t.active_time_user_s, active_time_cli_s: t.active_time_cli_s,
+    })
+    .from(t)
+    .where(and(eq(t.scope_type, 'organisation'), eq(t.scope_id, ORG_SCOPE_ID), eq(t.granularity, 'rolling'), only))
+    .orderBy(desc(t.computed_at))
+    .limit(1));
   const row = metricsRows[0] ?? null;
 
   const n = (v: unknown): number | null => (v === null || v === undefined ? null : Number(v));
@@ -79,6 +72,7 @@ export async function GET(request: NextRequest) {
     engagedHours,
     cacheHitRatio: n(row?.cache_hit_ratio),
     hasWorkMix: cfg.codeClassifierEnabled === true,
+    vendor,
   };
 
   const boxes = buildCrosswalk(signals);
@@ -87,6 +81,8 @@ export async function GET(request: NextRequest) {
 
   return NextResponse.json({
     enabled: true,
+    vendor,
+    codexPresent,
     hasData,
     boxes,
     spendContext: { spendUsd: signals.spendUsd, autonomyRatio: signals.autonomyRatio },

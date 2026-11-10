@@ -46,7 +46,7 @@ describe('alert categories', () => {
       ['anomaly', 'code_model_policy', 'code_repo_exposure', 'intent', 'policy', 'risk']
     );
     expect(typesForCategory('cost-efficiency').sort()).toEqual(
-      ['code_cost_spike', 'code_friction', 'finance_reconciliation_drift']
+      ['code_cost_spike', 'code_friction', 'codex_cost_spike', 'finance_reconciliation_drift']
     );
     expect(typesForCategory('adoption-usage').sort()).toEqual(
       ['adoption', 'pulse_capability', 'use_case_at_risk']

@@ -78,4 +78,13 @@ describe('renderHighlightsPost', () => {
     const post = renderHighlightsPost(makeInput({ codeOutput: { linesChanged: 5400, handsOnHours: 21, changesKept: 310, changesProposed: 350, basis: 'week' } }), composed);
     expect(post.toLowerCase()).not.toContain('30 days');
   });
+
+  it('names Claude Code on the code output line when OpenAI is connected', () => {
+    const week = renderHighlightsPost(makeInput({ codeOutput: { linesChanged: 5400, handsOnHours: 21, changesKept: 310, changesProposed: 350, basis: 'week', claudeCodeLabel: true } }), composed);
+    expect(week).toContain(':computer: In Claude Code, 5,400 lines of code changed from 21 hours at the keyboard');
+    const rolling = renderHighlightsPost(makeInput({ codeOutput: { linesChanged: 5400, handsOnHours: 21, changesKept: 310, changesProposed: 350, basis: 'rolling', claudeCodeLabel: true } }), composed);
+    expect(rolling).toContain(':computer: Over the last 30 days in Claude Code, 5,400 lines');
+    const plain = renderHighlightsPost(makeInput({ codeOutput: { linesChanged: 5400, handsOnHours: 21, changesKept: 310, changesProposed: 350, basis: 'week' } }), composed);
+    expect(plain).not.toContain('In Claude Code');
+  });
 });

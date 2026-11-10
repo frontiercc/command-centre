@@ -21,6 +21,13 @@ export interface CodeSignals {
   engagedHours: number | null;
   cacheHitRatio: number | null;
   hasWorkMix: boolean;
+  /**
+   * Developer Pulse's view: Claude Code (the default), Codex ('openai') or both
+   * ('all'). Only the wording changes, plus, in the Codex view, the signals
+   * Codex never reports (pull requests, lines, edit decisions, engaged time)
+   * read "not captured" rather than a figure.
+   */
+  vendor?: 'all' | 'claude' | 'openai';
 }
 
 export interface CrosswalkCell {
@@ -63,8 +70,16 @@ function acceptanceRate(accept: number | null, reject: number | null): number | 
   return accept / (accept + reject);
 }
 
+const CODEX_NOT_REPORTED = 'Codex does not report this.';
+
 export function buildCrosswalk(s: CodeSignals): FrameworkBox[] {
   const accRate = acceptanceRate(s.editAcceptCount, s.editRejectCount);
+  const codex = s.vendor === 'openai';
+  /** In the Codex view, a signal Codex never sends is "not captured", never a figure. */
+  const codexGap = (cell: CrosswalkCell): CrosswalkCell =>
+    codex ? { ...cell, value: null, fit: 'not_captured', note: CODEX_NOT_REPORTED } : cell;
+  const sessionsIn = s.vendor === 'openai' ? 'Codex sessions' : s.vendor === 'all' ? 'Claude Code and Codex sessions' : 'Claude sessions';
+  const spendLabel = s.vendor === 'openai' ? 'Codex spend (context)' : s.vendor === 'all' ? 'Claude and Codex spend (context)' : 'Claude spend (context)';
 
   return [
     {
@@ -75,12 +90,12 @@ export function buildCrosswalk(s: CodeSignals): FrameworkBox[] {
         'Lead time and deployment frequency come from your CD pipeline. Connect DX to fill these.',
       cells: [
         { label: 'AI-assisted commits (7d)', value: num(s.commitCount), fit: 'proxy', space: 'activity',
-          note: 'Count of commits made inside Claude sessions, not total delivery.' },
-        { label: 'Merged PRs (7d)', value: num(s.prCount), fit: 'proxy', space: 'activity' },
-        { label: 'Code output (lines ±)', value:
+          note: `Count of commits made inside ${sessionsIn}, not total delivery.` },
+        codexGap({ label: 'Merged PRs (7d)', value: num(s.prCount), fit: 'proxy', space: 'activity' }),
+        codexGap({ label: 'Code output (lines ±)', value:
             s.linesAdded === null && s.linesRemoved === null ? null
               : `+${num(s.linesAdded) ?? '—'} / −${num(s.linesRemoved) ?? '—'}`,
-          fit: 'proxy', space: 'activity', note: 'Volume, not a productivity verdict.' },
+          fit: 'proxy', space: 'activity', note: 'Volume, not a productivity verdict.' }),
       ],
     },
     {
@@ -90,8 +105,8 @@ export function buildCrosswalk(s: CodeSignals): FrameworkBox[] {
       externalNote:
         'Change-failure rate and time to restore come from your CI and incident tooling. Connect DX to fill these.',
       cells: [
-        { label: 'Edit acceptance rate', value: pct(accRate), fit: 'proxy', space: 'performance',
-          note: 'Trust signal, not a change-failure rate.' },
+        codexGap({ label: 'Edit acceptance rate', value: pct(accRate), fit: 'proxy', space: 'performance',
+          note: 'Trust signal, not a change-failure rate.' }),
         { label: 'Friction index', value: pct(s.frictionIndex), fit: 'proxy', space: 'efficiency',
           note: 'Share of tool actions that failed: a coaching signal.' },
       ],
@@ -103,7 +118,7 @@ export function buildCrosswalk(s: CodeSignals): FrameworkBox[] {
       externalNote:
         'The Developer Experience Index (DXI) is a survey signal Command Centre does not capture. Connect DX to fill this.',
       cells: [
-        { label: 'Engaged AI time (hrs, 7d)', value: num(s.engagedHours), fit: 'proxy', space: 'efficiency' },
+        codexGap({ label: 'Engaged AI time (hrs, 7d)', value: num(s.engagedHours), fit: 'proxy', space: 'efficiency' }),
         { label: 'Cache efficiency', value: pct(s.cacheHitRatio), fit: 'ai_specific', space: 'efficiency',
           note: 'AI-specific cost efficiency, not a framework metric.' },
       ],
@@ -120,7 +135,7 @@ export function buildCrosswalk(s: CodeSignals): FrameworkBox[] {
               note: 'Judged by Haiku: the one non-measured signal here.' }
           : { label: 'AI-judged work mix', value: null, fit: 'not_captured', space: 'performance',
               note: 'Session classifier is off. Enable it in Developer Pulse admin.' },
-        { label: 'Claude spend (context)', value: usd(s.spendUsd), fit: 'ai_specific', space: 'efficiency',
+        { label: spendLabel, value: usd(s.spendUsd), fit: 'ai_specific', space: 'efficiency',
           note: 'AI cost, shown for context, in no framework box.' },
       ],
     },

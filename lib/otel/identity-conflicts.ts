@@ -2,9 +2,12 @@
 // SPDX-License-Identifier: Apache-2.0
 
 /**
- * Admin decisions on OTel identity conflicts. A conflict is
- * two Claude accounts sending from one installation; the resolver stores the
- * second email as its own person and records the clash here.
+ * Admin decisions on identity conflicts. A conflict is two Claude accounts
+ * sending from one installation (product 'claude', recorded by the OTel
+ * resolver), or one ChatGPT and Codex account arriving under two emails
+ * (product 'openai', recorded by the OpenAI sync, lib/openai/identity.ts).
+ * Either way the second email is stored as its own person and the clash is
+ * recorded here.
  *
  * Merge and undo are GOING FORWARD ONLY: a merge writes one
  * alias row so later events for that email go to the existing person; undo
@@ -17,11 +20,14 @@ import { schema } from '@/lib/db/schema';
 import { withTx } from '@/lib/db/with-tx';
 
 export type ConflictStatus = 'open' | 'merged' | 'separate';
+export type ConflictProduct = 'claude' | 'openai';
 export type ConflictAction = 'merge' | 'separate' | 'undo';
 
 export interface IdentityConflictRow {
   id: string;
+  /** Claude: the installation id's first 8 characters. OpenAI: the account id's first 16. */
   installationShort: string;
+  product: ConflictProduct;
   surface: string;
   existingUserId: string;
   existingEmail: string | null;
@@ -42,7 +48,7 @@ export async function listIdentityConflicts(): Promise<IdentityConflictRow[]> {
   const u = schema.users;
   const rows = await client
     .select({
-      id: c.id, installation_id: c.installation_id, surface: c.surface,
+      id: c.id, installation_id: c.installation_id, surface: c.surface, product: c.product,
       existing_user_id: c.existing_user_id, existing_email: u.email, existing_name: u.display_name,
       new_email: c.new_email, new_user_id: c.new_user_id,
       first_seen_at: c.first_seen_at, last_seen_at: c.last_seen_at, event_count: c.event_count,
@@ -54,7 +60,8 @@ export async function listIdentityConflicts(): Promise<IdentityConflictRow[]> {
     .limit(500);
   return rows.map((r) => ({
     id: r.id,
-    installationShort: r.installation_id.slice(0, 8),
+    installationShort: r.installation_id.slice(0, r.product === 'openai' ? 16 : 8),
+    product: r.product === 'openai' ? 'openai' : 'claude',
     surface: r.surface,
     existingUserId: r.existing_user_id,
     existingEmail: r.existing_email ?? null,

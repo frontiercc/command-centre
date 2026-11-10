@@ -10,7 +10,8 @@ interface ReviewItem { id: number; content: string | null; taskType: string | nu
 interface OpenCycle { id: number; period: string; nSampled: number; nReviewed: number; items: ReviewItem[] }
 interface HistoryRow { id: number; period: string; agreementPct: number | null; kappa: number | null; nReviewed: number }
 interface Published { agreementPct: number; kappa: number; n: number; cycles: number }
-interface AuditData { published: Published | null; open: OpenCycle | null; history: HistoryRow[]; kappaFloor: number }
+interface VendorAgreement { vendor: 'claude' | 'openai'; agree: number; n: number }
+interface AuditData { published: Published | null; byVendor?: VendorAgreement[]; open: OpenCycle | null; history: HistoryRow[]; kappaFloor: number }
 
 function priorMonth(): string {
   const d = new Date();
@@ -78,6 +79,11 @@ export default function AuditTab() {
               {belowFloor && `: below the ${kappaFloor} substantial-agreement floor; review the tier rubric.`}
             </p>
             <p className="m-0 text-[13px] text-[#8F8F8F]">Reweighted to the production tier×confidence mix. This is the standing answer to &ldquo;how do you know the tiers are right?&rdquo;</p>
+            {(data.byVendor ?? []).length > 0 && (
+              <p className="m-0 text-[13px] text-[#4D4D4D] tabular-nums">
+                By vendor, same cycles: {(data.byVendor ?? []).map(v => `${v.vendor === 'openai' ? 'ChatGPT' : 'Claude'} prompts ${v.n > 0 ? Math.round((v.agree / v.n) * 100) : 0}% of ${v.n} reviewed`).join(' · ')}. A plain share, not reweighted.
+              </p>
+            )}
           </div>
         ) : (
           <Muted>No scored audit cycle yet. Draw a sample and review it to publish the first figure.</Muted>

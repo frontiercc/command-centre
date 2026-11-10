@@ -119,3 +119,12 @@ function ranked(map: Map<string, NamedSpend>): NamedSpend[] {
 export function hasBreakdown(s: SpendSplit | null | undefined): boolean {
   return !!s && (s.subagentUsd > 0 || s.bySubagent.length > 0 || s.bySkill.length > 0);
 }
+
+/**
+ * The one model a split's calls ran on, or null when it ran on none or on
+ * more than one. Every ChatGPT and Codex conversation uses one model, so the
+ * Audit Log names it in the summary line instead of a one-line list.
+ */
+export function onlyModel(s: SpendSplit | null | undefined): string | null {
+  return s && s.byModel.length === 1 ? s.byModel[0].name : null;
+}

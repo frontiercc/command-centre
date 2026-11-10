@@ -14,6 +14,7 @@ import {
   getUserMessageCount7d,
   getUserAlerts,
   getSnapshotsForUser,
+  getUserProductDays,
   deleteUserData,
   getAllUserAdoptionHealth,
   getAllUserPrimarySurfaces,
@@ -28,6 +29,8 @@ import { getTypedClient } from '@/lib/db/client';
 import { schema } from '@/lib/db/schema';
 import { requireAdmin, getAdminSession, canAccessCorePlatform } from '@/lib/auth/admin-auth';
 import { logAccess } from '@/lib/audit/log';
+import { recordManualDepartment } from '@/lib/directory/department-sync';
+import { tidyDepartment } from '@/lib/directory/department-rules';
 
 // Disable Next.js route caching — all API routes read live data from the database
 export const dynamic = 'force-dynamic';
@@ -74,7 +77,7 @@ export async function GET(request: NextRequest) {
 
     const [
       coworkProjects, coworkRecentSessions, userAlerts,
-      adoptionHealth, primarySurface, messages7d, snapshots30d,
+      adoptionHealth, primarySurface, messages7d, snapshots30d, productDays,
     ] = await Promise.all([
       getCoworkUserProjects(id, thirtyDaysAgo),
       getCoworkUserSessions(id, thirtyDaysAgo),
@@ -83,6 +86,7 @@ export async function GET(request: NextRequest) {
       getUserPrimarySurface(id),
       getUserMessageCount7d(id),
       getSnapshotsForUser(id, 30),
+      getUserProductDays(id, 30),
     ]);
 
     const detail = {
@@ -92,6 +96,7 @@ export async function GET(request: NextRequest) {
       messages_7d: messages7d,
       alerts: userAlerts,
       snapshots_30d: snapshots30d,
+      product_days: productDays,
       coworkActivity: {
         projects: coworkProjects,
         recentSessions: coworkRecentSessions,
@@ -143,6 +148,13 @@ export async function PUT(request: NextRequest) {
     .update(schema.users)
     .set({ display_name: display_name ?? null, department: department ?? null })
     .where(eq(schema.users.id, id));
+
+  // A department changed by hand is kept by department sync until an admin
+  // returns it to the directory. This form saves the name and department
+  // together, so only a real change of department counts.
+  if (tidyDepartment(user.department) !== tidyDepartment(department ?? null)) {
+    await recordManualDepartment({ userIds: [id], from: user.department ?? null, to: department ?? null });
+  }
 
   return NextResponse.json({ ok: true });
 }

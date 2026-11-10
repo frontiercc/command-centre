@@ -30,7 +30,14 @@ type SortKey = 'spend_usd' | 'autonomy_ratio' | 'session_count' | 'repo_count' |
 /**
  * Member table. Renders the bare table (no border): place it inside a flush Panel.
  */
-export default function CodeUserTable({ users, showDepartment = true }: { users: CodeUserRow[]; showDepartment?: boolean }) {
+/** Which commits the GitHub repos column counts: every commit, or those matched to one tool (lib/pulse/code/github-tool-match.ts). */
+const GITHUB_REPOS_HEADER: Record<'all' | 'claude' | 'openai', string> = {
+  all: 'Repos (GitHub)',
+  claude: 'Repos (GitHub, Claude Code)',
+  openai: 'Repos (GitHub, Codex)',
+};
+
+export default function CodeUserTable({ users, showDepartment = true, githubBasis = 'all' }: { users: CodeUserRow[]; showDepartment?: boolean; githubBasis?: 'all' | 'claude' | 'openai' }) {
   const [sortKey, setSortKey] = useState<SortKey>('spend_usd');
   const [asc, setAsc] = useState(false);
 
@@ -79,7 +86,7 @@ export default function CodeUserTable({ users, showDepartment = true }: { users:
             {header('Sessions', 'session_count')}
             {header('Commits', 'commit_count')}
             {showRepos && header('Repos', 'repo_count')}
-            {showGithubRepos && header('Repos (GitHub)', 'github_repo_count')}
+            {showGithubRepos && header(GITHUB_REPOS_HEADER[githubBasis], 'github_repo_count')}
             {header('Cache', 'cache_hit_ratio')}
             <th scope="col" className={T.thRight}>Tokens</th>
           </tr>
@@ -91,7 +98,7 @@ export default function CodeUserTable({ users, showDepartment = true }: { users:
                 colSpan={(showDepartment ? 9 : 8) - (showRepos ? 0 : 1) + (showGithubRepos ? 1 : 0)}
                 className="px-4 py-6 text-center text-[13px] text-[#8F8F8F]"
               >
-                No Claude Code activity captured yet.
+                No coding activity captured yet.
               </td>
             </tr>
           ) : sorted.map(u => (

@@ -10,6 +10,7 @@
 // raw-SQL COUNT/SUM aggregate is Number()-coerced (bigint/numeric
 // come back as STRINGS on Postgres).
 import { NextRequest, NextResponse } from 'next/server';
+import { visibleVendor, visibleOpenAi } from '@/lib/sources/openai-visibility';
 import { and, asc, desc, eq, gte, isNotNull, lte, ne, sql } from 'drizzle-orm';
 import { getAdminSession, isDeptScoped, canAccessCoworkPulse, canAccessPulseAdmin } from '@/lib/auth/admin-auth';
 import { buildFrontierView, resolveViewerUserId } from '@/lib/pulse/frontier-view';
@@ -17,10 +18,15 @@ import { promptTextVisibleFor, logPromptRead } from '@/lib/auth/content-access';
 import { getTypedClient } from '@/lib/db/client';
 import { schema } from '@/lib/db/schema';
 import { getCoworkCostUsd, getCoworkFrictionIndex } from '@/lib/pulse/aggregator';
+import { hasOpenAiData } from '@/lib/dashboard/queries';
+import { vendorClause, workPulseToolClause } from '@/lib/dashboard/product-sql';
+import { messageVendor } from '@/lib/pulse/vendor-filter';
 import { getPublishedAgreement } from '@/lib/pulse/audit/cycle';
 import { readHumanTime } from '@/lib/pulse/human-time-summary';
 import { getAllConfig } from '@/lib/config';
 import { canViewSpendReview } from '@/lib/finance/spend-review-access';
+import { isWorkPulseSurface, classifiableSource, classifyChatgptOn } from '@/lib/pulse/work-surfaces';
+import { chatgptSpend } from '@/lib/openai/spend';
 
 // OTI's interpretive status line is gated on the classifier accuracy audit
 // clearing its substantial-agreement floor. No scored audit yet, or below the
@@ -111,29 +117,37 @@ export async function GET(request: NextRequest) {
   const now = Math.floor(Date.now() / 1000);
   const sixWeeksAgo = now - 42 * 24 * 3600;
 
+  // The Claude / OpenAI switch: a vendor view reads the aggregator's per-vendor
+  // figures and narrows classifications, skills and connectors by source.
+  const vendor = await visibleVendor(request.nextUrl.searchParams.get('vendor'));
+  const pmv = schema.pulseMetricsVendor;
+  const pm = vendor === 'all' ? schema.pulseMetrics : pmv as unknown as typeof schema.pulseMetrics;
+  const pmOnly = vendor === 'all' ? sql`TRUE` : eq(pmv.vendor, vendor);
+
   // Latest metrics for this user
   const metricsRows = await client
     .select({
-      oti: schema.pulseMetrics.oti,
-      dds: schema.pulseMetrics.dds,
-      psr: schema.pulseMetrics.psr,
-      ors: schema.pulseMetrics.ors,
-      event_count: schema.pulseMetrics.event_count,
-      tier_1_count: schema.pulseMetrics.tier_1_count,
-      tier_2_count: schema.pulseMetrics.tier_2_count,
-      tier_3_count: schema.pulseMetrics.tier_3_count,
-      computed_at: schema.pulseMetrics.computed_at,
+      oti: pm.oti,
+      dds: pm.dds,
+      psr: pm.psr,
+      ors: pm.ors,
+      event_count: pm.event_count,
+      tier_1_count: pm.tier_1_count,
+      tier_2_count: pm.tier_2_count,
+      tier_3_count: pm.tier_3_count,
+      computed_at: pm.computed_at,
       // OTI v2: "Early read" badge provenance + formula version.
-      oti_early_read: schema.pulseMetrics.oti_early_read,
-      metric_version: schema.pulseMetrics.metric_version,
+      oti_early_read: pm.oti_early_read,
+      metric_version: pm.metric_version,
     })
-    .from(schema.pulseMetrics)
+    .from(pm)
     .where(and(
-      eq(schema.pulseMetrics.scope_type, 'user'),
-      eq(schema.pulseMetrics.scope_id, userId),
-      eq(schema.pulseMetrics.granularity, 'rolling'),
+      pmOnly,
+      eq(pm.scope_type, 'user'),
+      eq(pm.scope_id, userId),
+      eq(pm.granularity, 'rolling'),
     ))
-    .orderBy(desc(schema.pulseMetrics.computed_at))
+    .orderBy(desc(pm.computed_at))
     .limit(1);
   const metrics = metricsRows[0];
 
@@ -141,19 +155,20 @@ export async function GET(request: NextRequest) {
   const sevenDaysAgo = now - 7 * 24 * 3600;
   const priorMetricsRows = await client
     .select({
-      oti: schema.pulseMetrics.oti,
-      dds: schema.pulseMetrics.dds,
-      psr: schema.pulseMetrics.psr,
-      ors: schema.pulseMetrics.ors,
+      oti: pm.oti,
+      dds: pm.dds,
+      psr: pm.psr,
+      ors: pm.ors,
     })
-    .from(schema.pulseMetrics)
+    .from(pm)
     .where(and(
-      eq(schema.pulseMetrics.scope_type, 'user'),
-      eq(schema.pulseMetrics.scope_id, userId),
-      eq(schema.pulseMetrics.granularity, 'rolling'),
-      lte(schema.pulseMetrics.computed_at, sevenDaysAgo),
+      pmOnly,
+      eq(pm.scope_type, 'user'),
+      eq(pm.scope_id, userId),
+      eq(pm.granularity, 'rolling'),
+      lte(pm.computed_at, sevenDaysAgo),
     ))
-    .orderBy(desc(schema.pulseMetrics.computed_at))
+    .orderBy(desc(pm.computed_at))
     .limit(1);
   const priorMetrics = priorMetricsRows[0];
 
@@ -172,6 +187,7 @@ export async function GET(request: NextRequest) {
       eq(schema.pulseClassifications.user_id, userId),
       eq(schema.pulseClassifications.classifier_status, 'classified'),
       gte(schema.coworkMessages.occurred_at, sixWeeksAgo),
+      messageVendor(vendor),
     ))
     .orderBy(asc(schema.coworkMessages.occurred_at));
 
@@ -226,24 +242,26 @@ export async function GET(request: NextRequest) {
   // is never populated in any real deployment (no admin UI, no ingest default), so
   // 'team' rows never actually exist there — dept-level is what real data lands in.
   const deptOrsRows = department ? await client
-    .select({ ors: schema.pulseMetrics.ors })
-    .from(schema.pulseMetrics)
+    .select({ ors: pm.ors })
+    .from(pm)
     .where(and(
-      eq(schema.pulseMetrics.scope_type, 'function'),
-      eq(schema.pulseMetrics.scope_id, department),
-      eq(schema.pulseMetrics.granularity, 'rolling'),
+      pmOnly,
+      eq(pm.scope_type, 'function'),
+      eq(pm.scope_id, department),
+      eq(pm.granularity, 'rolling'),
     ))
-    .orderBy(desc(schema.pulseMetrics.computed_at))
+    .orderBy(desc(pm.computed_at))
     .limit(1) : [];
   const teamOrsRows = teamId ? await client
-    .select({ ors: schema.pulseMetrics.ors })
-    .from(schema.pulseMetrics)
+    .select({ ors: pm.ors })
+    .from(pm)
     .where(and(
-      eq(schema.pulseMetrics.scope_type, 'team'),
-      eq(schema.pulseMetrics.scope_id, teamId),
-      eq(schema.pulseMetrics.granularity, 'rolling'),
+      pmOnly,
+      eq(pm.scope_type, 'team'),
+      eq(pm.scope_id, teamId),
+      eq(pm.granularity, 'rolling'),
     ))
-    .orderBy(desc(schema.pulseMetrics.computed_at))
+    .orderBy(desc(pm.computed_at))
     .limit(1) : [];
   const teamOrs = deptOrsRows[0]?.ors ?? teamOrsRows[0]?.ors ?? null;
 
@@ -270,8 +288,10 @@ export async function GET(request: NextRequest) {
   // subquery kept as one raw statement.
   const pendingRow = await rawGet<{ cnt: number | string }>(client, sql`
     SELECT COUNT(*) as cnt FROM cowork_messages cm
-    WHERE cm.surface = 'cowork' AND cm.user_id = ${userId}
+    WHERE ${isWorkPulseSurface(sql`cm.surface`)} AND cm.user_id = ${userId}
       AND cm.message_type = 'cowork_user_message'
+      AND ${sql.raw(vendorClause(vendor, 'cm.'))}
+      AND ${classifiableSource(sql`cm.source`, await classifyChatgptOn())}
       AND cm.id NOT IN (
         SELECT cowork_message_id FROM pulse_classifications
         WHERE classifier_status = 'classified' OR classifier_attempts >= 5
@@ -343,6 +363,7 @@ export async function GET(request: NextRequest) {
     SELECT skill_name AS name, COUNT(*) AS cnt
     FROM cowork_skill_invocations
     WHERE user_id = ${userId} AND occurred_at >= ${sevenDaysAgoTools}
+      AND ${sql.raw(workPulseToolClause(vendor))}
     GROUP BY skill_name
   `);
   const skillsUsed = skillsUsedRaw.map(r => ({ name: r.name, cnt: Number(r.cnt) }));
@@ -352,6 +373,7 @@ export async function GET(request: NextRequest) {
     FROM cowork_mcp_invocations
     WHERE user_id = ${userId} AND occurred_at >= ${sevenDaysAgoTools}
       AND mcp_server NOT IN ('workspace', 'cowork', 'Claude_in_Chrome')
+      AND ${sql.raw(workPulseToolClause(vendor))}
     GROUP BY mcp_server
   `);
   const connectorsUsed = connectorsUsedRaw.map(r => ({ name: r.name, cnt: Number(r.cnt) }));
@@ -388,6 +410,8 @@ export async function GET(request: NextRequest) {
   // OTel cowork enrichments — 7-day window
   const sevenDaysAgoOtel = now - 7 * 24 * 3600;
   const coworkCostUsd = await getCoworkCostUsd(userId, sevenDaysAgoOtel, now);
+  const openaiPresent = await visibleOpenAi(hasOpenAiData());
+  const chatgpt = vendor === 'claude' || !openaiPresent ? undefined : await chatgptSpend({ since: sevenDaysAgoOtel, userIds: [userId] });
   const coworkFrictionIndex = await getCoworkFrictionIndex(userId, sevenDaysAgoOtel, now);
 
   // Frontier boxes: best recent work, step-ups, capabilities.
@@ -397,7 +421,7 @@ export async function GET(request: NextRequest) {
     frontier = await buildFrontierView({ userId }, now, {
       seeAllDetail: canAccessPulseAdmin(session.role),
       ownUserId: await resolveViewerUserId(session.email),
-    });
+    }, vendor);
   } catch (err) {
     console.error('[pulse/me] frontier view failed', err);
   }
@@ -409,7 +433,7 @@ export async function GET(request: NextRequest) {
   // Person-level human time: admins and managers for anyone, everyone else for
   // themselves only (a same-department colleague's page does not carry it).
   const seesPerson = canAccessPulseAdmin(session.role) || userId === (await resolveMyUserId());
-  const humanTime = seesPerson ? await readHumanTime('cowork', [userId]) : null;
+  const humanTime = seesPerson ? await readHumanTime('cowork', [userId], vendor) : null;
   // Link to this person's Spend Review, for whoever may open it
   // (lib/finance/spend-review-access.ts); it lives under FinOps and is hidden with it.
   const canSeeSpendReview = (await getAllConfig()).chargebackEnabled === true
@@ -433,9 +457,14 @@ export async function GET(request: NextRequest) {
     teamId,
     teamMetrics: { ors: teamOrs },
     toolsUsed,
-    coworkCostUsd,
-    coworkFrictionIndex,
-    topNativeTools,
+    // Claude Cowork only (no ChatGPT spend or tool calls are recorded): absent in the OpenAI view.
+    coworkCostUsd: vendor === 'openai' ? undefined : coworkCostUsd,
+    chatgptCostUsd: chatgpt === undefined ? undefined : chatgpt?.usd ?? null,
+    chatgptUnpricedModels: chatgpt?.unpricedModels ?? [],
+    coworkFrictionIndex: vendor === 'openai' ? undefined : coworkFrictionIndex,
+    topNativeTools: vendor === 'openai' ? [] : topNativeTools,
     otiUnderReview,
+    vendor,
+    openaiPresent,
   });
 }

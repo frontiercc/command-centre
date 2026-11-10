@@ -72,7 +72,6 @@ afterAll(async () => cleanup());
 beforeEach(async () => {
   await sql.exec('DELETE FROM alerts');
   await sql.exec('DELETE FROM compliance_events');
-  await sql.exec('DELETE FROM chat_messages');
   await sql.exec('DELETE FROM analytics_snapshots');
   await sql.exec('DELETE FROM otel_events');
   try { await sql.exec('DELETE FROM cowork_messages'); } catch { /* table may not exist */ }
@@ -105,8 +104,8 @@ async function insertAlertWithTimestamp(id: string, generatedAt: number, opts: {
   ]);
 }
 
-// Raw-SQL twins of seed.ts's seedComplianceEvent / seedChatMessage
-// (same columns, same defaults) for createTestDatabase().
+// Raw-SQL twin of seed.ts's seedComplianceEvent (same columns, same
+// defaults) for createTestDatabase(), plus a Claude Chat prompt seeder.
 async function seedComplianceEvent(overrides: Partial<{
   id: string; user_id: string; event_type: string; surface: string;
   flagged: number; flag_reason: string | null; occurred_at: number;
@@ -127,19 +126,22 @@ async function seedComplianceEvent(overrides: Partial<{
   ]);
 }
 
+// A Claude Chat prompt is a cowork_messages row with surface 'chat'.
 async function seedChatMessage(overrides: Partial<{
-  id: string; user_id: string; prompt_length: number;
+  id: string; user_id: string; text: string;
   flagged: number; flag_reason: string | null; occurred_at: number;
 }> = {}) {
   const now = Math.floor(Date.now() / 1000);
+  const text = overrides.text ?? 'test prompt';
   await sql.run(`
-    INSERT INTO chat_messages (id, user_id, prompt_text, prompt_length, flagged, flag_reason, occurred_at, ingested_at)
-    VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+    INSERT INTO cowork_messages (id, session_id, user_id, message_type, surface, source, content_full, content_preview, flagged, flag_reason, occurred_at, ingested_at)
+    VALUES (?, ?, ?, 'cowork_user_message', 'chat', 'compliance', ?, ?, ?, ?, ?, ?)
   `, [
     overrides.id ?? `chat-${Math.random().toString(36).slice(2)}`,
+    'conv-1',
     overrides.user_id ?? 'user-1',
-    'test prompt',
-    overrides.prompt_length ?? 100,
+    text,
+    text.slice(0, 250),
     overrides.flagged ?? 0,
     overrides.flag_reason ?? null,
     overrides.occurred_at ?? now,
@@ -178,6 +180,28 @@ describe('runAnomalyDetection — watermark filtering', () => {
 
     expect(result).toEqual([]);
     expect(mockCreate).not.toHaveBeenCalled();
+  });
+
+  it('passes a Claude Chat prompt newer than the watermark to AI as a chat prompt', async () => {
+    await insertAlertWithTimestamp('old-alert', 1000);
+    // The only event: a flagged Claude Chat prompt after the watermark.
+    await seedChatMessage({
+      text: 'my card 4111 1111 1111 1111', occurred_at: 1100,
+      flagged: 1, flag_reason: 'PII detected: credit_card',
+    });
+
+    mockAiResponse([]);
+    await runAnomalyDetection();
+
+    expect(mockCreate).toHaveBeenCalledTimes(1);
+    const prompt = mockCreate.mock.calls[0][0].messages[0].content as string;
+    expect(prompt).toContain('Chat Prompts (last 1)');
+    expect(prompt).toContain('PII detected: credit_card');
+    // Prompt length is worked out from the stored text; the text itself is never sent.
+    expect(prompt).toContain(`"prompt_length": ${'my card 4111 1111 1111 1111'.length}`);
+    expect(prompt).not.toContain('4111 1111');
+    // Listed once, as a chat prompt, never again among the Cowork messages.
+    expect(prompt).not.toContain('Cowork + Code');
   });
 
   it('calls AI when watermark is 0 (no previous alerts)', async () => {

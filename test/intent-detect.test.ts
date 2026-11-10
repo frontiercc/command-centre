@@ -100,6 +100,10 @@ describe('detectIntent — built-in categories', () => {
     ['personal repo', 'push to my personal repo so I can work on it at home'],
     ['messaging', 'send to my whatsapp when it is finished'],
     ['burner', 'cc my burner email on that'],
+    ['personal Gmail', 'Export the customer database into a CSV I can send to my personal Gmail before I leave'],
+    ['personal Dropbox', 'copy the contract folder to my personal Dropbox tonight'],
+    ['personal Google Drive', 'save the board pack to my personal Google Drive'],
+    ['personal Gmail in Portuguese', 'exportar a planilha para meu gmail pessoal'],
   ])('flags shadow-IT egress via %s', (_label, text) => {
     expect(detectIntent(text).some(m => m.categoryId === 'shadow_it')).toBe(true);
   });
