@@ -398,7 +398,7 @@ When telemetry, Anthropic's Compliance API or OpenAI's Compliance API first show
 
 ### Sign-in, single sign-on and MFA
 
-People sign in with email and password or through single sign-on with an OpenID Connect identity provider. Single sign-on proves identity only: the person must already hold a Command Centre account with single sign-on enabled, and their role is held in Command Centre. Password accounts can add one-time passcodes from an authenticator app, with single-use recovery codes. Sessions expire after 24 hours or eight hours of inactivity; a person who chooses to be remembered on a device stays signed in for up to seven days. Administrators can see and revoke active sessions. When a session has ended, the next page or request takes the person straight to sign-in, and back to the same page afterwards.
+People sign in with email and password or through single sign-on with an OpenID Connect identity provider. Single sign-on proves identity only: the person must already hold a Command Centre account with single sign-on enabled, and their role is held in Command Centre. With single sign-on through Microsoft Entra ID, department sync can also keep each person's department in step with the directory; it never changes a role. Password accounts can add one-time passcodes from an authenticator app, with single-use recovery codes. Sessions expire after 24 hours or eight hours of inactivity; a person who chooses to be remembered on a device stays signed in for up to seven days. Administrators can see and revoke active sessions. When a session has ended, the next page or request takes the person straight to sign-in, and back to the same page afterwards.
 
 ### Configuration
 

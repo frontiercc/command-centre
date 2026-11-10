@@ -1,6 +1,6 @@
 # Frontier Command Centre: Troubleshooting and FAQ
 
-Fixes for the problems people most often hit when installing, signing in, connecting Claude, connecting ChatGPT and Codex, running and updating Command Centre.
+Fixes for the problems people most often hit when installing, signing in, connecting Claude, connecting ChatGPT and Codex, using department sync, running and updating Command Centre.
 
 The commands are for Docker Compose installations: run them from the `command-centre` folder. If your problem is not listed, ask in [Discussions](https://github.com/frontiercc/command-centre/discussions), or report a bug in [Issues](https://github.com/frontiercc/command-centre/issues).
 
