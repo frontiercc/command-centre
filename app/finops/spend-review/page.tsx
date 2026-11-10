@@ -116,7 +116,7 @@ function EfficiencyBoard({ boards, period }: { boards: Board[]; period: string }
                   <tr key={r.userId} className={T.row}>
                     <td className={cx(T.td, 'w-8 text-[12px] text-[#B3B3B3] tabular-nums')}>{i + 1}</td>
                     <td className={T.td}>
-                      <Link href={`/finops/spend-review/${encodeURIComponent(r.userId)}?period=${boardPeriod}`} className="font-medium text-[#0A0A0A] hover:text-[#245BF3] hover:underline">{r.displayName}</Link>
+                      <Link href={`/finops/spend-review/${encodeURIComponent(r.userId)}?period=${encodeURIComponent(boardPeriod)}`} className="font-medium text-[#0A0A0A] hover:text-[#245BF3] hover:underline">{r.displayName}</Link>
                       <span className="block text-[13px] text-[#8F8F8F]">{r.department ?? 'No department'}</span>
                     </td>
                     <td className={cx(T.tdRight, 'text-[#666666]')}>{r.sessions}</td>
