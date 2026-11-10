@@ -241,7 +241,7 @@ For Tier 2 and Tier 3 sessions of everyday work, in Claude and ChatGPT, Command 
 
 ### Briefings
 
-Each person has a weekly briefing on their own work, administrators and managers can generate a briefing for each department on its page, and the executive view carries a monthly organisation briefing. All are written by Claude from figures computed in code and pass the number check; organisation-level briefings are written from figures that carry no names. Each briefing compares Claude and ChatGPT work when both were used in the period, and the executive and department briefings also say how the work split between Claude Cowork and the Office and Google apps when those were used.
+Each person has a weekly briefing on their own work, written every Sunday, and can generate it again at any time from My Pulse; administrators and managers can generate a briefing for each department on its page, and the executive view carries a monthly organisation briefing. All are written by Claude from figures computed in code and pass the number check; organisation-level briefings are written from figures that carry no names. Each briefing compares Claude and ChatGPT work when both were used in the period, and the executive and department briefings also say how the work split between Claude Cowork and the Office and Google apps when those were used.
 
 ## Developer Pulse
 

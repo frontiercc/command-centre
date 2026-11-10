@@ -13,6 +13,7 @@ import { schema } from '@/lib/db/schema';
 import { getConfigValue, setConfigValue } from '@/lib/config';
 import { generateUserWeeklyBriefing } from '@/lib/pulse/briefings/weekly';
 import { generateCioBriefing } from '@/lib/pulse/briefings/cio';
+import { ownUserId } from '@/lib/finance/spend-review-access';
 
 export const dynamic = 'force-dynamic';
 
@@ -55,19 +56,29 @@ async function userModelUnavailable(model: string, saved: boolean): Promise<Next
  *    or { type: 'all_users' }   — personal model; regenerates for all active users
  *    or { type: 'cio' } / { type: 'dept', dept }  — organisation model
  *
- * Admin only. Returns { ok: true, generated: number } on success.
+ * Admins and managers can generate any of them. Everyone else can generate
+ * their own personal briefing (type 'user' with their own user id) and nothing
+ * else. Returns { ok: true, generated: number } on success.
  */
 export async function POST(request: NextRequest) {
   const session = await getAdminSession(request);
-  if (!session.authenticated || !canAccessPulseAdmin(session.role)) {
+  if (!session.authenticated) {
     return NextResponse.json({ error: 'Forbidden' }, { status: 403 });
   }
+  const pulseAdmin = canAccessPulseAdmin(session.role);
 
   let body: { type: string; userId?: string; dept?: string };
   try {
     body = await request.json();
   } catch {
-    return NextResponse.json({ error: 'Invalid JSON' }, { status: 400 });
+    return pulseAdmin
+      ? NextResponse.json({ error: 'Invalid JSON' }, { status: 400 })
+      : NextResponse.json({ error: 'Forbidden' }, { status: 403 });
+  }
+  if (!pulseAdmin) {
+    const own = body?.type === 'user' && typeof body.userId === 'string' && body.userId !== ''
+      && (await ownUserId(session)) === body.userId;
+    if (!own) return NextResponse.json({ error: 'Forbidden' }, { status: 403 });
   }
 
   // Personal briefings and organisation briefings use different models
