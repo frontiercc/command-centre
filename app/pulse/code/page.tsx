@@ -14,14 +14,13 @@ import RepoCoverageList, { type ActiveRepo, type DarkRepo } from '@/components/p
 import CodeBriefingCard from '@/components/pulse/code/CodeBriefingCard';
 import ShippingAlignmentChart from '@/components/pulse/code/ShippingAlignmentChart';
 import GithubRepoCards from '@/components/pulse/code/GithubRepoCards';
-import Sparkline from '@/components/pulse/Sparkline';
-import WeeklyDeltaBadge from '@/components/pulse/WeeklyDeltaBadge';
 import HumanTimeCard, { type HumanTimeSummary } from '@/components/pulse/HumanTimeCard';
 import { displayDefinition } from '@/lib/pulse/code/work-type-labels';
 import { useVendor, useOpenAiOnly, VendorSwitch, formatSplit } from '@/components/shared/VendorSwitch';
 import { DEVELOPER_PULSE_VENDOR_LABELS, type Vendor } from '@/lib/dashboard/vendor';
+import { Costing, Shipping, Delegating, KindOfWork, Leverage, toolName } from '@/components/pulse/code/DevPulseAnswers';
 import {
-  PageBody, Toolbar, Panel, PanelFoot, SubHead, Figure, BarRow, Bar, Tag, Pill, Notice, Muted,
+  PageBody, Toolbar, Panel, PanelFoot, SubHead, Figure, BarRow, Bar, Tag, Notice, Muted,
 } from '@/components/precision/ui';
 
 interface WeeklyPoint {
@@ -77,188 +76,6 @@ interface OrgSummary {
   spendProjection: { projected: number; daysElapsed: number; daysInMonth: number } | null;
 }
 
-
-// ─── Verdict cards (formerly the Executive View) ─────────────────────────────
-
-interface Verdict {
-  question: string;
-  value: string;
-  status: 'good' | 'building' | 'attention' | 'neutral';
-  plain: string;
-  trend?: WeeklyTrend;
-  /** Violet estimate note shown under the value — used by the spend verdict only. */
-  estimateBadge?: string;
-  /** Month-end spend projection line (spend verdict only). */
-  projection?: string;
-  /** All view: the Claude Code and Codex parts under the value. */
-  split?: string;
-  /** A quiet line under the explanation saying where the figure comes from. */
-  note?: string;
-}
-
-/** The product names each view uses in its wording. */
-function productWords(vendor: Vendor) {
-  if (vendor === 'claude') return { tool: 'Claude Code', actor: 'Claude', sessions: 'Claude Code sessions' };
-  if (vendor === 'openai') return { tool: 'Codex', actor: 'Codex', sessions: 'Codex sessions' };
-  return { tool: 'AI coding', actor: 'The AI', sessions: 'Claude Code and Codex sessions' };
-}
-
-const STATUS_TONE: Record<Verdict['status'], 'good' | 'info' | 'warn' | 'neutral'> = {
-  good: 'good',
-  building: 'info',
-  attention: 'warn',
-  neutral: 'neutral',
-};
-
-const STATUS_LABEL: Record<Verdict['status'], string> = {
-  good: 'Healthy',
-  building: 'Building',
-  attention: 'Worth a look',
-  neutral: 'Context',
-};
-
-function buildVerdicts(d: OrgSummary, vendor: Vendor): Verdict[] {
-  const m = d.metrics;
-  const w = productWords(vendor);
-  const sp = d.metricsSplit;
-  const part = (pick: (r: CodeMetricsRow) => number | null, fmt: (v: number) => string) => {
-    if (!sp) return undefined;
-    const c = sp.claude ? pick(sp.claude) : null;
-    const o = sp.openai ? pick(sp.openai) : null;
-    // Shown only when both products have a figure, never as "n/a".
-    if (c == null || o == null) return undefined;
-    return `Claude Code ${fmt(c)} · Codex ${fmt(o)}`;
-  };
-  const spendPerSession = m && m.spend_usd !== null && m.session_count > 0 ? m.spend_usd / m.session_count : null;
-  // Trend wording comes from the completed-week delta, never a render-time
-  // guess against the rolling snapshot — pct is null until two completed
-  // weeks of history exist, in which case we omit trend language entirely.
-  const spendPct = d.trends?.spend?.delta?.pct ?? null;
-  const spendTrend = spendPct == null ? null : spendPct >= 0.20 ? 'rising' : spendPct <= -0.20 ? 'falling' : 'steady';
-
-  const autonomy = m?.autonomy_ratio ?? null;
-  const subagentPct = d.subagentShare != null ? Math.round(d.subagentShare * 100) : null;
-  const subagentNote = subagentPct != null ? ` ${subagentPct}% of turns were subagent-driven, a measure of delegation depth.` : '';
-  const commits = m?.commit_count ?? 0;
-  const darkCount = d.darkRepos.length;
-  const activeCount = m?.repo_count ?? 0;
-  const hasRepoData = activeCount > 0 || darkCount > 0 || (d.activeRepos?.length ?? 0) > 0;
-
-  const verdicts: Verdict[] = [
-    {
-      question: `What is ${w.tool} costing us?`,
-      value: m?.spend_usd == null ? '—' : formatCurrency(m.spend_usd),
-      status: 'neutral',
-      plain: m?.spend_usd == null
-        ? 'No priced activity in the window yet.'
-        : `${formatCurrency(m.spend_usd)} this week across ${m.session_count} sessions` +
-          (spendPerSession !== null ? ` (${formatCurrency(spendPerSession)} per session)` : '') +
-          (spendTrend ? `, ${spendTrend} week-on-week` : '') +
-          '. Spend is context, not a verdict: read it alongside autonomy and shipping.',
-      trend: d.trends?.spend,
-      estimateBadge: d.spendIsPartlyEstimated
-        ? 'Includes provider-routed usage estimated at list pricing'
-        : undefined,
-      projection: d.spendProjection != null
-        ? `≈ ${formatCurrency(d.spendProjection.projected)} projected month-end`
-        : undefined,
-      split: part(r => r.spend_usd, formatCurrency),
-    },
-    {
-      question: 'Are developers delegating, or just typing faster?',
-      value: autonomy == null ? '—' : `${autonomy.toFixed(1)}× `,
-      status: autonomy == null ? 'neutral' : autonomy >= 3 ? 'good' : autonomy >= 1 ? 'building' : 'attention',
-      plain: (autonomy == null
-        ? 'No activity to judge yet.'
-        : autonomy >= 3
-          ? `${w.actor} takes ${autonomy.toFixed(1)} actions per human instruction: developers are supervising delegated work, not dictating keystrokes.`
-          : autonomy >= 1
-            ? `${w.actor} takes ${autonomy.toFixed(1)} actions per instruction: delegation is forming but still hands-on.`
-            : `Under one action per instruction: ${w.actor === 'The AI' ? 'AI' : w.actor} is being used as a conversational aid more than a delegate. Expect this to rise as trust builds.`) + subagentNote,
-      trend: d.trends?.autonomy,
-      split: part(r => r.autonomy_ratio, v => `${v.toFixed(1)}×`),
-    },
-    {
-      question: 'Is AI-assisted work actually shipping?',
-      value: String(commits),
-      status: commits > 0 ? 'good' : 'attention',
-      plain: (commits > 0
-        ? `${commits} AI-assisted commit${commits === 1 ? '' : 's'} from ${w.sessions} this week.`
-        : `No AI-assisted commits in ${w.sessions} this week. Activity may be exploration, review, or Q&A rather than shipping.`)
-        + (d.githubOverlay
-            ? ` Shipping context: the ${d.githubOverlay.trackedRepoCount} tracked repo${d.githubOverlay.trackedRepoCount === 1 ? '' : 's'} saw ${d.githubOverlay.totalCommits7d} commit${d.githubOverlay.totalCommits7d === 1 ? '' : 's'} and ${d.githubOverlay.totalPrs7d} merged PR${d.githubOverlay.totalPrs7d === 1 ? '' : 's'} on GitHub this week.`
-            : ' Add repositories in admin to see GitHub shipping volume alongside this.'),
-      trend: d.trends?.commits,
-      split: part(r => r.commit_count ?? null, v => String(v)),
-    },
-    {
-      question: 'How much of our codebase does this reach?',
-      value: `${activeCount} repo${activeCount === 1 ? '' : 's'}`,
-      status: darkCount > activeCount ? 'attention' : activeCount > 0 ? 'building' : 'neutral',
-      plain: darkCount > 0
-        ? `${activeCount} active repo${activeCount === 1 ? '' : 's'} this week; ${darkCount} repo${darkCount === 1 ? ' has' : 's have'} gone quiet for 30+ days. Quiet repos are the expansion opportunity.`
-        : `${activeCount} repo${activeCount === 1 ? '' : 's'} with ${w.tool} activity this week and nothing has gone quiet.`,
-    },
-  ];
-  // Codex reports no repository, so on the Codex tab the reach comes from
-  // GitHub: tracked repos that received commits matched to Codex.
-  const reach = d.githubOverlay?.codexReach ?? null;
-  if (vendor === 'openai') {
-    const rest = verdicts.filter(v => !v.question.startsWith('How much of our codebase'));
-    if (!reach) return rest;
-    const a = reach.activeRepos7d;
-    const quiet = reach.quietRepos30d;
-    return [...rest, {
-      question: 'How much of our codebase does this reach?',
-      value: `${a} repo${a === 1 ? '' : 's'}`,
-      status: quiet > a ? 'attention' : a > 0 ? 'building' : 'neutral',
-      plain: `${a} tracked repo${a === 1 ? '' : 's'} received commits made with Codex this week` +
-        (quiet > 0
-          ? `; ${quiet} of ${reach.trackedRepos} had none in the last 30 days. Quiet repos are the expansion opportunity.`
-          : ', and every tracked repo had one in the last 30 days.'),
-      note: 'Worked out from GitHub commits matched to Codex, on the GitHub-tracked repos only: Codex does not report which repository it worked in.',
-    }];
-  }
-  // Retire the repo-centric verdict on OTel-only instances (no cwd → no repo data),
-  // where it would always read "0 repos". Instances with repo data keep it.
-  return hasRepoData ? verdicts : verdicts.filter(v => !v.question.startsWith('How much of our codebase'));
-}
-
-function VerdictPanel({ v }: { v: Verdict }) {
-  return (
-    <Panel title={v.question} right={<Pill tone={STATUS_TONE[v.status]}>{STATUS_LABEL[v.status]}</Pill>}>
-      <div className="flex flex-col gap-2.5">
-        <div className="flex items-end gap-4">
-          <span className="text-[28px] leading-8 font-semibold tracking-[-0.03em] tabular-nums text-[#0A0A0A]">{v.value}</span>
-          {v.trend && (
-            <div className="ml-auto w-40 shrink-0">
-              <Sparkline
-                data={v.trend.series.map(p => p.value)}
-                partialLast={v.trend.series[v.trend.series.length - 1]?.partial ?? false}
-                label={v.question}
-              />
-            </div>
-          )}
-        </div>
-        {v.split && <p className="m-0 -mt-1 text-[13px] text-[#8F8F8F] tabular-nums">{v.split}</p>}
-        {(v.projection || v.estimateBadge) && (
-          <div className="flex flex-col gap-0.5 text-[13px] text-[#2451F3]">
-            {v.projection && <span title="Last-7-day run rate extended to month end">{v.projection}</span>}
-            {v.estimateBadge && <span>{v.estimateBadge}</span>}
-          </div>
-        )}
-        <p className="m-0 text-[14px] leading-[1.5] text-[#4D4D4D]">{v.plain}</p>
-        {v.note && <p className="m-0 text-[13px] text-[#8F8F8F]">{v.note}</p>}
-        {v.trend && (
-          <div className="flex items-center gap-2 flex-wrap text-[13px] text-[#8F8F8F]">
-            <span>8-week trend · week to date shown hollow</span>
-            <span className="ml-auto"><WeeklyDeltaBadge pct={v.trend.delta.pct} /></span>
-          </div>
-        )}
-      </div>
-    </Panel>
-  );
-}
 
 // ─── Page ────────────────────────────────────────────────────────────────────
 
@@ -400,7 +217,7 @@ export default function CodePulseOverviewPage() {
 
   return (
     <>
-      <TopBar title="Developer Pulse" subtitle="Engineering signals in plain language, measured rather than judged" />
+      <TopBar title="Developer Pulse" subtitle="What coding with AI costs, what it ships, and how deeply developers delegate" />
       <PageBody>
         {error ? (
           <Notice tone="error">{error}</Notice>
@@ -413,14 +230,34 @@ export default function CodePulseOverviewPage() {
             >
               <span className="flex flex-wrap items-center justify-end gap-3.5 text-[13px] text-[#666666]">
                 <VendorSwitch vendor={vendor} onChange={setVendor} openaiPresent={codexPresent} labels={DEVELOPER_PULSE_VENDOR_LABELS} />
-                <span className="flex items-center gap-1.5"><span className="w-2 h-2 rounded-[2px] bg-[#05073F]" />Measured</span>
-                <span className="flex items-center gap-1.5"><span className="w-2 h-2 rounded-[2px] bg-[#699BFB]" />AI-judged or estimate</span>
               </span>
             </Toolbar>
             {codexPresent && vendor !== 'all' && !openaiOnly && (
               <p className="m-0 -mt-2 text-[13px] text-[#8F8F8F]">Showing {vendor === 'openai' ? 'Codex' : 'Claude Code'} only.</p>
             )}
 
+            {(() => {
+              const tool = toolName(view, codexPresent);
+              return (
+                <>
+                  <div className="grid grid-cols-1 xl:grid-cols-2 gap-4 items-start">
+                    <Costing series={data!.trends.spend.series} projection={data!.spendProjection} tool={tool} estimated={data!.spendIsPartlyEstimated} />
+                    <Shipping commits={data!.trends.commits.series} github={data!.githubOverlay} dark={data!.darkRepos} tool={tool} />
+                    <Delegating autonomy={data!.trends.autonomy.series} workMix={data!.workMix} tool={tool} />
+                    <KindOfWork workMix={data!.workMix} tool={tool} />
+                  </div>
+                  <Leverage skills={data!.skillLeverage ?? []} agents={data!.agentLeverage ?? []} subagentShare={data!.subagentShare} />
+                </>
+              );
+            })()}
+
+            {/* The detail, one click away. */}
+            <details id="detail" className="group bg-white border border-[#EAEAEA] rounded-[14px]">
+              <summary className="cursor-pointer list-none px-5 py-3.5 text-[14px] font-semibold text-[#0A0A0A] flex items-center gap-2">
+                <span className="inline-block transition-transform group-open:rotate-90">›</span> The detail behind these answers
+                <span className="ml-auto text-[13px] font-normal text-[#8F8F8F] hidden md:inline">Productivity, the weekly briefing, shipping by repo, kinds of work, models, repos, tools and efficiency</span>
+              </summary>
+              <div className="px-4 pb-4 flex flex-col gap-4">
             {/* Productivity strip: Claude Code's own telemetry (engaged time, lines, pull requests, edits). */}
             {openaiOnly ? null : view === 'openai' ? (
               <Notice tone="info">Engaged time, lines of code, pull requests and edit acceptance come from Claude Code&apos;s own telemetry. Codex doesn&apos;t send them, so they aren&apos;t shown for Codex.</Notice>
@@ -436,10 +273,6 @@ export default function CodePulseOverviewPage() {
               </>
             )}
 
-            {/* Verdicts — the executive read; everything below is the working detail */}
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-              {buildVerdicts(data!, view).map(v => <VerdictPanel key={v.question} v={v} />)}
-            </div>
 
             {/* By hand vs with Claude sits after the verdicts, above This Week in Code. */}
             <HumanTimeCard summary={data!.humanTime} surface="code" scope="Org" view={view} />
@@ -447,11 +280,11 @@ export default function CodePulseOverviewPage() {
             <CodeBriefingCard />
 
             {data?.githubOverlay && (
-              <ShippingAlignmentChart series={data.githubOverlay.shippingSeries ?? []} codexPresent={codexPresent && vendor !== 'claude'} openaiOnly={openaiOnly || vendor === 'openai'} view={codexPresent || openaiOnly ? vendor : 'all'}>
+              <div id="detail-shipping"><ShippingAlignmentChart series={data.githubOverlay.shippingSeries ?? []} codexPresent={codexPresent && vendor !== 'claude'} openaiOnly={openaiOnly || vendor === 'openai'} view={codexPresent || openaiOnly ? vendor : 'all'}>
                 {(data.githubOverlay.repoCards?.length ?? 0) > 0
                   ? <GithubRepoCards cards={data.githubOverlay.repoCards} />
                   : undefined}
-              </ShippingAlignmentChart>
+              </ShippingAlignmentChart></div>
             )}
 
             {data && data.unpricedModels.length > 0 && (
@@ -464,7 +297,7 @@ export default function CodePulseOverviewPage() {
               </Notice>
             )}
 
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+            <div id="detail-work" className="grid grid-cols-1 md:grid-cols-2 gap-4">
               {hasWorkMix ? (
                 <Panel title="Work mix" subtitle="30 days" right={<Tag tone="judged">AI-judged</Tag>} flush>
                   {data!.workMix!.length === 0 ? (
@@ -501,7 +334,7 @@ export default function CodePulseOverviewPage() {
                     </div>
                   )}
                   <PanelFoot>
-                    Session digests classified by Claude: the only judged numbers on this page. Everything else is measured.
+                    Kinds of work are Claude&apos;s judgement of each finished session.
                   </PanelFoot>
                 </Panel>
               ) : (
@@ -555,7 +388,7 @@ export default function CodePulseOverviewPage() {
             </div>
 
             {((data?.skillLeverage?.length ?? 0) > 0 || (data?.agentLeverage?.length ?? 0) > 0) && (
-              <Panel
+              <div id="detail-tools"><Panel
                 title={codexPresent ? 'Leverage: Claude Code spend by skill and subagent' : 'Leverage: spend by skill and subagent'}
                 subtitle="30 days"
                 right={data?.subagentShare != null
@@ -588,39 +421,18 @@ export default function CodePulseOverviewPage() {
                     )}
                   </div>
                 </div>
-              </Panel>
+              </Panel></div>
             )}
 
             <EfficiencyCard metrics={data!.metrics} claude={claudeRow} />
 
             <SpendConcentrationCard data={data?.spendConcentration ?? null} />
 
-            {(data?.highFrictionSessions?.length ?? 0) > 0 && (
-              <Panel title="High-friction sessions" subtitle="7 days" flush>
-                <div className="px-4 pt-3 pb-2">
-                  <Muted>Sessions where over a quarter of tool actions failed: a coaching signal, not a fault list.</Muted>
-                </div>
-                <ul className="m-0 p-0 list-none">
-                  {data!.highFrictionSessions.map(s => (
-                    <li key={s.session_id} className="flex items-center justify-between gap-3 px-4 py-2.5 border-t border-[#F2F2F2] text-[14px]">
-                      <span className="text-[#0A0A0A] truncate min-w-0">
-                        {s.repo ? <><span className="font-mono text-[13px]">{s.repo}</span><span className="text-[#8F8F8F]"> · </span></> : null}
-                        <span className="font-medium">{s.user_display_name ?? 'unknown user'}</span>
-                        <span className="text-[#8F8F8F]"> · {new Date(s.last_at * 1000).toLocaleDateString('en-GB', { day: 'numeric', month: 'short' })}</span>
-                      </span>
-                      <span className="text-[13px] text-[#B54708] tabular-nums shrink-0">
-                        {s.error_count}/{s.tool_use_count} actions failed ({Math.round((s.error_count / s.tool_use_count) * 100)}%)
-                      </span>
-                    </li>
-                  ))}
-                </ul>
-              </Panel>
-            )}
+              </div>
+            </details>
 
             <Muted>
-              Everything on this page except the Work mix is computed directly from session telemetry: token counts,
-              tool actions, commits, repositories.
-              {data && data.metrics ? ` Window: 7 days (lists 30 days) · ${formatTokens(data.metrics.input_tokens + data.metrics.output_tokens)} tokens processed.` : ''}
+              Spend, commits, actions and tools are measured from session telemetry. Kinds of work and frontier work are Claude&apos;s judgement of each session, and projections are estimates.
             </Muted>
           </>
         )}

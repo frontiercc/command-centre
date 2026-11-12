@@ -9,7 +9,7 @@ import { logAccess } from '@/lib/audit/log';
 import { buildChargeback, type ChargebackReport } from '@/lib/finance/chargeback';
 import { currentPeriod, monthBounds } from '@/lib/finance/period';
 import { officeSpendByUser, summariseOfficeSpend } from '@/lib/finance/office-spend';
-import { buildFinopsProjection } from '@/lib/finance/finops-projection';
+import { buildFinopsProjection, MIN_PROJECTION_DAYS } from '@/lib/finance/finops-projection';
 import { buildInsightFacts, composeInsightNarrative, type InsightFacts } from '@/lib/finance/insights';
 import { getSeatsSummary, getChatgptSeatsSummary } from '@/lib/finance/seats';
 
@@ -63,13 +63,13 @@ export async function GET(request: NextRequest) {
   // NO LLM call (keeps the page fast; no synchronous Claude round-trip). Best-effort:
   // a failure (e.g. bad prior period) must never 500 the whole report.
   let insight: { facts: InsightFacts; narrative: string | null };
+  let prior: ChargebackReport | null = null;
   try {
-    let prior: ChargebackReport | null = null;
-    try {
-      prior = await buildChargeback(priorPeriodOf(period), nowS);
-    } catch {
-      prior = null;
-    }
+    prior = await buildChargeback(priorPeriodOf(period), nowS);
+  } catch {
+    prior = null;
+  }
+  try {
     const facts = buildInsightFacts(current, prior, projection);
     insight = { facts, narrative: composeInsightNarrative(facts) };
   } catch {
@@ -96,5 +96,20 @@ export async function GET(request: NextRequest) {
     ? await officeSpendByUser(start, end).then(rows => summariseOfficeSpend(rows, { allApps: true })).catch(() => null)
     : null;
 
-  return NextResponse.json({ ...current, projection, projectionByVendor, insight, seats, chatgptSeats, office });
+  // Each cost centre against last month (additive): for the month in progress, last month is scaled
+  // to the same point in the month, the same rule as the insight's biggest mover; before day
+  // MIN_PROJECTION_DAYS there is no comparison. Unallocated is a data gap, not a centre, so it is left out.
+  let centreChanges: Array<{ name: string; currentUsd: number; priorUsd: number }> | null = null;
+  if (prior && !(projection && projection.daysElapsed < MIN_PROJECTION_DAYS)) {
+    const pace = projection ? projection.daysElapsed / Math.max(1, projection.daysInMonth) : 1;
+    const priorByName = new Map(prior.costCentres.map(c => [c.name, c.totalUsd]));
+    const names = new Set([...current.costCentres.map(c => c.name), ...prior.costCentres.map(c => c.name)]);
+    centreChanges = [...names].map(name => ({
+      name,
+      currentUsd: current.costCentres.find(c => c.name === name)?.totalUsd ?? 0,
+      priorUsd: (priorByName.get(name) ?? 0) * pace,
+    }));
+  }
+
+  return NextResponse.json({ ...current, projection, projectionByVendor, insight, seats, chatgptSeats, office, centreChanges });
 }

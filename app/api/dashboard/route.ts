@@ -31,10 +31,18 @@ import {
   getAdoptionTrendByProduct,
   getDepartmentBreakdownByProduct,
   getTopUsersByProduct,
+  getWeeklyActivePeople,
 } from '@/lib/dashboard/queries';
 
 // Disable Next.js route caching — all API routes read live data from the database
 export const dynamic = 'force-dynamic';
+
+/** A percentage target from config: blank means the default, 'off' or 0 means no target. */
+function parseTarget(raw: string, fallback: number): number | null {
+  if (raw === '') return fallback;
+  const n = Number(raw);
+  return Number.isFinite(n) && n > 0 && n <= 100 ? n : null;
+}
 
 export async function GET(request: NextRequest) {
   const session = await getAdminSession(request);
@@ -76,6 +84,7 @@ export async function GET(request: NextRequest) {
       activeByVendor,
       sessionsByProduct,
       flaggedByProduct,
+      weeklyActive,
     ] = await Promise.all([
       getCoworkActiveProjectCount(weekAgo),
       getCoworkProjectStats(weekAgo),
@@ -95,6 +104,7 @@ export async function GET(request: NextRequest) {
       getActiveUsersByVendor(nowS),
       getSessionsPerWeekByProduct(nowS),
       getFlaggedByProduct(),
+      getWeeklyActivePeople(vendor, 8, nowS),
     ]);
     // A box's figure for the chosen vendor.
     const pick = (s: { total: number; claude: number; openai: number }) => (vendor === 'all' ? s.total : s[vendor]);
@@ -138,6 +148,10 @@ export async function GET(request: NextRequest) {
       },
       dataSourceStatus: await getDataSourceStatus(),
       licensedSeats,
+      // People active in each of the last 8 rolling weeks, oldest first.
+      weeklyActive,
+      // Department adoption target (Admin → System), a percentage; null when cleared.
+      adoptionTargetPct: parseTarget(await getConfigValue('targetDeptAdoptionPct'), 50),
     });
   } catch (err) {
     return errorResponse('Dashboard API', err);

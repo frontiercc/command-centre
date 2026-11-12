@@ -5,11 +5,12 @@
 
 import { Fragment, useEffect, useState } from 'react';
 import TopBar from '@/components/layout/TopBar';
+import { Spending, CentreGrowth, SpendLess } from '@/components/finance/FinOpsAnswers';
 import LoadingSpinner from '@/components/shared/LoadingSpinner';
 import SurfaceTiles, { type SurfaceSummary, type SurfaceSpend } from '@/components/finance/SurfaceTiles';
 import FinopsCharts, { type SpendTrend } from '@/components/finance/FinopsCharts';
 import Leaderboard, { type LeaderboardEntry } from '@/components/finance/Leaderboard';
-import InsightCard, { type InsightFacts } from '@/components/finance/InsightCard';
+import type { InsightFacts } from '@/components/finance/InsightCard';
 import ModelEfficiencySection from '@/components/finance/ModelEfficiencySection';
 import OfficeSpendPanel, { type OfficeSpendData } from '@/components/finance/OfficeSpendPanel';
 import { PageBody, Toolbar, Panel, Tag, Pill, T, B, Notice, Empty, Bar, cx } from '@/components/precision/ui';
@@ -48,6 +49,8 @@ interface ChargebackCentre {
 
 interface ChargebackReport {
   period: string;
+  /** Each cost centre against last month at the same point (additive), or null before day 7. */
+  centreChanges?: Array<{ name: string; currentUsd: number; priorUsd: number }> | null;
   periodStart: number;
   periodEnd: number;
   monthToDate: boolean;
@@ -426,6 +429,30 @@ export default function CostChargebackPage() {
           <Empty title={`No AI spend recorded for ${monthOptions.find(o => o.value === period)?.label ?? period}.`} />
         ) : (
           <>
+            <Spending
+              period={period}
+              totalUsd={report.grandTotalUsd}
+              monthToDate={report.monthToDate}
+              projection={report.projection ?? null}
+              vsPriorPct={report.insight?.facts.projection?.vsPriorPct ?? null}
+              trend={trend?.series ?? []}
+              gaps={dataQualityNotes.map((n, i) => ({ key: `g${i}`, label: n }))}
+            />
+            <div className="grid grid-cols-1 xl:grid-cols-2 gap-4 items-start">
+              <CentreGrowth changes={report.centreChanges ?? null} totalUsd={report.grandTotalUsd} monthToDate={report.monthToDate} />
+              <SpendLess period={period} totalUsd={report.grandTotalUsd} />
+            </div>
+
+            {/* Claude in Office and Google: an estimate beside the totals, never in them */}
+            <OfficeSpendPanel data={report.office} />
+
+            {/* The detail, one click away. */}
+            <details id="detail" className="group bg-white border border-[#EAEAEA] rounded-[14px]">
+              <summary className="cursor-pointer list-none px-5 py-3.5 text-[14px] font-semibold text-[#0A0A0A] flex items-center gap-2">
+                <span className="inline-block transition-transform group-open:rotate-90">›</span> The detail behind these answers
+                <span className="ml-auto text-[13px] font-normal text-[#8F8F8F] hidden md:inline">Spend by product, seats and licences, kinds of work and models, top spenders and every cost centre</span>
+              </summary>
+              <div className="px-4 pb-4 flex flex-col gap-4">
             {/* Headline */}
             <div className="flex flex-col gap-2">
               <div className="flex items-baseline gap-3 flex-wrap">
@@ -516,22 +543,13 @@ export default function CostChargebackPage() {
               </details>
             </div>
 
-            {dataQualityNotes.length > 0 && (
-              <Notice tone="warn">
-                {dataQualityNotes.map((note, i) => (
-                  <span key={i} className="block">{note}</span>
-                ))}
-              </Notice>
-            )}
 
             {/* By-surface strip */}
             {report.surfaces && <SurfaceTiles surfaces={report.surfaces} openaiOnly={openaiOnly} />}
 
-            {/* Claude in Office: an estimate beside the strip, never in its totals */}
-            <OfficeSpendPanel data={report.office} />
 
             {/* Model efficiency — activity × model drill-down, directly below the by-surface strip. Self-gated on financeModelEfficiencyEnabled (route 404s when off, section hides). */}
-            <ModelEfficiencySection period={period} />
+            <div id="detail-efficiency"><ModelEfficiencySection period={period} /></div>
 
             {/* Charts: spend trend / month-end projection / concentration */}
             <FinopsCharts
@@ -543,15 +561,12 @@ export default function CostChargebackPage() {
               openaiOnly={openaiOnly}
             />
 
-            {/* Top spenders + this-month insight */}
-            <div className="grid grid-cols-1 lg:grid-cols-[minmax(0,3fr)_minmax(0,2fr)] gap-4">
-              <Leaderboard leaderboard={report.leaderboard ?? []} period={period} openaiOnly={openaiOnly} />
-              <InsightCard insight={report.insight ?? null} dataQualityNotes={dataQualityNotes} />
-            </div>
+            {/* Top spenders: Spend Review is their home; the answers above replace the insight card */}
+            <Leaderboard leaderboard={report.leaderboard ?? []} period={period} openaiOnly={openaiOnly} />
 
             {/* Cost centres, Unallocated last */}
             {centreKeys.length > 0 && (
-              <Panel
+              <div id="detail-centres"><Panel
                 title="By cost centre"
                 subtitle={`${centreCount} centre${centreCount === 1 ? '' : 's'}${report.unallocated.users.length > 0 ? ', plus unallocated' : ''}`}
                 right={
@@ -607,8 +622,10 @@ export default function CostChargebackPage() {
                     </tbody>
                   </table>
                 </div>
-              </Panel>
+              </Panel></div>
             )}
+              </div>
+            </details>
           </>
         )}
       </PageBody>

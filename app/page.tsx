@@ -5,22 +5,15 @@
 
 import { useEffect, useState } from 'react';
 import TopBar from '@/components/layout/TopBar';
-import StatCard from '@/components/dashboard/StatCard';
-import AdoptionChart from '@/components/dashboard/AdoptionChart';
-import StickinessCard from '@/components/dashboard/StickinessCard';
-import DepartmentHeatmap from '@/components/dashboard/DepartmentHeatmap';
-import TopUsers from '@/components/dashboard/TopUsers';
 import LoadingSpinner from '@/components/shared/LoadingSpinner';
-import AiBriefing from '@/components/dashboard/AiBriefing';
-import { DataSourceIndicator } from '@/components/dashboard/DataSourceIndicator';
-import Link from 'next/link';
-import { PageBody, Toolbar, Strip, Panel, Tag, Notice, B } from '@/components/precision/ui';
-import { useVendor, VendorSwitch, formatSplit } from '@/components/shared/VendorSwitch';
-import { PRODUCTS, dashboardProducts, type Vendor, type VendorSplit, type ProductCounts, type ProductId } from '@/lib/dashboard/vendor';
-import PulseBand from '@/components/pulse/PulseBand';
-import CodePulseBand from '@/components/pulse/code/CodePulseBand';
+import { PageBody, Toolbar, Notice, B } from '@/components/precision/ui';
+import { useVendor, VendorSwitch } from '@/components/shared/VendorSwitch';
+import type { Vendor, VendorSplit, ProductCounts, ProductId } from '@/lib/dashboard/vendor';
 import { useCorePlatformGuard } from '@/components/shared/useCorePlatformGuard';
 import GetStartedPanel from '@/components/dashboard/GetStartedPanel';
+import ThisWeek from '@/components/dashboard/ThisWeek';
+import WhoIsUsing from '@/components/dashboard/WhoIsUsing';
+import AlertsDecision from '@/components/dashboard/AlertsDecision';
 
 interface DashboardData {
   stats: {
@@ -92,6 +85,8 @@ interface DashboardData {
     mode: 'max' | 'enterprise';
   };
   licensedSeats: number | null;
+  weeklyActive: Array<{ endS: number; people: number }>;
+  adoptionTargetPct: number | null;
 }
 
 function formatTimeAgo(date: Date): string {
@@ -103,45 +98,17 @@ function formatTimeAgo(date: Date): string {
   return `${hours}h ago`;
 }
 
-function formatChange(current: number, previous: number): string {
-  if (previous === 0) return current > 0 ? '\u2191 new' : '';
-  const diff = current - previous;
-  const pct = Math.round((diff / previous) * 100);
-  if (pct > 0) return `\u2191 ${pct}% vs last week`;
-  if (pct < 0) return `\u2193 ${Math.abs(pct)}% vs last week`;
-  return 'no change';
-}
-
-function flaggedLine(n: number): string {
-  return n > 0 ? `${n} flagged for PII` : 'no PII flags';
-}
-
-function formatAlertSeverity(bySeverity: Record<string, number>): string {
-  const parts: string[] = [];
-  if (bySeverity.critical) parts.push(`${bySeverity.critical} critical`);
-  if (bySeverity.high) parts.push(`${bySeverity.high} high`);
-  if (bySeverity.medium) parts.push(`${bySeverity.medium} medium`);
-  if (bySeverity.low) parts.push(`${bySeverity.low} low`);
-  return parts.join(', ') || 'none';
-}
-
 export default function DashboardPage() {
   useCorePlatformGuard();
   const [data, setData] = useState<DashboardData | null>(null);
   const [loading, setLoading] = useState(true);
   const [lastRefreshed, setLastRefreshed] = useState<Date>(new Date());
   const [refreshKey, setRefreshKey] = useState(0);
-  const [briefingRefreshKey, setBriefingRefreshKey] = useState(0);
   const [, setTick] = useState(0);
-  const [pulseEnabled, setPulseEnabled] = useState(false);
   // The vendor switch, remembered per browser and shared with Work Pulse.
   const [vendor, setVendor, vendorReady] = useVendor();
 
-  // Manual Refresh click refreshes both dashboard data AND briefing
-  const refreshDashboard = () => {
-    setRefreshKey(k => k + 1);
-    setBriefingRefreshKey(k => k + 1);
-  };
+  const refreshDashboard = () => setRefreshKey(k => k + 1);
 
   useEffect(() => {
     if (!vendorReady) return; // the saved view is read after the page loads
@@ -160,12 +127,6 @@ export default function DashboardPage() {
       .finally(() => setLoading(false));
   }, [refreshKey, vendor, vendorReady]);
 
-  useEffect(() => {
-    fetch('/api/config')
-      .then(r => r.ok ? r.json() : Promise.reject())
-      .then(d => setPulseEnabled(!!d.pulseEnabled))
-      .catch(() => {});
-  }, []);
 
 
   // Re-render timeago text every 30 seconds
@@ -190,176 +151,39 @@ export default function DashboardPage() {
     </>
   );
 
-  const { stats } = data;
-  // The switch shows once OpenAI data exists (or while a narrowed view is chosen).
-  const split = vendor === 'all' && data.openaiPresent;
-  // The products the charts show, in display order.
-  const shownProducts = dashboardProducts(PRODUCTS.filter(p => data.productsShown.includes(p.id)), data.officeShown !== false);
-  const allProducts = vendor === 'all' ? '' : ' · all products';
-  const seats = data.licensedSeats;
-  const activeSub = seats == null
-    ? 'this week'
-    : vendor === 'openai'
-      ? 'this week'
-      : split
-        ? `${data.products.activeUsers.claude} of ${seats} Claude seats`
-        : `${stats.activeUsersThisWeek} of ${seats} seats`;
-
   return (
     <>
       <TopBar title="Dashboard" subtitle="How AI is changing the work across your organisation" />
       <PageBody>
-        {/* Last refreshed + data source status */}
         <Toolbar
           left={
             <span className="flex items-center gap-2">
               <span>Updated {formatTimeAgo(lastRefreshed)}</span>
-              <button
-                type="button"
-                onClick={refreshDashboard}
-                className={B.link}
-                title="Refresh dashboard"
-              >
-                Refresh
-              </button>
+              <button type="button" onClick={refreshDashboard} className={B.link} title="Refresh dashboard">Refresh</button>
             </span>
           }
         >
-          <span className="flex flex-wrap items-center justify-end gap-3">
-            <VendorSwitch vendor={vendor} onChange={setVendor} openaiPresent={data.openaiPresent} />
-            <DataSourceIndicator status={data.dataSourceStatus} />
-          </span>
+          <VendorSwitch vendor={vendor} onChange={setVendor} openaiPresent={data.openaiPresent} />
         </Toolbar>
 
         {/* Setup steps for a new install (admins only; renders nothing otherwise) */}
         <GetStartedPanel />
 
-        {/* AI intelligence briefing + recommendations: first thing on the page */}
-        {!data.dataSourceStatus?.aiFeatures ? (
-          <Panel title="Intelligence briefing" badge={<Tag tone="judged">AI summary</Tag>}>
-            <PanelEmpty
-              title="The briefing needs a Claude API key"
-              description="Add one to get a briefing on what changed and what to do next."
-              actionLabel="Go to Access & Keys"
-              actionHref="/admin/security"
-            />
-          </Panel>
-        ) : (
-          <AiBriefing refreshKey={briefingRefreshKey} coversBoth={data.openaiPresent === true} />
-        )}
+        {/* One answer from each page, each linking to its page (the page is the figure's one home). */}
+        <ThisWeek key={`tw-${refreshKey}-${vendor}`} vendor={vendor} openaiPresent={data.openaiPresent} />
 
-        {/* Headline figures */}
-        <Strip cols={3}>
-          <StatCard
-            title="Active users"
-            value={stats.activeUsersThisWeek}
-            change={formatChange(stats.activeUsersThisWeek, stats.activeUsersLastWeek)}
-            subtitle={activeSub}
-            action={split ? formatSplit(data.products.activeUsers, 'ChatGPT and Codex') : undefined}
+        <div className="grid grid-cols-1 lg:grid-cols-2 gap-4 items-start">
+          <WhoIsUsing
+            weeklyActive={data.weeklyActive}
+            departments={data.departmentBreakdown}
+            targetPct={data.adoptionTargetPct}
+            vendor={vendor}
+            openaiPresent={data.openaiPresent}
           />
-          <StatCard
-            title="Events ingested"
-            value={stats.eventsLast24h}
-            subtitle={`last 24 hours${allProducts}`}
-          />
-          <StatCard
-            title="Open alerts"
-            value={stats.openAlertCount}
-            subtitle={`${formatAlertSeverity(stats.alertsBySeverity)}${allProducts}`}
-          />
-        </Strip>
-        {/* Chat, Work and Code: in the All view each box splits into Claude and its own OpenAI product */}
-        <Strip cols={3}>
-          <StatCard
-            title="Chat conversations"
-            value={stats.avgSessionsPerWeek.chat}
-            change="avg / week"
-            subtitle={flaggedLine(stats.chatFlagged)}
-            action={split ? formatSplit(data.products.sessions.chat, 'ChatGPT') : undefined}
-          />
-          <StatCard
-            title="Work sessions"
-            value={stats.avgSessionsPerWeek.cowork}
-            change="avg / week"
-            subtitle={flaggedLine(stats.coworkFlagged)}
-            action={
-              split ? formatSplit(data.products.sessions.work, 'ChatGPT')
-                : !data.dataSourceStatus.otelCowork && vendor !== 'openai' ? (
-                <span>Connect OpenTelemetry for Cowork visibility</span>
-              ) : undefined
-            }
-          />
-          <StatCard
-            title="Code sessions"
-            value={stats.avgSessionsPerWeek.code}
-            change="avg / week"
-            subtitle={flaggedLine(stats.codeFlagged)}
-            action={split ? formatSplit(data.products.sessions.code, 'Codex') : undefined}
-          />
-        </Strip>
-
-        {/* 14-day adoption trend (2/3) + product stickiness (1/3) */}
-        <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
-          <div className="lg:col-span-2 min-w-0">
-            {data.adoptionTrend.length === 0 ? (
-              <Panel title="Adoption trend" className="h-full">
-                <PanelEmpty
-                  title="No adoption data yet"
-                  description="Connect Claude Code or Cowork, or add Anthropic's Compliance or Analytics key, to see adoption trends."
-                  actionLabel="Go to Access & Keys"
-                  actionHref="/admin/security"
-                />
-              </Panel>
-            ) : (
-              <AdoptionChart data={data.adoptionTrend} products={shownProducts} />
-            )}
-          </div>
-          <StickinessCard vendor={vendor} openaiPresent={data.openaiPresent} officeShown={data.officeShown !== false} />
+          <AlertsDecision key={`al-${refreshKey}`} />
         </div>
-
-        {/* Department adoption (2/3) + top users this week (1/3) */}
-        <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
-          <div className="lg:col-span-2 min-w-0">
-            {data.departmentBreakdown.length === 0 ? (
-              <Panel title="Department breakdown" className="h-full">
-                <PanelEmpty
-                  title="No department data"
-                  description="Set user departments on the User Insights page to see department breakdowns."
-                  actionLabel="Go to User Insights"
-                  actionHref="/users"
-                />
-              </Panel>
-            ) : (
-              <DepartmentHeatmap data={data.departmentBreakdown} products={shownProducts} />
-            )}
-          </div>
-          <TopUsers users={data.topUsers} products={shownProducts} />
-        </div>
-
-        {/* Work Pulse band with the Developer Pulse strip nested directly below its signal strip */}
-        {pulseEnabled ? (
-          <PulseBand vendor={vendor} showVendor={data.openaiPresent}>
-            <CodePulseBand vendor={vendor} />
-          </PulseBand>
-        ) : (
-          <CodePulseBand vendor={vendor} />
-        )}
       </PageBody>
     </>
   );
 }
 
-/** Empty state inside a panel: no second border, a link onward. */
-function PanelEmpty({ title, description, actionLabel, actionHref }: {
-  title: string; description: string; actionLabel?: string; actionHref?: string;
-}) {
-  return (
-    <div className="py-6 flex flex-col items-center text-center gap-1.5">
-      <span className="text-[14px] font-medium text-[#0A0A0A]">{title}</span>
-      <span className="text-[13px] text-[#8F8F8F] max-w-xs">{description}</span>
-      {actionLabel && actionHref && (
-        <Link href={actionHref} className="text-[13px] font-medium text-[#245BF3] hover:underline">{actionLabel}</Link>
-      )}
-    </div>
-  );
-}

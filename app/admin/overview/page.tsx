@@ -7,6 +7,7 @@
 import { useEffect, useState } from 'react';
 import Link from 'next/link';
 import TopBar from '@/components/layout/TopBar';
+import IsEverythingRunning from '@/components/admin/IsEverythingRunning';
 import { PageBody, cx } from '@/components/precision/ui';
 
 // --- Types ---
@@ -162,8 +163,9 @@ export default function AdminOverviewPage() {
 
   return (
     <>
-      <TopBar title="Overview" subtitle="System health at a glance" />
+      <TopBar title="Overview" subtitle="Is everything running, and where to go next" />
       <PageBody>
+        <IsEverythingRunning />
         {loading ? (
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4" aria-busy="true">
             {Array.from({ length: 6 }).map((_, i) => (

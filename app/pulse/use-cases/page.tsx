@@ -63,7 +63,8 @@ interface GovernanceRollup {
   allWorkflowsTotal: number;
 }
 
-const LIFECYCLE_ORDER = ['adopted', 'piloting', 'at_risk', 'not_seen'] as const;
+// What needs attention first: at risk, then not seen, then piloting and adopted.
+const LIFECYCLE_ORDER = ['at_risk', 'not_seen', 'piloting', 'adopted'] as const;
 
 const LIFECYCLE_LABEL: Record<string, string> = {
   adopted: 'Adopted',
@@ -353,6 +354,12 @@ export default function UseCaseGovernancePage() {
       <PageBody>
         <Toolbar left={win.label} />
 
+        {/* The answer first: the summary sentence is written in code from the bets (no AI). */}
+        <section className="bg-white border border-[#EAEAEA] rounded-[14px] px-5 py-4">
+          <h2 className="m-0 text-[14px] font-semibold text-[#0A0A0A]">How are the strategic bets doing?</h2>
+          <p className="m-0 mt-2 text-[16px] leading-6 text-[#0A0A0A]">{data.narrative}</p>
+        </section>
+
         <Strip cols={5}>
           <Figure label="Declared bets" value={headline.declared.toLocaleString()} />
           <Figure label="Adopted" value={headline.adopted.toLocaleString()} />
@@ -369,11 +376,6 @@ export default function UseCaseGovernancePage() {
             sub={`~${fmtHours(value.hoursRecovered)} hrs · est. ${value.calibration.minutesPerSession} min × ${totalSessions} sessions · loaded @ ${formatCurrency(value.calibration.loadedCompAnnual)}/yr`}
           />
         </Strip>
-
-        {/* Narrative */}
-        <Panel title="Summary">
-          <p className="m-0 text-[14px] leading-6 text-[#333333]">{data.narrative}</p>
-        </Panel>
 
         <BetsPanel bets={data.bets} minutesPerSession={value.calibration.minutesPerSession} />
 

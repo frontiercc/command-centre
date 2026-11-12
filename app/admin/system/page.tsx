@@ -182,6 +182,7 @@ export default function SystemPage() {
   const [ingestIntervalSeconds, setIngestIntervalSeconds] = useState('60');
   const [acceptableUsePolicy, setAcceptableUsePolicy] = useState('');
   const [licensedSeats, setLicensedSeats] = useState('');
+  const [targetDeptAdoptionPct, setTargetDeptAdoptionPct] = useState('');
   const [dbStats, setDbStats] = useState<Record<string, unknown> | null>(null);
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
@@ -270,6 +271,7 @@ export default function SystemPage() {
         if (configData.ingestIntervalSeconds) setIngestIntervalSeconds(String(configData.ingestIntervalSeconds));
         if (configData.acceptableUsePolicy) setAcceptableUsePolicy(String(configData.acceptableUsePolicy));
         if (configData.licensedSeats) setLicensedSeats(String(configData.licensedSeats));
+        if (configData.targetDeptAdoptionPct) setTargetDeptAdoptionPct(String(configData.targetDeptAdoptionPct));
         setFinanceModelEfficiencyEnabled(
           configData.financeModelEfficiencyEnabled === true || configData.financeModelEfficiencyEnabled === 'true'
         );
@@ -407,7 +409,7 @@ export default function SystemPage() {
       const res = await fetch('/api/config', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ organisationName, ingestIntervalSeconds, acceptableUsePolicy, licensedSeats }),
+        body: JSON.stringify({ organisationName, ingestIntervalSeconds, acceptableUsePolicy, licensedSeats, targetDeptAdoptionPct }),
       });
       if (res.ok) {
         showToast('Settings saved successfully', 'success');
@@ -646,6 +648,17 @@ export default function SystemPage() {
                 className={cx(B.input, 'w-full')}
                 min={1}
                 placeholder="e.g. 150"
+              />
+            </Field>
+            <Field label="Department adoption target (%)" hint="The share of each department active in a week. Departments below it turn amber on the dashboard. Blank for 50; 0 for no target.">
+              <input
+                type="number"
+                value={targetDeptAdoptionPct}
+                onChange={e => setTargetDeptAdoptionPct(e.target.value)}
+                className={cx(B.input, 'w-full')}
+                min={0}
+                max={100}
+                placeholder="50"
               />
             </Field>
             <Field label="Acceptable use policy" className="md:col-span-3">

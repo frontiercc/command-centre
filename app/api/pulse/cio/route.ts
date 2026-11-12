@@ -11,7 +11,7 @@
 // STRINGS on Postgres).
 import { NextRequest, NextResponse } from 'next/server';
 import { visibleVendor, visibleOpenAi } from '@/lib/sources/openai-visibility';
-import { and, desc, eq, gte, isNotNull, lt, sql } from 'drizzle-orm';
+import { and, desc, eq, gte, inArray, isNotNull, lt, sql } from 'drizzle-orm';
 import { getAdminSession, canAccessOrgOverview } from '@/lib/auth/admin-auth';
 import { promptTextVisibleFor, logPromptRead } from '@/lib/auth/content-access';
 import { getTypedClient } from '@/lib/db/client';
@@ -170,6 +170,24 @@ export async function GET(request: NextRequest) {
       .innerJoin(cm, eq(cm.id, pe.cowork_message_id))
       .where(and(eq(pe.event_type, 'capability_creation'), eq(pe.status, 'confirmed'), messageVendor(vendor)));
   const orgPsr = Number(orgPsrRows[0]?.v ?? 0);
+
+  // Capabilities waiting for a manager's review, and those confirmed or detected in the last 30
+  // days (for the Capabilities panel's timeline). All vendors: review is one queue.
+  const capabilityPendingRows = await client
+    .select({ v: sql<number | string>`COUNT(*)` })
+    .from(pe)
+    .where(and(eq(pe.event_type, 'capability_creation'), eq(pe.status, 'candidate')));
+  const capabilitiesPending = Number(capabilityPendingRows[0]?.v ?? 0);
+  const capabilityTimeline = (await client
+    .select({ id: pe.id, title: pe.title, status: pe.status, detected_at: pe.detected_at, confirmed_at: pe.confirmed_at })
+    .from(pe)
+    .where(and(eq(pe.event_type, 'capability_creation'), inArray(pe.status, ['candidate', 'confirmed']),
+      gte(sql`COALESCE(${pe.confirmed_at}, ${pe.detected_at})`, now - 30 * 86400)))
+    .orderBy(sql`COALESCE(${pe.confirmed_at}, ${pe.detected_at})`)
+    .limit(40)).map(r => ({
+      id: Number(r.id), title: r.title, status: r.status === 'confirmed' ? 'confirmed' as const : 'candidate' as const,
+      at: Number(r.confirmed_at ?? r.detected_at),
+    }));
 
   // ORS is only ever computed at group level (scope_type='team' keyed by
   // users.team_id, or scope_type='function' keyed by admin_users.department
@@ -505,11 +523,21 @@ export async function GET(request: NextRequest) {
     },
     delegation: {
       window: delegationWindow,
-      org: { bands: orgBands, bandsDataWeeks: orgBandsDataWeeks },
+      org: {
+        bands: orgBands, bandsDataWeeks: orgBandsDataWeeks,
+        // Completed weeks' prompt counts by tier, oldest first (additive): the answer sentences
+        // work out shares from these, so a share is never averaged across weeks of different size.
+        weeks: [...orgWeekRows].sort((a, b) => a.periodStart - b.periodStart).map(r => ({ weekStart: r.periodStart, t1: r.t1, t2: r.t2, t3: r.t3 })),
+      },
       departments: delegationDepartments,
       building: delegationBuilding,
     },
     actNext,
     deptProcesses,
+    // Frontier (Tier 3) prompts per person, 14 days, most first: counts only, no names (additive).
+    tier3ByPerson: tier3UserCounts.slice(0, 60).map(r => Number(r.cnt)),
+    tier3People: tier3UserCounts.length,
+    capabilitiesPending,
+    capabilityTimeline,
   });
 }

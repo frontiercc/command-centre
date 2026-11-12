@@ -166,7 +166,7 @@ export function Figure({ label, value, sub, tone = 'neutral', unit, delta, delta
   return (
     <div className="p-4 flex flex-col gap-1.5 min-w-0" title={title}>
       <span className="text-[13px] text-[#666666]">{label}</span>
-      <span className={cx('text-[24px] leading-7 font-semibold tracking-[-0.02em] tabular-nums', tone === 'judged' ? 'text-[#05073F]' : toneText[tone])}>
+      <span className={cx('text-[24px] leading-7 font-semibold tracking-[-0.02em] tabular-nums', toneText[tone])}>
         {value}{unit && <span className="text-[14px] font-normal text-[#8F8F8F] tracking-normal"> {unit}</span>}
       </span>
       {delta && <span className={cx('text-[13px] tabular-nums', deltaTone ? toneText[deltaTone] : 'text-[#8F8F8F]')}>{delta}</span>}
@@ -175,11 +175,14 @@ export function Figure({ label, value, sub, tone = 'neutral', unit, delta, delta
   );
 }
 
-/** Tone for a signed change: up is good unless `upIsBad`. */
-export function deltaTone(diff: number | null | undefined, upIsBad = false): Tone {
-  if (diff === null || diff === undefined || Math.abs(diff) < 1e-9) return 'neutral';
-  const up = diff > 0;
-  return up !== upIsBad ? 'good' : 'bad';
+/**
+ * Tone for a signed change. Change on its own is neutral grey: more is not good or bad until a
+ * target says so, and amber and red mean worse than a target (components/precision/answer.tsx).
+ * The arguments are kept so callers don't change.
+ */
+// eslint-disable-next-line @typescript-eslint/no-unused-vars
+export function deltaTone(_diff: number | null | undefined, _upIsBad = false): Tone {
+  return 'neutral';
 }
 
 /* ── Rows, bars and tables ─────────────────────────────────────────── */
@@ -392,10 +395,10 @@ export function Spark({ data, tone = 'measured', width = 72, height = 20, fixedM
   fixedMin?: number; fixedMax?: number;
 }) {
   const vals = data.filter((v): v is number => v !== null && Number.isFinite(v));
-  if (vals.length < 2) return <span className="text-[12px] text-[#B3B3B3]">—</span>;
+  if (vals.length < 2) return <span className="text-[12px] text-[#B3B3B3]">Not enough data</span>;
   const max = fixedMax ?? Math.max(...vals), min = fixedMin ?? Math.min(...vals), span = max - min || 1;
   const step = data.length > 1 ? width / (data.length - 1) : width;
-  const stroke = tone === 'judged' ? '#699BFB' : tone === 'neutral' ? '#8F8F8F' : '#05073F';
+  const stroke = tone === 'judged' ? '#699BFB' : tone === 'neutral' ? '#8F8F8F' : tone === 'warn' ? '#DC8A00' : tone === 'bad' ? '#B42318' : '#05073F';
   const segs: string[] = [];
   let cur: string[] = [];
   data.forEach((v, i) => {
