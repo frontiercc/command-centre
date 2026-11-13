@@ -116,7 +116,7 @@ function EfficiencyBoard({ boards, period }: { boards: Board[]; period: string }
                   <tr key={r.userId} className={T.row}>
                     <td className={cx(T.td, 'w-8 text-[12px] text-[#B3B3B3] tabular-nums')}>{i + 1}</td>
                     <td className={T.td}>
-                      <Link href={`/finops/spend-review/${encodeURIComponent(r.userId)}?period=${encodeURIComponent(boardPeriod)}`} className="font-medium text-[#0A0A0A] hover:text-[#245BF3] hover:underline">{r.displayName}</Link>
+                      <Link href={`/finops/spend-review/${encodeURIComponent(r.userId)}?period=${encodeURIComponent(boardPeriod)}`} className="font-medium text-[#0A0A0A] hover:text-[#1F6F8B] hover:underline">{r.displayName}</Link>
                       <span className="block text-[13px] text-[#8F8F8F]">{r.department ?? 'No department'}</span>
                     </td>
                     <td className={cx(T.tdRight, 'text-[#666666]')}>{r.sessions}</td>
@@ -409,7 +409,7 @@ function SpendReviewIndex() {
                 <Figure
                   label="Better routes waiting"
                   value={
-                    <button type="button" onClick={() => setOnlyRoutes(v => !v)} disabled={s.peopleWithRoutes === 0} aria-pressed={onlyRoutes} className="text-left hover:text-[#245BF3] disabled:hover:text-inherit">
+                    <button type="button" onClick={() => setOnlyRoutes(v => !v)} disabled={s.peopleWithRoutes === 0} aria-pressed={onlyRoutes} className="text-left hover:text-[#1F6F8B] disabled:hover:text-inherit">
                       {s.peopleWithRoutes}<span className="text-[14px] font-normal text-[#4D4D4D] tracking-normal"> {s.peopleWithRoutes === 1 ? 'person' : 'people'}</span>
                     </button>
                   }
@@ -419,7 +419,7 @@ function SpendReviewIndex() {
                   <Figure
                     label="Anthropic limits"
                     value={
-                      <button type="button" onClick={() => setOnlyNear(v => !v)} aria-pressed={onlyNear} className="text-left hover:text-[#245BF3]">
+                      <button type="button" onClick={() => setOnlyNear(v => !v)} aria-pressed={onlyNear} className="text-left hover:text-[#1F6F8B]">
                         {over}<span className="text-[14px] font-normal text-[#4D4D4D] tracking-normal"> over</span> · {near}<span className="text-[14px] font-normal text-[#4D4D4D] tracking-normal"> close</span>
                       </button>
                     }

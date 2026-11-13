@@ -173,7 +173,7 @@ function DiscoverFeed({
               className="group flex flex-col gap-1.5 border border-[#EAEAEA] rounded-[14px] px-3.5 py-3 hover:border-[#DADADA] hover:bg-[#FAFAFA] hover:no-underline"
             >
               <span className="flex items-start justify-between gap-2">
-                <span className="text-[14px] font-medium text-[#0A0A0A] group-hover:text-[#245BF3] truncate">
+                <span className="text-[14px] font-medium text-[#0A0A0A] group-hover:text-[#1F6F8B] truncate">
                   {item.name}
                 </span>
                 <span className="shrink-0">

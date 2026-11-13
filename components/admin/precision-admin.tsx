@@ -31,7 +31,7 @@ export function Switch({ checked, onChange, label, disabled = false, id }: {
       onClick={() => onChange(!checked)}
       className={cx(
         'relative inline-flex shrink-0 w-[34px] h-5 rounded-full p-0 border-0 transition-colors',
-        'focus:outline-none focus-visible:ring-2 focus-visible:ring-[#245BF3]/40 focus-visible:ring-offset-1',
+        'focus:outline-none focus-visible:ring-2 focus-visible:ring-[#1F6F8B]/40 focus-visible:ring-offset-1',
         'disabled:opacity-50 disabled:cursor-not-allowed',
         checked ? 'bg-[#0A0A0A]' : 'bg-[#DADADA]',
       )}

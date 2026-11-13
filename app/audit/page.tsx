@@ -314,13 +314,13 @@ function CoworkThread({ messages }: { messages: CoworkMessage[] }) {
                 {/* Tool details */}
                 {isTool && msg.tool_input_preview && (
                   <details className="mt-1">
-                    <summary className="text-[13px] text-[#245BF3] cursor-pointer">Input</summary>
+                    <summary className="text-[13px] text-[#1F6F8B] cursor-pointer">Input</summary>
                     <pre className="m-0 mt-1 text-[12px] font-mono text-[#4D4D4D] bg-white border border-[#EAEAEA] rounded-[6px] p-2 overflow-x-auto">{msg.tool_input_preview}</pre>
                   </details>
                 )}
                 {isTool && msg.tool_output_preview && (
                   <details>
-                    <summary className="text-[13px] text-[#245BF3] cursor-pointer">Output</summary>
+                    <summary className="text-[13px] text-[#1F6F8B] cursor-pointer">Output</summary>
                     <pre className="m-0 mt-1 text-[12px] font-mono text-[#4D4D4D] bg-white border border-[#EAEAEA] rounded-[6px] p-2 overflow-x-auto">{msg.tool_output_preview}</pre>
                   </details>
                 )}
@@ -621,7 +621,7 @@ export default function AuditPage() {
 
         {/* Search and filters */}
         <div className="flex flex-wrap gap-2 items-center">
-          <label className="flex-grow min-w-[240px] flex items-center gap-2 px-2.5 py-1.5 border border-[#DADADA] rounded-[10px] bg-white text-[#8F8F8F] focus-within:ring-2 focus-within:ring-[#245BF3]/30 focus-within:border-[#245BF3]">
+          <label className="flex-grow min-w-[240px] flex items-center gap-2 px-2.5 py-1.5 border border-[#DADADA] rounded-[10px] bg-white text-[#8F8F8F] focus-within:ring-2 focus-within:ring-[#1F6F8B]/30 focus-within:border-[#1F6F8B]">
             <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2} aria-hidden="true"><circle cx="11" cy="11" r="8" /><path d="m21 21-4.3-4.3" /></svg>
             <input
               type="text"
@@ -681,7 +681,7 @@ export default function AuditPage() {
               type="checkbox"
               checked={flaggedOnly}
               onChange={e => setFlaggedOnly(e.target.checked)}
-              className="rounded-[6px] border-[#DADADA] accent-[#245BF3]"
+              className="rounded-[6px] border-[#DADADA] accent-[#1F6F8B]"
             />
             Flagged only
           </label>
@@ -716,7 +716,7 @@ export default function AuditPage() {
           ) : (
             <Empty
               title="No events found"
-              action={<Link href="/settings" className="text-[13px] font-medium text-[#245BF3] hover:underline">Go to Settings</Link>}
+              action={<Link href="/settings" className="text-[13px] font-medium text-[#1F6F8B] hover:underline">Go to Settings</Link>}
             >
               No events ingested yet. Check your API key configuration in Settings.
             </Empty>
@@ -770,7 +770,7 @@ export default function AuditPage() {
                               <span className="ml-1 text-[13px] text-[#8F8F8F]">Metadata only</span>
                             )}
                           </td>
-                          <td className={`${T.td} hidden md:table-cell text-[13px] text-[#245BF3] whitespace-nowrap`}>
+                          <td className={`${T.td} hidden md:table-cell text-[13px] text-[#1F6F8B] whitespace-nowrap`}>
                             <SourceCell event={event} />
                           </td>
                           <td className={`${T.td} whitespace-nowrap`}>{formatEventType(event.event_type)}</td>
@@ -883,7 +883,7 @@ export default function AuditPage() {
                 if (en.total_errors != null && en.total_errors > 0) facts.push(<span key="err" className="text-[#B42318]">{en.total_errors} error{en.total_errors !== 1 ? 's' : ''}</span>);
                 return (
                   <div className="border border-[#EAEAEA] rounded-[10px] px-3 py-2.5 flex flex-col gap-1.5 text-[13px]">
-                    <span className="font-semibold text-[#245BF3]">
+                    <span className="font-semibold text-[#1F6F8B]">
                       {isCodeEvent || isOpenAiSource(selectedEvent?._source) ? 'Session stats' : 'Session stats (OTel)'}
                     </span>
                     {facts.length > 0 && (

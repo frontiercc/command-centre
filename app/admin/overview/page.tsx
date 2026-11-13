@@ -62,7 +62,7 @@ function Tile({ href, title, icon, value, valueClassName, caption, children }: T
   return (
     <Link
       href={href}
-      className="block h-full bg-white border border-[#EAEAEA] rounded-[14px] p-4 hover:border-[#DADADA] hover:bg-[#FAFAFA] focus:outline-none focus-visible:ring-2 focus-visible:ring-[#245BF3]/30"
+      className="block h-full bg-white border border-[#EAEAEA] rounded-[14px] p-4 hover:border-[#DADADA] hover:bg-[#FAFAFA] focus:outline-none focus-visible:ring-2 focus-visible:ring-[#1F6F8B]/30"
     >
       <div className="flex flex-col gap-1.5 min-w-0">
         <span className="flex items-center gap-2 text-[13px] text-[#666666]">

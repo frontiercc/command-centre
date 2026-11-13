@@ -155,7 +155,7 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
             >
               <span>{item.label}</span>
               {item.href === '/admin/pulse' && pulsePendingCount > 0 && (
-                <span className="text-[12px] font-semibold bg-[#245BF3] text-white px-1.5 rounded-full min-w-[18px] h-[18px] inline-flex items-center justify-center tabular-nums">
+                <span className="text-[12px] font-semibold bg-[#1F6F8B] text-white px-1.5 rounded-full min-w-[18px] h-[18px] inline-flex items-center justify-center tabular-nums">
                   {pulsePendingCount}
                 </span>
               )}

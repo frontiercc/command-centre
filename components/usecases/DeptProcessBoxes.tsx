@@ -52,7 +52,7 @@ export default function DeptProcessBoxes({
                         key={s.id}
                         type="button"
                         onClick={() => onOpen(s.id)}
-                        className="block w-full text-left py-1.5 first:pt-1 text-[14px] leading-5 text-[#0A0A0A] hover:text-[#245BF3]"
+                        className="block w-full text-left py-1.5 first:pt-1 text-[14px] leading-5 text-[#0A0A0A] hover:text-[#1F6F8B]"
                       >
                         {s.title}
                       </button>
@@ -62,7 +62,7 @@ export default function DeptProcessBoxes({
                     <button
                       type="button"
                       onClick={() => onOpen(g.suggestions[TITLES_PER_GROUP].id)}
-                      className="self-start pt-1 text-[13px] text-[#8F8F8F] hover:text-[#245BF3]"
+                      className="self-start pt-1 text-[13px] text-[#8F8F8F] hover:text-[#1F6F8B]"
                     >
                       +{hidden} more
                     </button>
@@ -73,7 +73,7 @@ export default function DeptProcessBoxes({
             <button
               type="button"
               onClick={() => onOpen(box.suggestions[0].id)}
-              className="self-start mt-auto text-[14px] font-medium text-[#245BF3] hover:underline"
+              className="self-start mt-auto text-[14px] font-medium text-[#1F6F8B] hover:underline"
             >
               Review
             </button>

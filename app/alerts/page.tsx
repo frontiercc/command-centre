@@ -247,7 +247,7 @@ export default function AlertsPage() {
                           type="button"
                           onClick={() => setExpandedId(open ? null : alert.id)}
                           aria-expanded={open}
-                          className="self-start text-[13px] text-[#245BF3] hover:underline py-1"
+                          className="self-start text-[13px] text-[#1F6F8B] hover:underline py-1"
                         >
                           {open ? 'Hide detail' : 'Detail'}
                         </button>
@@ -292,7 +292,7 @@ export default function AlertsPage() {
                                 {evidence.message_id && (
                                   <Link
                                     href={`/audit?q=${encodeURIComponent(evidence.message_id)}`}
-                                    className="self-start text-[13px] font-medium text-[#245BF3] hover:underline"
+                                    className="self-start text-[13px] font-medium text-[#1F6F8B] hover:underline"
                                   >
                                     View in Audit Log
                                   </Link>

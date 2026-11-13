@@ -20,7 +20,7 @@ export function Toast({ message, type, onClose }: ToastProps) {
   const colors = {
     success: 'bg-white border-[#EAEAEA] border-l-[3px] border-l-[#1A7F37] text-[#0A0A0A]',
     error: 'bg-white border-[#EAEAEA] border-l-[3px] border-l-[#D92D20] text-[#0A0A0A]',
-    info: 'bg-white border-[#EAEAEA] border-l-[3px] border-l-[#245BF3] text-[#0A0A0A]',
+    info: 'bg-white border-[#EAEAEA] border-l-[3px] border-l-[#1F6F8B] text-[#0A0A0A]',
   };
 
   return (

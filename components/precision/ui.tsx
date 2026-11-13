@@ -9,7 +9,7 @@
  *  - grey page (#F7F7F8), white panels with a 1px #EAEAEA border and 8px corners
  *  - 13px body text, 12px captions in #8F8F8F, panel titles 13px semibold ink
  *  - dark blue (#05073F) = measured, sky blue (#699BFB, #2451F3 text) = AI-judged or estimate;
- *    vibrant blue (#245BF3) is for links and actions only
+ *    vibrant blue (#1F6F8B) is for links and actions only
  *  - figures use tabular numbers; never render a missing value as 0
  * Client-safe, no data fetching. Import from '@/components/precision/ui'.
  */
@@ -26,11 +26,11 @@ export const C = {
   input: '#DADADA',
   subtle: '#FAFAFA',
   page: '#F7F7F8',
-  accent: '#245BF3',
+  accent: '#1F6F8B',
   measured: '#05073F',
   measuredLight: '#8C96BF',
-  accentHover: '#1A44C7',
-  accentTint: '#F2F5FF',
+  accentHover: '#185A71',
+  accentTint: '#EEF5F8',
   judged: '#699BFB',
   judgedInk: '#2451F3',
   judgedTint: '#EDF3FF',
@@ -247,7 +247,7 @@ export function Pill({ children, tone = 'neutral' }: { children: ReactNode; tone
   const cls = {
     neutral: 'bg-[#F2F2F2] text-[#4D4D4D]',
     good: 'bg-[#E7F6EC] text-[#146C2E]',
-    info: 'bg-[#EAF0FE] text-[#1A44C7]',
+    info: 'bg-[#E4EFF3] text-[#185A71]',
     warn: 'bg-[#FFF1E0] text-[#8A5300]',
     bad: 'bg-[#FFF5F4] text-[#B42318]',
     judged: 'bg-[#EDF3FF] text-[#2451F3]',
@@ -272,12 +272,12 @@ export const SEVERITY_COLOR: Record<string, string> = {
 /** Button class names. */
 export const B = {
   primary: 'inline-flex items-center justify-center gap-1.5 text-[13px] font-medium px-3 py-1.5 rounded-[10px] bg-[#0A0A0A] text-white hover:bg-[#262626] disabled:opacity-50 disabled:cursor-not-allowed',
-  accent: 'inline-flex items-center justify-center gap-1.5 text-[13px] font-medium px-3 py-1.5 rounded-[10px] bg-[#245BF3] text-white hover:bg-[#1A44C7] disabled:opacity-50 disabled:cursor-not-allowed',
+  accent: 'inline-flex items-center justify-center gap-1.5 text-[13px] font-medium px-3 py-1.5 rounded-[10px] bg-[#1F6F8B] text-white hover:bg-[#185A71] disabled:opacity-50 disabled:cursor-not-allowed',
   secondary: 'inline-flex items-center justify-center gap-1.5 text-[13px] font-medium px-3 py-1.5 rounded-[10px] border border-[#DADADA] bg-white text-[#0A0A0A] hover:bg-[#FAFAFA] disabled:opacity-50 disabled:cursor-not-allowed',
   danger: 'inline-flex items-center justify-center gap-1.5 text-[13px] font-medium px-3 py-1.5 rounded-[10px] border border-[#F3C0BB] bg-white text-[#B42318] hover:bg-[#FFF5F4] disabled:opacity-50 disabled:cursor-not-allowed',
-  link: 'text-[13px] font-medium text-[#245BF3] hover:underline disabled:opacity-50',
-  input: 'text-[14px] px-2.5 py-1.5 rounded-[10px] border border-[#DADADA] bg-white text-[#0A0A0A] placeholder:text-[#8F8F8F] focus:outline-none focus:ring-2 focus:ring-[#245BF3]/30 focus:border-[#245BF3]',
-  select: 'text-[13px] px-2 py-1.5 rounded-[10px] border border-[#DADADA] bg-white text-[#0A0A0A] focus:outline-none focus:ring-2 focus:ring-[#245BF3]/30',
+  link: 'text-[13px] font-medium text-[#1F6F8B] hover:underline disabled:opacity-50',
+  input: 'text-[14px] px-2.5 py-1.5 rounded-[10px] border border-[#DADADA] bg-white text-[#0A0A0A] placeholder:text-[#8F8F8F] focus:outline-none focus:ring-2 focus:ring-[#1F6F8B]/30 focus:border-[#1F6F8B]',
+  select: 'text-[13px] px-2 py-1.5 rounded-[10px] border border-[#DADADA] bg-white text-[#0A0A0A] focus:outline-none focus:ring-2 focus:ring-[#1F6F8B]/30',
 };
 
 /** Segmented control (period / window / status filters). */
@@ -345,7 +345,7 @@ export function Chip({ on, onClick, children }: { on: boolean; onClick: () => vo
       aria-pressed={on}
       onClick={onClick}
       className={cx('text-[13px] px-2.5 py-1 rounded-[10px] border',
-        on ? 'border-[#245BF3] bg-[#F2F5FF] text-[#245BF3] font-medium' : 'border-[#EAEAEA] bg-white text-[#4D4D4D] hover:border-[#DADADA]')}
+        on ? 'border-[#1F6F8B] bg-[#EEF5F8] text-[#1F6F8B] font-medium' : 'border-[#EAEAEA] bg-white text-[#4D4D4D] hover:border-[#DADADA]')}
     >
       {children}
     </button>

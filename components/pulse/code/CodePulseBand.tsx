@@ -103,11 +103,11 @@ export default function CodePulseBand({ vendor = 'all' }: { vendor?: 'all' | 'cl
           question="How many repos does it reach?"
           value={repos !== null ? String(repos) : undefined}
           unit={repos !== null ? (ghRepos !== undefined && (m?.repo_count ?? 0) === 0 ? `of ${data.githubOverlay?.trackedRepoCount ?? 0} tracked on GitHub` : 'repos') : undefined}
-          notMeasured={repos === null ? <>Connect GitHub to see repos. <Link href="/admin/code-pulse?tab=github" className="text-[#245BF3] hover:underline">Set up</Link></> : undefined}
+          notMeasured={repos === null ? <>Connect GitHub to see repos. <Link href="/admin/code-pulse?tab=github" className="text-[#1F6F8B] hover:underline">Set up</Link></> : undefined}
         />
       </div>
       <p className="m-0 mt-3 pt-2.5 border-t border-dashed border-[#EAEAEA] text-[12px] text-[#8F8F8F]">
-        Measured from {tool} telemetry. Bars and lines show the last 8 completed weeks. <Link href="/pulse/code" className="text-[#245BF3] font-medium hover:underline">Open Developer Pulse</Link>
+        Measured from {tool} telemetry. Bars and lines show the last 8 completed weeks. <Link href="/pulse/code" className="text-[#1F6F8B] font-medium hover:underline">Open Developer Pulse</Link>
       </p>
     </section>
   );

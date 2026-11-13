@@ -219,7 +219,7 @@ function RouteText({ r, name, surface }: { r: Route; name: string; surface: Surf
       <span>
         <span className="font-semibold">{r.peerUsers} colleagues</span> use the{' '}
         {r.libraryEntryId
-          ? <Link href={`/library/${r.libraryEntryId}`} className="font-medium text-[#245BF3] hover:underline">{r.name}</Link>
+          ? <Link href={`/library/${r.libraryEntryId}`} className="font-medium text-[#1F6F8B] hover:underline">{r.name}</Link>
           : <span className="font-medium">{r.name}</span>}{' '}
         {thing} for this work, in {pct(r.peerSessionShare)} of their sessions. {name} hasn&apos;t used it in the last 90 days.
       </span>
@@ -380,7 +380,7 @@ function ModelEfficiency({ data, onShowAll }: { data: Review; onShowAll: () => v
                   <button
                     type="button"
                     onClick={e => { e.stopPropagation(); open(w.key); }}
-                    className="block text-left font-medium text-[#0A0A0A] hover:text-[#245BF3] leading-snug"
+                    className="block text-left font-medium text-[#0A0A0A] hover:text-[#1F6F8B] leading-snug"
                     title={w.definition && w.definition.toLowerCase() !== w.label.toLowerCase() ? `Covers: ${displayDefinition(w.definition)}` : undefined}
                   >
                     {w.label}
@@ -482,7 +482,7 @@ function WorkCard({ w, name, peerDays }: { w: WorkRow; name: string; peerDays: n
 
       {w.routes.length > 0 ? (
         <div className="mt-1 rounded-[6px] border border-[#C9D6FD] bg-[#F5F8FF] px-3.5 py-3 flex flex-col gap-2">
-          <span className="text-[13px] font-semibold text-[#245BF3]">
+          <span className="text-[13px] font-semibold text-[#1F6F8B]">
             {w.routes.length} better route{w.routes.length === 1 ? '' : 's'}
           </span>
           {w.routes.map((r, i) => (
@@ -560,7 +560,7 @@ function SessionRow({ s, userId, canSeePrompts }: { s: Session; userId: string; 
           <span className="block text-[14px] font-medium text-[#0A0A0A] tabular-nums">{s.spendUsd === null ? 'Not priced' : money(s.spendUsd)}</span>
           {s.hasUnpriced && s.spendUsd !== null && <span className="block text-[12px] text-[#B54708]">Part not priced</span>}
         </span>
-        <span className="w-12 text-right text-[13px] text-[#245BF3] shrink-0">{open ? 'Hide' : 'Details'}</span>
+        <span className="w-12 text-right text-[13px] text-[#1F6F8B] shrink-0">{open ? 'Hide' : 'Details'}</span>
       </button>
       {open && (
         <div className="px-4 pb-3.5 flex flex-col gap-2.5">

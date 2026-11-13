@@ -44,7 +44,7 @@ function diagnose(nOti: number, nDds: number, nGovernance: number, nOrs: number)
   if (governanceLed) return {
     label: 'Governance-led transformation',
     description: 'Oversight is active. Depth is building. Next priority: resilience and team-wide capability sharing.',
-    color: '#245BF3',
+    color: '#1F6F8B',
   };
   return {
     label: 'Early stage',

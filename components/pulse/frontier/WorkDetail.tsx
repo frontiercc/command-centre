@@ -144,7 +144,7 @@ export default function WorkDetail({ item, showName, canOpenUseCases, compact = 
         <p className="m-0">
           <span className="text-[#8F8F8F]">Matches use case: </span>
           {canOpenUseCases
-            ? <Link href={`/use-cases/${encodeURIComponent(item.useCase.id)}`} className="text-[#245BF3] hover:underline">{item.useCase.title}</Link>
+            ? <Link href={`/use-cases/${encodeURIComponent(item.useCase.id)}`} className="text-[#1F6F8B] hover:underline">{item.useCase.title}</Link>
             : <span>{item.useCase.title}</span>}
         </p>
       )}

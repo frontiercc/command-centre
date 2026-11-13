@@ -89,7 +89,7 @@ function formatBriefingAge(generatedAt: number): string {
 }
 
 function Spinner() {
-  return <span className="inline-block w-3.5 h-3.5 border-2 border-[#DADADA] border-t-[#245BF3] rounded-full animate-spin" aria-hidden="true" />;
+  return <span className="inline-block w-3.5 h-3.5 border-2 border-[#DADADA] border-t-[#1F6F8B] rounded-full animate-spin" aria-hidden="true" />;
 }
 
 const BADGE = <Tag tone="judged">AI summary</Tag>;

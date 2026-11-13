@@ -261,7 +261,7 @@ export default function UserDrillDown({ userId }: { userId: string }) {
                     {new Date(b.generated_at * 1000).toLocaleDateString('en-GB', {
                       day: 'numeric', month: 'long', year: 'numeric',
                     })}
-                    {i === 0 && <span className="ml-2 text-[13px] text-[#245BF3]">(latest)</span>}
+                    {i === 0 && <span className="ml-2 text-[13px] text-[#1F6F8B]">(latest)</span>}
                   </span>
                   <span className="text-[13px] text-[#8F8F8F]" aria-hidden="true">{expandedBriefing === i ? '▲' : '▼'}</span>
                 </button>

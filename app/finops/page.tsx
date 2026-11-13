@@ -472,7 +472,7 @@ export default function CostChargebackPage() {
               {((report.cacheSavingsUsd != null && report.cacheSavingsUsd > 0) || (report.seats != null && isCurrentMonth && claudeShown)) && (
                 <div className="flex gap-x-5 gap-y-1 flex-wrap text-[13px]">
                   {report.cacheSavingsUsd != null && report.cacheSavingsUsd > 0 && (
-                    <span className="text-[#245BF3]">
+                    <span className="text-[#1F6F8B]">
                       Prompt caching saved about {fmtUsd(report.cacheSavingsUsd)} this month (estimate, at list rates)
                     </span>
                   )}

@@ -166,7 +166,7 @@ function ActivityTableRow({
             type="button"
             aria-expanded={expanded}
             onClick={(e) => { e.stopPropagation(); onToggle(); }}
-            className="inline-flex items-center gap-1.5 text-left text-[#0A0A0A] hover:text-[#245BF3]"
+            className="inline-flex items-center gap-1.5 text-left text-[#0A0A0A] hover:text-[#1F6F8B]"
           >
             <span className="text-[#B3B3B3] inline-block w-3" aria-hidden="true">{expanded ? '▾' : '▸'}</span>
             {activity.label}

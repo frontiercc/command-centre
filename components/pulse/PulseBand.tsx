@@ -89,7 +89,7 @@ export function WorkPulsePanel({ data, product, title = 'Work Pulse', actions = 
           notMeasured={people === null ? 'No classified work yet' : undefined}
           todo={actions && people !== null && active !== null
             ? (active - people > 0
-              ? <>{active - people} {active - people === 1 ? 'person only uses' : 'people only use'} it for routine tasks. <Link href="/pulse/users" className="text-[#245BF3] font-medium hover:underline">See who</Link></>
+              ? <>{active - people} {active - people === 1 ? 'person only uses' : 'people only use'} it for routine tasks. <Link href="/pulse/users" className="text-[#1F6F8B] font-medium hover:underline">See who</Link></>
               : 'Everyone active is doing some real work.')
             : undefined}
         />
@@ -109,7 +109,7 @@ export function WorkPulsePanel({ data, product, title = 'Work Pulse', actions = 
           value={d ? (d.capabilitiesRecent === 0 ? 'None' : String(d.capabilitiesRecent)) : undefined}
           unit={q ? 'confirmed this quarter' : 'confirmed this month'}
           sub={d && d.capabilitiesPending > 0
-            ? <Link href="/admin/pulse?tab=overview" className="text-[#245BF3] font-medium hover:underline">{d.capabilitiesPending} waiting for your review</Link>
+            ? <Link href="/admin/pulse?tab=overview" className="text-[#1F6F8B] font-medium hover:underline">{d.capabilitiesPending} waiting for your review</Link>
             : undefined}
           trend={d?.capabilityWeeks}
           trendKind="bars"
@@ -119,15 +119,15 @@ export function WorkPulsePanel({ data, product, title = 'Work Pulse', actions = 
         <QuestionCard
           question="Frontier work rests on"
           value={half !== null ? (half === 1 ? 'One person' : `${half} people`) : undefined}
-          sub={half !== null && d ? <>They do half of it, out of {d.frontierPeople30d} doing any. <Link href="/pulse/cio" className="text-[#245BF3] font-medium hover:underline">See who</Link></> : undefined}
+          sub={half !== null && d ? <>They do half of it, out of {d.frontierPeople30d} doing any. <Link href="/pulse/cio" className="text-[#1F6F8B] font-medium hover:underline">See who</Link></> : undefined}
           notMeasured={half === null ? `No frontier work in ${span}` : undefined}
           todo={actions && d?.frontierTopShare != null
-            ? <>If the busiest person left, {d.frontierTopShare < 0.15 ? `${Math.round(d.frontierTopShare * 100)}%` : shareWords(d.frontierTopShare)} of it would go. <Link href="/pulse/dept" className="text-[#245BF3] font-medium hover:underline">See who</Link></>
+            ? <>If the busiest person left, {d.frontierTopShare < 0.15 ? `${Math.round(d.frontierTopShare * 100)}%` : shareWords(d.frontierTopShare)} of it would go. <Link href="/pulse/dept" className="text-[#1F6F8B] font-medium hover:underline">See who</Link></>
             : undefined}
         />
       </div>
       <p className="m-0 mt-3 pt-2.5 border-t border-dashed border-[#EAEAEA] text-[12px] text-[#8F8F8F]">
-        Real work means a task Claude judged meaningful or frontier, not routine. A new way of working is one a manager has confirmed. {q ? 'Bars and lines show the quarter week by week.' : 'Bars and lines show the last 8 weeks.'} <Link href="/pulse/cio" className="text-[#245BF3] font-medium hover:underline">Open Work Pulse</Link>
+        Real work means a task Claude judged meaningful or frontier, not routine. A new way of working is one a manager has confirmed. {q ? 'Bars and lines show the quarter week by week.' : 'Bars and lines show the last 8 weeks.'} <Link href="/pulse/cio" className="text-[#1F6F8B] font-medium hover:underline">Open Work Pulse</Link>
       </p>
     </section>
   );
@@ -230,7 +230,7 @@ function SpreadPanel({ skills, connectors, activePeople }: { skills: { total: nu
       )}
       <p className="m-0 mt-3 pt-2.5 border-t border-dashed border-[#EAEAEA] text-[12px] text-[#8F8F8F]">
         Bars count the people using each {one}, not how often it was used, so one that is spreading stands out. Change is against the 30 days before; new means first used in the last 30 days.
-        {list.total > rows.length ? ` Top ${rows.length} of ${list.total} shown.` : ''} <Link href="/library" className="text-[#245BF3] font-medium hover:underline">See all on the S&amp;C Board</Link>
+        {list.total > rows.length ? ` Top ${rows.length} of ${list.total} shown.` : ''} <Link href="/library" className="text-[#1F6F8B] font-medium hover:underline">See all on the S&amp;C Board</Link>
       </p>
     </section>
   );

@@ -31,7 +31,7 @@ export default function TopUsers({ users, products }: { users: TopUser[]; produc
   return (
     <Panel
       title="Top users this week"
-      right={<Link href="/users" className="text-[13px] font-medium text-[#245BF3] hover:underline">View all</Link>}
+      right={<Link href="/users" className="text-[13px] font-medium text-[#1F6F8B] hover:underline">View all</Link>}
       className="h-full"
       flush
     >

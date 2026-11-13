@@ -248,7 +248,7 @@ export default function LibraryDetailPage({ params }: { params: Promise<{ id: st
             Upload the zip in Organisation settings → Plugins &amp; skills.
           </p>
           <p className="m-0 text-[13px] text-[#8F8F8F]">
-            Drafted from the use case <Link href={`/use-cases/${encodeURIComponent(entry.codified.useCaseId)}`} className="text-[#245BF3] hover:underline">{entry.codified.useCaseTitle}</Link>.
+            Drafted from the use case <Link href={`/use-cases/${encodeURIComponent(entry.codified.useCaseId)}`} className="text-[#1F6F8B] hover:underline">{entry.codified.useCaseTitle}</Link>.
           </p>
         </div>
       );
@@ -309,7 +309,7 @@ export default function LibraryDetailPage({ params }: { params: Promise<{ id: st
         <Toolbar
           left={
             <span className="flex flex-wrap items-center gap-2">
-              <Link href="/library" className="inline-flex items-center gap-1 text-[#245BF3] hover:underline">
+              <Link href="/library" className="inline-flex items-center gap-1 text-[#1F6F8B] hover:underline">
                 <LineIcon d={ICON.back} />
                 Back to the S&amp;C Board
               </Link>
@@ -332,7 +332,7 @@ export default function LibraryDetailPage({ params }: { params: Promise<{ id: st
             type="button"
             onClick={handleVote}
             aria-pressed={!!entry.stats.user_voted}
-            className={cx(B.secondary, entry.stats.user_voted && '!border-[#245BF3] !text-[#245BF3] !bg-[#F2F5FF]')}
+            className={cx(B.secondary, entry.stats.user_voted && '!border-[#1F6F8B] !text-[#1F6F8B] !bg-[#EEF5F8]')}
           >
             <svg className="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2} aria-hidden="true">
               <path strokeLinecap="round" strokeLinejoin="round" d="M4.5 15.75l7.5-7.5 7.5 7.5" />

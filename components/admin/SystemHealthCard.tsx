@@ -209,7 +209,7 @@ export default function SystemHealthCard() {
             </ul>
           )}
           <details className="mt-2">
-            <summary className="text-[13px] font-medium text-[#245BF3] cursor-pointer">All jobs ({health.jobs.length})</summary>
+            <summary className="text-[13px] font-medium text-[#1F6F8B] cursor-pointer">All jobs ({health.jobs.length})</summary>
             <ul className={cx(listCls, 'mt-1')}>
               {health.jobs.map(j => <JobRow key={j.name} j={j} now={now} />)}
             </ul>

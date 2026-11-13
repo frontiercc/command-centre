@@ -189,7 +189,7 @@ export default function IdeateChatPage() {
     <>
       <TopBar title="Ideate" subtitle="Brainstorm use cases grounded in your own usage data" />
       <PageBody>
-        <Toolbar left={<Link href="/use-cases" className="text-[#245BF3] hover:underline">Back to Use Cases</Link>}>
+        <Toolbar left={<Link href="/use-cases" className="text-[#1F6F8B] hover:underline">Back to Use Cases</Link>}>
           {mode !== null && (
             <button type="button" onClick={resetChat} disabled={sending} className={B.secondary}>
               New chat

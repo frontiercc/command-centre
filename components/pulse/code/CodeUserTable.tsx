@@ -104,7 +104,7 @@ export default function CodeUserTable({ users, showDepartment = true, githubBasi
           ) : sorted.map(u => (
             <tr key={u.user_id} className={T.row}>
               <td className={T.td}>
-                <Link href={`/pulse/code/users?userId=${encodeURIComponent(u.user_id)}`} className="font-medium text-[#0A0A0A] hover:text-[#245BF3] hover:underline">
+                <Link href={`/pulse/code/users?userId=${encodeURIComponent(u.user_id)}`} className="font-medium text-[#0A0A0A] hover:text-[#1F6F8B] hover:underline">
                   {u.display_name || u.email || u.user_id}
                 </Link>
               </td>

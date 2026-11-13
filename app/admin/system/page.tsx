@@ -594,7 +594,7 @@ export default function SystemPage() {
 
   const statusBadge = (status: CheckStatus) => {
     if (status === 'idle') return <span className="text-[#B3B3B3] text-[13px]">—</span>;
-    if (status === 'running') return <span className="text-[#245BF3] text-[13px] animate-pulse">Running…</span>;
+    if (status === 'running') return <span className="text-[#1F6F8B] text-[13px] animate-pulse">Running…</span>;
     if (status === 'pass') return <Pill tone="good">Pass</Pill>;
     if (status === 'info') return <Pill tone="neutral">Info</Pill>;
     return <Pill tone="bad">Fail</Pill>;

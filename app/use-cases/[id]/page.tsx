@@ -407,7 +407,7 @@ export default function UseCaseDetailPage() {
         <Toolbar
           left={
             <span className="flex flex-wrap items-center gap-2">
-              <Link href="/use-cases" className="text-[#245BF3] hover:underline">Back to register</Link>
+              <Link href="/use-cases" className="text-[#1F6F8B] hover:underline">Back to register</Link>
               <span className="text-[#D4D4D4]" aria-hidden="true">·</span>
               <Tag>{ORIGIN_LABEL[uc.origin]}</Tag>
               <Pill tone={uc.status === 'confirmed' ? 'good' : 'neutral'}>{STATUS_LABEL[uc.status]}</Pill>

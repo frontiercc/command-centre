@@ -185,9 +185,9 @@ function LoginForm() {
       </div>
     </div>
   );
-  const inputCls = 'w-full text-[14px] px-2.5 py-2 rounded-[10px] border border-[#DADADA] bg-white text-[#0A0A0A] placeholder:text-[#8F8F8F] focus:outline-none focus:ring-2 focus:ring-[#245BF3]/30 focus:border-[#245BF3]';
+  const inputCls = 'w-full text-[14px] px-2.5 py-2 rounded-[10px] border border-[#DADADA] bg-white text-[#0A0A0A] placeholder:text-[#8F8F8F] focus:outline-none focus:ring-2 focus:ring-[#1F6F8B]/30 focus:border-[#1F6F8B]';
   const primaryCls = 'w-full text-[14px] font-medium px-3.5 py-2.5 rounded-[10px] bg-[#0A0A0A] text-white hover:bg-[#262626] disabled:opacity-50 disabled:cursor-not-allowed';
-  const linkCls = 'text-[13px] text-[#245BF3] hover:underline';
+  const linkCls = 'text-[13px] text-[#1F6F8B] hover:underline';
 
   if (checking) {
     return (

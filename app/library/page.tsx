@@ -140,7 +140,7 @@ function initials(name: string | null) {
 
 /** Small outline button used on list rows (Install, upvote, Claim). */
 const SMALL_BTN = cx(B.secondary, '!px-2 !py-0.5');
-const VOTED_BTN = '!border-[#245BF3] !text-[#245BF3] !bg-[#F2F5FF]';
+const VOTED_BTN = '!border-[#1F6F8B] !text-[#1F6F8B] !bg-[#EEF5F8]';
 
 /** Line icon (24px grid, currentColor stroke): a single path via `d`, or shapes as children. */
 function LineIcon({ d, size = 14, className, children }: { d?: string; size?: 12 | 14; className?: string; children?: ReactNode }) {
@@ -302,7 +302,7 @@ function HighlightCard({ card }: { card: StripCard }) {
       <span className="flex items-center gap-2 min-w-0">
         <span className="font-mono text-[13px] font-semibold truncate">{fmt(card.name)}</span>
         <span className={cx('ml-auto text-[12px] font-medium tabular-nums whitespace-nowrap shrink-0',
-          card.badgeTone === 'warn' ? 'text-[#B54708]' : 'text-[#245BF3]')}>
+          card.badgeTone === 'warn' ? 'text-[#B54708]' : 'text-[#1F6F8B]')}>
           {card.badge}
         </span>
       </span>
@@ -593,7 +593,7 @@ function LeaderboardSidebar({
             </span>
             <span className="flex flex-col min-w-0 flex-1 relative">
               <span
-                className={cx('truncate cursor-default font-medium', isYou ? 'text-[#245BF3]' : 'text-[#0A0A0A]',
+                className={cx('truncate cursor-default font-medium', isYou ? 'text-[#1F6F8B]' : 'text-[#0A0A0A]',
                   hasDetails && 'underline decoration-dotted underline-offset-2 decoration-[#B3B3B3]')}
                 onMouseEnter={() => hasDetails && setHoveredId(u.user_id)}
                 onMouseLeave={() => setHoveredId(null)}
@@ -637,12 +637,12 @@ function LeaderboardSidebar({
       {/* The current user's position when outside the top five */}
       {userRank && userRank.rank > 5 && (
         <div className="flex items-center gap-2.5 px-4 py-2 border-t border-dashed border-[#DADADA] bg-[#F5F8FF]">
-          <span className="w-6 shrink-0 font-medium text-[#245BF3] tabular-nums">#{userRank.rank}</span>
-          <span className="w-6 h-6 rounded-full bg-white border border-[#245BF3] text-[11px] font-semibold text-[#245BF3] inline-flex items-center justify-center shrink-0">
+          <span className="w-6 shrink-0 font-medium text-[#1F6F8B] tabular-nums">#{userRank.rank}</span>
+          <span className="w-6 h-6 rounded-full bg-white border border-[#1F6F8B] text-[11px] font-semibold text-[#1F6F8B] inline-flex items-center justify-center shrink-0">
             me
           </span>
-          <span className="flex-1 font-medium text-[#245BF3]">You</span>
-          <span className="font-medium tabular-nums text-[#245BF3] shrink-0">{userRank.total_count.toLocaleString()}</span>
+          <span className="flex-1 font-medium text-[#1F6F8B]">You</span>
+          <span className="font-medium tabular-nums text-[#1F6F8B] shrink-0">{userRank.total_count.toLocaleString()}</span>
         </div>
       )}
     </Panel>
@@ -1039,7 +1039,7 @@ export default function LibraryPage() {
 
         {/* Search + filters */}
         <div className="flex gap-2 items-center flex-wrap">
-          <label className="flex-1 min-w-[220px] flex items-center gap-2 px-2.5 py-1.5 border border-[#DADADA] rounded-[10px] bg-white text-[#8F8F8F] focus-within:ring-2 focus-within:ring-[#245BF3]/30 focus-within:border-[#245BF3]">
+          <label className="flex-1 min-w-[220px] flex items-center gap-2 px-2.5 py-1.5 border border-[#DADADA] rounded-[10px] bg-white text-[#8F8F8F] focus-within:ring-2 focus-within:ring-[#1F6F8B]/30 focus-within:border-[#1F6F8B]">
             <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2} aria-hidden="true">
               <circle cx="11" cy="11" r="8" /><path d="m21 21-4.3-4.3" />
             </svg>

@@ -161,7 +161,7 @@ export default function UsersPage() {
         <span className="inline-flex items-center gap-1.5">
           Deactivated
           {deactivated.length > 0 && (
-            <span className="text-[12px] text-[#245BF3] tabular-nums">{deactivated.length}</span>
+            <span className="text-[12px] text-[#1F6F8B] tabular-nums">{deactivated.length}</span>
           )}
         </span>
       ),
@@ -206,7 +206,7 @@ export default function UsersPage() {
                             <div className="flex items-center gap-2">
                               <Tag tone="measured" title={badge.title}>{badge.label}</Tag>
                               <div className="min-w-0">
-                                <Link href={`/admin/users/${user.id}`} className="text-[#0A0A0A] font-medium hover:text-[#245BF3] hover:underline">
+                                <Link href={`/admin/users/${user.id}`} className="text-[#0A0A0A] font-medium hover:text-[#1F6F8B] hover:underline">
                                   {user.display_name || user.email}
                                 </Link>
                                 {user.display_name && (

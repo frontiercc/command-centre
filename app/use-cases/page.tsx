@@ -69,12 +69,12 @@ const LIFECYCLE_PILL: Record<string, { label: string; tone: LifecycleTone }> = {
 /** Same colours as the kit's Pill, for the lifecycle filter toggles. */
 const LIFECYCLE_CHIP_ON: Record<LifecycleTone, string> = {
   good: 'bg-[#E7F6EC] text-[#146C2E] border-[#E7F6EC]',
-  info: 'bg-[#EAF0FE] text-[#1A44C7] border-[#EAF0FE]',
+  info: 'bg-[#E4EFF3] text-[#185A71] border-[#E4EFF3]',
   warn: 'bg-[#FFF1E0] text-[#8A5300] border-[#FFF1E0]',
   neutral: 'bg-[#F2F2F2] text-[#4D4D4D] border-[#F2F2F2]',
 };
 const LIFECYCLE_DOT: Record<LifecycleTone, string> = {
-  good: '#1A7F37', info: '#245BF3', warn: '#DC8A00', neutral: '#A3A3A3',
+  good: '#1A7F37', info: '#1F6F8B', warn: '#DC8A00', neutral: '#A3A3A3',
 };
 
 const LIFECYCLE_FACETS: Array<UseCase['lifecycle']> = ['adopted', 'piloting', 'at_risk', 'not_seen'];

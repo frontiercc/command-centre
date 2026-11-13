@@ -89,7 +89,7 @@ export default function MemberTable({ members }: MemberTableProps) {
                   <td className={`${T.td} text-right`}>
                     <Link
                       href={`/pulse/user/${encodeURIComponent(m.id)}`}
-                      className="text-[13px] font-medium text-[#245BF3] hover:underline"
+                      className="text-[13px] font-medium text-[#1F6F8B] hover:underline"
                       aria-label={`View ${m.display_name ?? m.email} pulse`}
                     >
                       Open

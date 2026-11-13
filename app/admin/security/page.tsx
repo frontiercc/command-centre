@@ -917,7 +917,7 @@ export default function SecurityPage() {
             <>
               {selectedUserIds.size > 0 && (
                 <div className="flex items-center justify-between gap-3 flex-wrap px-4 py-2 border-b border-[#F2F2F2] bg-[#F5F8FF]">
-                  <span className="text-[13px] text-[#1A44C7] font-medium tabular-nums">
+                  <span className="text-[13px] text-[#185A71] font-medium tabular-nums">
                     {selectedUserIds.size} user{selectedUserIds.size === 1 ? '' : 's'} selected
                   </span>
                   <div className="flex items-center gap-3">
@@ -1644,7 +1644,7 @@ export default function SecurityPage() {
           </button>
           <Link
             href="/audit"
-            className="text-[13px] font-medium text-[#245BF3] hover:underline"
+            className="text-[13px] font-medium text-[#1F6F8B] hover:underline"
           >
             View full audit log &rarr;
           </Link>
@@ -1869,7 +1869,7 @@ export default function SecurityPage() {
 /* ── Page-local parts ──────────────────────────────────────────────── */
 
 const CHECKBOX = 'h-3.5 w-3.5 rounded-[6px] border-[#DADADA] accent-[#0A0A0A] cursor-pointer';
-const ROW_LINK = 'text-[13px] font-medium text-[#245BF3] hover:underline';
+const ROW_LINK = 'text-[13px] font-medium text-[#1F6F8B] hover:underline';
 const DANGER_SOLID = 'inline-flex items-center justify-center gap-1.5 text-[13px] font-medium px-3 py-1.5 rounded-[10px] bg-[#B42318] text-white hover:bg-[#912018] disabled:opacity-50 disabled:cursor-not-allowed';
 
 /** Test button: outline when idle, tinted green/red after a result. */
@@ -1924,7 +1924,7 @@ function Switch({ checked, onChange, label, title, disabled }: {
       disabled={disabled}
       onClick={() => onChange(!checked)}
       className={cx(
-        'relative inline-flex h-5 w-[34px] shrink-0 rounded-full transition-colors focus:outline-none focus-visible:ring-2 focus-visible:ring-[#245BF3]/30 disabled:opacity-50 disabled:cursor-not-allowed',
+        'relative inline-flex h-5 w-[34px] shrink-0 rounded-full transition-colors focus:outline-none focus-visible:ring-2 focus-visible:ring-[#1F6F8B]/30 disabled:opacity-50 disabled:cursor-not-allowed',
         checked ? 'bg-[#0A0A0A]' : 'bg-[#DADADA]',
       )}
     >

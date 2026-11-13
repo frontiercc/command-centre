@@ -104,7 +104,7 @@ export default function NewUseCasePage() {
     <>
       <TopBar title="Add Use Case" subtitle="Guided intake" />
       <PageBody>
-        <Toolbar left={<Link href="/use-cases" className="text-[#245BF3] hover:underline">Back to Use Cases</Link>} />
+        <Toolbar left={<Link href="/use-cases" className="text-[#1F6F8B] hover:underline">Back to Use Cases</Link>} />
         <div className="max-w-[760px] w-full">
           <Panel title="Use case" flush>
             <div className="p-4 flex flex-col gap-4">

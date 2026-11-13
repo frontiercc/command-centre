@@ -75,7 +75,7 @@ export default function DeptTable({ depts }: DeptTableProps) {
                 <td className={`${T.td} text-right`}>
                   <Link
                     href={`/pulse/dept?dept=${encodeURIComponent(d.department)}`}
-                    className="text-[13px] font-medium text-[#245BF3] hover:underline"
+                    className="text-[13px] font-medium text-[#1F6F8B] hover:underline"
                     aria-label={`View ${d.department} department pulse`}
                   >
                     Open

@@ -355,7 +355,7 @@ function PanelEmpty({ title, description, actionLabel, actionHref }: {
       <span className="text-[14px] font-medium text-[#0A0A0A]">{title}</span>
       <span className="text-[13px] text-[#8F8F8F] max-w-xs">{description}</span>
       {actionLabel && actionHref && (
-        <Link href={actionHref} className="text-[13px] font-medium text-[#245BF3] hover:underline">{actionLabel}</Link>
+        <Link href={actionHref} className="text-[13px] font-medium text-[#1F6F8B] hover:underline">{actionLabel}</Link>
       )}
     </div>
   );

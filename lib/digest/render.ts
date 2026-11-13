@@ -93,7 +93,7 @@ function estimateCaveatLines(code: NonNullable<DigestData['code']>): string[] {
 const COLOR_HEADER_BG = '#0B1220';
 const COLOR_TEXT = '#1A1A1A';
 const COLOR_MUTED = '#6B7280';
-const COLOR_BLUE = '#2563EB';
+const COLOR_BLUE = '#1F6F8B';
 const COLOR_AMBER_BG = '#FFFBEB';
 const COLOR_AMBER_BORDER = '#F59E0B';
 const COLOR_AMBER_TEXT = '#92400E';

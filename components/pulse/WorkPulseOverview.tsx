@@ -51,7 +51,7 @@ export function Track({ value, colour = DASH, floor, striped }: { value: number;
   );
 }
 
-export const linkCls = 'text-[#245BF3] font-medium hover:underline';
+export const linkCls = 'text-[#1F6F8B] font-medium hover:underline';
 
 /* ── 2: Use cases to act on next ───────────────────────────────── */
 
@@ -118,7 +118,7 @@ export function BiggerJobs({ weeks, departments, product, window, onWindow }: {
           <div className="text-[12px] font-semibold text-[#333333] mb-0.5">Going the other way</div>
           {falling.slice(0, 3).map(d => (
             <div key={d.dept} className="flex gap-2.5 items-center py-1 text-[13px]">
-              <Link href={`/pulse/dept?dept=${encodeURIComponent(d.dept)}`} className="text-[#0A0A0A] hover:text-[#245BF3]">{d.dept}</Link>
+              <Link href={`/pulse/dept?dept=${encodeURIComponent(d.dept)}`} className="text-[#0A0A0A] hover:text-[#1F6F8B]">{d.dept}</Link>
               <span className="text-[#777777]">real work is now {words(d.thenVsNow!.now)} of tasks</span>
               <span className="ml-auto text-[#333333]">down from {words(d.thenVsNow!.then)}</span>
             </div>

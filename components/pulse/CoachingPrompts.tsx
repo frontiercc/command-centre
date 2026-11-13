@@ -152,7 +152,7 @@ export default function CoachingPrompts({ prompts }: { prompts: CoachingPromptIt
             <li key={key} className="px-4 py-2.5 border-t border-[#F2F2F2] first:border-t-0 flex items-start justify-between gap-3">
               <p className="m-0 text-[14px] leading-5 text-[#333333] min-w-0">
                 {p.promptText}{' '}
-                <Link href={`/use-cases/${encodeURIComponent(p.useCaseId)}`} className="text-[13px] font-medium text-[#245BF3] hover:underline">
+                <Link href={`/use-cases/${encodeURIComponent(p.useCaseId)}`} className="text-[13px] font-medium text-[#1F6F8B] hover:underline">
                   View “{p.useCaseTitle}”
                 </Link>
                 {failedKey === key && <span className="block text-[13px] text-[#B42318] mt-0.5">Could not save. Try again.</span>}
