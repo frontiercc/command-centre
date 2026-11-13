@@ -255,18 +255,49 @@ export function TaskList({ kind, period, userId, who, onClose, names }: {
 /* ── 3: Is the work getting deeper? ───────────────────────────── */
 
 export function DeeperPanel({ q, who, names }: { q: MyPeriod; who: Who; names?: TierNames }) {
+  return (
+    <DepthPanel
+      weeks={q.weeks}
+      grid={q.grid}
+      end={q.end}
+      names={names}
+      title={`Is ${poss(who)} work getting deeper?`}
+      subject={who.you ? 'you handed over' : `${who.name} handed over`}
+      whose={poss(who)}
+    />
+  );
+}
+
+/**
+ * The depth panel itself: the delegation journey grid by default, the longer views behind the
+ * same switch. Shared by Work Pulse and Developer Pulse, each passing its own tier names and
+ * its own word for a unit of work.
+ */
+export function DepthPanel({ weeks, grid, end, names, title, subject, whose, unit = 'task' }: {
+  weeks: Array<{ weekStart: number; t1: number; t2: number; t3: number }>;
+  grid: Array<{ weekStart: number; t1: number; t2: number; t3: number }>;
+  end: number;
+  names?: TierNames;
+  title: string;
+  /** How the grid sentence opens: "you handed over", "Finance handed over". */
+  subject: string;
+  /** Whose tasks the longer view is about: "your", "Finance's". */
+  whose: string;
+  /** What one row of the grid counts: a task on Work Pulse, a session on Developer Pulse. */
+  unit?: 'task' | 'session';
+}) {
   const [window, setWindow] = useState<DepthWindow>(6);
-  const cols = depthColumns(q.weeks, window === 6 ? 13 : window, q.end);
+  const cols = depthColumns(weeks, window === 6 ? 13 : window, end);
   return (
     <Frame
-      title={`Is ${poss(who)} work getting deeper?`}
+      title={title}
       judged
       period={<DepthSwitch window={window} onWindow={setWindow} />}
-      answer={window === 6 ? gridSentence(q.grid, who.you ? 'you handed over' : `${who.name} handed over`, names) : depthSentence(cols, window, poss(who), names)}
-      note={window === 6 ? 'Each number is a count of tasks that week. The last column is the week in progress.'
+      answer={window === 6 ? gridSentence(grid, subject, names, unit) : depthSentence(cols, window, whose, names, unit)}
+      note={window === 6 ? `Each number is a count of ${unit}s that week. The last column is the week in progress.`
         : window === 52 ? 'One column per calendar month.' : 'One column per completed week, Monday to Sunday.'}
     >
-      {window === 6 ? <><TierGrid grid={q.grid} names={names} /><TierLegend names={names} /></> : <DepthChart cols={cols} names={names} />}
+      {window === 6 ? <><TierGrid grid={grid} names={names} /><TierLegend names={names} /></> : <DepthChart cols={cols} names={names} />}
     </Frame>
   );
 }

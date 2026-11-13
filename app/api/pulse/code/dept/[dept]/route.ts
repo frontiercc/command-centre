@@ -14,6 +14,11 @@ import { getCodeDeptMembers } from '@/lib/pulse/code/dept';
 import { hasCodexData, readCodeMetrics, pickCodeMetricsSource, codeSessionVendor } from '@/lib/pulse/code/vendor-view';
 import { readHumanTime } from '@/lib/pulse/human-time-summary';
 import { githubRepoBasis, githubBasisColumn, type GithubRepoBasis } from '@/lib/pulse/code/github-tool-match';
+import { weeklyTiers, getCodeTierNames } from '@/lib/pulse/code/weekly-tiers';
+import { getCodeWorkTypeDefinitions } from '@/lib/pulse/code/tier-config';
+import { codeWorkTypeLabel } from '@/lib/pulse/code/work-type-labels';
+import { buildCodePeriodWork } from '@/lib/pulse/code/period-work';
+import type { PulsePeriod } from '@/lib/pulse/period-shape';
 
 export const dynamic = 'force-dynamic';
 
@@ -149,6 +154,42 @@ export async function GET(
     return { week, tier, count, provisionalCount: provisionalCounts.get(k) ?? 0 };
   });
 
+  // The same weekly view as a person's page: a year of completed weeks, and the six-week grid.
+  const yearAgo = now - 53 * 7 * 24 * 3600;
+  const yearTierRows = await client
+    .select({ tier: csc.tier, work_type: csc.work_type, last_at: css.last_at })
+    .from(csc)
+    .innerJoin(css, eq(css.session_id, csc.session_id))
+    .innerJoin(u, eq(u.id, csc.user_id))
+    .where(and(eq(u.department, dept), eq(csc.status, 'classified'), gte(css.last_at, yearAgo), codeSessionVendor(css.session_id, vendor)));
+  const { weeks: tierWeeks, grid: tierGrid } = weeklyTiers(yearTierRows, now);
+  const tierNames = await getCodeTierNames();
+
+  // The page's one period: this week, this month or this quarter.
+  const askedPeriod = request.nextUrl.searchParams.get('period');
+  const periodName: PulsePeriod = askedPeriod === 'week' || askedPeriod === 'month' || askedPeriod === 'quarter' ? askedPeriod : 'quarter';
+  let periodWork = null;
+  try {
+    periodWork = await buildCodePeriodWork({ scopeType: 'function', scopeId: dept, period: periodName, vendor, nowS: now });
+  } catch (err) {
+    console.error('[pulse/code] period work failed', err);
+  }
+
+  // What kinds of coding work the department delegates, over the last 30 days.
+  const thirtyDaysAgoWork = now - 30 * 24 * 3600;
+  const workDefs = await getCodeWorkTypeDefinitions();
+  const workCounts = new Map<string, { sessions: number; deep: number }>();
+  for (const r of yearTierRows) {
+    if (r.last_at < thirtyDaysAgoWork) continue;
+    const e = workCounts.get(r.work_type) ?? { sessions: 0, deep: 0 };
+    e.sessions++;
+    if (r.tier >= 2) e.deep++;
+    workCounts.set(r.work_type, e);
+  }
+  const workMix = [...workCounts.entries()]
+    .map(([work_type, v]) => ({ work_type, label: codeWorkTypeLabel(work_type, workDefs.get(work_type)), sessions: v.sessions, deep: v.deep }))
+    .sort((a, b) => b.sessions - a.sessions);
+
   const humanTime = await readHumanTime('code', memberIds, vendor);
-  return NextResponse.json({ dept, vendor, codexPresent, metricsSplit, metrics, members, journeyGrid, githubRepos, humanTime });
+  return NextResponse.json({ dept, vendor, codexPresent, metricsSplit, metrics, members, journeyGrid, tierWeeks, tierGrid, tierNames, periodWork, workMix, githubRepos, humanTime });
 }

@@ -78,7 +78,7 @@ const plural = (c: number, one: string, many: string) => `${c} ${c === 1 ? one :
  * One sentence on the whole span shown: the top two tiers' share in its first month against its last.
  * A first month with no work is skipped and the sentence says where the work starts.
  */
-export function depthSentence(cols: DepthColumn[], window: DepthWindow, whose: string, names?: TierNames): ReactNode {
+export function depthSentence(cols: DepthColumn[], window: DepthWindow, whose: string, names?: TierNames, unit: 'task' | 'session' = 'task'): ReactNode {
   const per = window === 52 ? 1 : 4; // columns in a month
   const withData = cols.map((c, i) => (total(c) > 0 ? i : -1)).filter(i => i >= 0);
   if (withData.length < per * 2) return <>Not enough weeks of work yet to compare over {SPAN_WORDS[window]}.</>;
@@ -91,24 +91,24 @@ export function depthSentence(cols: DepthColumn[], window: DepthWindow, whose: s
   const monthName = new Date(cols[firstIdx[0]].start * 1000).toLocaleDateString('en-GB', { month: 'long', timeZone: 'UTC' });
   const firstWhen = !startsLate ? 'in its first month'
     : window === 52 ? `in ${monthName}, the first month with work` : `in the first month with work, from ${cols[firstIdx[0]].label}`;
-  return <>{verdict}Over {SPAN_WORDS[window]}, {deepWords(names)} work went from <b>{words(first)}</b> of {whose ? `${whose} ` : ''}tasks {firstWhen} to <b>{words(last)}</b> in its last month.</>;
+  return <>{verdict}Over {SPAN_WORDS[window]}, {deepWords(names)} work went from <b>{words(first)}</b> of {whose ? `${whose} ` : ''}{unit}s {firstWhen} to <b>{words(last)}</b> in its last month.</>;
 }
 
 /** The grid's sentence: this week first, because that is what a new starter needs to see. */
-export function gridSentence(grid: TierWeek[], whose: string, names?: TierNames): ReactNode {
+export function gridSentence(grid: TierWeek[], whose: string, names?: TierNames, unit: 'task' | 'session' = 'task'): ReactNode {
   const now = grid[grid.length - 1], prev = grid[grid.length - 2];
   const real = (w?: TierWeek) => (w ? w.t2 + w.t3 : 0);
   const six = grid.reduce((s, w) => s + total(w), 0);
   const who = whose ? `${whose} ` : '';
-  if (six === 0) return <>No classified tasks in the last six weeks.</>;
+  if (six === 0) return <>No classified {unit}s in the last six weeks.</>;
   const deep = deepWords(names);
   if (total(now) > 0) {
-    return <>This week so far, {who}<b>{plural(total(now), 'task', 'tasks')}</b>, {real(now) === 0 ? <>none of them {deep} yet</> : <><b>{real(now)} of them</b> {deep}</>}. Six weeks: {plural(six, 'task', 'tasks')}.</>;
+    return <>This week so far, {who}<b>{plural(total(now), unit, `${unit}s`)}</b>, {real(now) === 0 ? <>none of them {deep} yet</> : <><b>{real(now)} of them</b> {deep}</>}. Six weeks: {plural(six, unit, `${unit}s`)}.</>;
   }
   if (prev && total(prev) > 0) {
-    return <>Nothing yet this week. Last week {who}<b>{plural(total(prev), 'task', 'tasks')}</b>, {real(prev)} of them {deep}.</>;
+    return <>Nothing yet this week. Last week {who}<b>{plural(total(prev), unit, `${unit}s`)}</b>, {real(prev)} of them {deep}.</>;
   }
-  return <>Nothing in the last two weeks. Six weeks: {plural(six, 'task', 'tasks')}.</>;
+  return <>Nothing in the last two weeks. Six weeks: {plural(six, unit, `${unit}s`)}.</>;
 }
 
 export function DepthSwitch({ window, onWindow, windows = DEPTH_WINDOWS }: {
@@ -132,7 +132,9 @@ export function TierGrid({ grid, names }: { grid: TierWeek[]; names?: TierNames 
     [1, t1, DASH_SHADES[0]],
   ];
   const count = (w: TierWeek, t: 3 | 2 | 1) => (t === 3 ? w.t3 : t === 2 ? w.t2 : w.t1);
-  const cols = `minmax(0,104px) repeat(${grid.length}, minmax(0,1fr))`;
+  // The row label is as wide as the longest tier name needs, since a customer can rename them.
+  const labelW = Math.min(190, Math.max(104, Math.max(...tiers.map(t => t[1].length)) * 7));
+  const cols = `${labelW}px repeat(${grid.length}, minmax(0,1fr))`;
   return (
     <div>
       <div className="grid gap-1 text-[11px] text-[#8F8F8F] pb-1" style={{ gridTemplateColumns: cols }}>
@@ -143,13 +145,13 @@ export function TierGrid({ grid, names }: { grid: TierWeek[]; names?: TierNames 
       </div>
       {tiers.map(([t, label, colour]) => (
         <div key={t} className="grid gap-1 items-center py-[2px]" style={{ gridTemplateColumns: cols }}>
-          <span className="text-[12px] text-[#333333] truncate">{label}</span>
+          <span className="text-[12px] text-[#333333] leading-4">{label}</span>
           {grid.map(w => {
             const c = count(w, t);
             return (
               <span
                 key={w.weekStart}
-                title={`${fmtDay(w.weekStart)}: ${plural(c, 'task', 'tasks')}`}
+                title={`${fmtDay(w.weekStart)}: ${c}`}
                 className="h-6 rounded-[6px] flex items-center justify-center text-[12px] font-semibold tabular-nums"
                 style={c > 0
                   ? { background: colour, color: t === 3 ? '#FFFFFF' : '#134A5E' }

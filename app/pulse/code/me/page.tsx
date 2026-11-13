@@ -11,10 +11,15 @@ import LoadingSpinner from '@/components/shared/LoadingSpinner';
 import CodeStatStrip, { type CodeMetricsRow, formatTokens, formatCurrency } from '@/components/pulse/code/CodeStatStrip';
 import CodeProductivityStrip from '@/components/pulse/code/CodeProductivityStrip';
 import ModelMixBar, { type ModelMixItem } from '@/components/pulse/code/ModelMixBar';
-import JourneyGrid from '@/components/pulse/JourneyGrid';
+import { DepthPanel, ByHandPanel, type ByHand, type Who } from '@/components/pulse/MyPulsePanels';
+import {
+  CodeWorkPanel, CodeBestWork, CodeWorkMix,
+  type CodePeriodWork, type CodeWorkMixRow, type BestSession,
+} from '@/components/pulse/code/CodePulsePanels';
+import type { PulsePeriod } from '@/lib/pulse/period-shape';
+import type { TierNames } from '@/lib/pulse/tier-names';
 import Sparkline from '@/components/pulse/Sparkline';
 import WeeklyDeltaBadge from '@/components/pulse/WeeklyDeltaBadge';
-import HumanTimeCard, { type HumanTimeSummary } from '@/components/pulse/HumanTimeCard';
 import { PageBody, Toolbar, Panel, Tag, Empty, Muted, B } from '@/components/precision/ui';
 import { useVendor, useOpenAiOnly, VendorSwitch } from '@/components/shared/VendorSwitch';
 import { DEVELOPER_PULSE_VENDOR_LABELS, type Vendor } from '@/lib/dashboard/vendor';
@@ -46,10 +51,16 @@ interface WeeklyTrend {
 }
 
 interface MeData {
+  periodWork?: CodePeriodWork | null;
+  tierWeeks?: Array<{ weekStart: number; t1: number; t2: number; t3: number }>;
+  tierGrid?: Array<{ weekStart: number; t1: number; t2: number; t3: number }>;
+  tierNames?: TierNames | null;
+  workMix?: CodeWorkMixRow[];
+  bestSession?: BestSession | null;
   vendor?: Vendor;
   codexPresent?: boolean;
   metricsSplit?: { claude: CodeMetricsRow | null; openai: CodeMetricsRow | null } | null;
-  humanTime?: HumanTimeSummary | null;
+  humanTime?: ByHand | null;
   canSeeSpendReview?: boolean;
   userId: string | null;
   metrics: CodeMetricsRow | null;
@@ -134,6 +145,8 @@ function MyCodePulseContent() {
   const viewName = searchParams.get('name');
 
   const [data, setData] = useState<MeData | null>(null);
+  // One period for the page, as on Work Pulse.
+  const [period, setPeriod] = useState<PulsePeriod>('quarter');
   const [loading, setLoading] = useState(true);
   const [vendor, setVendor, vendorReady] = useVendor();
   const openaiOnly = useOpenAiOnly();
@@ -144,14 +157,16 @@ function MyCodePulseContent() {
     if (!vendorReady) return; // the saved view is read after the page loads
     const qs = new URLSearchParams({ vendor });
     if (viewUserId) qs.set('userId', viewUserId);
-    fetch(`/api/pulse/code/me?${qs.toString()}`)
+    fetch(`/api/pulse/code/me?${qs.toString()}&period=${period}`)
       .then(r => r.json())
       .then(setData)
       .catch(() => {})
       .finally(() => setLoading(false));
-  }, [viewUserId, vendor, vendorReady]);
+  }, [viewUserId, vendor, vendorReady, period]);
 
   if (loading) return <LoadingSpinner />;
+
+  const who: Who = { you: !viewUserId, name: viewName || 'This person' };
 
   return (
     <>
@@ -163,7 +178,7 @@ function MyCodePulseContent() {
             ? (viewUserId ? 'Per-user coding activity: Claude Code and Codex' : 'Your coding activity, spend, and autonomy: Claude Code and Codex')
             : (viewUserId ? 'Per-user Claude Code activity' : 'Your Claude Code activity, spend, and autonomy')}
       />
-      <PageBody>
+      <PageBody className="dash-compact">
         {!data?.userId ? (
           openaiOnly ? (
             <Empty title="No Codex activity linked to your account yet">
@@ -189,6 +204,41 @@ function MyCodePulseContent() {
               </Toolbar>
             )}
 
+            {/* 1. The coding work of the period */}
+            {data.periodWork && (
+              <CodeWorkPanel
+                w={data.periodWork}
+                who={who}
+                period={period}
+                onPeriod={setPeriod}
+                product={openaiOnly ? 'Codex' : data.codexPresent && vendor === 'all' ? 'Claude Code and Codex' : vendor === 'openai' ? 'Codex' : 'Claude Code'}
+              />
+            )}
+
+            {/* 2. Best work this week */}
+            <CodeBestWork s={data.bestSession ?? null} who={who} names={data.tierNames ?? undefined} />
+
+            {/* 3. Is the work getting deeper? */}
+            {(data.tierGrid?.length ?? 0) > 0 && (
+              <DepthPanel
+                weeks={data.tierWeeks ?? []}
+                grid={data.tierGrid ?? []}
+                end={Math.floor(Date.now() / 1000)}
+                names={data.tierNames ?? undefined}
+                title={`Is ${who.you ? 'your' : `${who.name}'s`} work getting deeper?`}
+                subject={who.you ? 'you ran' : `${who.name} ran`}
+                whose={who.you ? 'your' : `${who.name}'s`}
+                unit="session"
+              />
+            )}
+
+            {/* 4 and 5 */}
+            <div className="grid grid-cols-1 xl:grid-cols-2 gap-4">
+              <CodeWorkMix rows={data.workMix ?? []} who={who} names={data.tierNames ?? undefined} />
+              <ByHandPanel h={data.humanTime} who={who} />
+            </div>
+
+            {/* 6. The measured detail behind it */}
             <CodeStatStrip metrics={data.metrics} githubRepos={data.githubRepos} view={codexView ? vendor : 'claude'} split={data.metricsSplit} />
 
             {openaiOnly ? null : data.codexPresent && vendor === 'openai'
@@ -197,22 +247,10 @@ function MyCodePulseContent() {
                   ? { ...data.metricsSplit.claude, commit_count: data.metrics.commit_count }
                   : data.metrics} />}
 
-            <HumanTimeCard summary={data.humanTime} surface="code" scope="Personal" view={codexView ? vendor : 'claude'} />
-
             {data.trends && !openaiOnly && (
               <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                 <TrendCard label="Engaged time" trend={data.trends.engagedTime} />
                 <TrendCard label="Code output" trend={data.trends.codeOutput} />
-              </div>
-            )}
-
-            {(data.journeyGrid?.length ?? 0) > 0 && (
-              <div className="flex flex-col gap-2">
-                <div className="flex items-center gap-2 flex-wrap">
-                  <Tag tone="judged">AI-judged</Tag>
-                  <span className="text-[13px] text-[#8F8F8F]">Your delegation journey, 6 weeks: session tiers from the digest classifier</span>
-                </div>
-                <JourneyGrid data={data.journeyGrid} />
               </div>
             )}
 

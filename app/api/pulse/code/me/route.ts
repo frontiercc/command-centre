@@ -21,6 +21,11 @@ import { canViewSpendReview } from '@/lib/finance/spend-review-access';
 import { hasCodexData, readCodeMetrics, trendVendor, codeSessionVendor } from '@/lib/pulse/code/vendor-view';
 import { codexActionCounts } from '@/lib/pulse/code/aggregator';
 import { githubRepoBasis, githubBasisColumn, type GithubRepoBasis } from '@/lib/pulse/code/github-tool-match';
+import { weeklyTiers, getCodeTierNames } from '@/lib/pulse/code/weekly-tiers';
+import { getCodeWorkTypeDefinitions } from '@/lib/pulse/code/tier-config';
+import { codeWorkTypeLabel } from '@/lib/pulse/code/work-type-labels';
+import { buildCodePeriodWork } from '@/lib/pulse/code/period-work';
+import type { PulsePeriod } from '@/lib/pulse/period-shape';
 
 export const dynamic = 'force-dynamic';
 
@@ -291,14 +296,53 @@ export async function GET(request: NextRequest) {
     modelMix.sort((a, b) => (b.input_tokens + b.output_tokens) - (a.input_tokens + a.output_tokens));
   }
 
-  // Journey grid (judged layer): weekly session-tier counts over 6 weeks.
-  // Bucketed by when the work HAPPENED (session last_at), not when classified.
+  // The judged layer by week: a year of completed weeks for the longer views, and six weeks
+  // counting back from today for the grid, so the week in progress is always in it. Bucketed by
+  // when the work HAPPENED (session last_at), not when it was classified.
   const sixWeeksAgo = now - 42 * 24 * 3600;
+  const yearAgo = now - 53 * 7 * 24 * 3600;
   const tierRows = await client
     .select({ tier: csc.tier, provisional: csc.provisional, last_at: css.last_at })
     .from(csc)
     .innerJoin(css, eq(css.session_id, csc.session_id))
     .where(and(eq(csc.user_id, userId), eq(csc.status, 'classified'), gte(css.last_at, sixWeeksAgo), sessionVendor));
+
+  const yearTierRows = await client
+    .select({ tier: csc.tier, work_type: csc.work_type, last_at: css.last_at })
+    .from(csc)
+    .innerJoin(css, eq(css.session_id, csc.session_id))
+    .where(and(eq(csc.user_id, userId), eq(csc.status, 'classified'), gte(css.last_at, yearAgo), sessionVendor));
+  const { weeks: tierWeeks, grid: tierGrid } = weeklyTiers(yearTierRows, now);
+  const tierNames = await getCodeTierNames();
+
+  // The page's one period: this week, this month or this quarter.
+  const askedPeriod = request.nextUrl.searchParams.get('period');
+  const periodName: PulsePeriod = askedPeriod === 'week' || askedPeriod === 'month' || askedPeriod === 'quarter' ? askedPeriod : 'quarter';
+  let periodWork = null;
+  try {
+    periodWork = await buildCodePeriodWork({ scopeType: 'user', scopeId: userId, period: periodName, vendor, nowS: now });
+  } catch (err) {
+    console.error('[pulse/code] period work failed', err);
+  }
+
+  // What kinds of coding work this person delegates, over the last 30 days.
+  const workDefs = await getCodeWorkTypeDefinitions();
+  const workCounts = new Map<string, { sessions: number; deep: number }>();
+  for (const r of yearTierRows) {
+    if (r.last_at < thirtyDaysAgo) continue;
+    const e = workCounts.get(r.work_type) ?? { sessions: 0, deep: 0 };
+    e.sessions++;
+    if (r.tier >= 2) e.deep++;
+    workCounts.set(r.work_type, e);
+  }
+  const workMix = [...workCounts.entries()]
+    .map(([work_type, v]) => ({
+      work_type,
+      label: codeWorkTypeLabel(work_type, workDefs.get(work_type)),
+      sessions: v.sessions,
+      deep: v.deep,
+    }))
+    .sort((a, b) => b.sessions - a.sessions);
 
   const journeyCounts = new Map<string, number>();
   const journeyProvisional = new Map<string, number>();
@@ -341,5 +385,36 @@ export async function GET(request: NextRequest) {
   // (lib/finance/spend-review-access.ts); it lives under FinOps and is hidden with it.
   const canSeeSpendReview = (await getAllConfig()).chargebackEnabled === true
     && await canViewSpendReview(session, userId);
-  return NextResponse.json({ userId, displayName, vendor, codexPresent, metricsSplit, metrics, priorMetrics, trends, sessions, modelMix, journeyGrid, githubRepos, humanTime, canSeeSpendReview });
+  // Best work this week: the deepest classified session of the last 7 days, with what it was.
+  const sevenDaysAgoBest = now - 7 * 24 * 3600;
+  const bestRows = await client
+    .select({
+      session_id: css.session_id, repo: css.repo, branch: css.git_branch,
+      tier: csc.tier, work_type: csc.work_type,
+      last_at: css.last_at, active_secs: css.active_secs,
+      prompts: css.user_msg_count, actions: css.tool_use_count, commits: css.commit_count,
+    })
+    .from(csc)
+    .innerJoin(css, eq(css.session_id, csc.session_id))
+    .where(and(eq(csc.user_id, userId), eq(csc.status, 'classified'), gte(css.last_at, sevenDaysAgoBest), sessionVendor))
+    .orderBy(desc(csc.tier), desc(css.active_secs))
+    .limit(1);
+  const b = bestRows[0];
+  const bestSession = b
+    ? {
+        sessionId: b.session_id,
+        repo: b.repo ?? null,
+        branch: b.branch ?? null,
+        tier: Number(b.tier),
+        workType: b.work_type,
+        label: codeWorkTypeLabel(b.work_type, workDefs.get(b.work_type)),
+        occurredAt: Number(b.last_at),
+        activeSecs: b.active_secs === null ? null : Number(b.active_secs),
+        prompts: Number(b.prompts ?? 0),
+        actions: Number(b.actions ?? 0),
+        commits: Number(b.commits ?? 0),
+      }
+    : null;
+
+  return NextResponse.json({ userId, displayName, vendor, codexPresent, metricsSplit, metrics, priorMetrics, trends, sessions, modelMix, journeyGrid, tierWeeks, tierGrid, tierNames, periodWork, workMix, bestSession, githubRepos, humanTime, canSeeSpendReview });
 }
