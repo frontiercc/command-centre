@@ -11,6 +11,7 @@
  */
 import { Panel, Muted, Tag } from '@/components/precision/ui';
 import type { Product, ProductCounts } from '@/lib/dashboard/vendor';
+import { DASH } from '@/components/dashboard/QuestionCard';
 
 interface DeptStats {
   department: string;
@@ -50,19 +51,19 @@ export default function DepartmentHeatmap({ data: all, targetPct }: { data: Dept
   return (
     <Panel
       title="Which departments are using it?"
-      badge={<Tag tone="measured">Measured</Tag>}
+      badge={<Tag tone="neutral">Measured</Tag>}
       right={<span className="text-[13px] text-[#8F8F8F]">Last 7 days</span>}
     >
-      <p className="m-0 mb-2 text-[15px] leading-6 text-[#0A0A0A]">{answer}</p>
+      <p className="m-0 mb-2 text-[14px] leading-[22px] text-[#1A1A1A]">{answer}</p>
       <div className="grid grid-cols-1 md:grid-cols-2 gap-x-8">
         {rows.map(d => {
           const isBelow = target !== null && d.active < target;
           return (
             <div key={d.department} className="grid grid-cols-[minmax(0,120px)_minmax(0,1fr)_44px] gap-2.5 items-center py-[3px] text-[13px]" title={`${d.active_users} of ${d.user_count} people active`}>
               <span className="truncate text-[#333333]">{d.department}</span>
-              <span className="relative h-2 rounded-[2px] bg-[#F2F2F4]">
-                <span className="absolute inset-y-0 left-0 rounded-[2px]" style={{ width: `${Math.max(1, d.active * 100)}%`, background: isBelow ? '#DC8A00' : '#3D4451' }} />
-                {target !== null && <span className="absolute -top-1 -bottom-1 border-l-2 border-dashed border-[#0A0A0A]" style={{ left: `${target * 100}%` }} />}
+              <span className="relative h-[6px] rounded-[3px] bg-[#F1F1F3]">
+                <span className="absolute inset-y-0 left-0 rounded-[3px]" style={{ width: `${Math.max(1, d.active * 100)}%`, background: isBelow ? '#DC8A00' : DASH }} />
+                {target !== null && <span className="absolute -top-1 -bottom-1 border-l-[1.5px] border-dashed border-[#555555]" style={{ left: `${target * 100}%` }} />}
               </span>
               <span className={`text-right tabular-nums ${isBelow ? 'font-semibold text-[#B54708]' : 'text-[#0A0A0A]'}`}>{Math.round(d.active * 100)}%</span>
             </div>

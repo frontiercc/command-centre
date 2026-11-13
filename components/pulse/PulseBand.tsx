@@ -14,7 +14,7 @@ import Link from 'next/link';
 import { Panel, Tag, Muted, Empty, Segmented } from '@/components/precision/ui';
 import { WORK_PULSE_VENDOR_LABELS, type Vendor } from '@/lib/dashboard/vendor';
 import { useOpenAiOnly } from '@/components/shared/VendorSwitch';
-import { QuestionCard, changeFrom } from '@/components/dashboard/QuestionCard';
+import { QuestionCard, changeFrom, DASH, DASH_SHADES } from '@/components/dashboard/QuestionCard';
 
 type Tier = { t1: number; t2: number; t3: number };
 
@@ -38,7 +38,7 @@ interface OrgSummary {
   };
 }
 
-const T1 = '#CCD1DB', T2 = '#8DB2FC', T3 = '#3D6CE8';
+const [T1, T2, T3] = DASH_SHADES;
 
 const total = (t: Tier) => t.t1 + t.t2 + t.t3;
 const deep = (t: Tier) => (total(t) > 0 ? (t.t2 + t.t3) / total(t) : null);
@@ -70,10 +70,10 @@ function WorkPulsePanel({ data, product }: { data: OrgSummary; product: string }
     <section className="bg-white border border-[#EAEAEA] rounded-[14px] px-4 py-3.5">
       <div className="flex items-baseline gap-2 flex-wrap">
         <h2 className="m-0 text-[14px] font-semibold text-[#0A0A0A]">Work Pulse</h2>
-        <Tag tone="judged">AI-judged</Tag>
+        <Tag tone="neutral">AI-judged</Tag>
         <span className="ml-auto text-[12px] text-[#8F8F8F]">Last 30 days against the 30 before</span>
       </div>
-      {answer && <p className="m-0 mt-2 text-[15px] leading-6 text-[#0A0A0A] [&_b]:font-semibold">{answer}</p>}
+      {answer && <p className="m-0 mt-2 text-[14px] leading-[22px] text-[#1A1A1A] [&_b]:font-semibold">{answer}</p>}
       <div className="grid grid-cols-2 xl:grid-cols-4 gap-2.5 mt-3">
         <QuestionCard
           question="Is the work getting more valuable?"
@@ -122,7 +122,7 @@ function WorkPulsePanel({ data, product }: { data: OrgSummary; product: string }
 
 function DepthPanel({ now, before, product }: { now: Tier; before: Tier | null; product: string }) {
   if (total(now) === 0) {
-    return <Panel title="How deep is the work?" right={<Tag tone="judged">AI-judged</Tag>}><Muted>No classified work in the last 30 days.</Muted></Panel>;
+    return <Panel title="How deep is the work?" right={<Tag tone="neutral">AI-judged</Tag>}><Muted>No classified work in the last 30 days.</Muted></Panel>;
   }
   const f = (t: Tier) => (total(t) > 0 ? t.t3 / total(t) : 0);
   const hasBefore = before !== null && total(before) > 0;
@@ -132,7 +132,7 @@ function DepthPanel({ now, before, product }: { now: Tier; before: Tier | null; 
   const row = (label: string, t: Tier, bold: boolean) => (
     <div className="grid grid-cols-[96px_minmax(0,1fr)_44px] gap-2.5 items-center text-[13px] py-1.5">
       <span className="text-[#333333]">{label}</span>
-      <div className="flex h-[22px] rounded-[3px] overflow-hidden gap-[2px]">
+      <div className="flex h-[14px] rounded-[3px] overflow-hidden gap-[2px]">
         {t.t1 > 0 && <span style={{ flex: t.t1, background: T1 }} title={`Routine ${pct(t.t1 / total(t))}`} />}
         {t.t2 > 0 && <span style={{ flex: t.t2, background: T2 }} title={`Meaningful ${pct(t.t2 / total(t))}`} />}
         {t.t3 > 0 && <span style={{ flex: t.t3, background: T3 }} title={`Frontier ${pct(t.t3 / total(t))}`} />}
@@ -144,10 +144,10 @@ function DepthPanel({ now, before, product }: { now: Tier; before: Tier | null; 
     <section className="bg-white border border-[#EAEAEA] rounded-[14px] px-4 py-3.5 h-full">
       <div className="flex items-baseline gap-2">
         <h2 className="m-0 text-[14px] font-semibold text-[#0A0A0A]">How deep is the work?</h2>
-        <Tag tone="judged">AI-judged</Tag>
+        <Tag tone="neutral">AI-judged</Tag>
         <span className="ml-auto text-[12px] text-[#8F8F8F]">30 days</span>
       </div>
-      <p className="m-0 mt-2 mb-2 text-[15px] leading-6 text-[#0A0A0A] [&_b]:font-semibold">{answer}</p>
+      <p className="m-0 mt-2 mb-2 text-[14px] leading-[22px] text-[#1A1A1A] [&_b]:font-semibold">{answer}</p>
       {hasBefore && row('30 days before', before!, false)}
       {row('Last 30 days', now, true)}
       <div className="flex flex-wrap gap-x-3.5 gap-y-1 mt-2 text-[12px] text-[#666666]">
@@ -186,13 +186,13 @@ function SpreadPanel({ skills, connectors, activePeople }: { skills: { total: nu
     <section className="bg-white border border-[#EAEAEA] rounded-[14px] px-4 py-3.5">
       <div className="flex items-center gap-2 flex-wrap">
         <h2 className="m-0 text-[14px] font-semibold text-[#0A0A0A]">Which skills and connectors are spreading?</h2>
-        <Tag tone="measured">Measured</Tag>
+        <Tag tone="neutral">Measured</Tag>
         <span className="ml-auto flex items-center gap-3">
           <span className="text-[12px] text-[#8F8F8F]">Last 30 days</span>
           <Segmented label="Skills or connectors" value={kind} onChange={setKind} options={[{ value: 'skills', label: 'Skills' }, { value: 'connectors', label: 'Connectors' }]} />
         </span>
       </div>
-      <p className="m-0 mt-2 mb-2 text-[15px] leading-6 text-[#0A0A0A] [&_b]:font-semibold">{answer}</p>
+      <p className="m-0 mt-2 mb-2 text-[14px] leading-[22px] text-[#1A1A1A] [&_b]:font-semibold">{answer}</p>
       {rows.length > 0 && (
         <div>
           <div className="grid grid-cols-[minmax(0,1fr)_minmax(0,1.2fr)_90px] gap-3 text-[12px] text-[#8F8F8F] py-1 border-b border-[#EAEAEA]">
@@ -206,7 +206,7 @@ function SpreadPanel({ skills, connectors, activePeople }: { skills: { total: nu
                   {formatName(kind, r.name)}
                   {r.isNew && <span className="ml-1.5 text-[10px] font-bold text-[#05073F] bg-[#E8E9F2] rounded-[3px] px-1 align-[1px]">NEW</span>}
                 </span>
-                <span className="relative h-2 rounded-[2px] bg-[#F2F2F4]"><span className="absolute inset-y-0 left-0 rounded-[2px] bg-[#3D4451]" style={{ width: `${(r.people / max) * 100}%` }} /></span>
+                <span className="relative h-[6px] rounded-[3px] bg-[#F1F1F3]"><span className="absolute inset-y-0 left-0 rounded-[3px]" style={{ width: `${(r.people / max) * 100}%`, background: DASH }} /></span>
                 <span className={`text-right tabular-nums ${grew > 0 ? 'font-semibold text-[#0A0A0A]' : 'text-[#666666]'}`}>{r.people} · {change(r)}</span>
               </div>
             );

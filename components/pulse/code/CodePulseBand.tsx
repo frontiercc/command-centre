@@ -68,10 +68,10 @@ export default function CodePulseBand({ vendor = 'all' }: { vendor?: 'all' | 'cl
     <section className="bg-white border border-[#EAEAEA] rounded-[14px] px-4 py-3.5">
       <div className="flex items-baseline gap-2 flex-wrap">
         <h2 className="m-0 text-[14px] font-semibold text-[#0A0A0A]">Developer Pulse</h2>
-        <Tag tone="measured">Measured</Tag>
+        <Tag tone="neutral">Measured</Tag>
         <span className="ml-auto text-[12px] text-[#8F8F8F]">Last 7 days against the 7 before</span>
       </div>
-      {answer && <p className="m-0 mt-2 text-[15px] leading-6 text-[#0A0A0A] [&_b]:font-semibold">{answer}</p>}
+      {answer && <p className="m-0 mt-2 text-[14px] leading-[22px] text-[#1A1A1A] [&_b]:font-semibold">{answer}</p>}
       <div className="grid grid-cols-2 xl:grid-cols-4 gap-2.5 mt-3">
         <QuestionCard
           question="What did it cost?"
@@ -89,7 +89,6 @@ export default function CodePulseBand({ vendor = 'all' }: { vendor?: 'all' | 'cl
           sub={prs !== null && prs > 0 ? `${prs} pull requests merged` : undefined}
           trend={series(data.trends?.commits.series)}
           trendKind="bars"
-          trendColour="#0D8276"
           notMeasured={commits === null ? 'No commits recorded yet' : undefined}
         />
         <QuestionCard

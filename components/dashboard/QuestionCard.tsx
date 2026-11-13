@@ -10,14 +10,16 @@
  */
 import type { ReactNode } from 'react';
 
-const JUDGED = '#699BFB';
-const JUDGED_INK = '#2451F3';
-const MEASURED = '#3D4451';
+/** The Dashboard's one chart colour (petrol), used for measured and AI-judged alike. */
+export const DASH = '#1F6F8B';
+/** Three shades of it, lightest first, for the depth of work. */
+export const DASH_SHADES = ['#C9DEE6', '#6BA3B8', '#1F6F8B'] as const;
 
-export function QuestionCard({ question, value, unit, judged = false, change, sub, trend, trendKind = 'line', trendColour, notMeasured }: {
+export function QuestionCard({ question, value, unit, change, sub, trend, trendKind = 'line', trendColour, notMeasured }: {
   question: string;
   value?: ReactNode;
   unit?: ReactNode;
+  /** Kept for callers; AI-judged is shown by the panel tag, not a colour. */
   judged?: boolean;
   change?: ReactNode;
   sub?: ReactNode;
@@ -27,22 +29,22 @@ export function QuestionCard({ question, value, unit, judged = false, change, su
   /** Shown in place of the figure when it isn't captured. */
   notMeasured?: ReactNode;
 }) {
-  const colour = trendColour ?? (judged ? JUDGED : MEASURED);
+  const colour = trendColour ?? DASH;
   return (
-    <div className="border border-[#EAEAEA] rounded-[10px] px-3 py-2.5 flex flex-col min-w-0">
-      <span className="text-[12px] text-[#666666] leading-4 min-h-[32px]">{question}</span>
+    <div className="border border-[#EFEFEF] rounded-[10px] px-3 py-3 flex flex-col min-w-0">
+      <span className="text-[12px] text-[#777777] leading-4 min-h-[32px]">{question}</span>
       {notMeasured ? (
         <>
-          <span className="mt-1 text-[15px] font-medium text-[#8F8F8F]">Not measured</span>
+          <span className="mt-1 text-[14px] font-medium text-[#8F8F8F]">Not measured</span>
           <span className="text-[12px] text-[#666666] mt-0.5">{notMeasured}</span>
         </>
       ) : (
         <>
-          <span className={`mt-1 text-[24px] leading-7 font-semibold tracking-[-0.02em] tabular-nums ${judged ? 'text-[#2451F3]' : 'text-[#0A0A0A]'}`}>
+          <span className="mt-1 text-[20px] leading-6 font-semibold tracking-[-0.01em] tabular-nums text-[#0A0A0A]">
             {value}{unit && <span className="text-[13px] font-normal tracking-normal text-[#8F8F8F]"> {unit}</span>}
           </span>
-          {change && <span className="text-[12px] text-[#666666] mt-0.5">{change}</span>}
-          {sub && <span className="text-[12px] text-[#666666] mt-0.5">{sub}</span>}
+          {change && <span className="text-[12px] text-[#777777] mt-0.5">{change}</span>}
+          {sub && <span className="text-[12px] text-[#777777] mt-0.5">{sub}</span>}
           {trend && trend.filter(v => v !== null).length >= 2 && <Trend data={trend} kind={trendKind} colour={colour} />}
         </>
       )}
@@ -51,15 +53,15 @@ export function QuestionCard({ question, value, unit, judged = false, change, su
 }
 
 function Trend({ data, kind, colour }: { data: Array<number | null>; kind: 'line' | 'bars'; colour: string }) {
-  const W = 200, H = 34;
+  const W = 200, H = 24;
   const vals = data.filter((v): v is number => v !== null);
   if (kind === 'bars') {
     const max = Math.max(1, ...vals);
     const w = W / data.length;
     return (
-      <svg viewBox={`0 0 ${W} ${H}`} className="w-full h-[34px] mt-1.5 block" aria-hidden="true">
+      <svg viewBox={`0 0 ${W} ${H}`} className="w-full h-[24px] mt-2 block" aria-hidden="true">
         {data.map((v, i) => v === null ? null : (
-          <rect key={i} x={i * w + 2} y={H - (v / max) * (H - 2)} width={w - 4} height={Math.max((v / max) * (H - 2), v > 0 ? 1 : 0)} fill={colour} opacity={i === data.length - 1 ? 1 : 0.55} />
+          <rect key={i} x={i * w + 2} y={H - (v / max) * (H - 2)} width={w - 4} height={Math.max((v / max) * (H - 2), v > 0 ? 1 : 0)} fill={colour} opacity={i === data.length - 1 ? 1 : 0.45} />
         ))}
       </svg>
     );
@@ -72,14 +74,13 @@ function Trend({ data, kind, colour }: { data: Array<number | null>; kind: 'line
   const pts = data.map((v, i) => (v === null ? null : `${x(i)},${y(v)}`)).filter(Boolean).join(' ');
   const lastIdx = data.map(v => v !== null).lastIndexOf(true);
   return (
-    <svg viewBox={`0 0 ${W} ${H}`} className="w-full h-[34px] mt-1.5 block" aria-hidden="true">
+    <svg viewBox={`0 0 ${W} ${H}`} className="w-full h-[24px] mt-2 block" aria-hidden="true">
       <polyline points={pts} fill="none" stroke={colour} strokeWidth={2.5} strokeLinejoin="round" />
       {lastIdx >= 0 && <circle cx={x(lastIdx)} cy={y(data[lastIdx]!)} r={3.5} fill={colour} />}
     </svg>
   );
 }
 
-export const CARD_COLOURS = { judged: JUDGED, judgedInk: JUDGED_INK, measured: MEASURED };
 
 /** "up from 1.18×", "down from 0.56", "the same as before"; null when there is nothing to compare. */
 export function changeFrom(now: number | null, before: number | null, fmt: (v: number) => string, period: string): string | null {
