@@ -7,7 +7,9 @@ import { useEffect, useState, type ReactNode } from 'react';
 import TopBar from '@/components/layout/TopBar';
 import LoadingSpinner from '@/components/shared/LoadingSpinner';
 import type { DiscoveredSkill } from '@/lib/pulse/skills-discover';
-import { PageBody, Panel, BarRow, Tag, Notice, Muted, B } from '@/components/precision/ui';
+import Link from 'next/link';
+import { PageBody, Panel, Tag, Notice, Muted, B } from '@/components/precision/ui';
+import { Frame, Track, linkCls } from '@/components/pulse/WorkPulseOverview';
 import { isWebUrl } from '@/lib/library/source-url';
 import { WORK_PULSE_VENDOR_LABELS } from '@/lib/dashboard/vendor';
 
@@ -32,47 +34,6 @@ function toolLabel(name: string, vendor: RowVendor | undefined, showVendor: bool
   );
 }
 
-function RankedList({
-  title,
-  items,
-  nameKey,
-  emptyMessage,
-  formatName,
-  showVendor,
-}: {
-  title: string;
-  items: Array<{ usage_count: number; user_count: number; vendor?: RowVendor; tag?: string; [k: string]: unknown }>;
-  nameKey: string;
-  emptyMessage: string;
-  formatName: (n: string) => string;
-  showVendor: boolean;
-}) {
-  const max = items[0]?.usage_count ?? 1;
-  return (
-    <Panel title={title} subtitle="Org, 30 days" right={<Tag tone="measured">Measured</Tag>} flush={items.length > 0}>
-      {items.length === 0 ? (
-        <Muted>{emptyMessage}</Muted>
-      ) : (
-        <div className="py-1">
-          {items.map((item, i) => {
-            const name = item[nameKey] as string;
-            const barPct = Math.round((item.usage_count / max) * 100);
-            return (
-              <BarRow
-                key={`${name}|${item.tag ?? item.vendor ?? ''}`}
-                rank={i + 1}
-                label={toolLabel(formatName(name), item.vendor, showVendor, item.tag)}
-                value={`${item.usage_count}× · ${item.user_count} ${item.user_count === 1 ? 'user' : 'users'}`}
-                pct={barPct}
-                tone="measured"
-              />
-            );
-          })}
-        </div>
-      )}
-    </Panel>
-  );
-}
 
 function GapList({
   title,
@@ -192,7 +153,114 @@ function DiscoverFeed({
   );
 }
 
+/* ── What is spreading, what is stuck, what nobody uses ─────────── */
+
+const kindWord = (k: string) => (k === 'connector' ? 'connector' : 'skill');
+const plural = (n: number, one: string, many: string) => `${n} ${n === 1 ? one : many}`;
+const dateOf = (s: number) => new Date(s * 1000).toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric' });
+
+function Spreading({ rows }: { rows: SpreadRow[] }) {
+  const [kind, setKind] = useState<'skill' | 'connector'>('skill');
+  const shown = rows.filter(r => r.kind === kind).slice(0, 10);
+  const grew = [...shown].filter(r => r.people > r.before).sort((a, b) => (b.people - b.before) - (a.people - a.before))[0];
+  const fresh = shown.filter(r => r.isNew).length;
+  const max = Math.max(1, ...shown.map(r => r.people));
+  const label = kind === 'skill' ? 'skills' : 'connectors';
+  const freshWords = fresh === 0 ? '' : fresh === 1 ? ' One was used for the first time this month.' : ` ${fresh} were used for the first time this month.`;
+  return (
+    <Frame
+      title="What is spreading"
+      period={
+        <span className="inline-flex items-center gap-2">
+          <span>Last 30 days against the 30 before</span>
+          <span className="inline-flex border border-[#EAEAEA] rounded-[8px] overflow-hidden bg-white">
+            {(['skill', 'connector'] as const).map(k => (
+              <button key={k} type="button" onClick={() => setKind(k)} className={`text-[12px] px-2 py-0.5 ${k === kind ? 'bg-[#F2F2F2] text-[#0A0A0A] font-medium' : 'bg-white text-[#666666]'}`}>
+                {k === 'skill' ? 'Skills' : 'Connectors'}
+              </button>
+            ))}
+          </span>
+        </span>
+      }
+      answer={shown.length === 0
+        ? <>No {label} were used in the last 30 days.</>
+        : grew
+          ? <><b>{grew.name}</b> reached the most new people: {grew.people}, up from {grew.before}.{freshWords}</>
+          : <>No {label} reached more people than the month before.{freshWords}</>}
+      note="Bars count the people using each one, not how often it was used, so one that is spreading stands out."
+    >
+      {shown.map(r => {
+        const change = r.people > r.before ? `up ${r.people - r.before}` : r.people === r.before ? 'same' : `down ${r.before - r.people}`;
+        return (
+          <div key={`${r.kind}:${r.name}`} className="grid grid-cols-[minmax(0,200px)_minmax(0,1fr)_132px] gap-2.5 items-center py-[3px] text-[13px]">
+            <span className="truncate text-[#333333]">
+              {r.name}
+              {r.isNew && <span className="ml-1.5 text-[10px] bg-[#EEF5F8] text-[#1F6F8B] rounded-[3px] px-1.5 py-px align-middle">New</span>}
+            </span>
+            <Track value={r.people / max} />
+            <span className="text-right tabular-nums" style={{ color: r.people > r.before ? '#1A7F37' : '#777777' }}>
+              {plural(r.people, 'person', 'people')} · {change}
+            </span>
+          </div>
+        );
+      })}
+    </Frame>
+  );
+}
+
+function Stuck({ rows }: { rows: SoleRow[] }) {
+  return (
+    <Frame
+      title="Stuck with one person"
+      period="Last 30 days"
+      answer={rows.length === 0
+        ? <>Nothing: every skill and connector used this month was used by more than one person.</>
+        : <><b>{rows.length === 1 ? 'One skill or connector is' : `${rows.length} skills and connectors are`}</b> used by one person only. If they left, that work stops.</>}
+      note="Pairing someone with them is the fix. The same rule as the department page."
+    >
+      {rows.map(r => (
+        <div key={`${r.kind}:${r.name}`} className="flex items-baseline gap-2.5 py-1.5 border-b border-[#F2F2F2] last:border-b-0 text-[13px]">
+          <span className="min-w-0 truncate text-[#0A0A0A]">{r.name}</span>
+          <span className="text-[#777777] whitespace-nowrap">{kindWord(r.kind)} · only {r.who ?? 'one person'}{r.department ? ` · ${r.department}` : ''}</span>
+          <span className="ml-auto tabular-nums text-[#333333] whitespace-nowrap">{plural(r.uses, 'use', 'uses')}</span>
+        </div>
+      ))}
+    </Frame>
+  );
+}
+
+function Unused({ rows, of }: { rows: UnusedRow[]; of: number }) {
+  if (of === 0) return null;
+  return (
+    <Frame
+      title="Used by nobody"
+      period="Last 30 days"
+      answer={rows.length === 0
+        ? <>Every one of the {of} skills and connectors on the Board was used this month.</>
+        : <><b>{rows.length} of {of}</b> skills and connectors on the Board were not used at all.</>}
+      note={<>Worth retiring, or worth a nudge. <Link href="/library" className={linkCls}>Open the S&amp;C Board</Link></>}
+    >
+      {rows.slice(0, 10).map(r => (
+        <div key={r.id} className="flex items-baseline gap-2.5 py-1.5 border-b border-[#F2F2F2] last:border-b-0 text-[13px]">
+          <Link href={`/library/${r.id}`} className="min-w-0 truncate text-[#0A0A0A] hover:text-[#1F6F8B]">{r.name}</Link>
+          <span className="text-[#777777] whitespace-nowrap">{kindWord(r.kind)}{r.claimed ? ` · claimed${r.author ? ` by ${r.author}` : ''}` : ' · unclaimed'}</span>
+          <span className="ml-auto text-[#8F8F8F] whitespace-nowrap">{r.lastUsed === null ? 'never used' : `last used ${dateOf(r.lastUsed)}`}</span>
+        </div>
+      ))}
+      {rows.length > 10 && <p className="m-0 mt-1.5 text-[13px] text-[#8F8F8F]">and {rows.length - 10} more.</p>}
+    </Frame>
+  );
+}
+
+export interface SpreadRow { kind: 'skill' | 'connector'; name: string; tag: string; people: number; before: number; uses: number; isNew: boolean }
+export interface SoleRow { kind: 'skill' | 'connector'; name: string; tag: string; uses: number; who: string | null; department: string | null }
+export interface UnusedRow { id: number; name: string; kind: string; author: string | null; claimed: boolean; lastUsed: number | null }
+
 interface OverviewData {
+  spread?: SpreadRow[];
+  sole?: SoleRow[];
+  unused?: UnusedRow[];
+  unusedOf?: number;
   topSkills: Array<{ skill_name: string; vendor?: RowVendor; tag?: string; usage_count: number; user_count: number }>;
   topConnectors: Array<{ mcp_server: string; vendor?: RowVendor; tag?: string; usage_count: number; user_count: number }>;
   skillGap: Array<{ skill_name: string; vendor?: RowVendor; tag?: string; usage_count: number; user_count: number }>;
@@ -247,14 +315,14 @@ export default function SkillsPage() {
 
   if (overviewLoading) return (
     <>
-      <TopBar title="Tool usage" subtitle="Adoption, gaps, and ecosystem discovery" />
+      <TopBar title="Tool usage" subtitle="Which skills and connectors are spreading, and which are stuck" />
       <LoadingSpinner />
     </>
   );
 
   if (overviewError) return (
     <>
-      <TopBar title="Tool usage" subtitle="Adoption, gaps, and ecosystem discovery" />
+      <TopBar title="Tool usage" subtitle="Which skills and connectors are spreading, and which are stuck" />
       <PageBody>
         <Notice tone="error" title="Failed to load.">{overviewError}</Notice>
       </PageBody>
@@ -266,46 +334,35 @@ export default function SkillsPage() {
 
   return (
     <>
-      <TopBar title="Tool usage" subtitle="Adoption, gaps, and ecosystem discovery" />
-      <PageBody>
+      <TopBar title="Tool usage" subtitle="Which skills and connectors are spreading, and which are stuck" />
+      <PageBody className="dash-compact">
 
-        {/* Row 1 — Org top usage */}
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-          <RankedList
-            title="Top skills"
-            items={overview?.topSkills ?? []}
-            nameKey="skill_name"
-            emptyMessage="No skill invocations captured yet."
-            formatName={formatSkillName}
-            showVendor={showVendor}
-          />
-          <RankedList
-            title="Top connectors"
-            items={overview?.topConnectors ?? []}
-            nameKey="mcp_server"
-            emptyMessage="No connector invocations captured yet."
-            formatName={formatConnectorName}
-            showVendor={showVendor}
-          />
+        {/* 1. What is spreading */}
+        <Spreading rows={overview?.spread ?? []} />
+
+        {/* 2 and 3 */}
+        <div className="grid grid-cols-1 xl:grid-cols-2 gap-4">
+          <Stuck rows={overview?.sole ?? []} />
+          <Unused rows={overview?.unused ?? []} of={overview?.unusedOf ?? 0} />
         </div>
 
-        {/* Row 2 — Gap / discovery */}
+        {/* 4. What colleagues use that you don't */}
         <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
           <GapList
             title="Skills you haven't tried"
-            subtitle="Used by teammates in the last 30 days, not yet in your history"
+            subtitle="Used by colleagues in the last 30 days, not yet in your history"
             items={overview?.skillGap ?? []}
             nameKey="skill_name"
-            emptyMessage="You've used all the top skills your org uses. Nice."
+            emptyMessage="You've used every skill your colleagues use."
             formatName={formatSkillName}
             showVendor={showVendor}
           />
           <GapList
             title="Connectors you haven't tried"
-            subtitle="Connected by teammates in the last 30 days, not yet in your history"
+            subtitle="Used by colleagues in the last 30 days, not yet in your history"
             items={overview?.connectorGap ?? []}
             nameKey="mcp_server"
-            emptyMessage="You've used all the top connectors your org uses."
+            emptyMessage="You've used every connector your colleagues use."
             formatName={formatConnectorName}
             showVendor={showVendor}
           />

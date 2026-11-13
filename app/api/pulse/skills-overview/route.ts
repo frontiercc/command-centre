@@ -115,7 +115,94 @@ export async function GET(request: NextRequest) {
   const skillGap = topSkills.filter(s => !mySkillSet.has(`${s.skill_name}|${s.vendor}`));
   const connectorGap = topConnectors.filter(c => !myConnectorSet.has(`${c.mcp_server}|${c.vendor}`));
 
+  // ── What is spreading: people using each one now against the 30 days before ──
+  const sixtyDaysAgo = now - 60 * 24 * 3600;
+  interface Exec { execute: (q: ReturnType<typeof sql>) => Promise<{ rows: unknown[] }> }
+  const raw = client as unknown as Exec;
+  const num = (v: unknown) => Number(v ?? 0);
+
+  const spreadRows = (await raw.execute(sql`
+    SELECT kind, name, tag,
+           COUNT(DISTINCT CASE WHEN occurred_at >= ${thirtyDaysAgo} THEN user_id END) AS people,
+           COUNT(DISTINCT CASE WHEN occurred_at >= ${sixtyDaysAgo} AND occurred_at < ${thirtyDaysAgo} THEN user_id END) AS before,
+           COUNT(CASE WHEN occurred_at >= ${thirtyDaysAgo} THEN 1 END) AS uses,
+           MIN(occurred_at) AS first_at
+    FROM (
+      SELECT 'skill' AS kind, skill_name AS name, ${skillTagSql} AS tag, user_id, occurred_at
+        FROM cowork_skill_invocations
+      UNION ALL
+      SELECT 'connector' AS kind, mcp_server AS name, ${connectorTagSql} AS tag, user_id, occurred_at
+        FROM cowork_mcp_invocations
+        WHERE mcp_server NOT IN ('workspace', 'cowork', 'Claude_in_Chrome')
+    ) t
+    GROUP BY kind, name, tag
+    HAVING COUNT(DISTINCT CASE WHEN occurred_at >= ${thirtyDaysAgo} THEN user_id END) > 0
+    ORDER BY 4 DESC, 2
+  `)).rows as Array<{ kind: 'skill' | 'connector'; name: string; tag: string; people: number | string; before: number | string; uses: number | string; first_at: number | string }>;
+  const spread = spreadRows.map(r => ({
+    kind: r.kind, name: r.name, tag: r.tag,
+    people: num(r.people), before: num(r.before), uses: num(r.uses),
+    isNew: num(r.first_at) >= thirtyDaysAgo,
+  }));
+
+  // ── Stuck with one person: used by exactly one person in the last 30 days ──
+  const soleRows = (await raw.execute(sql`
+    SELECT t.kind, t.name, t.tag, MIN(t.user_id) AS user_id, COUNT(*) AS uses
+    FROM (
+      SELECT 'skill' AS kind, skill_name AS name, ${skillTagSql} AS tag, user_id
+        FROM cowork_skill_invocations WHERE occurred_at >= ${thirtyDaysAgo}
+      UNION ALL
+      SELECT 'connector' AS kind, mcp_server AS name, ${connectorTagSql} AS tag, user_id
+        FROM cowork_mcp_invocations
+        WHERE occurred_at >= ${thirtyDaysAgo} AND mcp_server NOT IN ('workspace', 'cowork', 'Claude_in_Chrome')
+    ) t
+    GROUP BY t.kind, t.name, t.tag
+    HAVING COUNT(DISTINCT t.user_id) = 1
+    ORDER BY COUNT(*) DESC
+    LIMIT 12
+  `)).rows as Array<{ kind: 'skill' | 'connector'; name: string; tag: string; user_id: string; uses: number | string }>;
+  const soleIds = [...new Set(soleRows.map(r => r.user_id))];
+  const soleNames = soleIds.length === 0 ? [] : (await raw.execute(sql`
+    SELECT u.id, COALESCE(NULLIF(au.display_name, ''), u.display_name, u.email) AS name,
+           COALESCE(NULLIF(au.department, ''), u.department) AS department
+    FROM users u LEFT JOIN admin_users au ON au.linked_cowork_user_id = u.id
+    WHERE u.id IN (${sql.join(soleIds.map(id => sql`${id}`), sql`, `)})
+  `)).rows as Array<{ id: string; name: string | null; department: string | null }>;
+  const whoById = new Map(soleNames.map(r => [r.id, r]));
+  const sole = soleRows.map(r => ({
+    kind: r.kind, name: r.name, tag: r.tag, uses: num(r.uses),
+    who: whoById.get(r.user_id)?.name ?? null,
+    department: whoById.get(r.user_id)?.department ?? null,
+  }));
+
+  // ── Used by nobody: Board entries with no use in the last 30 days ──
+  const unusedRows = (await raw.execute(sql`
+    SELECT e.id, e.name, e.type, e.is_published,
+           COALESCE(NULLIF(au.display_name, ''), ou.display_name, ou.email) AS author,
+           (SELECT MAX(occurred_at) FROM (
+              SELECT occurred_at FROM cowork_skill_invocations WHERE skill_name = e.name
+              UNION ALL
+              SELECT occurred_at FROM cowork_mcp_invocations WHERE mcp_server = e.name
+            ) a) AS last_at
+    FROM skill_library_entries e
+    LEFT JOIN users ou ON ou.id = e.author_user_id
+    LEFT JOIN admin_users au ON au.linked_cowork_user_id = e.author_user_id
+    ORDER BY e.name
+  `)).rows as Array<{ id: number | string; name: string; type: string; is_published: number | string; author: string | null; last_at: number | string | null }>;
+  const unused = unusedRows
+    .filter(r => r.last_at === null || num(r.last_at) < thirtyDaysAgo)
+    .map(r => ({
+      id: num(r.id), name: r.name, kind: r.type,
+      author: num(r.is_published) === 1 ? r.author : null,
+      claimed: num(r.is_published) === 1,
+      lastUsed: r.last_at === null ? null : num(r.last_at),
+    }));
+
   return NextResponse.json({
+    spread,
+    sole,
+    unused,
+    unusedOf: unusedRows.length,
     topSkills,
     topConnectors,
     mySkills,
