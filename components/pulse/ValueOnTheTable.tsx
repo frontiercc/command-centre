@@ -46,18 +46,18 @@ export default function ValueOnTheTable() {
       </p>
       <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 px-4 py-3">
         <div>
-          <p className="m-0 text-[24px] leading-7 font-semibold tabular-nums text-[#2451F3]">{gbp(rollup.annualisedRecurring)}<span className="text-[13px] font-normal text-[#8F8F8F]"> /yr</span></p>
+          <p className="m-0 text-[24px] leading-7 font-semibold tabular-nums text-[#1F6F8B]">{gbp(rollup.annualisedRecurring)}<span className="text-[13px] font-normal text-[#8F8F8F]"> /yr</span></p>
           <p className="m-0 mt-1 text-[13px] text-[#8F8F8F]">Recurring, annualised</p>
         </div>
         {rollup.oneOffTotal > 0 && (
           <div>
-            <p className="m-0 text-[24px] leading-7 font-semibold tabular-nums text-[#2451F3]">{gbp(rollup.oneOffTotal)}</p>
+            <p className="m-0 text-[24px] leading-7 font-semibold tabular-nums text-[#1F6F8B]">{gbp(rollup.oneOffTotal)}</p>
             <p className="m-0 mt-1 text-[13px] text-[#8F8F8F]">One-off (not annualised)</p>
           </div>
         )}
         {rollup.hoursReclaimedMonthly > 0 && (
           <div>
-            <p className="m-0 text-[24px] leading-7 font-semibold tabular-nums text-[#2451F3]">{Math.round(rollup.hoursReclaimedMonthly)}<span className="text-[13px] font-normal text-[#8F8F8F]"> hrs/mo</span></p>
+            <p className="m-0 text-[24px] leading-7 font-semibold tabular-nums text-[#1F6F8B]">{Math.round(rollup.hoursReclaimedMonthly)}<span className="text-[13px] font-normal text-[#8F8F8F]"> hrs/mo</span></p>
             <p className="m-0 mt-1 text-[13px] text-[#8F8F8F]">Time reclaimed</p>
           </div>
         )}
@@ -73,7 +73,7 @@ export default function ValueOnTheTable() {
               {e.valueBasis && <p className="m-0 text-[13px] text-[#8F8F8F] truncate">{e.valueBasis}</p>}
               {e.attributedBy && <p className="m-0 text-[13px] text-[#8F8F8F]">Attributed by {e.attributedBy}</p>}
             </div>
-            <div className="text-right shrink-0 text-[#2451F3] tabular-nums">
+            <div className="text-right shrink-0 text-[#1F6F8B] tabular-nums">
               {e.valueType === 'time_reclaimed'
                 ? `${Math.round(e.valueAmount ?? 0)} hrs/mo`
                 : `${gbp(e.valueAmount ?? 0)} ${e.valuePeriod === 'one_off' ? 'one-off' : e.valuePeriod === 'annual' ? '/yr' : '/mo'}`}

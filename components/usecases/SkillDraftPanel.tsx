@@ -28,7 +28,7 @@ export interface SkillDraftView {
 
 interface Props { view: SkillDraftView; useCaseId: string; onChanged: (view: SkillDraftView) => void }
 
-const MEASURED_CLS = 'text-[#05073F]';
+const MEASURED_CLS = 'text-[#1F6F8B]';
 const FIELD_LABEL = 'block text-[13px] font-medium text-[#4D4D4D] mb-1';
 
 // Every count is the FULL matched evidence; the model reads a capped sample,

@@ -85,7 +85,7 @@ export default function CodeValuePage() {
                   type="button"
                   onClick={() => setShowFormula(s => !s)}
                   aria-expanded={showFormula}
-                  className="text-[13px] font-medium text-[#2451F3] hover:underline"
+                  className="text-[13px] font-medium text-[#1F6F8B] hover:underline"
                 >
                   How this is calculated {showFormula ? '▾' : '▸'}
                 </button>
@@ -104,7 +104,7 @@ export default function CodeValuePage() {
             {data?.timeSaved != null && (
               <Panel title="Time saved" right={<Tag tone="judged">Estimate</Tag>} flush>
                 <div className="p-4 flex flex-col gap-1.5">
-                  <span className="text-[24px] leading-7 font-semibold tracking-[-0.02em] tabular-nums text-[#2451F3]">
+                  <span className="text-[24px] leading-7 font-semibold tracking-[-0.02em] tabular-nums text-[#1F6F8B]">
                     ~{data.timeSaved.totalHours.toLocaleString()} hours
                   </span>
                   <span className="text-[13px] text-[#8F8F8F]">from measured output over the windows shown</span>
@@ -126,7 +126,7 @@ export default function CodeValuePage() {
             {data?.observedLift != null && (
               <Panel title="Observed signal" right={<Tag tone="judged">Beta</Tag>}>
                 <div className="flex flex-col gap-2">
-                  <p className="m-0 text-[20px] leading-7 font-semibold tabular-nums text-[#2451F3]">
+                  <p className="m-0 text-[20px] leading-7 font-semibold tabular-nums text-[#1F6F8B]">
                     {data.observedLift.liftPct >= 0 ? '+' : ''}{Math.round(data.observedLift.liftPct * 100)}% output rate in higher-AI weeks
                   </p>
                   <p className="m-0 text-[13px] leading-[1.6] text-[#666666]">

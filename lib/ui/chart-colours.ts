@@ -5,7 +5,7 @@
  * Chart colours, in one place: "calm editorial". Products
  * indigo, teal and rose; models in earth tones; percentage bars charcoal. Each group is its own
  * colour family, so a product is never mistaken for a model and single-value bars don't compete
- * with coloured series. Tiers stay a sky-blue ramp, because sky blue means AI-judged.
+ * with coloured series. Tiers and single-series bars are petrol shades.
  * Client-safe, no imports.
  */
 
@@ -78,5 +78,5 @@ export const SURFACE_INK = {
 export const MODEL_COLOURS = ['#5B4B2E', '#B98A3E', '#D9C9A3', '#8A6F45', '#CFAE72', '#EDE3CC'] as const;
 export const MODEL_OTHER = '#B3B3B3';
 
-/** Single-series percentage and share bars (cost by type, shares, top lists): charcoal. */
-export const SHARE_BAR = '#3D4451';
+/** Single-series percentage and share bars (cost by type, shares, top lists): petrol. */
+export const SHARE_BAR = '#1F6F8B';

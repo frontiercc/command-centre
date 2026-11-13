@@ -44,8 +44,8 @@ function timeAgo(ts: number): string {
 }
 
 // Confidence is AI-judged: sky blue steps, darkest for the most confident buckets.
-const CONF_HIGH = '#3D6CE8';
-const CONF_MID = '#8DB2FC';
+const CONF_HIGH = '#1F6F8B';
+const CONF_MID = '#6BA3B8';
 const CONF_LOW = '#CCD1DB';
 
 function ConfHistogram({ data }: { data: number[] }) {
@@ -175,8 +175,8 @@ export default function CodeClassifierHealthTab() {
   // Tiers are AI-judged: sky blue, deepening from Tier 1 to Tier 3.
   const tierRows: Array<{ key: keyof TierDistribution; label: string; colour: string }> = [
     { key: 'tier1', label: data.config?.tiers?.tier1?.name || 'Tier 1', colour: '#CCD1DB' },
-    { key: 'tier2', label: data.config?.tiers?.tier2?.name || 'Tier 2', colour: '#8DB2FC' },
-    { key: 'tier3', label: data.config?.tiers?.tier3?.name || 'Tier 3', colour: '#3D6CE8' },
+    { key: 'tier2', label: data.config?.tiers?.tier2?.name || 'Tier 2', colour: '#6BA3B8' },
+    { key: 'tier3', label: data.config?.tiers?.tier3?.name || 'Tier 3', colour: '#1F6F8B' },
   ];
   const hasConfidenceData = data.confidenceHistogram.some(c => c > 0);
 

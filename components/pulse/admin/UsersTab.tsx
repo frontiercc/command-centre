@@ -46,8 +46,8 @@ function TierBar({ t1, t2, t3 }: { t1: number; t2: number; t3: number }) {
   return (
     <div className="flex h-2 w-20 rounded-full overflow-hidden gap-px bg-[#F2F2F2]" title={`T1:${t1} T2:${t2} T3:${t3}`}>
       {t1 > 0 && <div className="bg-[#CCD1DB]" style={{ width: `${(t1 / total) * 100}%` }} />}
-      {t2 > 0 && <div className="bg-[#8DB2FC]" style={{ width: `${(t2 / total) * 100}%` }} />}
-      {t3 > 0 && <div className="bg-[#3D6CE8]" style={{ width: `${(t3 / total) * 100}%` }} />}
+      {t2 > 0 && <div className="bg-[#6BA3B8]" style={{ width: `${(t2 / total) * 100}%` }} />}
+      {t3 > 0 && <div className="bg-[#1F6F8B]" style={{ width: `${(t3 / total) * 100}%` }} />}
     </div>
   );
 }

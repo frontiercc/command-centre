@@ -131,7 +131,7 @@ export default function RadarSignals({ oti, dds, governanceScore, ors }: RadarSi
               <PolarGrid stroke="#EAEAEA" />
               <PolarAngleAxis dataKey="signal" tick={{ fontSize: 12, fill: '#666666' }} />
               <PolarRadiusAxis angle={90} domain={[0, 100]} tick={false} axisLine={false} />
-              <Radar name="Signals" dataKey="value" stroke="#05073F" fill="#05073F" fillOpacity={0.12} strokeWidth={1.5} dot={{ fill: '#05073F', r: 2.5 }} />
+              <Radar name="Signals" dataKey="value" stroke="#1F6F8B" fill="#1F6F8B" fillOpacity={0.12} strokeWidth={1.5} dot={{ fill: '#1F6F8B', r: 2.5 }} />
             </RadarChart>
           </ResponsiveContainer>
           <div className="flex flex-col gap-3">

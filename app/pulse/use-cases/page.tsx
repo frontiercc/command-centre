@@ -187,7 +187,7 @@ function BetsPanel({ bets, minutesPerSession }: { bets: GovernanceBet[]; minutes
                     <td className={T.td}>
                       <span role="img" aria-label={`${bet.title} weekly sessions`}><Spark data={bet.series} width={96} /></span>
                     </td>
-                    <td className={cx(T.tdRight, 'text-[#05073F] whitespace-nowrap')}>
+                    <td className={cx(T.tdRight, 'text-[#1F6F8B] whitespace-nowrap')}>
                       {bet.measured.sessions} {bet.measured.sessions === 1 ? 'session' : 'sessions'} · {bet.measured.distinctUsers} {bet.measured.distinctUsers === 1 ? 'user' : 'users'}
                       {split(bet) && (
                         <div className="text-[13px] tabular-nums mt-0.5">{sessionsSplit(bet.measured.productSessions)}</div>
@@ -195,13 +195,13 @@ function BetsPanel({ bets, minutesPerSession }: { bets: GovernanceBet[]; minutes
                     </td>
                     <td className={cx(T.tdRight, 'whitespace-nowrap')}>
                       {bet.measured.hours != null
-                        ? <span className="text-[#05073F]">{fmtHours(bet.measured.hours)} h</span>
+                        ? <span className="text-[#1F6F8B]">{fmtHours(bet.measured.hours)} h</span>
                         : <span className="text-[#8F8F8F]">Not measured</span>}
                       {split(bet) && (
-                        <div className="text-[13px] tabular-nums text-[#05073F] mt-0.5">{hoursSplit(bet.measured.productHours, bet.measured.productSessions)}</div>
+                        <div className="text-[13px] tabular-nums text-[#1F6F8B] mt-0.5">{hoursSplit(bet.measured.productHours, bet.measured.productSessions)}</div>
                       )}
                     </td>
-                    <td className={cx(T.tdRight, 'whitespace-nowrap text-[#2451F3]')}>
+                    <td className={cx(T.tdRight, 'whitespace-nowrap text-[#1F6F8B]')}>
                       ≈ {fmtHours(bet.estimated.hoursRecovered)} hrs
                       <div className="text-[13px]">est. {minutesPerSession} min × {bet.measured.sessions} sessions</div>
                     </td>
@@ -259,7 +259,7 @@ function WorkflowsByLifecycle({ workflows, total }: { workflows: GovernanceWorkf
                   </td>
                   <td className={cx(T.tdRight, 'whitespace-nowrap')}>
                     {wf.measuredHours != null ? (
-                      <span className="text-[#05073F]">{fmtHours(wf.measuredHours)} h</span>
+                      <span className="text-[#1F6F8B]">{fmtHours(wf.measuredHours)} h</span>
                     ) : (
                       <span className="text-[#8F8F8F]">Not measured</span>
                     )}
@@ -334,7 +334,7 @@ export default function UseCaseGovernancePage() {
         <PageBody>
           <Empty title="No strategic bets yet.">
             Mark a use case as a board-level bet on the{' '}
-            <Link href="/use-cases" className="text-[#05073F] hover:underline">
+            <Link href="/use-cases" className="text-[#1F6F8B] hover:underline">
               Use Cases register
             </Link>.
           </Empty>

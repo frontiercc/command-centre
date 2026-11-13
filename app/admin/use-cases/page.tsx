@@ -395,7 +395,7 @@ export default function UseCasesAdminPage() {
           flush
         >
           <p className="m-0 px-4 pt-3.5 text-[14px] text-[#666666] leading-5">
-            Calibrates the <span className="text-[#2451F3]">estimated</span> hours and $ recovered shown on the
+            Calibrates the <span className="text-[#1F6F8B]">estimated</span> hours and $ recovered shown on the
             Use Case Governance rollup. These are estimates built on measured session counts, never presented as measured fact.
           </p>
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4 p-4">

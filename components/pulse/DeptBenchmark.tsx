@@ -68,7 +68,7 @@ export default function DeptBenchmark({ depts }: DeptBenchmarkProps) {
                 {/* median centre line */}
                 <div className="absolute left-1/2 top-0 bottom-0 w-px bg-[#DADADA]" />
                 <div
-                  className={`absolute top-1 bottom-1 rounded-full ${r.needsSupport ? 'bg-[#DC8A00]' : below ? 'bg-[#DADADA]' : 'bg-[#05073F]'}`}
+                  className={`absolute top-1 bottom-1 rounded-full ${r.needsSupport ? 'bg-[#DC8A00]' : below ? 'bg-[#DADADA]' : 'bg-[#1F6F8B]'}`}
                   style={below ? { right: '50%', width: `${pct}%` } : { left: '50%', width: `${pct}%` }}
                 />
               </div>

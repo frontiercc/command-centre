@@ -37,9 +37,9 @@ html[data-theme="precision"] {
   --p-accent-hover: #185A71;
   --p-accent-tint: #EEF5F8;
   --p-page: #F7F7F8;
-  --p-judged: #699BFB;
-  --p-judged-ink: #2451F3;
-  --p-measured: #05073F;
+  --p-judged: #6BA3B8;
+  --p-judged-ink: #1F6F8B;
+  --p-measured: #1F6F8B;
   --background: #F7F7F8;
   --foreground: var(--p-ink);
 }

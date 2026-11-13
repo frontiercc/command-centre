@@ -219,7 +219,7 @@ function SpreadPanel({ skills, connectors, activePeople }: { skills: { total: nu
               <div key={r.name} className="grid grid-cols-[minmax(0,1fr)_minmax(0,1.2fr)_90px] gap-3 items-center text-[13px] py-1.5 border-b border-[#F2F2F2] last:border-b-0">
                 <span className="truncate text-[#0A0A0A]">
                   {formatName(kind, r.name)}
-                  {r.isNew && <span className="ml-1.5 text-[10px] font-bold text-[#05073F] bg-[#E8E9F2] rounded-[3px] px-1 align-[1px]">NEW</span>}
+                  {r.isNew && <span className="ml-1.5 text-[10px] font-bold text-[#1F6F8B] bg-[#E4EFF3] rounded-[3px] px-1 align-[1px]">NEW</span>}
                 </span>
                 <span className="relative h-[6px] rounded-[3px] bg-[#F1F1F3]"><span className="absolute inset-y-0 left-0 rounded-[3px]" style={{ width: `${(r.people / max) * 100}%`, background: DASH }} /></span>
                 <span className={`text-right tabular-nums ${grew > 0 ? 'font-semibold text-[#0A0A0A]' : 'text-[#666666]'}`}>{r.people} · {change(r)}</span>

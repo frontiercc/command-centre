@@ -60,7 +60,7 @@ export default function SessionOutputCard({ report }: { report: SessionOutputRep
       {/* No weekly trend chart: on a 0-100% scale the real values sit at a few per cent
           and every bar rounded to the floor, which read as missing data. */}
       <div className="px-4 pt-3 pb-2">
-        <p className="m-0 text-[24px] leading-7 font-semibold tabular-nums text-[#05073F]">{pct(report.rate)}</p>
+        <p className="m-0 text-[24px] leading-7 font-semibold tabular-nums text-[#1F6F8B]">{pct(report.rate)}</p>
         <p className="m-0 mt-1 text-[13px] text-[#8F8F8F] tabular-nums">
           {report.produced.toLocaleString()} of {report.sessions.toLocaleString()} {report.claudeOnly ? 'Claude sessions' : 'sessions'}, 13 weeks
         </p>

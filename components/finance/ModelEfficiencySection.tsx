@@ -214,7 +214,7 @@ function OpportunityCard({ activity }: { activity: ActivityRow }) {
         {fmtPct(flag.premiumShare)} of measured spend ran on {prettyModel(flag.premiumModel)}.
       </p>
       {flag.estCeilingUsd !== null && flag.targetModel ? (
-        <p className="m-0 text-[13px] text-[#2451F3] tabular-nums">
+        <p className="m-0 text-[13px] text-[#1F6F8B] tabular-nums">
           About {fmtUsd(Math.round(flag.estCeilingUsd))} estimated ceiling if repriced at {prettyModel(flag.targetModel)}
         </p>
       ) : (
@@ -272,7 +272,7 @@ function SpendByModelCard({ report }: { report: CostDriverFigures }) {
                 <div className="flex items-center justify-between gap-2 text-[13px] mb-1">
                   <span className="text-[#0A0A0A] truncate">{prettyModel(m.model)}</span>
                   <span className="flex items-center gap-2 shrink-0 tabular-nums">
-                    <span className="font-medium text-[#05073F]">{fmtUsd(m.spendUsd)}</span>
+                    <span className="font-medium text-[#1F6F8B]">{fmtUsd(m.spendUsd)}</span>
                     <span className="text-[#8F8F8F]">{fmtTokensCompact(m.tokens)} tok</span>
                   </span>
                 </div>
@@ -314,7 +314,7 @@ function CostByTypeCard({ report }: { report: CostDriverFigures }) {
                     {row.note && <span className="block text-[12px] text-[#8F8F8F]">{row.note}</span>}
                   </span>
                   <span className="flex items-center gap-2 shrink-0 tabular-nums">
-                    <span className="font-medium text-[#05073F]">{fmtUsd(row.value)}</span>
+                    <span className="font-medium text-[#1F6F8B]">{fmtUsd(row.value)}</span>
                     <span className="text-[#8F8F8F]">{fmtPct(share)}</span>
                   </span>
                 </div>
@@ -331,7 +331,7 @@ function CostByTypeCard({ report }: { report: CostDriverFigures }) {
 function CacheEfficiencyCard({ report }: { report: CostDriverFigures }) {
   return (
     <DriverColumn title="Cache efficiency">
-      <p className="m-0 text-[24px] leading-7 font-semibold tracking-[-0.02em] tabular-nums text-[#05073F]">
+      <p className="m-0 text-[24px] leading-7 font-semibold tracking-[-0.02em] tabular-nums text-[#1F6F8B]">
         {report.cacheEfficiency.ratio === null ? '—' : `${Math.round(report.cacheEfficiency.ratio * 100)}%`}
       </p>
       <p className="m-0 mt-1 text-[13px] text-[#8F8F8F] leading-5">
@@ -428,7 +428,7 @@ export default function ModelEfficiencySection({ period }: { period: string }) {
   return (
     <Panel
       title="Model efficiency"
-      subtitle={<>Activity is <span className="text-[#2451F3]">AI-judged</span>; spend, model split and friction are <span className="text-[#05073F] font-medium">measured</span></>}
+      subtitle={<>Activity is <span className="text-[#1F6F8B]">AI-judged</span>; spend, model split and friction are <span className="text-[#1F6F8B] font-medium">measured</span></>}
       right={
         <Segmented<Surface>
           label="Surface"

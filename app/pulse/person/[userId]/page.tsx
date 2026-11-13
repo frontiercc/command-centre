@@ -41,7 +41,7 @@ function FigureGrid({ children, cols }: { children: ReactNode; cols: 2 | 3 | 4 }
   );
 }
 
-const TIER_SWATCH = ['bg-[#CCD1DB]', 'bg-[#8DB2FC]', 'bg-[#3D6CE8]'];
+const TIER_SWATCH = ['bg-[#CCD1DB]', 'bg-[#6BA3B8]', 'bg-[#1F6F8B]'];
 
 function SparkBlock({ label, children }: { label: string; children: ReactNode }) {
   return (

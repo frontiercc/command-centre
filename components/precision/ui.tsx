@@ -8,8 +8,8 @@
  * Rules the kit encodes:
  *  - grey page (#F7F7F8), white panels with a 1px #EAEAEA border and 8px corners
  *  - 13px body text, 12px captions in #8F8F8F, panel titles 13px semibold ink
- *  - dark blue (#05073F) = measured, sky blue (#699BFB, #2451F3 text) = AI-judged or estimate;
- *    vibrant blue (#1F6F8B) is for links and actions only
+ *  - one colour, petrol (#1F6F8B, shades #C9DEE6 / #6BA3B8), for charts, links and actions;
+ *    AI-judged and estimate figures are told apart by a grey tag and their words, never a colour
  *  - figures use tabular numbers; never render a missing value as 0
  * Client-safe, no data fetching. Import from '@/components/precision/ui'.
  */
@@ -27,13 +27,13 @@ export const C = {
   subtle: '#FAFAFA',
   page: '#F7F7F8',
   accent: '#1F6F8B',
-  measured: '#05073F',
-  measuredLight: '#8C96BF',
+  measured: '#1F6F8B',
+  measuredLight: '#6BA3B8',
   accentHover: '#185A71',
   accentTint: '#EEF5F8',
-  judged: '#699BFB',
-  judgedInk: '#2451F3',
-  judgedTint: '#EDF3FF',
+  judged: '#6BA3B8',
+  judgedInk: '#1F6F8B',
+  judgedTint: '#EEF5F8',
   good: '#1A7F37',
   bad: '#B42318',
   warn: '#B54708',
@@ -44,16 +44,16 @@ export const C = {
 export type Tone = 'measured' | 'judged' | 'neutral' | 'good' | 'bad' | 'warn';
 
 const toneText: Record<Tone, string> = {
-  measured: 'text-[#05073F]',
-  judged: 'text-[#2451F3]',
+  measured: 'text-[#1F6F8B]',
+  judged: 'text-[#1F6F8B]',
   neutral: 'text-[#0A0A0A]',
   good: 'text-[#1A7F37]',
   bad: 'text-[#B42318]',
   warn: 'text-[#B54708]',
 };
 const toneBar: Record<Tone, string> = {
-  measured: 'bg-[#3D4451]', // percentage and share bars are charcoal (SHARE_BAR in lib/ui/chart-colours)
-  judged: 'bg-[#699BFB]',
+  measured: 'bg-[#1F6F8B]', // percentage and share bars are charcoal (SHARE_BAR in lib/ui/chart-colours)
+  judged: 'bg-[#6BA3B8]',
   neutral: 'bg-[#0A0A0A]',
   good: 'bg-[#1A7F37]',
   bad: 'bg-[#B42318]',
@@ -166,7 +166,7 @@ export function Figure({ label, value, sub, tone = 'neutral', unit, delta, delta
   return (
     <div className="p-4 flex flex-col gap-1.5 min-w-0" title={title}>
       <span className="text-[13px] text-[#666666]">{label}</span>
-      <span className={cx('text-[24px] leading-7 font-semibold tracking-[-0.02em] tabular-nums', tone === 'judged' ? 'text-[#05073F]' : toneText[tone])}>
+      <span className={cx('text-[24px] leading-7 font-semibold tracking-[-0.02em] tabular-nums', tone === 'judged' ? 'text-[#1F6F8B]' : toneText[tone])}>
         {value}{unit && <span className="text-[14px] font-normal text-[#8F8F8F] tracking-normal"> {unit}</span>}
       </span>
       {delta && <span className={cx('text-[13px] tabular-nums', deltaTone ? toneText[deltaTone] : 'text-[#8F8F8F]')}>{delta}</span>}
@@ -230,8 +230,8 @@ export const T = {
 export function Tag({ children, tone = 'neutral', title }: { children: ReactNode; tone?: 'neutral' | 'measured' | 'judged' | 'warn' | 'bad'; title?: string }) {
   const cls = {
     neutral: 'border border-[#EAEAEA] text-[#4D4D4D]',
-    measured: 'bg-[#E8E9F2] text-[#05073F]',
-    judged: 'bg-[#EDF3FF] text-[#2451F3]',
+    measured: 'bg-[#E4EFF3] text-[#1F6F8B]',
+    judged: 'border border-[#EAEAEA] text-[#4D4D4D]',
     warn: 'bg-[#FFF4E5] border border-[#F5D9A8] text-[#8A5300]',
     bad: 'bg-[#FFF5F4] border border-[#F3C0BB] text-[#B42318]',
   }[tone];
@@ -250,7 +250,7 @@ export function Pill({ children, tone = 'neutral' }: { children: ReactNode; tone
     info: 'bg-[#E4EFF3] text-[#185A71]',
     warn: 'bg-[#FFF1E0] text-[#8A5300]',
     bad: 'bg-[#FFF5F4] text-[#B42318]',
-    judged: 'bg-[#EDF3FF] text-[#2451F3]',
+    judged: 'bg-[#F2F2F2] text-[#4D4D4D]',
   }[tone];
   return <span className={cx('inline-flex items-center text-[12px] font-medium px-2 py-0.5 rounded-full whitespace-nowrap', cls)}>{children}</span>;
 }
@@ -356,7 +356,7 @@ export function Notice({ tone = 'info', title, children, action }: {
   tone?: 'info' | 'warn' | 'error' | 'success'; title?: ReactNode; children?: ReactNode; action?: ReactNode;
 }) {
   const cls = {
-    info: 'border-[#C9D6FD] bg-[#F5F8FF] text-[#333333]',
+    info: 'border-[#C9DEE6] bg-[#F5F8FF] text-[#333333]',
     warn: 'border-[#F5D9A8] bg-[#FFFAF0] text-[#5C3A00]',
     error: 'border-[#F3C0BB] bg-[#FFF5F4] text-[#7A271A]',
     success: 'border-[#B7E4C7] bg-[#F1FBF4] text-[#14532D]',
@@ -395,7 +395,7 @@ export function Spark({ data, tone = 'measured', width = 72, height = 20, fixedM
   if (vals.length < 2) return <span className="text-[12px] text-[#B3B3B3]">—</span>;
   const max = fixedMax ?? Math.max(...vals), min = fixedMin ?? Math.min(...vals), span = max - min || 1;
   const step = data.length > 1 ? width / (data.length - 1) : width;
-  const stroke = tone === 'judged' ? '#699BFB' : tone === 'neutral' ? '#8F8F8F' : '#05073F';
+  const stroke = tone === 'judged' ? '#6BA3B8' : tone === 'neutral' ? '#8F8F8F' : '#1F6F8B';
   const segs: string[] = [];
   let cur: string[] = [];
   data.forEach((v, i) => {

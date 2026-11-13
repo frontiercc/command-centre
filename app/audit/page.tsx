@@ -132,7 +132,7 @@ interface ChatThreadMessage {
 /** Conversation bubble. User: blue tint, assistant: white, tool and other: grey. */
 function Bubble({ kind, header, children }: { kind: 'user' | 'assistant' | 'tool'; header: ReactNode; children: ReactNode }) {
   const cls = {
-    user: 'self-end ml-8 border-[#C9D6FD] bg-[#F5F8FF]',
+    user: 'self-end ml-8 border-[#C9DEE6] bg-[#F5F8FF]',
     assistant: 'self-start mr-8 border-[#EAEAEA] bg-white',
     tool: 'self-start mr-8 border-[#EAEAEA] bg-[#FAFAFA]',
   }[kind];
@@ -331,7 +331,7 @@ function CoworkThread({ messages }: { messages: CoworkMessage[] }) {
                   try { resources = JSON.parse(msg.synced_resources); } catch { return null; }
                   if (!resources.length) return null;
                   return (
-                    <div className="mt-1.5 pt-1.5 border-t border-[#C9D6FD] flex flex-wrap items-center gap-1.5">
+                    <div className="mt-1.5 pt-1.5 border-t border-[#C9DEE6] flex flex-wrap items-center gap-1.5">
                       <span className="text-[12px] text-[#666666] shrink-0"><span aria-hidden="true">📎</span> Synced:</span>
                       {resources.map((r, i) => {
                         const chip = (

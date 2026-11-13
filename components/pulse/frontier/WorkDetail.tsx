@@ -85,7 +85,7 @@ export default function WorkDetail({ item, showName, canOpenUseCases, compact = 
 
   // The one AI-written sentence: violet, labelled as an AI summary.
   const description = item.description && (
-    <p className="m-0 mb-1 text-[13px] leading-5 text-[#2451F3]">
+    <p className="m-0 mb-1 text-[13px] leading-5 text-[#1F6F8B]">
       <span className="mr-1.5 align-middle"><Tag tone="judged">AI summary</Tag></span>
       {item.description}
     </p>

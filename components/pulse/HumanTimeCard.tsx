@@ -78,11 +78,11 @@ export default function HumanTimeCard({ summary, surface, scope, className = '',
         <div className="flex flex-col gap-3">
           <div className="flex flex-wrap items-end gap-x-8 gap-y-3">
             <div title={`Range ${hours(low)}–${hours(high)} hours`}>
-              <p className="m-0 text-[24px] leading-7 font-semibold tabular-nums text-[#2451F3]">~{hours(likely)} h</p>
+              <p className="m-0 text-[24px] leading-7 font-semibold tabular-nums text-[#1F6F8B]">~{hours(likely)} h</p>
               <p className="m-0 mt-1 text-[13px] text-[#8F8F8F]">by hand (estimate)</p>
             </div>
             <div>
-              <p className="m-0 text-[24px] leading-7 font-semibold tabular-nums text-[#05073F]">{hours(summary.claudeMinutes)} h</p>
+              <p className="m-0 text-[24px] leading-7 font-semibold tabular-nums text-[#1F6F8B]">{hours(summary.claudeMinutes)} h</p>
               <p className="m-0 mt-1 text-[13px] text-[#8F8F8F]">{claudeLabel}</p>
             </div>
           </div>
@@ -117,8 +117,8 @@ export default function HumanTimeCard({ summary, surface, scope, className = '',
                   <div className="flex items-baseline justify-between gap-3 text-[13px]">
                     <span className="text-[14px] text-[#0A0A0A]">{label(k.kind, surface)}</span>
                     <span className="shrink-0 tabular-nums text-[#8F8F8F]">
-                      <span className="text-[#2451F3]">~{hours(k.humanMinutes)}</span> by hand ·{' '}
-                      <span className="text-[#05073F]">{hours(k.claudeMinutes)}</span> with {name} · {k.sessions} sessions
+                      <span className="text-[#1F6F8B]">~{hours(k.humanMinutes)}</span> by hand ·{' '}
+                      <span className="text-[#1F6F8B]">{hours(k.claudeMinutes)}</span> with {name} · {k.sessions} sessions
                     </span>
                   </div>
                   <Bar pct={pct(k.humanMinutes)} tone="judged" height={4} />

@@ -228,7 +228,7 @@ function RouteText({ r, name, surface }: { r: Route; name: string; surface: Surf
   const outcome = r.metric === 'produced' ? 'produce a file' : 'reach deep (Tier 3) work';
   const fromWho = r.from.basis === 'colleagues' ? `on ${prettyModel(r.fromModel)}` : `on ${prettyModel(r.fromModel)} (${name}'s own sessions)`;
   const saving = r.estSavingUsd !== null && (
-    <span className="text-[#2451F3]"> About {money(r.estSavingUsd)} less this month at list price{r.savingShare !== null ? `, roughly ${pct(r.savingShare)} of this work's cost` : ''} (estimate).</span>
+    <span className="text-[#1F6F8B]"> About {money(r.estSavingUsd)} less this month at list price{r.savingShare !== null ? `, roughly ${pct(r.savingShare)} of this work's cost` : ''} (estimate).</span>
   );
   if (r.direction === 'save') {
     return (
@@ -359,7 +359,7 @@ function ModelEfficiency({ data, onShowAll }: { data: Review; onShowAll: () => v
   return (
     <Panel
       title="Model efficiency"
-      subtitle={<>Kind of work is <span className="text-[#2451F3]">AI-judged</span>; spend and model split are <span className="text-[#05073F] font-medium">measured</span>. Click a row for the detail.</>}
+      subtitle={<>Kind of work is <span className="text-[#1F6F8B]">AI-judged</span>; spend and model split are <span className="text-[#1F6F8B] font-medium">measured</span>. Click a row for the detail.</>}
       flush
     >
       <div className="overflow-x-auto">
@@ -388,7 +388,7 @@ function ModelEfficiency({ data, onShowAll }: { data: Review; onShowAll: () => v
                   <span className="mt-0.5 flex items-center gap-1.5 text-[13px] text-[#8F8F8F]">
                     <span>{surfaceName(w.surface, !!data.openai)}</span>
                     {w.workKey && (
-                      <span className="inline-flex items-center gap-1 text-[#2451F3]"><span className="w-1.5 h-1.5 rounded-full bg-[#699BFB]" />AI-judged</span>
+                      <span className="inline-flex items-center gap-1 text-[#1F6F8B]"><span className="w-1.5 h-1.5 rounded-full bg-[#6BA3B8]" />AI-judged</span>
                     )}
                   </span>
                 </td>
@@ -481,7 +481,7 @@ function WorkCard({ w, name, peerDays }: { w: WorkRow; name: string; peerDays: n
         : w.topModel && <p className="m-0 text-[13px] text-[#666666]">{pct(w.topModel.share)} on {w.topModel.model}</p>}
 
       {w.routes.length > 0 ? (
-        <div className="mt-1 rounded-[6px] border border-[#C9D6FD] bg-[#F5F8FF] px-3.5 py-3 flex flex-col gap-2">
+        <div className="mt-1 rounded-[6px] border border-[#C9DEE6] bg-[#F5F8FF] px-3.5 py-3 flex flex-col gap-2">
           <span className="text-[13px] font-semibold text-[#1F6F8B]">
             {w.routes.length} better route{w.routes.length === 1 ? '' : 's'}
           </span>

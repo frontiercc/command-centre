@@ -76,7 +76,7 @@ export default function StickinessCard({ vendor = 'all', openaiPresent = false, 
             })}
           </div>
           <div className="flex flex-wrap gap-x-4 mt-3 text-[12px] text-[#666666]">
-            <span className="inline-flex items-center gap-1.5"><span className="w-2.5 h-2.5 rounded-full" style={{ background: rows[0] ? PRODUCT_COLOR[rows[0].id] : '#3D4451' }} />In the product&apos;s colour: uses it on a typical day</span>
+            <span className="inline-flex items-center gap-1.5"><span className="w-2.5 h-2.5 rounded-full" style={{ background: rows[0] ? PRODUCT_COLOR[rows[0].id] : '#1F6F8B' }} />In the product&apos;s colour: uses it on a typical day</span>
             <span className="inline-flex items-center gap-1.5"><span className="w-2.5 h-2.5 rounded-full bg-[#E4E4E7]" />Used it this month, not daily</span>
           </div>
         </>

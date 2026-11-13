@@ -484,7 +484,7 @@ export default function CostChargebackPage() {
                         <>
                           {report.seats.unused} of {report.seats.licensed} licensed {openai ? 'Claude ' : ''}seats unused in the last 30 days
                           {report.seats.estUnusedUsd != null && (
-                            <span className="text-[#2451F3]">
+                            <span className="text-[#1F6F8B]">
                               {' '}(about {fmtUsd(report.seats.estUnusedUsd)} a month, estimate, for visibility, not billing)
                             </span>
                           )}

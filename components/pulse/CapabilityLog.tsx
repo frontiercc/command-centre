@@ -94,9 +94,9 @@ export default function CapabilityLog({ events }: CapabilityLogProps) {
                   <td className={`${T.td} text-right`}>
                     {ev.tier ? (
                       <span className={`font-mono text-[12px] px-1.5 py-0.5 rounded-[6px] ${
-                        ev.tier === 3 ? 'bg-[#3D6CE8] text-white' :
-                        ev.tier === 2 ? 'bg-[#8DB2FC] text-[#05073F]' :
-                        'bg-[#CCD1DB] text-[#05073F]'
+                        ev.tier === 3 ? 'bg-[#1F6F8B] text-white' :
+                        ev.tier === 2 ? 'bg-[#6BA3B8] text-[#1F6F8B]' :
+                        'bg-[#CCD1DB] text-[#1F6F8B]'
                       }`} title="Tier is AI-judged">
                         T{ev.tier}
                       </span>

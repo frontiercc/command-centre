@@ -721,7 +721,7 @@ function DeptBreakdown({ rows }: { rows: DeptRow[] }) {
             {/* Split bar: blue = skills, grey = connectors, scaled to the busiest department */}
             <div className="w-full h-1.5 rounded-full bg-[#F2F2F2] overflow-hidden">
               <div className="h-full flex gap-px" style={{ width: `${barPct}%` }}>
-                <div className="h-full bg-[#05073F]" style={{ width: `${skillPct}%` }} />
+                <div className="h-full bg-[#1F6F8B]" style={{ width: `${skillPct}%` }} />
                 <div className="h-full bg-[#B3B3B3] flex-1" />
               </div>
             </div>
@@ -730,7 +730,7 @@ function DeptBreakdown({ rows }: { rows: DeptRow[] }) {
       })}
       <PanelFoot>
         <span className="inline-flex items-center gap-4">
-          <span className="inline-flex items-center gap-1.5"><span className="w-2 h-2 rounded-full bg-[#05073F]" aria-hidden="true" />Skills</span>
+          <span className="inline-flex items-center gap-1.5"><span className="w-2 h-2 rounded-full bg-[#1F6F8B]" aria-hidden="true" />Skills</span>
           <span className="inline-flex items-center gap-1.5"><span className="w-2 h-2 rounded-full bg-[#B3B3B3]" aria-hidden="true" />Connectors</span>
         </span>
       </PanelFoot>

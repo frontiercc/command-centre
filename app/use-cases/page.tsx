@@ -330,9 +330,9 @@ export default function UseCasesRegisterPage() {
                             <span className={cx('text-[13px] leading-5 text-[#4D4D4D]', !expanded && 'line-clamp-3')}>{s.description}</span>
                           )}
                         </button>
-                        <span className="text-[13px] text-[#05073F] tabular-nums">{formatSuggestionEvidenceLine(s)}</span>
+                        <span className="text-[13px] text-[#1F6F8B] tabular-nums">{formatSuggestionEvidenceLine(s)}</span>
                         {s.products && formatSuggestionProducts(s.products) && (
-                          <span className="text-[13px] text-[#05073F] tabular-nums">Found in {formatSuggestionProducts(s.products)}</span>
+                          <span className="text-[13px] text-[#1F6F8B] tabular-nums">Found in {formatSuggestionProducts(s.products)}</span>
                         )}
                         <div className="flex items-center gap-2 pt-1">
                           <button

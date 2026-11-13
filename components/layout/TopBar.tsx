@@ -8,11 +8,6 @@ import { usePathname } from 'next/navigation';
 import { usePrecision } from './ThemeContext';
 import { crumbsFor, shortTitle } from '@/lib/nav/breadcrumb';
 
-/** Pages that mix measured and AI-judged figures carry the colour key in the header. */
-function showsLegend(pathname: string): boolean {
-  return pathname === '/' || pathname.startsWith('/pulse') || pathname.startsWith('/finops') || pathname.startsWith('/use-cases');
-}
-
 export default function TopBar({ title, subtitle }: { title: ReactNode; subtitle?: string }) {
   const precision = usePrecision();
   const pathname = usePathname() ?? '/';
@@ -31,12 +26,7 @@ export default function TopBar({ title, subtitle }: { title: ReactNode; subtitle
             </span>
           ))}
           <span className="ccc-pbar-current">{heading}</span>
-          {showsLegend(pathname) && (
-            <span className="ccc-pbar-legend">
-              <span><i className="is-measured" aria-hidden="true" />Measured</span>
-              <span><i className="is-judged" aria-hidden="true" />AI-judged or estimate</span>
-            </span>
-          )}
+          {/* One chart colour (petrol) for measured and AI-judged alike; panels tag AI-judged figures. */}
         </header>
         <div className="ccc-ptitle">
           <h1>{heading}</h1>

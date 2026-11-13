@@ -242,7 +242,7 @@ function VerdictPanel({ v }: { v: Verdict }) {
         </div>
         {v.split && <p className="m-0 -mt-1 text-[13px] text-[#8F8F8F] tabular-nums">{v.split}</p>}
         {(v.projection || v.estimateBadge) && (
-          <div className="flex flex-col gap-0.5 text-[13px] text-[#2451F3]">
+          <div className="flex flex-col gap-0.5 text-[13px] text-[#1F6F8B]">
             {v.projection && <span title="Last-7-day run rate extended to month end">{v.projection}</span>}
             {v.estimateBadge && <span>{v.estimateBadge}</span>}
           </div>
@@ -413,8 +413,8 @@ export default function CodePulseOverviewPage() {
             >
               <span className="flex flex-wrap items-center justify-end gap-3.5 text-[13px] text-[#666666]">
                 <VendorSwitch vendor={vendor} onChange={setVendor} openaiPresent={codexPresent} labels={DEVELOPER_PULSE_VENDOR_LABELS} />
-                <span className="flex items-center gap-1.5"><span className="w-2 h-2 rounded-[2px] bg-[#05073F]" />Measured</span>
-                <span className="flex items-center gap-1.5"><span className="w-2 h-2 rounded-[2px] bg-[#699BFB]" />AI-judged or estimate</span>
+                <span className="flex items-center gap-1.5"><span className="w-2 h-2 rounded-[2px] bg-[#1F6F8B]" />Measured</span>
+                <span className="flex items-center gap-1.5"><span className="w-2 h-2 rounded-[2px] bg-[#6BA3B8]" />AI-judged or estimate</span>
               </span>
             </Toolbar>
             {codexPresent && vendor !== 'all' && !openaiOnly && (

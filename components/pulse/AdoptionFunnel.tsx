@@ -57,8 +57,8 @@ export default function AdoptionFunnel({ data }: AdoptionFunnelProps) {
           <Tooltip contentStyle={{ fontSize: 13, borderRadius: 12, border: '1px solid #EAEAEA', backgroundColor: '#FFF' }} cursor={{ fill: '#FAFAFA' }} />
           <Legend wrapperStyle={{ fontSize: 13, paddingTop: 12, color: '#666666' }} />
           <Bar dataKey="Tier 1" stackId="a" fill="#CCD1DB" />
-          <Bar dataKey="Tier 2" stackId="a" fill="#8DB2FC" />
-          <Bar dataKey="Tier 3" stackId="a" fill="#3D6CE8" radius={[2, 2, 0, 0]} />
+          <Bar dataKey="Tier 2" stackId="a" fill="#6BA3B8" />
+          <Bar dataKey="Tier 3" stackId="a" fill="#1F6F8B" radius={[2, 2, 0, 0]} />
         </BarChart>
       </ResponsiveContainer>
     </Panel>

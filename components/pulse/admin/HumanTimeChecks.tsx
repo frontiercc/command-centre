@@ -134,8 +134,8 @@ export default function HumanTimeChecks() {
                 <p className="m-0 mt-1.5 text-[13px] text-[#8F8F8F] tabular-nums">
                   {openai && i.product && <>{PRODUCT_LABEL[i.product]} · </>}
                   {i.prompts} prompts · {i.toolCalls !== null ? `${i.toolCalls} tool calls` : 'tool calls not measured'} ·{' '}
-                  <span className="text-[#05073F] font-medium">{hrs(i.claudeMinutes)} with {i.product ? WITH_LABEL[i.product] : 'Claude'}</span> ·{' '}
-                  <span className="text-[#2451F3]">estimate {hrs(i.estimate.likely)} by hand{i.estimate.low !== null && i.estimate.high !== null ? ` (${hrs(i.estimate.low)}–${hrs(i.estimate.high)})` : ''}</span>
+                  <span className="text-[#1F6F8B] font-medium">{hrs(i.claudeMinutes)} with {i.product ? WITH_LABEL[i.product] : 'Claude'}</span> ·{' '}
+                  <span className="text-[#1F6F8B]">estimate {hrs(i.estimate.likely)} by hand{i.estimate.low !== null && i.estimate.high !== null ? ` (${hrs(i.estimate.low)}–${hrs(i.estimate.high)})` : ''}</span>
                 </p>
                 <div className="flex items-center gap-2 mt-2 flex-wrap">
                   {(Object.keys(VERDICT_LABEL) as Verdict[]).map(v => (

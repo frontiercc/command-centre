@@ -174,11 +174,11 @@ export default function ShippingAlignmentChart({ series, children, codexPresent 
           {singleTool && runPaths(matchedValues, max).map((d, i) => (
             <path key={`m${i}`} d={d} fill="none" stroke="#B3B3B3" strokeWidth={1.5} strokeLinecap="round" vectorEffect="non-scaling-stroke" />
           ))}
-          <path d={aiPath} fill="none" stroke="#05073F" strokeWidth={2} strokeLinecap="round" vectorEffect="non-scaling-stroke" />
+          <path d={aiPath} fill="none" stroke="#1F6F8B" strokeWidth={2} strokeLinecap="round" vectorEffect="non-scaling-stroke" />
         </svg>
         <div className="flex flex-wrap items-center gap-x-4 gap-y-1 text-[13px] text-[#666666] tabular-nums">
           <span className="flex items-center gap-1.5">
-            {legendSwatch('#05073F', 'line')} {singleTool ? `Commits ${tool} recorded` : 'AI-assisted commits'} ({totalAi})
+            {legendSwatch('#1F6F8B', 'line')} {singleTool ? `Commits ${tool} recorded` : 'AI-assisted commits'} ({totalAi})
           </span>
           {singleTool ? (
             <>

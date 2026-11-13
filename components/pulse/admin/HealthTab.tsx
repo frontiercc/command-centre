@@ -55,7 +55,7 @@ function ConfHistogram({ data }: { data: ConfBucket[] }) {
           <div
             title={`${b.bucket * 10}%–${b.bucket * 10 + 10}%: ${b.cnt}`}
             style={{ height: `${Math.round((b.cnt / maxCnt) * 52)}px` }}
-            className={`w-full rounded-full ${b.bucket >= 7 ? 'bg-[#3D6CE8]' : b.bucket >= 4 ? 'bg-[#8DB2FC]' : 'bg-[#CCD1DB]'}`}
+            className={`w-full rounded-full ${b.bucket >= 7 ? 'bg-[#1F6F8B]' : b.bucket >= 4 ? 'bg-[#6BA3B8]' : 'bg-[#CCD1DB]'}`}
           />
           <span className="text-[11px] text-[#8F8F8F] tabular-nums">{b.bucket * 10}</span>
         </div>
@@ -214,7 +214,7 @@ export default function HealthTab() {
                 const cnt = tierTotals[tier] ?? 0;
                 const pct = Math.round((cnt / totalClassified) * 100);
                 // AI-judged: sky blue steps, light to dark from Tier 1 to Tier 3.
-                const colours: Record<number, string> = { 1: '#CCD1DB', 2: '#8DB2FC', 3: '#3D6CE8' };
+                const colours: Record<number, string> = { 1: '#CCD1DB', 2: '#6BA3B8', 3: '#1F6F8B' };
                 const labels: Record<number, string> = { 1: 'Tier 1: Administrative', 2: 'Tier 2: Meaningful', 3: 'Tier 3: Frontier' };
                 return (
                   <div key={tier} className="flex flex-col gap-1">

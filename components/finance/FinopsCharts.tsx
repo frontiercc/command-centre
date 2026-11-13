@@ -181,12 +181,12 @@ function ProjectionCard({ monthToDate, projection, byVendor, openaiOnly }: {
         {split ? (
           <p className="m-0 flex flex-col gap-0.5 tabular-nums">
             <span className="text-[14px] text-[#4D4D4D]">
-              Projected <span className="text-[24px] leading-7 font-semibold tracking-[-0.02em] text-[#2451F3]">{fmtUsd(projection.projected)}</span>:
+              Projected <span className="text-[24px] leading-7 font-semibold tracking-[-0.02em] text-[#1F6F8B]">{fmtUsd(projection.projected)}</span>:
             </span>
             <span className="text-[13px] text-[#4D4D4D]">Claude {fmtUsd(split.claudeUsd)} · ChatGPT and Codex {fmtUsd(split.openaiUsd)}</span>
           </p>
         ) : (
-          <span className="text-[24px] leading-7 font-semibold tracking-[-0.02em] tabular-nums text-[#2451F3]">{fmtUsd(projection.projected)}</span>
+          <span className="text-[24px] leading-7 font-semibold tracking-[-0.02em] tabular-nums text-[#1F6F8B]">{fmtUsd(projection.projected)}</span>
         )}
         <span className="text-[13px] text-[#666666] tabular-nums">Day {projection.daysElapsed} of {projection.daysInMonth}</span>
         <Bar pct={(projection.daysElapsed / Math.max(1, projection.daysInMonth)) * 100} tone="measured" height={6} />

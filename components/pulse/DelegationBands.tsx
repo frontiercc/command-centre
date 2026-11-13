@@ -74,8 +74,8 @@ export default function DelegationBands({
                       <div key={w.weekStart} className="flex-1 h-1 rounded-full bg-[#F2F2F2] self-end" title="no data" />
                     ) : (
                       <div key={w.weekStart} className="flex-1 h-full flex flex-col justify-end gap-px" title={shortDate(w.weekStart)}>
-                        <div className="bg-[#3D6CE8] rounded-t-[2px]" style={{ height: `${(w.t3Share ?? 0) * 100}%` }} />
-                        <div className="bg-[#8DB2FC]" style={{ height: `${(w.t2Share ?? 0) * 100}%` }} />
+                        <div className="bg-[#1F6F8B] rounded-t-[2px]" style={{ height: `${(w.t3Share ?? 0) * 100}%` }} />
+                        <div className="bg-[#6BA3B8]" style={{ height: `${(w.t2Share ?? 0) * 100}%` }} />
                         <div className="bg-[#CCD1DB]" style={{ height: `${(w.t1Share ?? 0) * 100}%` }} />
                       </div>
                     ))}
@@ -89,8 +89,8 @@ export default function DelegationBands({
               )}
               <div className="flex gap-4 flex-wrap text-[13px] text-[#666666]">
                 <span className="flex items-center gap-1.5"><span className="w-2.5 h-2 rounded-full bg-[#CCD1DB] inline-block" />Tier 1, quick questions</span>
-                <span className="flex items-center gap-1.5"><span className="w-2.5 h-2 rounded-full bg-[#8DB2FC] inline-block" />Tier 2</span>
-                <span className="flex items-center gap-1.5"><span className="w-2.5 h-2 rounded-full bg-[#3D6CE8] inline-block" />Tier 3, delegated work</span>
+                <span className="flex items-center gap-1.5"><span className="w-2.5 h-2 rounded-full bg-[#6BA3B8] inline-block" />Tier 2</span>
+                <span className="flex items-center gap-1.5"><span className="w-2.5 h-2 rounded-full bg-[#1F6F8B] inline-block" />Tier 3, delegated work</span>
               </div>
               {bands.some(s => s.startsAtRubricBreak) && (
                 <p className="m-0 text-[13px] text-[#8F8F8F]">Dashed divider: the classifier rubric changed, so the mix either side is not comparable.</p>
@@ -115,7 +115,7 @@ export default function DelegationBands({
                     <span className="flex items-center gap-1.5 tabular-nums">
                       <span className="text-[#666666]">{pct(p.thenVsNow.then)}</span>
                       <span style={{ color: ARROW_COLOR[p.thenVsNow.arrow] }} aria-label={`trend ${p.thenVsNow.arrow}`}>→</span>
-                      <span className="font-semibold text-[#2451F3]">{pct(p.thenVsNow.now)}</span>
+                      <span className="font-semibold text-[#1F6F8B]">{pct(p.thenVsNow.now)}</span>
                     </span>
                   ) : (
                     <span className="text-[13px] text-[#8F8F8F]">
