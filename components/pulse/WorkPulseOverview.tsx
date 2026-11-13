@@ -110,9 +110,14 @@ export function BiggerJobs({ weeks, departments, product, window, onWindow }: {
   const verdict = first !== null && last !== null
     ? (Math.round(last * 100) > Math.round(first * 100) + 2 ? 'Yes. ' : Math.round(last * 100) < Math.round(first * 100) - 2 ? 'No. ' : 'About the same. ')
     : '';
+  const n4 = Math.min(4, weeks.length);
+  const firstFrom = fmtDate(weeks[0].weekStart);
+  const lastTo = fmtDate(weeks[weeks.length - 1].weekStart + 6 * 86400);
   const answer = first !== null && last !== null
-    ? <>{verdict}Real work went from <b>{words(first)}</b> of tasks at the start of this period to <b>{words(last)}</b> in the last four weeks.{falling.length === 1 ? ` ${falling[0].dept} is going the other way.` : falling.length > 1 ? ` ${falling.length} departments are going the other way.` : ''}</>
+    ? <>{verdict}Over the last {weeks.length} weeks, real work went from <b>{words(first)}</b> of tasks in the first {n4} (from {firstFrom}) to <b>{words(last)}</b> in the most recent {n4} (to {lastTo}).{falling.length === 1 ? ` ${falling[0].dept} is going the other way.` : falling.length > 1 ? ` ${falling.length} departments are going the other way.` : ''}</>
     : null;
+  // A window longer than the history there is: say so rather than imply the chart covers it.
+  const short = weeks.length < window;
   const W = 1100, H = 120, left = 36, top = 6, bottom = 18, plotH = H - top - bottom;
   const n = weeks.length, gap = n > 26 ? 2 : 8, bw = (W - left - gap * (n - 1)) / n;
   const every = n > 26 ? 4 : n > 13 ? 2 : 1;
@@ -124,6 +129,7 @@ export function BiggerJobs({ weeks, departments, product, window, onWindow }: {
       note="Each column is one week, Monday to Sunday, split into routine, meaningful and frontier tasks. Only completed weeks are shown."
     >
       <div className="flex justify-end -mt-9 mb-3">
+        {short && <span className="mr-3 self-center text-[12px] text-[#8F8F8F]">Only {weeks.length} weeks of history so far</span>}
         <span className="inline-flex border border-[#EAEAEA] rounded-[8px] overflow-hidden">
           {([13, 26, 52] as const).map(w => (
             <button key={w} type="button" onClick={() => onWindow(w)} className={`text-[12px] px-2 py-0.5 ${w === window ? 'bg-[#F2F2F2] text-[#0A0A0A] font-medium' : 'bg-white text-[#666666]'}`}>{w} weeks</button>
