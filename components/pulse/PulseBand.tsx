@@ -58,7 +58,8 @@ export function WorkPulsePanel({ data, product, title = 'Work Pulse', actions = 
   const q = d?.window === 'quarter';
   const span = q ? 'the last quarter' : 'the last 30 days';
   const prior = q ? 'the quarter before' : 'the month before';
-  const now = deep(d?.tierCounts ?? data.tierCounts);
+  const tc = d?.tierCounts ?? data.tierCounts;
+  const now = deep(tc);
   const before = d ? deep(d.priorTierCounts) : null;
   const people = d?.deepPeople30d ?? null;
   const active = d?.activePeople30d ?? null;
@@ -95,8 +96,9 @@ export function WorkPulsePanel({ data, product, title = 'Work Pulse', actions = 
         />
         <QuestionCard
           question="Tasks that are real work"
-          value={now !== null ? cap(shareWords(now)) : undefined}
-          change={shareChange}
+          value={now !== null ? `${(tc.t2 + tc.t3).toLocaleString('en-GB')} of ${total(tc).toLocaleString('en-GB')}` : undefined}
+          unit="tasks"
+          change={now !== null ? `${shareWords(now)}${shareChange ? `, ${shareChange}` : ''}` : undefined}
           trend={d?.tierWeeks.map(t => (t ? deep(t) : null))}
           notMeasured={now === null ? `No classified work in ${span}` : undefined}
           todo={actions && now !== null && before !== null

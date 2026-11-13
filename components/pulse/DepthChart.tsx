@@ -4,20 +4,30 @@
 'use client';
 
 /**
- * "Is the work getting deeper?": routine, meaningful and frontier tasks over a quarter, two
- * quarters or a year. Weekly columns for the quarter and two quarters, monthly for the year.
- * Every week in the window gets a column, empty or not. Text is real HTML at a fixed size,
- * so it never grows with the page width.
+ * "Is the work getting deeper?" at two zoom levels, one colour (petrol).
+ *
+ *  - Last 6 weeks: the delegation journey grid, a count per tier per week, counting back from
+ *    today so the week in progress is always there. This is what a new starter sees.
+ *  - Last quarter / 2 quarters / year: the share of tasks at each depth over completed weeks,
+ *    or completed months for the year.
+ *
+ * Every week in a window gets a column, empty or not, and text is real HTML at a fixed size so
+ * it never grows with the page width.
  */
 import type { ReactNode } from 'react';
 import { DASH_SHADES, shareWords } from '@/components/dashboard/QuestionCard';
 
 export interface TierWeek { weekStart: number; t1: number; t2: number; t3: number }
-export type DepthWindow = 13 | 26 | 52;
+export type DepthWindow = 6 | 13 | 26 | 52;
 
 const WEEK = 7 * 86400;
-export const WINDOW_LABEL: Record<DepthWindow, string> = { 13: 'Last quarter', 26: 'Last 2 quarters', 52: 'Last year' };
-const SPAN_WORDS: Record<DepthWindow, string> = { 13: 'the last quarter', 26: 'the last two quarters', 52: 'the last year' };
+export const DEPTH_WINDOWS: DepthWindow[] = [6, 13, 26, 52];
+export const WINDOW_LABEL: Record<DepthWindow, string> = {
+  6: 'Last 6 weeks', 13: 'Last quarter', 26: 'Last 2 quarters', 52: 'Last year',
+};
+const SPAN_WORDS: Record<DepthWindow, string> = {
+  6: 'the last six weeks', 13: 'the last quarter', 26: 'the last two quarters', 52: 'the last year',
+};
 
 /** Monday 00:00 UTC of the week containing ts. */
 function mondayOf(ts: number): number {
@@ -26,13 +36,14 @@ function mondayOf(ts: number): number {
   return midnight - ((d.getUTCDay() + 6) % 7) * 86400;
 }
 
+const fmtDay = (s: number) => new Date(s * 1000).toLocaleDateString('en-GB', { day: 'numeric', month: 'short', timeZone: 'UTC' });
+
 export interface DepthColumn { start: number; label: string; t1: number; t2: number; t3: number }
 
 /** The completed weeks (or, for the year, the last 12 calendar months) of the window, every one present. */
 export function depthColumns(weeks: TierWeek[], window: DepthWindow, nowS: number): DepthColumn[] {
   const byWeek = new Map(weeks.map(w => [w.weekStart, w]));
   const current = mondayOf(nowS);
-  const fmtDay = (s: number) => new Date(s * 1000).toLocaleDateString('en-GB', { day: 'numeric', month: 'short', timeZone: 'UTC' });
   if (window !== 52) {
     return Array.from({ length: window }, (_, i) => {
       const start = current - (window - i) * WEEK;
@@ -57,9 +68,10 @@ export function depthColumns(weeks: TierWeek[], window: DepthWindow, nowS: numbe
   });
 }
 
-const total = (c: DepthColumn) => c.t1 + c.t2 + c.t3;
+const total = (c: { t1: number; t2: number; t3: number }) => c.t1 + c.t2 + c.t3;
 const realShare = (cs: DepthColumn[]) => { const a = cs.reduce((s, c) => s + total(c), 0); return a > 0 ? cs.reduce((s, c) => s + c.t2 + c.t3, 0) / a : null; };
 const words = (v: number) => (v < 0.15 ? `${Math.round(v * 100)}%` : shareWords(v));
+const plural = (c: number, one: string, many: string) => `${c} ${c === 1 ? one : many}`;
 
 /**
  * One sentence on the whole span shown: real work in its first month against its last month.
@@ -81,13 +93,72 @@ export function depthSentence(cols: DepthColumn[], window: DepthWindow, whose: s
   return <>{verdict}Over {SPAN_WORDS[window]}, real work went from <b>{words(first)}</b> of {whose ? `${whose} ` : ''}tasks {firstWhen} to <b>{words(last)}</b> in its last month.</>;
 }
 
-export function DepthSwitch({ window, onWindow }: { window: DepthWindow; onWindow: (w: DepthWindow) => void }) {
+/** The grid's sentence: this week first, because that is what a new starter needs to see. */
+export function gridSentence(grid: TierWeek[], whose: string): ReactNode {
+  const now = grid[grid.length - 1], prev = grid[grid.length - 2];
+  const real = (w?: TierWeek) => (w ? w.t2 + w.t3 : 0);
+  const six = grid.reduce((s, w) => s + total(w), 0);
+  const who = whose ? `${whose} ` : '';
+  if (six === 0) return <>No classified tasks in the last six weeks.</>;
+  if (total(now) > 0) {
+    return <>This week so far, {who}<b>{plural(total(now), 'task', 'tasks')}</b>, {real(now) === 0 ? <>none of them real work yet</> : <><b>{real(now)} of them</b> real work</>}. Six weeks: {plural(six, 'task', 'tasks')}.</>;
+  }
+  if (prev && total(prev) > 0) {
+    return <>Nothing yet this week. Last week {who}<b>{plural(total(prev), 'task', 'tasks')}</b>, {real(prev)} of them real work.</>;
+  }
+  return <>Nothing in the last two weeks. Six weeks: {plural(six, 'task', 'tasks')}.</>;
+}
+
+export function DepthSwitch({ window, onWindow, windows = DEPTH_WINDOWS }: {
+  window: DepthWindow; onWindow: (w: DepthWindow) => void; windows?: DepthWindow[];
+}) {
   return (
     <span className="inline-flex border border-[#EAEAEA] rounded-[8px] overflow-hidden bg-white">
-      {([13, 26, 52] as const).map(w => (
+      {windows.map(w => (
         <button key={w} type="button" onClick={() => onWindow(w)} className={`text-[12px] px-2 py-0.5 ${w === window ? 'bg-[#F2F2F2] text-[#0A0A0A] font-medium' : 'bg-white text-[#666666]'}`}>{WINDOW_LABEL[w]}</button>
       ))}
     </span>
+  );
+}
+
+/** The delegation journey: a count per tier per week, oldest week on the left, this week last. */
+export function TierGrid({ grid }: { grid: TierWeek[] }) {
+  const tiers: Array<[3 | 2 | 1, string, string]> = [
+    [3, 'Frontier', DASH_SHADES[2]],
+    [2, 'Meaningful', DASH_SHADES[1]],
+    [1, 'Routine', DASH_SHADES[0]],
+  ];
+  const count = (w: TierWeek, t: 3 | 2 | 1) => (t === 3 ? w.t3 : t === 2 ? w.t2 : w.t1);
+  const cols = `minmax(0,78px) repeat(${grid.length}, minmax(0,1fr))`;
+  return (
+    <div>
+      <div className="grid gap-1 text-[11px] text-[#8F8F8F] pb-1" style={{ gridTemplateColumns: cols }}>
+        <span />
+        {grid.map((w, i) => (
+          <span key={w.weekStart} className="text-center">{i === grid.length - 1 ? 'This week' : fmtDay(w.weekStart)}</span>
+        ))}
+      </div>
+      {tiers.map(([t, label, colour]) => (
+        <div key={t} className="grid gap-1 items-center py-[2px]" style={{ gridTemplateColumns: cols }}>
+          <span className="text-[12px] text-[#333333] truncate">{label}</span>
+          {grid.map(w => {
+            const c = count(w, t);
+            return (
+              <span
+                key={w.weekStart}
+                title={`${fmtDay(w.weekStart)}: ${plural(c, 'task', 'tasks')}`}
+                className="h-6 rounded-[6px] flex items-center justify-center text-[12px] font-semibold tabular-nums"
+                style={c > 0
+                  ? { background: colour, color: t === 3 ? '#FFFFFF' : '#134A5E' }
+                  : { background: '#FAFAFA', color: '#C9C9C9' }}
+              >
+                {c > 0 ? c : ''}
+              </span>
+            );
+          })}
+        </div>
+      ))}
+    </div>
   );
 }
 
@@ -119,9 +190,17 @@ export function DepthChart({ cols, height = 80 }: { cols: DepthColumn[]; height?
           <span key={c.start} className="flex-1 min-w-0 text-center text-[11px] text-[#8F8F8F] whitespace-nowrap overflow-visible">{i % every === 0 || i === n - 1 ? c.label : ''}</span>
         ))}
       </div>
-      <div className="flex flex-wrap gap-x-3.5 mt-1.5 text-[12px] text-[#777777]">
-        {['Routine', 'Meaningful', 'Frontier'].map((l, i) => <span key={l} className="inline-flex items-center gap-1.5"><span className="w-2.5 h-2.5 rounded-[2px]" style={{ background: DASH_SHADES[i] }} />{l}</span>)}
-      </div>
+      <TierLegend />
+    </div>
+  );
+}
+
+export function TierLegend() {
+  return (
+    <div className="flex flex-wrap gap-x-3.5 mt-1.5 text-[12px] text-[#777777]">
+      {['Routine', 'Meaningful', 'Frontier'].map((l, i) => (
+        <span key={l} className="inline-flex items-center gap-1.5"><span className="w-2.5 h-2.5 rounded-[2px]" style={{ background: DASH_SHADES[i] }} />{l}</span>
+      ))}
     </div>
   );
 }

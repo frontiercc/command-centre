@@ -96,10 +96,14 @@ function numberWord(n: number): string {
 
 /* ── 3: Are people handing Claude bigger jobs? ──────────────────── */
 
+/** The organisation chart has no per-week grid, so it offers the three longer views only. */
+export type OrgDepthWindow = 13 | 26 | 52;
+const ORG_WINDOWS: DepthWindow[] = [13, 26, 52];
+
 interface DeptTrend { dept: string; thenVsNow: { then: number; now: number; deltaPp: number; arrow: 'up' | 'flat' | 'down' } | null }
 
 export function BiggerJobs({ weeks, departments, product, window, onWindow }: {
-  weeks: TierWeek[]; departments: DeptTrend[]; product: string; window: DepthWindow; onWindow: (w: DepthWindow) => void;
+  weeks: TierWeek[]; departments: DeptTrend[]; product: string; window: OrgDepthWindow; onWindow: (w: OrgDepthWindow) => void;
 }) {
   const cols = depthColumns(weeks, window, Math.floor(Date.now() / 1000));
   const falling = departments.filter(d => d.thenVsNow?.arrow === 'down').sort((a, b) => a.thenVsNow!.deltaPp - b.thenVsNow!.deltaPp);
@@ -108,7 +112,7 @@ export function BiggerJobs({ weeks, departments, product, window, onWindow }: {
     <Frame
       title={`Are people handing ${product} bigger jobs?`}
       judged
-      period={<DepthSwitch window={window} onWindow={onWindow} />}
+      period={<DepthSwitch window={window} onWindow={w => onWindow(w as OrgDepthWindow)} windows={ORG_WINDOWS} />}
       answer={<>{depthSentence(cols, window, '')}{others}</>}
       note={window === 52 ? 'Each column is one calendar month of tasks, split into routine, meaningful and frontier.' : 'Each column is one completed week, Monday to Sunday, split into routine, meaningful and frontier tasks.'}
     >

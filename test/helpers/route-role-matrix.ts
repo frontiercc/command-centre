@@ -190,6 +190,7 @@ export const ROUTE_ROLE_MATRIX: Record<string, MatrixEntry> = {
   'pulse/depts GET': COWORK_PULSE,
   'pulse/governance-health GET': ADMIN_MANAGER,
   'pulse/me GET': COWORK_PULSE,
+  'pulse/me/tasks GET': COWORK_PULSE, // + same-department check for contributor roles
   'pulse/org-summary GET': ORG,
   'pulse/person/[userId] GET': COWORK_PULSE, // + same-department check for contributor roles
   // Role check now runs before the ?dept/?userId input check (fixed),

@@ -9,17 +9,18 @@ import Link from 'next/link';
 import TopBar from '@/components/layout/TopBar';
 import LoadingSpinner from '@/components/shared/LoadingSpinner';
 import type { FrontierView } from '@/lib/pulse/frontier-view';
-import type { MyQuarter } from '@/lib/pulse/my-quarter';
+import type { MyPeriod, PulsePeriod } from '@/lib/pulse/period-shape';
+import FrontierHero from '@/components/pulse/FrontierHero';
 import GenerateBriefingButton from '@/components/pulse/GenerateBriefingButton';
 import { cleanTitle } from '@/components/pulse/CapabilityLog';
 import { Frame } from '@/components/pulse/WorkPulseOverview';
-import { QuarterPanel, DeeperPanel, ProducedPanel, ColleagueToolsPanel, SpendPanel, type MonthSpend, type Who } from '@/components/pulse/MyPulseQuarter';
+import { WorkPanel, TaskList, DeeperPanel, ProducedPanel, ColleagueToolsPanel, SpendPanel, type MonthSpend, type Who, type DrillKind } from '@/components/pulse/MyPulsePanels';
 import { PageBody, Toolbar, Notice, Dot, B, C } from '@/components/precision/ui';
 import { useVendor, useOpenAiOnly, VendorSwitch } from '@/components/shared/VendorSwitch';
 import { WORK_PULSE_VENDOR_LABELS } from '@/lib/dashboard/vendor';
 
 interface PersonalPulseData {
-  quarter?: MyQuarter | null;
+  period?: MyPeriod | null;
   spendThisMonth?: MonthSpend | null;
   canSeeSpendReview?: boolean;
   userId: string | null;
@@ -71,6 +72,9 @@ export default function PersonalPulsePage() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [refreshKey, setRefreshKey] = useState(0);
+  // One period for the page: this week, this month or this quarter.
+  const [period, setPeriod] = useState<PulsePeriod>('quarter');
+  const [drill, setDrill] = useState<DrillKind | null>(null);
   const [pulseStartAt, setPulseStartAt] = useState<number | null>(null);
   // The All / Claude / OpenAI switch, shared with the dashboard and Executive View.
   const [vendor, setVendor, vendorReady] = useVendor();
@@ -81,8 +85,8 @@ export default function PersonalPulsePage() {
     setLoading(true);
     setError(null);
     const meUrl = viewingUserId
-      ? `/api/pulse/me?userId=${encodeURIComponent(viewingUserId)}&vendor=${vendor}`
-      : `/api/pulse/me?vendor=${vendor}`;
+      ? `/api/pulse/me?userId=${encodeURIComponent(viewingUserId)}&vendor=${vendor}&period=${period}`
+      : `/api/pulse/me?vendor=${vendor}&period=${period}`;
     Promise.all([
       fetch(meUrl).then(r => { if (!r.ok) throw new Error("Couldn't load this page. Try again."); return r.json(); }),
       fetch('/api/pulse/user-prefs').then(r => r.ok ? r.json() : { pulse_start_at: null }),
@@ -93,7 +97,7 @@ export default function PersonalPulsePage() {
       })
       .catch(e => setError(e.message))
       .finally(() => setLoading(false));
-  }, [refreshKey, viewingUserId, vendor, vendorReady]);
+  }, [refreshKey, viewingUserId, vendor, vendorReady, period]);
 
   if (loading) return (
     <>
@@ -126,7 +130,7 @@ export default function PersonalPulsePage() {
   const product = vendor === 'openai' ? 'ChatGPT' : vendor === 'claude' || !data.openaiPresent ? 'Claude' : 'Claude and ChatGPT';
   const who: Who = { you: !viewingUserId, name: data.displayName ?? 'This person' };
   const reviewHref = data.canSeeSpendReview && data.userId ? `/finops/spend-review/${encodeURIComponent(data.userId)}` : null;
-  const q = data.quarter ?? null;
+  const q = data.period ?? null;
 
   return (
     <>
@@ -155,20 +159,37 @@ export default function PersonalPulsePage() {
 
         {q ? (
           <>
-            {/* 1. The quarter */}
-            <QuarterPanel q={q} frontier={data.frontier} product={product} who={who} reviewHref={pending.length > 0 ? '#to-review' : null} />
+            {/* 1. Your work, over the chosen period */}
+            <WorkPanel
+              q={q}
+              product={product}
+              who={who}
+              period={period}
+              onPeriod={setPeriod}
+              onDrill={setDrill}
+              drill={drill}
+              reviewHref={pending.length > 0 ? '#to-review' : null}
+            />
 
-            {/* 2 and 3 */}
-            <div className="grid grid-cols-1 xl:grid-cols-2 gap-4 items-start">
-              <DeeperPanel q={q} who={who} />
-              <ProducedPanel q={q} who={who} />
-            </div>
+            {/* The work behind whichever figure was clicked */}
+            {drill && (
+              <TaskList kind={drill} period={period} userId={viewingUserId} who={who} onClose={() => setDrill(null)} />
+            )}
+
+            {/* 2. Best work this week, with what it actually was */}
+            <FrontierHero view={data.frontier} canOpenUseCases={data.frontierAccess?.canOpenUseCases ?? false} />
+
+            {/* 3. Is the work getting deeper? Six weeks as a grid, then the longer views */}
+            <DeeperPanel q={q} who={who} />
 
             {/* 4 and 5 */}
             <div className="grid grid-cols-1 xl:grid-cols-2 gap-4 items-start">
-              <ColleagueToolsPanel q={q} who={who} department={data.department} />
-              {data.spendThisMonth && <SpendPanel s={data.spendThisMonth} product={product} who={who} reviewHref={reviewHref} />}
+              <ProducedPanel q={q} who={who} period={period} />
+              <ColleagueToolsPanel q={q} who={who} department={data.department} period={period} />
             </div>
+
+            {/* 6 */}
+            {data.spendThisMonth && <SpendPanel s={data.spendThisMonth} product={product} who={who} reviewHref={reviewHref} />}
           </>
         ) : (
           <Notice tone="info" title="No work yet.">Nothing has been recorded for {who.you ? 'you' : 'this person'} yet.</Notice>

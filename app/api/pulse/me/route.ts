@@ -27,7 +27,7 @@ import { getAllConfig } from '@/lib/config';
 import { canViewSpendReview } from '@/lib/finance/spend-review-access';
 import { isWorkPulseSurface, classifiableSource, classifyChatgptOn } from '@/lib/pulse/work-surfaces';
 import { chatgptSpend } from '@/lib/openai/spend';
-import { buildMyQuarter, type MyQuarter } from '@/lib/pulse/my-quarter';
+import { buildMyPeriod, type MyPeriod, type PulsePeriod } from '@/lib/pulse/my-period';
 import { humanTimeOn } from '@/lib/pulse/human-time-flags';
 import { buildChargeback, type ChargebackReport } from '@/lib/finance/chargeback';
 import { currentPeriod } from '@/lib/finance/period';
@@ -467,12 +467,15 @@ export async function GET(request: NextRequest) {
   const canSeeSpendReview = (await getAllConfig()).chargebackEnabled === true
     && await canViewSpendReview(session, userId);
 
-  // The page's one period: the last quarter. Own try/catch so a failure hides the panels, not the page.
-  let quarter: MyQuarter | null = null;
+  // The page's one period: this week, this month or this quarter. Own try/catch so a failure
+  // hides the panels, not the page.
+  const asked = request.nextUrl.searchParams.get('period');
+  const period: PulsePeriod = asked === 'week' || asked === 'month' || asked === 'quarter' ? asked : 'quarter';
+  let periodData: MyPeriod | null = null;
   try {
-    quarter = await buildMyQuarter({ userId, department, vendor, nowS: now, showHumanTime: seesPerson, humanTimeOn: await humanTimeOn('cowork') });
+    periodData = await buildMyPeriod({ userId, department, vendor, nowS: now, period, showHumanTime: seesPerson, humanTimeOn: await humanTimeOn('cowork') });
   } catch (err) {
-    console.error('[pulse/me] quarter failed', err);
+    console.error('[pulse/me] period failed', err);
   }
   let spendThisMonth: Awaited<ReturnType<typeof monthSpend>> | null = null;
   try {
@@ -483,7 +486,7 @@ export async function GET(request: NextRequest) {
 
   return NextResponse.json({
     humanTime,
-    quarter,
+    period: periodData,
     spendThisMonth,
     canSeeSpendReview,
     userId,
