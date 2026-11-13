@@ -7,31 +7,32 @@ import { useEffect, useState, useCallback, useRef } from 'react';
 import { useRouter, useSearchParams } from 'next/navigation';
 import TopBar from '@/components/layout/TopBar';
 import LoadingSpinner from '@/components/shared/LoadingSpinner';
-import StatStrip from '@/components/pulse/StatStrip';
+import {
+  WorkPanel, TaskList, DeeperPanel, ByHandPanel, PeoplePanel, ProducedPanel, ColleagueToolsPanel,
+  type ByHand, type PersonRow, type Who, type DrillKind,
+} from '@/components/pulse/MyPulsePanels';
+import { Frame } from '@/components/pulse/WorkPulseOverview';
+import type { BandSegment, PersonDelegation } from '@/components/pulse/DelegationBands';
+import type { MyPeriod, PulsePeriod } from '@/lib/pulse/period-shape';
+import type { TierNames } from '@/lib/pulse/tier-names';
 import FrontierHero from '@/components/pulse/FrontierHero';
 import type { FrontierView } from '@/lib/pulse/frontier-view';
-import MilestoneCards from '@/components/pulse/MilestoneCards';
 import type { ToolUsed } from '@/components/pulse/MilestoneCards';
 import ConcentrationRisk from '@/components/pulse/ConcentrationRisk';
-import FrontierFeed from '@/components/pulse/FrontierFeed';
-import MemberTable from '@/components/pulse/MemberTable';
 import type { MemberRow } from '@/components/pulse/MemberTable';
 import GenerateBriefingButton from '@/components/pulse/GenerateBriefingButton';
-import WeeklyPulse from '@/components/pulse/WeeklyPulse';
-import JourneyGrid from '@/components/pulse/JourneyGrid';
-import OrsBreakdown from '@/components/pulse/OrsBreakdown';
-import DelegationBands, { type BandSegment, type PersonDelegation } from '@/components/pulse/DelegationBands';
 import CoachingPrompts, { type CoachingPromptItem } from '@/components/pulse/CoachingPrompts';
-import HumanTimeCard, { type HumanTimeSummary } from '@/components/pulse/HumanTimeCard';
-import { PageBody, Toolbar, Strip, Figure, Notice, B, cx } from '@/components/precision/ui';
-import { useVendor, useOpenAiOnly, useConnectedProducts, VendorSwitch } from '@/components/shared/VendorSwitch';
+import { PageBody, Toolbar, Notice, B, cx } from '@/components/precision/ui';
+import { useVendor, useOpenAiOnly, VendorSwitch } from '@/components/shared/VendorSwitch';
 import { WORK_PULSE_VENDOR_LABELS } from '@/lib/dashboard/vendor';
-import { workSpendFigure } from '@/lib/pulse/spend-figure';
 
 // Based on DeptPulseData from app/pulse/dept/[dept]/page.tsx (a redirect-only
 // legacy page) but intentionally diverges: `delegation?` exists only here.
 interface DeptData {
-  humanTime?: HumanTimeSummary | null;
+  humanTime?: ByHand | null;
+  period?: MyPeriod | null;
+  memberRows?: PersonRow[];
+  tierNames?: TierNames | null;
   dept: string;
   members: Array<{ id: string; display_name: string | null; email: string }>;
   memberMetrics: MemberRow[];
@@ -70,27 +71,6 @@ interface DeptData {
 
 interface DeptListRow { dept: string; member_count: number }
 
-function delta(current: number | null, prior: number | null): number | null {
-  if (current === null || prior === null) return null;
-  return Math.round((current - prior) * 100) / 100;
-}
-
-/** Spend for the last 7 days: an absent figure is "Not measured", never $0. */
-function spendValue(usd: number | null | undefined) {
-  if (usd == null) return <span className="text-[15px] font-medium text-[#8F8F8F] tracking-normal">Not measured</span>;
-  if (usd === 0) return '$0.00';
-  return usd >= 100 ? `$${usd.toFixed(0)}` : `$${usd.toFixed(2)}`;
-}
-
-/** The Document sessions caption, naming what the figure covers in the switch's view. */
-function docSessionsCaption(vendor: 'all' | 'claude' | 'openai', openaiConnected: boolean): string {
-  if (vendor === 'openai') return 'ChatGPT conversations where one or more files were attached';
-  if (vendor === 'claude') return 'Claude sessions where one or more files were attached';
-  return openaiConnected
-    ? 'Sessions where one or more files were attached, Claude and ChatGPT'
-    : 'Sessions where one or more files were attached';
-}
-
 export default function DeptPickerPage() {
   const searchParams = useSearchParams();
   const router = useRouter();
@@ -100,11 +80,13 @@ export default function DeptPickerPage() {
   const [deptData, setDeptData] = useState<DeptData | null>(null);
   const [dataLoading, setDataLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const [delegationWeeks, setDelegationWeeks] = useState<13 | 26 | 52>(13);
+  const [delegationWeeks] = useState<13 | 26 | 52>(13);
   // The All / Claude / OpenAI switch, shared with the dashboard and Executive View.
   const [vendor, setVendor, vendorReady] = useVendor();
-  const connected = useConnectedProducts();
   const openaiOnly = useOpenAiOnly();
+
+  const [period, setPeriod] = useState<PulsePeriod>('quarter');
+  const [drill, setDrill] = useState<DrillKind | null>(null);
 
   const selectedDept = searchParams.get('dept') ?? '';
 
@@ -139,7 +121,7 @@ export default function DeptPickerPage() {
     if (!dept) return;
     if (loadedDeptRef.current !== dept) setDataLoading(true);
     setError(null);
-    fetch(`/api/pulse/dept/${encodeURIComponent(dept)}?weeks=${delegationWeeks}&vendor=${vendor}`)
+    fetch(`/api/pulse/dept/${encodeURIComponent(dept)}?weeks=${delegationWeeks}&vendor=${vendor}&period=${period}`)
       .then(async r => {
         if (r.ok) return r.json();
         // A refusal says why, so nobody retries what can never load; the
@@ -151,7 +133,7 @@ export default function DeptPickerPage() {
       .then(d => { loadedDeptRef.current = dept; setDeptData(d); })
       .catch(e => { loadedDeptRef.current = null; setDeptData(null); setError(e.message); })
       .finally(() => setDataLoading(false));
-  }, [delegationWeeks, vendor, vendorReady]);
+  }, [delegationWeeks, vendor, vendorReady, period]);
 
   useEffect(() => {
     if (selectedDept) loadDept(selectedDept);
@@ -169,33 +151,32 @@ export default function DeptPickerPage() {
         title="Departments"
         subtitle={selectedDept ? `Delegation pulse · ${selectedDept}` : 'Select a department'}
       />
-      <PageBody>
+      <PageBody className="dash-compact">
 
         {/* Dept picker */}
         <Toolbar
-          left={deptData && !dataLoading
-            ? `${deptData.members.length} member${deptData.members.length !== 1 ? 's' : ''}`
-            : undefined}
-        >
-          {deptsLoading ? (
-            <div className="h-[30px] w-64 bg-[#F2F2F2] rounded-[10px] animate-pulse" />
-          ) : (
-            <select
-              aria-label="Department"
-              value={selectedDept}
-              onChange={e => handleSelect(e.target.value)}
-              className={cx(B.select, 'min-w-[200px]')}
-            >
-              {depts.length === 0 && (
-                <option value="">No departments found</option>
+          left={
+            <span className="flex items-center gap-3 flex-wrap">
+              {deptsLoading ? (
+                <span className="block h-8 w-64 bg-[#F2F2F2] rounded-[10px] animate-pulse" />
+              ) : (
+                <select
+                  aria-label="Department"
+                  value={selectedDept}
+                  onChange={e => handleSelect(e.target.value)}
+                  className={cx(B.select, 'min-w-[240px] text-[14px]')}
+                >
+                  {depts.length === 0 && <option value="">No departments found</option>}
+                  {depts.map(d => (
+                    <option key={d.dept} value={d.dept}>
+                      {d.dept} ({d.member_count} member{d.member_count !== 1 ? 's' : ''})
+                    </option>
+                  ))}
+                </select>
               )}
-              {depts.map(d => (
-                <option key={d.dept} value={d.dept}>
-                  {d.dept} ({d.member_count} member{d.member_count !== 1 ? 's' : ''})
-                </option>
-              ))}
-            </select>
-          )}
+            </span>
+          }
+        >
           <VendorSwitch vendor={vendor} onChange={setVendor} openaiPresent={deptData?.openaiPresent ?? false} labels={WORK_PULSE_VENDOR_LABELS} />
         </Toolbar>
         {vendor !== 'all' && !openaiOnly && (
@@ -213,124 +194,87 @@ export default function DeptPickerPage() {
 
         {deptData && !dataLoading && (() => {
           const d = deptData;
-          const spend = workSpendFigure(vendor, d.coworkCostUsd, d.chatgptCostUsd, d.chatgptUnpricedModels?.length ?? 0);
-          const showFriction = d.coworkFrictionIndex !== undefined;
-          const showDocs = !!d.docSessions && d.docSessions.sessions_with_uploads > 0;
-          const activityCols = (spend ? 1 : 0) + (showFriction ? 1 : 0) + (showDocs ? 2 : 0);
+          const q = d.period ?? null;
+          const who: Who = { you: false, name: d.dept };
+          const product = vendor === 'openai' ? 'ChatGPT' : vendor === 'claude' || !d.openaiPresent ? 'Claude' : 'Claude and ChatGPT';
+          const names = d.tierNames ?? undefined;
+          const thenVsNow = new Map((d.delegation?.people ?? [])
+            .filter(p => p.thenVsNow)
+            .map(p => [p.userId, { then: p.thenVsNow!.then, now: p.thenVsNow!.now, arrow: p.thenVsNow!.arrow }]));
+
           return (
             <>
-              <FrontierHero view={d.frontier} canOpenUseCases={d.frontierAccess?.canOpenUseCases ?? false} />
+              {q ? (
+                <>
+                  {/* 1. The department's work, over the chosen period */}
+                  <WorkPanel
+                    q={q}
+                    product={product}
+                    who={who}
+                    period={period}
+                    onPeriod={setPeriod}
+                    onDrill={setDrill}
+                    drill={drill}
+                    reviewHref={null}
+                    names={names}
+                  />
 
-              <HumanTimeCard summary={d.humanTime} surface="cowork" scope={d.dept} view={d.openaiPresent ? vendor : 'claude'} />
+                  {drill && (
+                    <TaskList kind={drill} period={period} userId={null} who={who} onClose={() => setDrill(null)} names={names} />
+                  )}
 
-              <StatStrip
-                oti={d.metrics?.oti ?? null}
-                dds={d.metrics?.dds ?? null}
-                psr={d.teamMetrics?.psr ?? d.metrics?.psr ?? null}
-                ors={d.teamMetrics?.ors ?? d.metrics?.ors ?? null}
-                otiDelta={delta(d.metrics?.oti ?? null, d.priorMetrics?.oti ?? null)}
-                ddsDelta={delta(d.metrics?.dds ?? null, d.priorMetrics?.dds ?? null)}
-                psrDelta={delta(d.metrics?.psr ?? null, d.priorMetrics?.psr ?? null)}
-                orsDelta={delta(d.metrics?.ors ?? null, d.priorMetrics?.ors ?? null)}
-              />
+                  {/* 2. Best work this week */}
+                  <FrontierHero view={d.frontier} canOpenUseCases={d.frontierAccess?.canOpenUseCases ?? false} />
 
-              {/* ORS explainability breakdown — mirrors the teamMetrics ?? metrics
-                  precedence used for the ORS score itself above. */}
-              <OrsBreakdown
-                breadth={d.teamMetrics?.orsBreadth ?? d.metrics?.ors_breadth ?? null}
-                overlap={d.teamMetrics?.orsOverlap ?? d.metrics?.ors_overlap ?? null}
-                propagation={d.teamMetrics?.orsPropagation ?? d.metrics?.ors_propagation ?? null}
-              />
+                  {/* 3. Is the department's work getting deeper? */}
+                  <DeeperPanel q={q} who={who} names={names} />
 
-              <JourneyGrid data={d.journeyHeatmap} heatmap={true} />
+                  {/* 4. By hand vs with Claude */}
+                  <ByHandPanel h={d.humanTime} who={who} />
 
-              <MilestoneCards frontier={d.frontier} canReview={d.frontierAccess?.canReview ?? false} canOpenUseCases={d.frontierAccess?.canOpenUseCases ?? false} toolsUsed={d.toolsUsed ?? []} />
+                  {/* 5. Who is in it */}
+                  <PeoplePanel rows={d.memberRows ?? []} dept={d.dept} names={names} thenVsNow={thenVsNow} />
 
-              <WeeklyPulse
-                briefing={d.deptBriefing}
-                action={
-                  d.deptBriefing ? (
-                    <GenerateBriefingButton
-                      type="dept"
-                      dept={d.dept}
-                      onComplete={() => loadDept(selectedDept)}
+                  {/* 6 and 7 */}
+                  <div className="grid grid-cols-1 xl:grid-cols-2 gap-4 items-start">
+                    <ConcentrationRisk
+                      risks={d.concentrationRisk}
+                      ors={d.teamMetrics?.ors ?? d.metrics?.ors ?? null}
+                      detail={d.concentrationDetail}
                     />
-                  ) : (
-                    <GenerateBriefingButton
-                      type="dept"
-                      dept={d.dept}
-                      label="Generate dept briefing"
-                      onComplete={() => loadDept(selectedDept)}
-                    />
-                  )
+                    {d.coaching && <CoachingPrompts prompts={d.coaching.prompts} />}
+                  </div>
+
+                  {/* 8 and 9 */}
+                  <div className="grid grid-cols-1 xl:grid-cols-2 gap-4 items-start">
+                    <ProducedPanel q={q} who={who} period={period} />
+                    <ColleagueToolsPanel q={q} who={who} department={d.dept} period={period} />
+                  </div>
+                </>
+              ) : (
+                <Notice tone="info" title="No work yet.">Nothing has been recorded for this department yet.</Notice>
+              )}
+
+              {/* 10. The department's briefing */}
+              <Frame
+                title={`${d.dept}, in a paragraph`}
+                tag="AI summary"
+                period={
+                  <span className="inline-flex items-center gap-2">
+                    {d.deptBriefing && new Date(d.deptBriefing.generated_at * 1000).toLocaleDateString('en-GB', { day: 'numeric', month: 'long', year: 'numeric' })}
+                    <GenerateBriefingButton type="dept" dept={d.dept} onComplete={() => loadDept(selectedDept)} />
+                  </span>
                 }
-              />
-
-              <ConcentrationRisk
-                risks={d.concentrationRisk}
-                ors={d.teamMetrics?.ors ?? d.metrics?.ors ?? null}
-                detail={d.concentrationDetail}
-              />
-
-              {d.frontier && (
-                <FrontierFeed items={d.frontier.feed} canOpenUseCases={d.frontierAccess?.canOpenUseCases ?? false} />
-              )}
-
-              {/* Cowork spend, friction and document sessions: measured, one strip. */}
-              {activityCols > 0 && (
-                <Strip cols={activityCols === 1 ? undefined : activityCols as 2 | 3 | 4}>
-                  {spend && (
-                    <Figure
-                      label={`Dept ${spend.label === 'Spend' ? 'spend' : spend.label}, 7 days`}
-                      value={spend.notPriced ? <span className="text-[15px] font-medium text-[#8F8F8F] tracking-normal">Not priced</span> : spendValue(spend.usd)}
-                      sub={spend.sub}
-                    />
-                  )}
-                  {showFriction && (
-                    <Figure
-                      label="Dept friction index, 7 days"
-                      value={d.coworkFrictionIndex == null
-                        ? <span className="text-[15px] font-medium text-[#8F8F8F] tracking-normal">No data</span>
-                        : `${(d.coworkFrictionIndex * 100).toFixed(1)}%`}
-                      sub="Tool failures ÷ total tool calls"
-                    />
-                  )}
-                  {showDocs && (
-                    <Figure
-                      label="Document sessions, 30 days"
-                      value={d.docSessions!.sessions_with_uploads}
-                      unit="sessions with uploads"
-                      sub={docSessionsCaption(vendor, connected?.openai === true)}
-                    />
-                  )}
-                  {showDocs && (
-                    <Figure
-                      label="Files uploaded, 30 days"
-                      value={d.docSessions!.total_uploads}
-                      unit="files"
-                      sub="Across those sessions"
-                    />
-                  )}
-                </Strip>
-              )}
-
-              {d.delegation && (
-                <DelegationBands
-                  bands={d.delegation.bands}
-                  bandsDataWeeks={d.delegation.bandsDataWeeks}
-                  people={d.delegation.people}
-                  window={d.delegation.window}
-                  onWindowChange={setDelegationWeeks}
-                />
-              )}
-
-              {/* No wrapping spacer div here: CoachingPrompts
-                  returns null when there is truly nothing to show, so an
-                  empty wrapper never leaves a stray gap once every prompt has
-                  been marked done. PageBody's gap spaces it. */}
-              {d.coaching && <CoachingPrompts prompts={d.coaching.prompts} />}
-
-              <MemberTable members={d.memberMetrics} />
+              >
+                {d.deptBriefing ? (
+                  <div className="grid grid-cols-1 lg:grid-cols-2 gap-4 mt-2 text-[14px] leading-[22px] text-[#1A1A1A]">
+                    <div>{d.deptBriefing.body.split(/\n\s*\n/).filter(t => t.trim()).map((t, i) => <p key={i} className="m-0 mb-2 last:mb-0">{t}</p>)}</div>
+                    {d.deptBriefing.suggestion && <p className="m-0"><b className="font-semibold">Recommendation:</b> {d.deptBriefing.suggestion}</p>}
+                  </div>
+                ) : (
+                  <p className="m-0 mt-2 text-[13px] text-[#8F8F8F]">No paragraph yet. Use Generate now, or wait for the scheduled run.</p>
+                )}
+              </Frame>
             </>
           );
         })()}

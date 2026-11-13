@@ -18,6 +18,10 @@ import { NextRequest, NextResponse } from 'next/server';
 import { visibleVendor, visibleOpenAi } from '@/lib/sources/openai-visibility';
 import { and, desc, eq, gte, inArray, isNotNull, lt, lte, notInArray, sql } from 'drizzle-orm';
 import { getAdminSession, isDeptScoped, canAccessCoworkPulse, canAccessPulseAdmin } from '@/lib/auth/admin-auth';
+import { buildMyPeriod, type MyPeriod, type PulsePeriod } from '@/lib/pulse/my-period';
+import { getTierNames } from '@/lib/pulse/tier-config';
+import { vendorClause } from '@/lib/dashboard/product-sql';
+import { humanTimeOn } from '@/lib/pulse/human-time-flags';
 import { buildFrontierView, resolveViewerUserId } from '@/lib/pulse/frontier-view';
 import { getTypedClient } from '@/lib/db/client';
 import { schema } from '@/lib/db/schema';
@@ -498,9 +502,56 @@ export async function GET(
 
   const humanTime = await readHumanTime('cowork', memberIds, vendor);
 
+  // The page's one period: this week, this month or this quarter, for the whole department.
+  const asked = request.nextUrl.searchParams.get('period');
+  const periodName: PulsePeriod = asked === 'week' || asked === 'month' || asked === 'quarter' ? asked : 'quarter';
+  let period: MyPeriod | null = null;
+  try {
+    period = await buildMyPeriod({
+      userIds: memberIds, department: dept, vendor, nowS: now, period: periodName,
+      showHumanTime: true, humanTimeOn: await humanTimeOn('cowork'),
+    });
+  } catch (err) {
+    console.error('[pulse/dept] period failed', err);
+  }
+
+  // Each person in plain numbers over the same window: how much of their work reached the top
+  // two tiers, their deepest tier this week, and when they were last seen.
+  const memberWork = period === null ? [] : await rawAll<{
+    user_id: string; deep: number | string; all: number | string; top: number | string | null; last_at: number | string | null;
+  }>(client, sql`
+    SELECT cm.user_id,
+           SUM(CASE WHEN pc.tier >= 2 THEN 1 ELSE 0 END) AS deep,
+           COUNT(*) AS all,
+           MAX(CASE WHEN cm.occurred_at >= ${now - 7 * 86400} THEN pc.tier END) AS top,
+           MAX(cm.occurred_at) AS last_at
+    FROM pulse_classifications pc JOIN cowork_messages cm ON cm.id = pc.cowork_message_id
+    WHERE cm.user_id IN (${memberIdsSql}) AND pc.classifier_status = 'classified'
+      AND cm.occurred_at >= ${period.start} AND cm.occurred_at < ${period.end}
+      AND ${sql.raw(vendorClause(vendor, 'cm.'))}
+    GROUP BY cm.user_id`);
+  const workByUser = new Map(memberWork.map(r => [r.user_id, r]));
+  const memberRows = memberMetrics.map(m => {
+    const w = workByUser.get(m.id);
+    const all = Number(w?.all ?? 0), deep = Number(w?.deep ?? 0);
+    return {
+      id: m.id,
+      display_name: m.display_name,
+      email: m.email,
+      deep,
+      all,
+      share: all > 0 ? deep / all : null,
+      topTierThisWeek: w?.top == null ? null : Number(w.top),
+      lastActive: w?.last_at == null ? m.last_active : Number(w.last_at),
+    };
+  }).sort((a, b) => (b.share ?? -1) - (a.share ?? -1) || b.deep - a.deep);
+
   const deptChatgpt = vendor === 'claude' || !openaiPresent ? undefined : await chatgptSpend({ since: sevenDaysAgoOtel, userIds: memberIds });
   return NextResponse.json({
     humanTime,
+    period,
+    memberRows,
+    tierNames: await getTierNames(),
     dept,
     members,
     memberMetrics,

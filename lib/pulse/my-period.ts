@@ -2,8 +2,8 @@
 // SPDX-License-Identifier: Apache-2.0
 
 /**
- * My Pulse figures for one period: this week, this month or this quarter, each against the same
- * length before it. Every window ENDS NOW, so work done today counts and someone in their first
+ * Work Pulse figures for one period: this week, this month or this quarter, each against the
+ * same length before it. One person (My Pulse, Users) or a set of people (Departments). Every window ENDS NOW, so work done today counts and someone in their first
  * week sees their own figures the day they start.
  *
  * Trend bars follow the window: one bar a day for the week and the month, one a week for the
@@ -52,7 +52,9 @@ const OUTPUT_KIND: Record<string, string> = {
 };
 
 export async function buildMyPeriod(opts: {
-  userId: string;
+  /** One person, or a set of people for a department. */
+  userId?: string;
+  userIds?: string[];
   department: string | null;
   vendor: Vendor;
   nowS: number;
@@ -61,7 +63,13 @@ export async function buildMyPeriod(opts: {
   showHumanTime: boolean;
   humanTimeOn: boolean;
 }): Promise<MyPeriod> {
-  const { userId, department, vendor, period } = opts;
+  const { userId, userIds, department, vendor, period } = opts;
+  const group = Array.isArray(userIds);
+  const ownIds = new Set(group ? userIds! : [userId!]);
+  if (ownIds.size === 0) ownIds.add('__none__');
+  const idList = sql.join([...ownIds].map(id => sql`${id}`), sql`, `);
+  // "the people this page is about": one person, or a department's members.
+  const whoIn = (col: string) => sql`${sql.raw(col)} IN (${idList})`;
   const { buckets, bucketSecs } = PERIOD_SHAPE[period];
   const end = opts.nowS;
   const start = end - buckets * bucketSecs;
@@ -74,7 +82,7 @@ export async function buildMyPeriod(opts: {
   const taskRows = await rows<{ at: number | string; tier: number | string }>(sql`
     SELECT cm.occurred_at AS at, pc.tier AS tier
     FROM pulse_classifications pc JOIN cowork_messages cm ON cm.id = pc.cowork_message_id
-    WHERE pc.user_id = ${userId} AND pc.classifier_status = 'classified'
+    WHERE ${whoIn('pc.user_id')} AND pc.classifier_status = 'classified'
       AND cm.occurred_at >= ${priorStart} AND cm.occurred_at < ${end} AND ${msgVendor}`);
   const realTrend = zeros();
   const allTrend = zeros();
@@ -91,7 +99,7 @@ export async function buildMyPeriod(opts: {
   const weekRows = await rows<{ wk: number | string; tier: number | string; c: number | string }>(sql`
     SELECT FLOOR((cm.occurred_at - ${yearStart}) / ${WEEK}) AS wk, pc.tier AS tier, COUNT(*) AS c
     FROM pulse_classifications pc JOIN cowork_messages cm ON cm.id = pc.cowork_message_id
-    WHERE pc.user_id = ${userId} AND pc.classifier_status = 'classified'
+    WHERE ${whoIn('pc.user_id')} AND pc.classifier_status = 'classified'
       AND cm.occurred_at >= ${yearStart} AND ${msgVendor}
     GROUP BY 1, 2`);
   const byWeek = new Map<number, PeriodTierWeek>();
@@ -110,9 +118,29 @@ export async function buildMyPeriod(opts: {
     return byWeek.get(ws) ?? { weekStart: ws, t1: 0, t2: 0, t3: 0 };
   });
 
-  // Department average: real-work tasks per person who did any classified work in the window.
+  // A department also says how many of its people did any of this work.
+  let people: { deep: number; active: number } | null = null;
+  if (group) {
+    const pr = await rows<{ deep: number | string; active: number | string }>(sql`
+      SELECT COUNT(DISTINCT CASE WHEN pc.tier >= 2 THEN pc.user_id END) AS deep,
+             COUNT(DISTINCT pc.user_id) AS active
+      FROM pulse_classifications pc JOIN cowork_messages cm ON cm.id = pc.cowork_message_id
+      WHERE ${whoIn('pc.user_id')} AND pc.classifier_status = 'classified'
+        AND cm.occurred_at >= ${start} AND cm.occurred_at < ${end} AND ${msgVendor}`);
+    people = { deep: n(pr[0]?.deep), active: n(pr[0]?.active) };
+  }
+
+  // What to compare with: a person against their department, a department against the organisation.
   let deptAverage: number | null = null;
-  if (department) {
+  if (group) {
+    const d = await rows<{ people: number | string; real: number | string }>(sql`
+      SELECT COUNT(DISTINCT pc.user_id) AS people, SUM(CASE WHEN pc.tier >= 2 THEN 1 ELSE 0 END) AS real
+      FROM pulse_classifications pc JOIN cowork_messages cm ON cm.id = pc.cowork_message_id
+      WHERE pc.classifier_status = 'classified' AND NOT ${whoIn('pc.user_id')}
+        AND cm.occurred_at >= ${start} AND cm.occurred_at < ${end} AND ${msgVendor}`);
+    const n2 = n(d[0]?.people);
+    deptAverage = n2 >= 3 && ownIds.size > 0 ? (n(d[0]?.real) / n2) * ownIds.size : null;
+  } else if (department) {
     const d = await rows<{ people: number | string; real: number | string }>(sql`
       SELECT COUNT(DISTINCT pc.user_id) AS people, SUM(CASE WHEN pc.tier >= 2 THEN 1 ELSE 0 END) AS real
       FROM pulse_classifications pc JOIN cowork_messages cm ON cm.id = pc.cowork_message_id
@@ -125,7 +153,7 @@ export async function buildMyPeriod(opts: {
   // ── New ways of working: confirmed capabilities by the bucket they were confirmed in ──
   const capRows = await rows<{ confirmed_at: number | string | null; status: string }>(sql`
     SELECT confirmed_at, status FROM pulse_events
-    WHERE user_id = ${userId} AND event_type = 'capability_creation'
+    WHERE ${whoIn('user_id')} AND event_type = 'capability_creation'
       AND (status = 'candidate' OR (status = 'confirmed' AND confirmed_at >= ${priorStart} AND confirmed_at < ${end}))`);
   const capTrend = zeros();
   let capNow = 0, capBefore = 0, pending = 0;
@@ -140,9 +168,9 @@ export async function buildMyPeriod(opts: {
   if (opts.showHumanTime && opts.humanTimeOn) {
     const parts: SQL[] = [];
     if (vendor !== 'openai') parts.push(sql`SELECT first_event_at AS at, human_minutes_likely AS likely, active_secs AS secs FROM cowork_session_stats
-      WHERE user_id = ${userId} AND first_event_at >= ${start} AND first_event_at < ${end} AND human_minutes_likely IS NOT NULL AND active_secs > 0`);
+      WHERE ${whoIn('user_id')} AND first_event_at >= ${start} AND first_event_at < ${end} AND human_minutes_likely IS NOT NULL AND active_secs > 0`);
     if (vendor !== 'claude') parts.push(sql`SELECT first_at AS at, human_minutes_likely AS likely, active_secs AS secs FROM chatgpt_session_time
-      WHERE user_id = ${userId} AND first_at >= ${start} AND first_at < ${end} AND human_minutes_likely IS NOT NULL AND active_secs > 0`);
+      WHERE ${whoIn('user_id')} AND first_at >= ${start} AND first_at < ${end} AND human_minutes_likely IS NOT NULL AND active_secs > 0`);
     const ht = await rows<{ at: number | string; likely: number | string; secs: number | string }>(sql.join(parts, sql` UNION ALL `));
     if (ht.length > 0) {
       const trend = zeros();
@@ -155,7 +183,7 @@ export async function buildMyPeriod(opts: {
   // ── What was produced: files Claude saved, sent or published, and the sessions behind them ──
   const outRows = await rows<{ session_id: string; output_name: string }>(sql`
     SELECT DISTINCT cm.session_id, cm.output_name FROM cowork_messages cm
-    WHERE cm.user_id = ${userId} AND cm.output_name IS NOT NULL
+    WHERE ${whoIn('cm.user_id')} AND cm.output_name IS NOT NULL
       AND cm.occurred_at >= ${start} AND cm.occurred_at < ${end} AND ${msgVendor}`);
   const kinds = new Map<string, number>();
   for (const r of outRows) {
@@ -164,7 +192,7 @@ export async function buildMyPeriod(opts: {
   }
   const sessRow = await rows<{ c: number | string }>(sql`
     SELECT COUNT(DISTINCT cm.session_id) AS c FROM cowork_messages cm
-    WHERE cm.user_id = ${userId} AND cm.message_type = 'cowork_user_message'
+    WHERE ${whoIn('cm.user_id')} AND cm.message_type = 'cowork_user_message'
       AND cm.occurred_at >= ${start} AND cm.occurred_at < ${end} AND ${msgVendor}`);
 
   // ── Skills and connectors: the person's own, and what colleagues use that they don't ──
@@ -172,20 +200,20 @@ export async function buildMyPeriod(opts: {
   const toolRows = await rows<{ type: 'skill' | 'connector'; name: string; user_id: string; c: number | string }>(sql`
     SELECT 'skill' AS type, skill_name AS name, user_id, COUNT(*) AS c FROM cowork_skill_invocations
       WHERE occurred_at >= ${start} AND occurred_at < ${end} AND ${toolV}
-        AND (user_id = ${userId} ${department ? sql`OR user_id IN (${deptMembers(department)})` : sql`OR TRUE`})
+        ${group ? sql`` : department ? sql`AND (${whoIn('user_id')} OR user_id IN (${deptMembers(department)}))` : sql``}
       GROUP BY skill_name, user_id
     UNION ALL
     SELECT 'connector' AS type, mcp_server AS name, user_id, COUNT(*) AS c FROM cowork_mcp_invocations
       WHERE occurred_at >= ${start} AND occurred_at < ${end} AND ${toolV}
         AND mcp_server NOT IN ('workspace', 'cowork', 'Claude_in_Chrome')
-        AND (user_id = ${userId} ${department ? sql`OR user_id IN (${deptMembers(department)})` : sql`OR TRUE`})
+        ${group ? sql`` : department ? sql`AND (${whoIn('user_id')} OR user_id IN (${deptMembers(department)}))` : sql``}
       GROUP BY mcp_server, user_id`);
   const own = new Map<string, number>();
   const others = new Map<string, { type: 'skill' | 'connector'; name: string; people: Set<string> }>();
   for (const r of toolRows) {
     if (!r.name || isBuiltInTool(r.type, r.name)) continue;
     const key = `${r.type}:${r.name}`;
-    if (r.user_id === userId) { own.set(key, (own.get(key) ?? 0) + n(r.c)); continue; }
+    if (ownIds.has(r.user_id)) { own.set(key, (own.get(key) ?? 0) + n(r.c)); continue; }
     const e = others.get(key) ?? { type: r.type, name: r.name, people: new Set<string>() };
     e.people.add(r.user_id);
     others.set(key, e);
@@ -206,6 +234,7 @@ export async function buildMyPeriod(opts: {
     end,
     weeks,
     grid,
+    people,
     realWork: { now: nowReal, all: nowAll, before: beforeReal, beforeAll, trend: realTrend, deptAverage },
     share: {
       now: nowAll > 0 ? nowReal / nowAll : null,

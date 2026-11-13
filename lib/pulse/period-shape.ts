@@ -29,6 +29,8 @@ export interface MyPeriod {
   weeks: PeriodTierWeek[];
   /** Six weeks counting back from today, newest week last; the current week is included. */
   grid: PeriodTierWeek[];
+  /** A department only: how many of its people did any of this work. */
+  people?: { deep: number; active: number } | null;
   realWork: { now: number; all: number; before: number; beforeAll: number; trend: number[]; deptAverage: number | null };
   share: { now: number | null; before: number | null; trend: Array<number | null> };
   capabilities: { confirmed: number; before: number; pending: number; trend: number[] };

@@ -18,7 +18,7 @@ import {
   type DepthWindow,
 } from '@/components/pulse/DepthChart';
 import { PERIOD_SHAPE, type MyPeriod, type PulsePeriod } from '@/lib/pulse/period-shape';
-import { deepWords, tierList, tierNamesOr, type TierNames } from '@/lib/pulse/tier-names';
+import { deepWords, DeepWords, tierList, tierNamesOr, type TierNames } from '@/lib/pulse/tier-names';
 
 const words = (v: number) => (v < 0.15 ? `${Math.round(v * 100)}%` : shareWords(v));
 const hours = (m: number) => { const h = m / 60; return h < 10 ? h.toFixed(1) : Math.round(h).toLocaleString('en-GB'); };
@@ -74,8 +74,8 @@ export function WorkPanel({ q, product, who, period, onPeriod, onDrill, drill, r
   const deptLine = r.deptAverage === null ? 'No department average yet.'
     : `${r.now > r.deptAverage * 1.25 ? 'Above' : r.now < r.deptAverage * 0.75 ? 'Below' : 'About'} the department average of ${Math.round(r.deptAverage)}.`;
   const ht = q.humanTime;
-  const shareChange = q.share.before === null ? 'nothing to compare with'
-    : q.share.now === null ? null
+  // Nothing before to compare with: say nothing rather than filling the line with it.
+  const shareChange = q.share.before === null || q.share.now === null ? null
       : Math.round(q.share.now * 100) === Math.round(q.share.before * 100) ? `the same as ${shape.prior}`
         : `${q.share.now > q.share.before ? 'up' : 'down'} from ${words(q.share.before)} ${shape.prior}`;
   return (
@@ -91,7 +91,19 @@ export function WorkPanel({ q, product, who, period, onPeriod, onDrill, drill, r
       answer={<>{subj(who)} handed {product} <b>{plural(r.now, 'task', 'tasks')} judged {deep}</b> {shape.label.toLowerCase()}, {change}.</>}
       note={<>{t.t2} and {t.t3} are the top two tiers Claude judges each task against; the rest are {t.t1.toLowerCase()}. Click a figure to see the work behind it.</>}
     >
-      <div className="grid grid-cols-1 sm:grid-cols-3 gap-2.5">
+      <div className={`grid grid-cols-1 sm:grid-cols-${q.people ? '2 xl:grid-cols-4' : '3'} gap-2.5`}>
+        {q.people && (
+          <QuestionCard
+            question={`People doing ${deep} work`}
+            value={`${q.people.deep} of ${q.people.active}`}
+            unit="people"
+            sub={q.people.active > q.people.deep
+              ? `${q.people.active - q.people.deep} only did ${t.t1.toLowerCase()} work`
+              : 'everyone active did some'}
+            notMeasured={q.people.active === 0 ? `Nobody active ${shape.label.toLowerCase()}` : undefined}
+            todo="Counts people with any classified task in the period."
+          />
+        )}
         <QuestionCard
           question={`Tasks judged ${deep}`}
           value={`${r.now} of ${r.all}`}
@@ -255,6 +267,73 @@ export function DeeperPanel({ q, who, names }: { q: MyPeriod; who: Who; names?: 
         : window === 52 ? 'One column per calendar month.' : 'One column per completed week, Monday to Sunday.'}
     >
       {window === 6 ? <><TierGrid grid={q.grid} names={names} /><TierLegend names={names} /></> : <DepthChart cols={cols} names={names} />}
+    </Frame>
+  );
+}
+
+/* ── Who is in it ─────────────────────────────────────────────── */
+
+export interface PersonRow {
+  id: string;
+  display_name: string | null;
+  email: string;
+  deep: number;
+  all: number;
+  share: number | null;
+  topTierThisWeek: number | null;
+  lastActive: number | null;
+}
+
+export function PeoplePanel({ rows, dept, names, thenVsNow }: {
+  rows: PersonRow[];
+  dept: string;
+  names?: TierNames;
+  /** Each person's share then against now, from the delegation window. */
+  thenVsNow?: Map<string, { then: number; now: number; arrow: 'up' | 'flat' | 'down' }>;
+}) {
+  if (rows.length === 0) return null;
+  const tiers = tierList(names);
+  const top = rows[0];
+  const quiet = rows.filter(r => r.all === 0);
+  const since = (s: number | null) => {
+    if (!s) return 'not seen';
+    const d = Math.floor((Date.now() / 1000 - s) / 86400);
+    return d <= 0 ? 'today' : d === 1 ? 'yesterday' : `${d} days ago`;
+  };
+  const arrow = { up: '↑', flat: '→', down: '↓' };
+  const arrowInk = { up: '#1A7F37', flat: '#8F8F8F', down: '#B54708' };
+  return (
+    <Frame
+      title={`Who is in ${dept}`}
+      judged
+      period={`${rows.length} ${rows.length === 1 ? 'person' : 'people'}`}
+      answer={<>
+        {top.share !== null ? <><b>{top.display_name ?? top.email}</b> does the deepest work, {words(top.share)} of their tasks.</> : <>Nobody has classified work in this period.</>}
+        {quiet.length > 0 ? <> {quiet.length === 1 ? `${quiet[0].display_name ?? quiet[0].email} has` : `${quiet.length} people have`} handed over nothing.</> : null}
+      </>}
+      note="Click a name to open that person's page. Sorted by how much of their work reached the top two tiers."
+    >
+      <div className="grid grid-cols-[minmax(0,1fr)_86px_minmax(0,120px)_52px_92px_80px] gap-2.5 text-[11px] text-[#8F8F8F] pb-1">
+        <span>Person</span><span className="text-right">{DeepWords(names)}</span><span /><span className="text-right">Share</span><span>Then and now</span><span className="text-right">Last active</span>
+      </div>
+      {rows.map(r => {
+        const t = thenVsNow?.get(r.id);
+        return (
+          <div key={r.id} className="grid grid-cols-[minmax(0,1fr)_86px_minmax(0,120px)_52px_92px_80px] gap-2.5 items-center py-[3px] text-[13px] border-b border-[#F7F7F7] last:border-b-0">
+            <Link href={`/pulse/users?userId=${encodeURIComponent(r.id)}`} className="truncate text-[#0A0A0A] hover:text-[#1F6F8B]">{r.display_name ?? r.email}</Link>
+            <span className="text-right tabular-nums text-[#333333]">{r.all > 0 ? `${r.deep} of ${r.all}` : '—'}</span>
+            <span>{r.share !== null && <Track value={r.share} />}</span>
+            <span className="text-right tabular-nums">{r.share !== null ? `${Math.round(r.share * 100)}%` : ''}</span>
+            <span className="text-[12px] whitespace-nowrap" style={{ color: t ? arrowInk[t.arrow] : '#B3B3B3' }}>
+              {t ? `${Math.round(t.then * 100)}% ${arrow[t.arrow]} ${Math.round(t.now * 100)}%` : 'not enough weeks'}
+            </span>
+            <span className="text-right text-[12px] text-[#8F8F8F] whitespace-nowrap">{since(r.lastActive)}</span>
+          </div>
+        );
+      })}
+      <p className="m-0 mt-2 text-[12px] text-[#8F8F8F]">
+        Deepest this week: {rows.filter(r => r.topTierThisWeek).length === 0 ? 'nobody yet' : rows.filter(r => r.topTierThisWeek).map(r => `${r.display_name ?? r.email} (${tiers[(r.topTierThisWeek ?? 1) - 1]})`).join(', ')}.
+      </p>
     </Frame>
   );
 }

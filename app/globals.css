@@ -52,8 +52,8 @@ html[data-theme="precision"] body {
 }
 
 /* Text sizes and weights */
-html[data-theme="precision"] .text-sm { font-size: 14px; line-height: 20px; }
-html[data-theme="precision"] .text-xl { font-size: 18px; line-height: 26px; letter-spacing: -0.02em; }
+html[data-theme="precision"] .text-sm { font-size: 13px; line-height: 19px; }
+html[data-theme="precision"] .text-xl { font-size: 17px; line-height: 24px; letter-spacing: -0.02em; }
 html[data-theme="precision"] .text-2xl.font-bold,
 html[data-theme="precision"] .text-3xl.font-bold,
 html[data-theme="precision"] .text-3xl.font-extrabold,
@@ -67,9 +67,9 @@ html[data-theme="precision"] .text-4xl { font-variant-numeric: tabular-nums; }
 html[data-theme="precision"] .uppercase.tracking-widest,
 html[data-theme="precision"] .uppercase.tracking-wider,
 html[data-theme="precision"] .uppercase.tracking-wide { text-transform: none; letter-spacing: normal; }
-html[data-theme="precision"] .text-xs.font-semibold.uppercase.tracking-widest { font-size: 14px; }
+html[data-theme="precision"] .text-xs.font-semibold.uppercase.tracking-widest { font-size: 13px; }
 html[data-theme="precision"] thead tr.uppercase,
-html[data-theme="precision"] thead th.uppercase { font-size: 13px; color: var(--p-faint); }
+html[data-theme="precision"] thead th.uppercase { font-size: 12px; color: var(--p-faint); }
 
 /* Text colours */
 html[data-theme="precision"] .text-\[\#1A1A1A\],
@@ -133,7 +133,7 @@ html[data-theme="precision"] .shadow { --tw-shadow: 0 0 #0000; --tw-shadow-color
 
 /* Page header (components/layout/TopBar.tsx) */
 html[data-theme="precision"] .ccc-topbar { padding: 14px 24px; border-color: var(--p-line); }
-html[data-theme="precision"] .ccc-topbar h2 { font-size: 18px; line-height: 26px; letter-spacing: -0.02em; }
+html[data-theme="precision"] .ccc-topbar h2 { font-size: 17px; line-height: 24px; letter-spacing: -0.02em; }
 
 /* Sidebar (components/layout/Sidebar.tsx): light, hairline edge, grey active state */
 html[data-theme="precision"] .ccc-sidebar { background-color: var(--p-subtle); color: var(--p-ink-3); border-right: 1px solid var(--p-line); }
