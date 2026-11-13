@@ -183,6 +183,7 @@ export default function SystemPage() {
   const [acceptableUsePolicy, setAcceptableUsePolicy] = useState('');
   const [licensedSeats, setLicensedSeats] = useState('');
   const [targetDeptAdoptionPct, setTargetDeptAdoptionPct] = useState('');
+  const [targetDeptRealWorkPct, setTargetDeptRealWorkPct] = useState('');
   const [dbStats, setDbStats] = useState<Record<string, unknown> | null>(null);
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
@@ -272,6 +273,7 @@ export default function SystemPage() {
         if (configData.acceptableUsePolicy) setAcceptableUsePolicy(String(configData.acceptableUsePolicy));
         if (configData.licensedSeats) setLicensedSeats(String(configData.licensedSeats));
         if (configData.targetDeptAdoptionPct) setTargetDeptAdoptionPct(String(configData.targetDeptAdoptionPct));
+        if (configData.targetDeptRealWorkPct) setTargetDeptRealWorkPct(String(configData.targetDeptRealWorkPct));
         setFinanceModelEfficiencyEnabled(
           configData.financeModelEfficiencyEnabled === true || configData.financeModelEfficiencyEnabled === 'true'
         );
@@ -409,7 +411,7 @@ export default function SystemPage() {
       const res = await fetch('/api/config', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ organisationName, ingestIntervalSeconds, acceptableUsePolicy, licensedSeats, targetDeptAdoptionPct }),
+        body: JSON.stringify({ organisationName, ingestIntervalSeconds, acceptableUsePolicy, licensedSeats, targetDeptAdoptionPct, targetDeptRealWorkPct }),
       });
       if (res.ok) {
         showToast('Settings saved successfully', 'success');
@@ -659,6 +661,17 @@ export default function SystemPage() {
                 min={0}
                 max={100}
                 placeholder="50"
+              />
+            </Field>
+            <Field label="Department real-work floor (%)" hint="On Work Pulse, departments where fewer tasks than this are real work (meaningful or frontier) are marked. Blank for 33; 0 for no floor.">
+              <input
+                type="number"
+                value={targetDeptRealWorkPct}
+                onChange={e => setTargetDeptRealWorkPct(e.target.value)}
+                className={cx(B.input, 'w-full')}
+                min={0}
+                max={100}
+                placeholder="33"
               />
             </Field>
             <Field label="Acceptable use policy" className="md:col-span-3">

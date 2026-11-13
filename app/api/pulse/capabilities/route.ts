@@ -48,7 +48,7 @@ export async function GET(request: NextRequest) {
   const candidates = await client
     .select({
       id: pe.id, title: pe.title, body: pe.body, tier: pe.tier, detected_at: pe.detected_at, status: pe.status,
-      user_id: pe.user_id, display_name: u.display_name, email: u.email, task_type: pc.task_type,
+      user_id: pe.user_id, display_name: u.display_name, email: u.email, department: u.department, task_type: pc.task_type,
     })
     .from(pe)
     .leftJoin(u, eq(u.id, pe.user_id))

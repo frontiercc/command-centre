@@ -15,7 +15,7 @@ export const DASH = '#1F6F8B';
 /** Three shades of it, lightest first, for the depth of work. */
 export const DASH_SHADES = ['#C9DEE6', '#6BA3B8', '#1F6F8B'] as const;
 
-export function QuestionCard({ question, value, unit, change, sub, trend, trendKind = 'line', trendColour, notMeasured }: {
+export function QuestionCard({ question, value, unit, change, sub, trend, trendKind = 'line', trendColour, notMeasured, todo }: {
   question: string;
   value?: ReactNode;
   unit?: ReactNode;
@@ -28,6 +28,8 @@ export function QuestionCard({ question, value, unit, change, sub, trend, trendK
   trendColour?: string;
   /** Shown in place of the figure when it isn't captured. */
   notMeasured?: ReactNode;
+  /** What to do about it, under a rule at the foot of the card. */
+  todo?: ReactNode;
 }) {
   const colour = trendColour ?? DASH;
   return (
@@ -48,6 +50,7 @@ export function QuestionCard({ question, value, unit, change, sub, trend, trendK
           {trend && trend.filter(v => v !== null).length >= 2 && <Trend data={trend} kind={trendKind} colour={colour} />}
         </>
       )}
+      {todo && <span className="mt-auto pt-2"><span className="block pt-2 border-t border-[#F2F2F2] text-[12px] text-[#333333]">{todo}</span></span>}
     </div>
   );
 }
@@ -88,3 +91,17 @@ export function changeFrom(now: number | null, before: number | null, fmt: (v: n
   if (fmt(now) === fmt(before)) return `the same as ${period}`;
   return `${now > before ? 'up' : 'down'} from ${fmt(before)} ${period}`;
 }
+
+/** A share as plain words: "two in three", "about half", "one in four"; a percentage otherwise. */
+export function shareWords(v: number): string {
+  const nice: Array<[number, string]> = [
+    [1 / 5, 'one in five'], [1 / 4, 'one in four'], [1 / 3, 'one in three'], [2 / 5, 'two in five'],
+    [1 / 2, 'half'], [3 / 5, 'three in five'], [2 / 3, 'two in three'], [3 / 4, 'three in four'], [4 / 5, 'four in five'],
+  ];
+  const near = nice.reduce((b, n) => (Math.abs(n[0] - v) < Math.abs(b[0] - v) ? n : b));
+  if (v >= 0.9) return 'nearly all';
+  if (v <= 0.1) return 'very few';
+  return Math.abs(near[0] - v) <= 0.04 ? near[1] : `${Math.round(v * 100)}%`;
+}
+export const cap = (t: string) => t.charAt(0).toUpperCase() + t.slice(1);
+

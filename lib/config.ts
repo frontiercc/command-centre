@@ -232,6 +232,8 @@ export interface AppConfig {
   licensedSeats: string;
   // Department adoption target for the dashboard, a percentage as a string; blank = 50, 0 = none.
   targetDeptAdoptionPct: string;
+  // Work Pulse floor for each department's share of real work, a percentage as a string; blank = 33, 0 = none.
+  targetDeptRealWorkPct: string;
   // OIDC SSO
   ssoEnabled: boolean;
   ssoIssuerUrl: string;
@@ -508,6 +510,7 @@ export const CONFIG_KEYS: Record<keyof AppConfig, string> = {
   alertsSlackSweepCursor: 'alerts_slack_sweep_cursor',
   licensedSeats: 'licensed_seats',
   targetDeptAdoptionPct: 'target_dept_adoption_pct',
+  targetDeptRealWorkPct: 'target_dept_real_work_pct',
   ssoEnabled: 'sso_enabled',
   ssoIssuerUrl: 'sso_issuer_url',
   ssoClientId: 'sso_client_id',
@@ -920,6 +923,7 @@ export async function getAllConfig(): Promise<AppConfig> {
     // Licensed seats
     licensedSeats: resolve('licensedSeats'),
     targetDeptAdoptionPct: resolve('targetDeptAdoptionPct'),
+    targetDeptRealWorkPct: resolve('targetDeptRealWorkPct'),
     // OIDC SSO
     ssoEnabled: resolve('ssoEnabled', 'false') === 'true',
     ssoIssuerUrl: resolve('ssoIssuerUrl'),

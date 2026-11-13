@@ -401,6 +401,7 @@ export async function GET(request: NextRequest) {
     deepPeopleWeeks: weeks.map((_, i) => deepPeopleByWeek.get(i) ?? 0),
     frontierPeople30d: frontierByPerson.length,
     frontierHalfPeople: frontierTotal > 0 ? frontierHalfPeople : null,
+    frontierTopShare: frontierTotal > 0 ? frontierByPerson[0] / frontierTotal : null,
     otiWeeks: await weekAvg('oti', 'user'),
     orsWeeks: await weekAvg('ors', 'function'),
     tierWeeks: weeks.map((_, i) => tierByWeek.get(i) ?? null),

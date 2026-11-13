@@ -14,13 +14,13 @@ import Link from 'next/link';
 import { Panel, Tag, Muted, Empty, Segmented } from '@/components/precision/ui';
 import { WORK_PULSE_VENDOR_LABELS, type Vendor } from '@/lib/dashboard/vendor';
 import { useOpenAiOnly } from '@/components/shared/VendorSwitch';
-import { QuestionCard, DASH, DASH_SHADES } from '@/components/dashboard/QuestionCard';
+import { QuestionCard, DASH, DASH_SHADES, shareWords, cap } from '@/components/dashboard/QuestionCard';
 
 type Tier = { t1: number; t2: number; t3: number };
 
 interface SpreadRow { name: string; people: number; priorPeople: number; isNew: boolean }
 
-interface OrgSummary {
+export interface OrgSummary {
   signalCards: { oti: number | null; dds: number | null; psr: number | null; ors: number | null };
   tierCounts: Tier;
   dashboard?: {
@@ -39,6 +39,7 @@ interface OrgSummary {
     deepPeopleWeeks?: number[];
     frontierPeople30d?: number;
     frontierHalfPeople?: number | null;
+    frontierTopShare?: number | null;
   };
 }
 
@@ -50,20 +51,7 @@ const pct = (v: number) => `${Math.round(v * 100)}%`;
 
 /* ── 10: Work Pulse, four questions ─────────────────────────────── */
 
-/** A share as plain words: "two in three", "about half", "one in four"; a percentage otherwise. */
-function shareWords(v: number): string {
-  const nice: Array<[number, string]> = [
-    [1 / 5, 'one in five'], [1 / 4, 'one in four'], [1 / 3, 'one in three'], [2 / 5, 'two in five'],
-    [1 / 2, 'half'], [3 / 5, 'three in five'], [2 / 3, 'two in three'], [3 / 4, 'three in four'], [4 / 5, 'four in five'],
-  ];
-  const near = nice.reduce((b, n) => (Math.abs(n[0] - v) < Math.abs(b[0] - v) ? n : b));
-  if (v >= 0.9) return 'nearly all';
-  if (v <= 0.1) return 'very few';
-  return Math.abs(near[0] - v) <= 0.03 ? near[1] : `${Math.round(v * 100)}%`;
-}
-const cap = (t: string) => t.charAt(0).toUpperCase() + t.slice(1);
-
-function WorkPulsePanel({ data, product }: { data: OrgSummary; product: string }) {
+export function WorkPulsePanel({ data, product, title = 'Work Pulse', actions = false }: { data: OrgSummary; product: string; title?: string; /** Add a line under each card saying what to do. */ actions?: boolean }) {
   const d = data.dashboard;
   const now = deep(data.tierCounts);
   const before = d ? deep(d.priorTierCounts) : null;
@@ -81,7 +69,7 @@ function WorkPulsePanel({ data, product }: { data: OrgSummary; product: string }
   return (
     <section className="bg-white border border-[#EAEAEA] rounded-[14px] px-4 py-3.5">
       <div className="flex items-baseline gap-2 flex-wrap">
-        <h2 className="m-0 text-[14px] font-semibold text-[#0A0A0A]">Work Pulse</h2>
+        <h2 className="m-0 text-[14px] font-semibold text-[#0A0A0A]">{title}</h2>
         <Tag tone="neutral">AI-judged</Tag>
         <span className="ml-auto text-[12px] text-[#8F8F8F]">Last 30 days against the 30 before</span>
       </div>
@@ -94,6 +82,11 @@ function WorkPulsePanel({ data, product }: { data: OrgSummary; product: string }
           trend={d?.deepPeopleWeeks}
           trendKind="bars"
           notMeasured={people === null ? 'No classified work yet' : undefined}
+          todo={actions && people !== null && active !== null
+            ? (active - people > 0
+              ? <>{active - people} {active - people === 1 ? 'person only uses' : 'people only use'} it for routine tasks. <Link href="/pulse/users" className="text-[#245BF3] font-medium hover:underline">See who</Link></>
+              : 'Everyone active is doing some real work.')
+            : undefined}
         />
         <QuestionCard
           question="Tasks that are real work"
@@ -101,6 +94,10 @@ function WorkPulsePanel({ data, product }: { data: OrgSummary; product: string }
           change={shareChange}
           trend={d?.tierWeeks.map(t => (t ? deep(t) : null))}
           notMeasured={now === null ? 'No classified work in the last 30 days' : undefined}
+          todo={actions && now !== null && before !== null
+            ? (Math.round(now * 100) > Math.round(before * 100) ? 'Rising. Nothing to do.'
+              : Math.round(now * 100) < Math.round(before * 100) ? 'Falling. See the departments below.' : 'Steady.')
+            : undefined}
         />
         <QuestionCard
           question="New ways of working"
@@ -112,12 +109,16 @@ function WorkPulsePanel({ data, product }: { data: OrgSummary; product: string }
           trend={d?.capabilityWeeks}
           trendKind="bars"
           notMeasured={!d ? 'Not available' : undefined}
+          todo={actions && d ? (d.capabilitiesPending > 0 ? 'Confirm the ones that are real, below.' : 'Nothing waiting for review.') : undefined}
         />
         <QuestionCard
           question="Frontier work rests on"
           value={half !== null ? (half === 1 ? 'One person' : `${half} people`) : undefined}
           sub={half !== null && d ? <>They do half of it, out of {d.frontierPeople30d} doing any. <Link href="/pulse/cio" className="text-[#245BF3] font-medium hover:underline">See who</Link></> : undefined}
           notMeasured={half === null ? 'No frontier work in the last 30 days' : undefined}
+          todo={actions && d?.frontierTopShare != null
+            ? <>If the busiest person left, {d.frontierTopShare < 0.15 ? `${Math.round(d.frontierTopShare * 100)}%` : shareWords(d.frontierTopShare)} of it would go. <Link href="/pulse/dept" className="text-[#245BF3] font-medium hover:underline">See who</Link></>
+            : undefined}
         />
       </div>
       <p className="m-0 mt-3 pt-2.5 border-t border-dashed border-[#EAEAEA] text-[12px] text-[#8F8F8F]">

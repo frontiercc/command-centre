@@ -13,6 +13,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { visibleVendor, visibleOpenAi } from '@/lib/sources/openai-visibility';
 import { and, desc, eq, gte, isNotNull, lt, sql } from 'drizzle-orm';
 import { getAdminSession, canAccessOrgOverview } from '@/lib/auth/admin-auth';
+import { getConfigValue } from '@/lib/config';
 import { promptTextVisibleFor, logPromptRead } from '@/lib/auth/content-access';
 import { getTypedClient } from '@/lib/db/client';
 import { schema } from '@/lib/db/schema';
@@ -478,12 +479,14 @@ export async function GET(request: NextRequest) {
       key: box.key,
       label: box.label,
       count: box.count,
-      suggestions: box.suggestions.map(s => ({ id: s.id, title: s.title })),
+      suggestions: box.suggestions.map(s => ({ id: s.id, title: s.title, people: s.canvas?.people ?? null })),
       groups: box.groups.map(g => ({ surface: g.surface, label: g.label, suggestions: g.suggestions.map(s => ({ id: s.id, title: s.title })) })),
     }));
   } catch {
     deptProcesses = [];
   }
+
+  const realWorkFloorRaw = await getConfigValue('targetDeptRealWorkPct');
 
   return NextResponse.json({
     vendor,
@@ -505,11 +508,35 @@ export async function GET(request: NextRequest) {
     },
     delegation: {
       window: delegationWindow,
-      org: { bands: orgBands, bandsDataWeeks: orgBandsDataWeeks },
+      org: {
+        bands: orgBands, bandsDataWeeks: orgBandsDataWeeks,
+        // Completed weeks' task counts by tier, oldest first (additive), for the depth columns.
+        weeks: [...orgWeekRows].sort((a, b) => a.periodStart - b.periodStart).map(r => ({ weekStart: r.periodStart, t1: r.t1, t2: r.t2, t3: r.t3 })),
+      },
       departments: delegationDepartments,
       building: delegationBuilding,
     },
     actNext,
     deptProcesses,
+    // Each department's share of tasks that were real work (meaningful or frontier) over the last
+    // 4 completed weeks, from the same weekly department rows as the delegation chart (additive).
+    deptRealWork: (() => {
+      const recent = new Set(delegationWeeks.slice(-4));
+      const by = new Map<string, { real: number; all: number }>();
+      for (const r of deptWeekRows) {
+        if (!recent.has(r.periodStart)) continue;
+        const b = by.get(r.scopeId) ?? { real: 0, all: 0 };
+        b.real += r.t2 + r.t3; b.all += r.t1 + r.t2 + r.t3;
+        by.set(r.scopeId, b);
+      }
+      return [...by.entries()].filter(([, b]) => b.all > 0)
+        .map(([dept, b]) => ({ dept, share: b.real / b.all, tasks: b.all }))
+        .sort((a, b) => b.share - a.share);
+    })(),
+    // The floor for that share (Admin → System), a percentage; null when switched off.
+    realWorkFloorPct: (() => {
+      const n = Number(realWorkFloorRaw);
+      return realWorkFloorRaw === '' ? 33 : Number.isFinite(n) && n > 0 && n <= 100 ? n : null;
+    })(),
   });
 }
