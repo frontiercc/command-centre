@@ -168,7 +168,7 @@ export default function UsersPickerPage() {
         title="Users"
         subtitle={displayName ? `Delegation pulse · ${displayName}` : 'Select a user'}
       />
-      <PageBody>
+      <PageBody className="dash-compact">
 
         {/* User picker (top-left), as on Developer Pulse → Users */}
         <Toolbar

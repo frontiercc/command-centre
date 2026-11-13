@@ -221,14 +221,15 @@ html[data-theme="precision"] .ccc-pbar-legend i.is-measured { background: var(--
 html[data-theme="precision"] .ccc-pbar-legend i.is-judged { background: var(--p-judged); }
 @media (max-width: 767px) { html[data-theme="precision"] .ccc-pbar-legend { display: none; } }
 
-/* Dashboard: one size smaller throughout (Lee, 2026-11-13). Scoped to the Dashboard page so the
-   shared kit keeps its sizes everywhere else. */
-.dash-compact .text-\[28px\] { font-size: 22px; line-height: 28px; }
-.dash-compact .text-\[24px\] { font-size: 20px; line-height: 24px; }
-.dash-compact .text-\[20px\] { font-size: 18px; line-height: 22px; }
-.dash-compact .text-\[16px\],
-.dash-compact .text-\[15px\] { font-size: 14px; line-height: 21px; }
-.dash-compact .text-\[14px\] { font-size: 13px; line-height: 20px; }
-.dash-compact .text-\[13px\] { font-size: 12px; line-height: 18px; }
-.dash-compact .w-\[120px\] { width: 96px; }
-.dash-compact .h-\[120px\] { height: 96px; }
+/* One size smaller throughout the app: the kit's scale, stepped down once, applied to every
+   page in the Precision look rather than page by page. The .dash-compact class stays as a no-op
+   so pages carrying it are unaffected. */
+html[data-theme="precision"] .text-\[28px\] { font-size: 22px; line-height: 28px; }
+html[data-theme="precision"] .text-\[24px\] { font-size: 20px; line-height: 24px; }
+html[data-theme="precision"] .text-\[20px\] { font-size: 18px; line-height: 22px; }
+html[data-theme="precision"] .text-\[16px\],
+html[data-theme="precision"] .text-\[15px\] { font-size: 14px; line-height: 21px; }
+html[data-theme="precision"] .text-\[14px\] { font-size: 13px; line-height: 20px; }
+html[data-theme="precision"] .text-\[13px\] { font-size: 12px; line-height: 18px; }
+html[data-theme="precision"] .w-\[120px\] { width: 96px; }
+html[data-theme="precision"] .h-\[120px\] { height: 96px; }
