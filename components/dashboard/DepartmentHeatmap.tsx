@@ -3,10 +3,17 @@
 
 'use client';
 
+/**
+ * Dashboard "Which departments are using it?" (was the department adoption heatmap). The grid
+ * stays; each cell is now the share of the department using that product, shaded on one grey
+ * scale, and the Active column is the share of the department active in the last 7 days.
+ * Only a department below the admin-set target is coloured (amber): there is no other
+ * green, amber or red.
+ */
 import type { CSSProperties } from 'react';
-import { Panel, Muted, T, Bar, Tag } from '@/components/precision/ui';
+import { Panel, Muted, T, Tag } from '@/components/precision/ui';
 import { PRODUCT_COLOR, SHARE_BAR } from '@/lib/ui/chart-colours';
-import { sumShown, type Product, type ProductCounts } from '@/lib/dashboard/vendor';
+import type { Product, ProductCounts } from '@/lib/dashboard/vendor';
 
 interface DeptStats {
   department: string;
@@ -16,94 +23,91 @@ interface DeptStats {
   products: ProductCounts;
 }
 
-// Every cell is shaded on one grey scale against the busiest cell in the table,
-// so darker only ever means more people; the product colour is on the column
-// heading alone. Hex alpha suffixes: 1A = 10%, 40 = 25%, 99 = 60%.
-function intensity(value: number, max: number): CSSProperties {
-  if (max === 0 || value === 0) return { background: '#FAFAFA', color: '#B3B3B3' };
-  const pct = value / max;
-  if (pct > 0.7) return { background: SHARE_BAR, color: '#FFFFFF' };
-  if (pct > 0.4) return { background: `${SHARE_BAR}99`, color: '#FFFFFF' };
-  if (pct > 0.15) return { background: `${SHARE_BAR}40`, color: '#0A0A0A' };
+/** One grey scale: darker only ever means a larger share of the department. */
+function shade(share: number): CSSProperties {
+  if (share <= 0) return { background: '#FAFAFA', color: '#B3B3B3' };
+  if (share >= 0.6) return { background: SHARE_BAR, color: '#FFFFFF' };
+  if (share >= 0.35) return { background: `${SHARE_BAR}99`, color: '#FFFFFF' };
+  if (share >= 0.15) return { background: `${SHARE_BAR}40`, color: '#0A0A0A' };
   return { background: `${SHARE_BAR}1A`, color: '#4D4D4D' };
 }
 
-function Legend() {
-  return (
-    <span className="flex items-center gap-3 text-[13px] text-[#8F8F8F]">
-      <span>Lighter = less, darker = more</span>
-    </span>
-  );
+function list(items: string[]): string {
+  return items.length <= 1 ? (items[0] ?? '') : `${items.slice(0, -1).join(', ')} and ${items[items.length - 1]}`;
 }
 
-function ProductHead({ product }: { product: Product }) {
-  return (
-    <span className="inline-flex items-center gap-1.5 whitespace-nowrap">
-      <span className="w-2 h-2 rounded-full shrink-0" style={{ background: PRODUCT_COLOR[product.id] }} />
-      {product.label}
-    </span>
-  );
-}
-
-/** One column per product shown: the chosen vendor's three, or all six. */
-export default function DepartmentHeatmap({ data: all, products }: { data: DeptStats[]; products: readonly Product[] }) {
-  // Busiest departments first, by people across the products shown.
-  const data = [...all].sort((a, b) => sumShown(b.products, products) - sumShown(a.products, products));
-  if (data.length === 0) {
+export default function DepartmentHeatmap({ data: all, products, targetPct }: { data: DeptStats[]; products: readonly Product[]; targetPct: number | null }) {
+  const rows = all
+    .filter(d => d.user_count > 0)
+    .map(d => ({ ...d, active: d.active_users / d.user_count }))
+    .sort((a, b) => b.active - a.active);
+  if (rows.length === 0) {
     return (
-      <Panel title="Department adoption">
-        <div className="py-6 text-center"><Muted>No department data available.</Muted></div>
+      <Panel title="Which departments are using it?">
+        <div className="py-6 text-center"><Muted>No department data yet. Set people&apos;s departments on the User Insights page.</Muted></div>
       </Panel>
     );
   }
-
-  const max = Math.max(...data.flatMap(d => products.map(p => d.products[p.id])), 1);
-  const colWidth = products.length > 3 ? 'w-[10%]' : 'w-[14%]';
-
-  const cell = (value: number) => (
-    <div className="rounded-[6px] text-center py-1 text-[13px] font-medium tabular-nums" style={intensity(value, max)}>
-      {value > 0 ? value.toLocaleString() : '–'}
-    </div>
-  );
+  const target = targetPct !== null ? targetPct / 100 : null;
+  const below = target === null ? [] : rows.filter(r => r.active < target);
+  const top = rows[0];
+  const answer = target === null
+    ? <><b className="font-semibold">{top.department}</b> uses it most: {Math.round(top.active * 100)}% of the department in the last 7 days.</>
+    : below.length === 0
+      ? <>Every department is at or above your <b className="font-semibold">{targetPct}%</b> target. {top.department} leads at {Math.round(top.active * 100)}%.</>
+      : below.length <= 3
+        ? <><b className="font-semibold">{list(below.map(b => b.department))}</b> {below.length === 1 ? 'is' : 'are'} below your {targetPct}% target. {top.department} leads at {Math.round(top.active * 100)}%.</>
+        : <><b className="font-semibold">{below.length} of {rows.length}</b> departments are below your {targetPct}% target. {top.department} leads at {Math.round(top.active * 100)}%.</>;
 
   return (
     <Panel
-      title="Department adoption heatmap"
+      title="Which departments are using it?"
       badge={<Tag tone="measured">Measured</Tag>}
-      right={<Legend />}
+      right={<span className="text-[13px] text-[#8F8F8F]">Last 7 days</span>}
       className="h-full"
       flush
     >
+      <p className="m-0 px-4 pt-3 pb-2 text-[15px] leading-6 text-[#0A0A0A]">{answer}</p>
       <div className="overflow-x-auto">
         <table className={T.table}>
           <thead>
             <tr className={T.headRow}>
               <th scope="col" className={T.th}>Department</th>
-              <th scope="col" className={T.thRight}>Users</th>
               {products.map(p => (
-                <th key={p.id} scope="col" className={`${T.th} text-center ${colWidth}`}><ProductHead product={p} /></th>
+                <th key={p.id} scope="col" className={`${T.th} text-center`}>
+                  <span className="inline-flex items-center gap-1.5 whitespace-nowrap">
+                    <span className="w-2 h-2 rounded-full shrink-0" style={{ background: PRODUCT_COLOR[p.id] }} />{p.label}
+                  </span>
+                </th>
               ))}
-              <th scope="col" className={`${T.th} w-[22%]`}>Adoption</th>
+              <th scope="col" className={`${T.th} text-center`}>Active</th>
             </tr>
           </thead>
           <tbody>
-            {data.map(dept => {
-              const adoptionPct = dept.user_count > 0
-                ? Math.round((dept.active_users / dept.user_count) * 100)
-                : 0;
-              const tone = adoptionPct >= 70 ? 'good' : adoptionPct >= 40 ? 'warn' : 'bad';
-
+            {rows.map(d => {
+              const isBelow = target !== null && d.active < target;
               return (
-                <tr key={dept.department} className={T.row}>
-                  <td className={`${T.td} font-medium text-[#0A0A0A]`}>{dept.department}</td>
-                  <td className={`${T.tdRight} text-[#666666]`}>{dept.active_users}/{dept.user_count}</td>
-                  {products.map(p => (
-                    <td key={p.id} className="px-1 py-1.5">{cell(dept.products[p.id])}</td>
-                  ))}
-                  <td className={T.td}>
-                    <div className="flex items-center gap-2">
-                      <div className="flex-1"><Bar pct={adoptionPct} tone={tone} height={6} /></div>
-                      <span className="text-[13px] text-[#666666] w-9 text-right tabular-nums">{adoptionPct}%</span>
+                <tr key={d.department} className={T.row}>
+                  <td className={`${T.td} font-medium text-[#0A0A0A]`}>
+                    {d.department}
+                    <span className="block text-[12px] font-normal text-[#8F8F8F]">{d.active_users} of {d.user_count} people</span>
+                  </td>
+                  {products.map(p => {
+                    const share = d.products[p.id] / d.user_count;
+                    return (
+                      <td key={p.id} className="px-1 py-1.5">
+                        <div className="rounded-[6px] text-center py-1 text-[13px] font-medium tabular-nums" style={shade(share)} title={`${d.products[p.id]} of ${d.user_count} people`}>
+                          {Math.round(share * 100)}%
+                        </div>
+                      </td>
+                    );
+                  })}
+                  <td className="px-1 py-1.5">
+                    <div
+                      className="rounded-[6px] text-center py-1 text-[13px] font-semibold tabular-nums"
+                      style={isBelow ? { background: '#FFF1E0', color: '#B54708', border: '1px solid #F5D9A8' } : { background: '#FFFFFF', color: '#0A0A0A', border: '1px solid #EAEAEA' }}
+                    >
+                      {Math.round(d.active * 100)}%
                     </div>
                   </td>
                 </tr>
@@ -111,6 +115,14 @@ export default function DepartmentHeatmap({ data: all, products }: { data: DeptS
             })}
           </tbody>
         </table>
+      </div>
+      <div className="px-4 py-2.5 border-t border-[#F2F2F2] text-[12px] text-[#8F8F8F] flex flex-wrap gap-x-4 gap-y-1 items-center">
+        <span>Cells show the share of the department using each product; darker means more.</span>
+        {target !== null && (
+          <span className="inline-flex items-center gap-1.5">
+            <span className="w-2.5 h-2.5 rounded-[2px]" style={{ background: '#FFF1E0', border: '1px solid #F5D9A8' }} />Below your {targetPct}% target, set in Admin → System
+          </span>
+        )}
       </div>
     </Panel>
   );

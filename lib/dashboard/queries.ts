@@ -344,3 +344,30 @@ export async function getTierMixThisWeekByVendor(endS = nowS()): Promise<Record<
   for (const r of rows) out[r.vendor as 'claude' | 'openai'] = { tier1: Number(r.t1), tier2: Number(r.t2), tier3: Number(r.t3) };
   return out;
 }
+
+/**
+ * People a day for each product over the last `days` UTC days, oldest first: the dashboard's
+ * "Who is using it each day?" lines. Every figure counts people, never prompts, so the products
+ * can be read against one another. A day with no activity reads 0 (nobody used it).
+ */
+export async function getPeopleByDayByProduct(days: number, endS = nowS()): Promise<Array<{ date: string; products: ProductCounts }>> {
+  const todayStart = Math.floor(endS / DAY) * DAY;
+  const startS = todayStart - (days - 1) * DAY;
+  const rows = await rawAll<{ date: string; product: string; people: number | string }>(sql`
+    SELECT to_char(to_timestamp(occurred_at) AT TIME ZONE 'UTC', 'YYYY-MM-DD') AS date,
+           ${sql.raw(productExpr())} AS product, COUNT(DISTINCT user_id) AS people
+    FROM cowork_messages
+    WHERE user_id IS NOT NULL AND occurred_at >= ${startS} AND occurred_at < ${endS}
+    GROUP BY 1, 2
+  `);
+  const out = Array.from({ length: days }, (_, i) => ({
+    date: new Date((startS + i * DAY) * 1000).toISOString().slice(0, 10),
+    products: zeroCounts(),
+  }));
+  const byDate = new Map(out.map(d => [d.date, d.products]));
+  for (const r of rows) {
+    const c = byDate.get(r.date);
+    if (c && r.product in c) c[r.product as ProductId] = Number(r.people);
+  }
+  return out;
+}

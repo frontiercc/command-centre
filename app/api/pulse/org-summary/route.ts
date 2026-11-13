@@ -10,7 +10,8 @@
 // its `decision` field is read with `->>'decision'`.
 import { NextRequest, NextResponse } from 'next/server';
 import { visibleVendor } from '@/lib/sources/openai-visibility';
-import { and, desc, eq, gte, isNotNull, sql } from 'drizzle-orm';
+import { and, desc, eq, gte, isNotNull, lt, sql } from 'drizzle-orm';
+import { weekStarts } from '@/lib/pulse/period';
 import { getAdminSession, canAccessOrgOverview } from '@/lib/auth/admin-auth';
 import { getTypedClient } from '@/lib/db/client';
 import { schema } from '@/lib/db/schema';
@@ -294,7 +295,95 @@ export async function GET(request: NextRequest) {
   // Human time vs Claude time — org totals; null when off.
   const humanTime = await readHumanTime('cowork', undefined, vendor);
 
+  // ── Dashboard figures (additive) ─────────────────────────────────────────
+  // The Dashboard's Work Pulse cards, depth panel and skills-and-connectors panel. Weeks are
+  // the 8 completed Monday-UTC weeks; a week with no figure is null, never 0.
+  const sixtyDaysAgo = now - 60 * 24 * 3600;
+  const weeks = weekStarts(now, 9).slice(0, 8);
+  const firstWeek = weeks[0];
+  const thisWeek = weekStarts(now, 1)[0];
+  const weekAvg = async (col: 'oti' | 'ors', scope: 'user' | 'function') => {
+    const rows = await client
+      .select({ ps: mt.period_start, v: sql<number | string | null>`AVG(${mt[col]})` })
+      .from(mt)
+      .where(and(mtOnly, eq(mt.scope_type, scope), eq(mt.granularity, 'week'), isNotNull(mt[col]),
+        gte(mt.period_start, firstWeek), lt(mt.period_start, thisWeek)))
+      .groupBy(mt.period_start);
+    const by = new Map(rows.map(r => [Number(r.ps), r.v === null ? null : Math.round(Number(r.v) * 100) / 100]));
+    return weeks.map(w => by.get(w) ?? null);
+  };
+  const tierWeekRows = await rawAll<{ w: number | string; t1: number | string; t2: number | string; t3: number | string }>(client, sql`
+    SELECT FLOOR((cm.occurred_at - ${firstWeek}) / ${7 * 86400}) AS w,
+           SUM(CASE WHEN pc.tier = 1 THEN 1 ELSE 0 END) AS t1,
+           SUM(CASE WHEN pc.tier = 2 THEN 1 ELSE 0 END) AS t2,
+           SUM(CASE WHEN pc.tier = 3 THEN 1 ELSE 0 END) AS t3
+    FROM pulse_classifications pc JOIN cowork_messages cm ON cm.id = pc.cowork_message_id
+    WHERE pc.classifier_status = 'classified' AND cm.occurred_at >= ${firstWeek} AND cm.occurred_at < ${thisWeek}
+      AND ${sql.raw(vendorClause(vendor, 'cm.'))}
+    GROUP BY 1
+  `);
+  const tierByWeek = new Map(tierWeekRows.map(r => [Number(r.w), { t1: Number(r.t1), t2: Number(r.t2), t3: Number(r.t3) }]));
+  const priorTier = await rawGet<{ t1: number | string | null; t2: number | string | null; t3: number | string | null }>(client, sql`
+    SELECT SUM(CASE WHEN pc.tier = 1 THEN 1 ELSE 0 END) AS t1,
+           SUM(CASE WHEN pc.tier = 2 THEN 1 ELSE 0 END) AS t2,
+           SUM(CASE WHEN pc.tier = 3 THEN 1 ELSE 0 END) AS t3
+    FROM pulse_classifications pc JOIN cowork_messages cm ON cm.id = pc.cowork_message_id
+    WHERE pc.classifier_status = 'classified' AND cm.occurred_at >= ${sixtyDaysAgo} AND cm.occurred_at < ${thirtyDaysAgo}
+      AND ${sql.raw(vendorClause(vendor, 'cm.'))}
+  `);
+  const capWeekRows = await rawAll<{ w: number | string; n: number | string }>(client, sql`
+    SELECT FLOOR((confirmed_at - ${firstWeek}) / ${7 * 86400}) AS w, COUNT(*) AS n
+    FROM pulse_events
+    WHERE event_type = 'capability_creation' AND status = 'confirmed'
+      AND confirmed_at >= ${firstWeek} AND confirmed_at < ${thisWeek}
+    GROUP BY 1
+  `);
+  const capByWeek = new Map(capWeekRows.map(r => [Number(r.w), Number(r.n)]));
+  const capCounts = await rawGet<{ recent: number | string; pending: number | string }>(client, sql`
+    SELECT SUM(CASE WHEN status = 'confirmed' AND confirmed_at >= ${thirtyDaysAgo} THEN 1 ELSE 0 END) AS recent,
+           SUM(CASE WHEN status = 'candidate' THEN 1 ELSE 0 END) AS pending
+    FROM pulse_events WHERE event_type = 'capability_creation'
+  `);
+  // Skills and connectors by the number of people using them: last 30 days against the 30
+  // before, and whether each was first seen in the last 30 days.
+  const spread = async (table: 'cowork_skill_invocations' | 'cowork_mcp_invocations', col: 'skill_name' | 'mcp_server') => {
+    const extra = table === 'cowork_mcp_invocations' ? sql`AND cm.mcp_server NOT IN ('workspace', 'cowork')` : sql``;
+    const rows = await rawAll<{ name: string; people: number | string; prior: number | string; first_at: number | string }>(client, sql`
+      SELECT cm.${sql.raw(col)} AS name,
+             COUNT(DISTINCT CASE WHEN cm.occurred_at >= ${thirtyDaysAgo} THEN cm.user_id END) AS people,
+             COUNT(DISTINCT CASE WHEN cm.occurred_at >= ${sixtyDaysAgo} AND cm.occurred_at < ${thirtyDaysAgo} THEN cm.user_id END) AS prior,
+             MIN(cm.occurred_at) AS first_at
+      FROM ${sql.raw(table)} cm
+      WHERE ${vendorSql} ${extra}
+      GROUP BY 1
+      HAVING COUNT(DISTINCT CASE WHEN cm.occurred_at >= ${thirtyDaysAgo} THEN cm.user_id END) > 0
+      ORDER BY 2 DESC, 1
+    `);
+    return {
+      total: rows.length,
+      rows: rows.slice(0, 5).map(r => ({ name: r.name, people: Number(r.people), priorPeople: Number(r.prior), isNew: Number(r.first_at) >= thirtyDaysAgo })),
+    };
+  };
+  const activePeopleRow = await rawGet<{ n: number | string }>(client, sql`
+    SELECT COUNT(DISTINCT user_id) AS n FROM cowork_messages cm
+    WHERE cm.user_id IS NOT NULL AND cm.occurred_at >= ${thirtyDaysAgo} AND ${sql.raw(vendorClause(vendor, 'cm.'))}
+  `);
+  const dashboard = {
+    weeks,
+    otiWeeks: await weekAvg('oti', 'user'),
+    orsWeeks: await weekAvg('ors', 'function'),
+    tierWeeks: weeks.map((_, i) => tierByWeek.get(i) ?? null),
+    priorTierCounts: { t1: Number(priorTier?.t1 ?? 0), t2: Number(priorTier?.t2 ?? 0), t3: Number(priorTier?.t3 ?? 0) },
+    capabilityWeeks: weeks.map((_, i) => capByWeek.get(i) ?? 0),
+    capabilitiesRecent: Number(capCounts?.recent ?? 0),
+    capabilitiesPending: Number(capCounts?.pending ?? 0),
+    skillSpread: await spread('cowork_skill_invocations', 'skill_name'),
+    connectorSpread: await spread('cowork_mcp_invocations', 'mcp_server'),
+    activePeople30d: Number(activePeopleRow?.n ?? 0),
+  };
+
   return NextResponse.json({
+    dashboard,
     signalCards: {
       oti: otiAvg !== null && otiAvg !== undefined ? Math.round(Number(otiAvg) * 100) / 100 : null,
       dds: ddsAvg !== null && ddsAvg !== undefined ? Math.round(Number(ddsAvg) * 100) / 100 : null,

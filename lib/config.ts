@@ -230,6 +230,8 @@ export interface AppConfig {
   alertsSlackSweepCursor: string;
   // Licensed seats (dashboard Active Users denominator)
   licensedSeats: string;
+  // Department adoption target for the dashboard, a percentage as a string; blank = 50, 0 = none.
+  targetDeptAdoptionPct: string;
   // OIDC SSO
   ssoEnabled: boolean;
   ssoIssuerUrl: string;
@@ -505,6 +507,7 @@ export const CONFIG_KEYS: Record<keyof AppConfig, string> = {
   alertsSlackSweepLastRun: 'alerts_slack_sweep_last_run',
   alertsSlackSweepCursor: 'alerts_slack_sweep_cursor',
   licensedSeats: 'licensed_seats',
+  targetDeptAdoptionPct: 'target_dept_adoption_pct',
   ssoEnabled: 'sso_enabled',
   ssoIssuerUrl: 'sso_issuer_url',
   ssoClientId: 'sso_client_id',
@@ -916,6 +919,7 @@ export async function getAllConfig(): Promise<AppConfig> {
     alertsSlackSweepCursor: resolve('alertsSlackSweepCursor'),
     // Licensed seats
     licensedSeats: resolve('licensedSeats'),
+    targetDeptAdoptionPct: resolve('targetDeptAdoptionPct'),
     // OIDC SSO
     ssoEnabled: resolve('ssoEnabled', 'false') === 'true',
     ssoIssuerUrl: resolve('ssoIssuerUrl'),

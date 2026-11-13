@@ -3,15 +3,26 @@
 
 'use client';
 
+/**
+ * The Dashboard's Developer Pulse panel: an answer line and four plain questions (cost, what it
+ * shipped, how much developers delegate, repos reached), the same card layout as the Work Pulse
+ * panel above it. Last 7 days against the 7 before. A figure that isn't captured says so.
+ */
 import { useEffect, useState } from 'react';
 import Link from 'next/link';
-import { Strip, Figure } from '@/components/precision/ui';
-import { formatCurrency, formatTokens, type CodeMetricsRow } from '@/components/pulse/code/CodeStatStrip';
+import { Tag } from '@/components/precision/ui';
+import { formatCurrency, type CodeMetricsRow } from '@/components/pulse/code/CodeStatStrip';
+import { QuestionCard, changeFrom } from '@/components/dashboard/QuestionCard';
+
+interface WeeklyPoint { weekStart: number; value: number | null; partial: boolean }
 
 interface BandData {
   codexPresent?: boolean;
   metrics: CodeMetricsRow | null;
-  githubOverlay: { totalCommits7d: number; reposActive7d?: number; trackedRepoCount?: number } | null;
+  priorMetrics: { spend_usd: number | null; autonomy_ratio: number | null; session_count: number } | null;
+  trends?: { spend: { series: WeeklyPoint[] }; autonomy: { series: WeeklyPoint[] }; commits: { series: WeeklyPoint[] } };
+  spendProjection: { projected: number } | null;
+  githubOverlay: { totalCommits7d: number; totalPrs7d?: number; reposActive7d?: number; trackedRepoCount?: number } | null;
 }
 
 /** `vendor` is the dashboard's switch: Developer Pulse's figures follow it (Codex in the OpenAI view). */
@@ -31,51 +42,74 @@ export default function CodePulseBand({ vendor = 'all' }: { vendor?: 'all' | 'cl
 
   if (forbidden || !data) return null;
   const m = data.metrics;
+  const tool = vendor === 'openai' ? 'Codex' : vendor === 'claude' || !data.codexPresent ? 'Claude Code' : 'Claude Code and Codex';
+  const series = (s?: WeeklyPoint[]) => (s ?? []).filter(p => !p.partial).map(p => p.value);
 
-  // Phase 3 overlay framing: AI-assisted commits lead; GitHub volume is context only
-  // (the in-session share field no longer exists in the org-summary payload).
-  const shipping = String(m?.commit_count ?? 0);
-  const shippingDesc = data.githubOverlay && data.githubOverlay.totalCommits7d > 0
-    ? `AI-assisted commits this week · ${data.githubOverlay.totalCommits7d} on GitHub across tracked repos`
-    : `Commits made inside ${!data.codexPresent || vendor === 'claude' ? 'Claude Code' : vendor === 'openai' ? 'Codex' : 'Claude Code and Codex'} sessions`;
+  const spend = m?.spend_usd ?? null;
+  const priorSpend = data.priorMetrics?.spend_usd ?? null;
+  const commits = m?.commit_count ?? null;
+  const prs = data.githubOverlay?.totalPrs7d ?? m?.pr_count ?? null;
+  const autonomy = m?.autonomy_ratio ?? null;
+  const priorAutonomy = data.priorMetrics?.autonomy_ratio ?? null;
+  const ghRepos = data.githubOverlay?.reposActive7d;
+  const repos = (m?.repo_count ?? 0) > 0 ? m!.repo_count : ghRepos !== undefined ? ghRepos : null;
 
-  const githubRepos = (m?.repo_count ?? 0) === 0 && data.githubOverlay?.reposActive7d !== undefined;
+  const spendChange = spend !== null && priorSpend !== null && priorSpend > 0
+    ? (() => { const p = Math.round(((spend - priorSpend) / priorSpend) * 100); return p === 0 ? 'the same as the 7 days before' : `${Math.abs(p)}% ${p > 0 ? 'more' : 'less'} than the 7 days before`; })()
+    : null;
+
+  const answer = commits !== null && commits > 0
+    ? <>{tool} helped make <b>{commits.toLocaleString('en-GB')} commits</b> in the last 7 days{spend !== null ? <>, for <b>{formatCurrency(spend)}</b></> : null}.</>
+    : spend !== null
+      ? <>{tool} cost <b>{formatCurrency(spend)}</b> in the last 7 days{spendChange ? `, ${spendChange}` : ''}.</>
+      : null;
 
   return (
-    <div className="flex flex-col gap-2">
-      <div className="flex items-baseline gap-x-3 gap-y-1 flex-wrap">
-        <h3 className="m-0 text-[14px] font-semibold text-[#0A0A0A]"><span className="text-[#245BF3] font-mono" aria-hidden="true">{'</>'}</span> Developer Pulse</h3>
-        <span className="text-[13px] text-[#8F8F8F]">Engineering signals · 7 days · measured, not judged</span>
-        <Link href="/pulse/code" className="ml-auto text-[13px] font-medium text-[#245BF3] hover:underline">
-          Open Developer Pulse
-        </Link>
+    <section className="bg-white border border-[#EAEAEA] rounded-[14px] px-4 py-3.5">
+      <div className="flex items-baseline gap-2 flex-wrap">
+        <h2 className="m-0 text-[14px] font-semibold text-[#0A0A0A]">Developer Pulse</h2>
+        <Tag tone="measured">Measured</Tag>
+        <span className="ml-auto text-[12px] text-[#8F8F8F]">Last 7 days against the 7 before</span>
       </div>
-      <Strip cols={4}>
-        <Figure
-          label="Spend"
-          value={m?.spend_usd == null ? '—' : formatCurrency(m.spend_usd)}
-          sub={`${formatTokens((m?.input_tokens ?? 0) + (m?.output_tokens ?? 0))} tokens this week`}
+      {answer && <p className="m-0 mt-2 text-[15px] leading-6 text-[#0A0A0A] [&_b]:font-semibold">{answer}</p>}
+      <div className="grid grid-cols-2 xl:grid-cols-4 gap-2.5 mt-3">
+        <QuestionCard
+          question="What did it cost?"
+          value={spend !== null ? formatCurrency(spend) : undefined}
+          change={spendChange}
+          sub={data.spendProjection ? `on pace for ${formatCurrency(data.spendProjection.projected)} this month (estimate)` : undefined}
+          trend={series(data.trends?.spend.series)}
+          trendKind="bars"
+          notMeasured={spend === null ? 'No priced model calls in the last 7 days' : undefined}
         />
-        <Figure
-          label="Automation"
-          value={m?.autonomy_ratio == null ? '—' : `${m.autonomy_ratio.toFixed(1)}×`}
-          sub={`Actions ${!data.codexPresent || vendor === 'claude' ? 'Claude' : vendor === 'openai' ? 'Codex' : 'the AI'} takes per instruction`}
+        <QuestionCard
+          question="What did it ship?"
+          value={commits !== null ? commits.toLocaleString('en-GB') : undefined}
+          unit="commits"
+          sub={prs !== null && prs > 0 ? `${prs} pull requests merged` : undefined}
+          trend={series(data.trends?.commits.series)}
+          trendKind="bars"
+          trendColour="#0D8276"
+          notMeasured={commits === null ? 'No commits recorded yet' : undefined}
         />
-        <Figure label="Shipping" value={shipping} sub={shippingDesc} />
-        {githubRepos ? (
-          <Figure
-            label="Repos"
-            value={String(data.githubOverlay!.reposActive7d)}
-            sub={`GitHub-tracked repos with commits this week · ${data.githubOverlay!.trackedRepoCount ?? 0} tracked`}
-          />
-        ) : (
-          <Figure
-            label="Repos"
-            value={String(m?.repo_count ?? 0)}
-            sub={`${m?.session_count ?? 0} sessions across active codebases`}
-          />
-        )}
-      </Strip>
-    </div>
+        <QuestionCard
+          question="How much do developers delegate?"
+          value={autonomy !== null ? autonomy.toFixed(1) : undefined}
+          unit="actions per prompt"
+          change={changeFrom(autonomy, priorAutonomy, v => v.toFixed(1), 'the 7 days before')}
+          trend={series(data.trends?.autonomy.series)}
+          notMeasured={autonomy === null ? 'Needs sessions with tool actions' : undefined}
+        />
+        <QuestionCard
+          question="How many repos does it reach?"
+          value={repos !== null ? String(repos) : undefined}
+          unit={repos !== null ? (ghRepos !== undefined && (m?.repo_count ?? 0) === 0 ? `of ${data.githubOverlay?.trackedRepoCount ?? 0} tracked on GitHub` : 'repos') : undefined}
+          notMeasured={repos === null ? <>Connect GitHub to see repos. <Link href="/admin/code-pulse?tab=github" className="text-[#245BF3] hover:underline">Set up</Link></> : undefined}
+        />
+      </div>
+      <p className="m-0 mt-3 pt-2.5 border-t border-dashed border-[#EAEAEA] text-[12px] text-[#8F8F8F]">
+        Measured from {tool} telemetry. Bars and lines show the last 8 completed weeks. <Link href="/pulse/code" className="text-[#245BF3] font-medium hover:underline">Open Developer Pulse</Link>
+      </p>
+    </section>
   );
 }
