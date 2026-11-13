@@ -21,6 +21,7 @@ import { getAdminSession, isDeptScoped, canAccessCoworkPulse, canAccessPulseAdmi
 import { buildMyPeriod, type MyPeriod, type PulsePeriod } from '@/lib/pulse/my-period';
 import { getTierNames } from '@/lib/pulse/tier-config';
 import { vendorClause } from '@/lib/dashboard/product-sql';
+import { monthSpend } from '@/lib/finance/month-spend';
 import { humanTimeOn } from '@/lib/pulse/human-time-flags';
 import { buildFrontierView, resolveViewerUserId } from '@/lib/pulse/frontier-view';
 import { getTypedClient } from '@/lib/db/client';
@@ -547,9 +548,18 @@ export async function GET(
   }).sort((a, b) => (b.share ?? -1) - (a.share ?? -1) || b.deep - a.deep);
 
   const deptChatgpt = vendor === 'claude' || !openaiPresent ? undefined : await chatgptSpend({ since: sevenDaysAgoOtel, userIds: memberIds });
+  // This month's spend for the department, from the same figures FinOps uses.
+  let spendThisMonth = null;
+  try {
+    spendThisMonth = await monthSpend(memberIds, vendor, now);
+  } catch (err) {
+    console.error('[pulse/dept] month spend failed', err);
+  }
+
   return NextResponse.json({
     humanTime,
     period,
+    spendThisMonth,
     memberRows,
     tierNames: await getTierNames(),
     dept,

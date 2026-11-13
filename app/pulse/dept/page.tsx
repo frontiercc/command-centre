@@ -9,7 +9,8 @@ import TopBar from '@/components/layout/TopBar';
 import LoadingSpinner from '@/components/shared/LoadingSpinner';
 import {
   WorkPanel, TaskList, DeeperPanel, ByHandPanel, PeoplePanel, ProducedPanel, ColleagueToolsPanel,
-  type ByHand, type PersonRow, type Who, type DrillKind,
+  CapabilitiesPanel, SpendPanel,
+  type ByHand, type MonthSpend, type PersonRow, type Who, type DrillKind,
 } from '@/components/pulse/MyPulsePanels';
 import { Frame } from '@/components/pulse/WorkPulseOverview';
 import type { BandSegment, PersonDelegation } from '@/components/pulse/DelegationBands';
@@ -32,6 +33,7 @@ interface DeptData {
   humanTime?: ByHand | null;
   period?: MyPeriod | null;
   memberRows?: PersonRow[];
+  spendThisMonth?: MonthSpend | null;
   tierNames?: TierNames | null;
   dept: string;
   members: Array<{ id: string; display_name: string | null; email: string }>;
@@ -233,7 +235,7 @@ export default function DeptPickerPage() {
                   {/* 4 and 5: what the work took, and what came out of it */}
                   <div className="grid grid-cols-1 xl:grid-cols-2 gap-4">
                     <ByHandPanel h={d.humanTime} who={who} />
-                    <ProducedPanel q={q} who={who} period={period} />
+                    <ProducedPanel q={q} who={who} period={period} uploads={d.docSessions ? { sessions: d.docSessions.sessions_with_uploads, files: d.docSessions.total_uploads } : null} />
                   </div>
 
                   {/* 6. Who is in it */}
@@ -251,8 +253,21 @@ export default function DeptPickerPage() {
                     <CoachingPrompts prompts={d.coaching?.prompts ?? []} />
                   </div>
 
-                  {/* 9. What colleagues elsewhere use */}
-                  <ColleagueToolsPanel q={q} who={who} department={d.dept} period={period} />
+                  {/* 9 and 10: what the department started, and what it spent */}
+                  <div className="grid grid-cols-1 xl:grid-cols-2 gap-4">
+                    <CapabilitiesPanel
+                      items={d.frontier?.capabilities ?? []}
+                      pending={d.frontier?.capabilityPending ?? 0}
+                      canReview={d.frontierAccess?.canReview ?? false}
+                      onChanged={() => loadDept(selectedDept)}
+                    />
+                    {d.spendThisMonth
+                      ? <SpendPanel s={d.spendThisMonth} product={product} who={who} reviewHref={null} />
+                      : <ColleagueToolsPanel q={q} who={who} department={d.dept} period={period} />}
+                  </div>
+
+                  {/* 11. What colleagues elsewhere use */}
+                  {d.spendThisMonth && <ColleagueToolsPanel q={q} who={who} department={d.dept} period={period} />}
                 </>
               ) : (
                 <Notice tone="info" title="No work yet.">Nothing has been recorded for this department yet.</Notice>

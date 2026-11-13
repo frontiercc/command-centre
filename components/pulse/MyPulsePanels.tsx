@@ -12,6 +12,7 @@
 import Link from 'next/link';
 import { useEffect, useState } from 'react';
 import { QuestionCard, shareWords, cap } from '@/components/dashboard/QuestionCard';
+import { B } from '@/components/precision/ui';
 import { Frame, Track, linkCls } from '@/components/pulse/WorkPulseOverview';
 import {
   depthColumns, depthSentence, gridSentence, DepthChart, DepthSwitch, TierGrid, TierLegend,
@@ -73,7 +74,6 @@ export function WorkPanel({ q, product, who, period, onPeriod, onDrill, drill, r
     : r.before === r.now ? `the same as ${shape.prior}` : `${r.now > r.before ? 'up' : 'down'} from ${r.before} ${shape.prior}`;
   const deptLine = r.deptAverage === null ? 'No department average yet.'
     : `${r.now > r.deptAverage * 1.25 ? 'Above' : r.now < r.deptAverage * 0.75 ? 'Below' : 'About'} the department average of ${Math.round(r.deptAverage)}.`;
-  const ht = q.humanTime;
   // Nothing before to compare with: say nothing rather than filling the line with it.
   const shareChange = q.share.before === null || q.share.now === null ? null
       : Math.round(q.share.now * 100) === Math.round(q.share.before * 100) ? `the same as ${shape.prior}`
@@ -340,7 +340,11 @@ export function PeoplePanel({ rows, dept, names, thenVsNow }: {
 
 /* ── 4: What was produced ─────────────────────────────────────── */
 
-export function ProducedPanel({ q, who, period }: { q: MyPeriod; who: Who; period: PulsePeriod }) {
+export function ProducedPanel({ q, who, period, uploads }: {
+  q: MyPeriod; who: Who; period: PulsePeriod;
+  /** Documents brought in, for a department: sessions with an upload, and how many files. */
+  uploads?: { sessions: number; files: number } | null;
+}) {
   const p = q.produced;
   const max = Math.max(1, ...p.byKind.map(k => k.files));
   const top = p.byKind.filter(k => k.kind !== 'Other').slice(0, 2).map(k => k.kind.toLowerCase());
@@ -351,7 +355,7 @@ export function ProducedPanel({ q, who, period }: { q: MyPeriod; who: Who; perio
       answer={p.files === 0
         ? <>No files saved, sent or published, from <b>{plural(p.sessions, 'session', 'sessions')}</b>.</>
         : <><b>{plural(p.files, 'file', 'files')}</b> from {plural(p.sessions, 'session', 'sessions')}{top.length ? <>, mostly {top.join(' and ')}</> : null}.</>}
-      note="A session produced a file when Claude saved, sent or published one."
+      note={<>A session produced a file when Claude saved, sent or published one.{uploads && uploads.sessions > 0 ? ` ${uploads.sessions} ${uploads.sessions === 1 ? 'session had' : 'sessions had'} documents brought in, ${uploads.files} ${uploads.files === 1 ? 'file' : 'files'} in all.` : ''}</>}
     >
       {p.byKind.map(k => (
         <div key={k.kind} className="grid grid-cols-[minmax(0,120px)_minmax(0,1fr)_36px] gap-2.5 items-center py-[3px] text-[13px]">
@@ -387,6 +391,68 @@ export function ColleagueToolsPanel({ q, who, department, period }: {
           <span className="min-w-0 truncate text-[#0A0A0A]">{x.name}</span>
           <span className="text-[#777777] whitespace-nowrap">{x.type} · {x.people} colleagues</span>
           {x.libraryId !== null && <Link href={`/library/${x.libraryId}`} className={`${linkCls} ml-auto`}>See it</Link>}
+        </div>
+      ))}
+    </Frame>
+  );
+}
+
+/* ── New ways of working, named ───────────────────────────────── */
+
+export interface CapabilityItem {
+  sessionId: string;
+  displayName: string;
+  taskType: string;
+  occurredAt: number;
+  description: string | null;
+  detailWithheld: boolean;
+  capability?: { eventId: number; status: 'candidate' | 'confirmed' };
+}
+
+export function CapabilitiesPanel({ items, pending, canReview, onChanged }: {
+  items: CapabilityItem[];
+  pending: number;
+  canReview: boolean;
+  onChanged: () => void;
+}) {
+  const [busy, setBusy] = useState<number | null>(null);
+  const act = async (eventId: number, action: 'confirm' | 'dismiss') => {
+    setBusy(eventId);
+    await fetch('/api/pulse/capabilities', {
+      method: 'PATCH', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ id: eventId, action }),
+    }).catch(() => {});
+    setBusy(null);
+    onChanged();
+  };
+  const confirmed = items.filter(i => i.capability?.status === 'confirmed').length;
+  return (
+    <Frame
+      title="New ways of working"
+      judged
+      period="Last 30 days"
+      answer={items.length === 0
+        ? <>Nothing new this month. Claude flags work that creates something reusable; a manager confirms it.</>
+        : <><b>{confirmed} confirmed</b>{pending > 0 ? <>, and <b>{pending}</b> {pending === 1 ? 'is' : 'are'} waiting for review</> : null}.</>}
+      note="A new way of working is a session that produced something the department can use again."
+    >
+      {items.map(i => (
+        <div key={i.sessionId} className="py-2 border-b border-[#F2F2F2] last:border-b-0 flex items-start gap-3">
+          <div className="min-w-0 flex-1">
+            <p className="m-0 flex items-baseline gap-2 flex-wrap text-[13px]">
+              <span className="font-semibold text-[#0A0A0A]">{i.displayName}</span>
+              <span className="text-[#666666]">{cap(i.taskType.replace(/_/g, ' '))}</span>
+              <span className="text-[#8F8F8F]">{dateOf(i.occurredAt)}</span>
+              {i.capability?.status === 'candidate' && <span className="text-[12px] text-[#B54708]">waiting for review</span>}
+            </p>
+            {i.description && <p className="m-0 mt-0.5 text-[13px] leading-5 text-[#444444] line-clamp-2">{i.description}</p>}
+          </div>
+          {canReview && i.capability?.status === 'candidate' && (
+            <span className="flex gap-1.5 shrink-0">
+              <button type="button" disabled={busy === i.capability.eventId} onClick={() => act(i.capability!.eventId, 'confirm')} className={`${B.secondary} !py-0.5 !px-2 !text-[12px]`}>Confirm</button>
+              <button type="button" disabled={busy === i.capability.eventId} onClick={() => act(i.capability!.eventId, 'dismiss')} className={`${B.secondary} !py-0.5 !px-2 !text-[12px]`}>Dismiss</button>
+            </span>
+          )}
         </div>
       ))}
     </Frame>
