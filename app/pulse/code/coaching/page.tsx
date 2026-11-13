@@ -1,0 +1,255 @@
+// Copyright 2026 Lee James
+// SPDX-License-Identifier: Apache-2.0
+
+// Developer Pulse, Team coaching (admin and manager): a coaching plan for one team, from
+// GET /api/pulse/code/coaching. Admins pick any team; a manager sees their own department.
+// Marking an action done saves the figure it is meant to move, so the page can say later
+// whether that figure moved, against the organisation's own movement over the same time.
+'use client';
+
+import { useCallback, useEffect, useState } from 'react';
+import TopBar from '@/components/layout/TopBar';
+import LoadingSpinner from '@/components/shared/LoadingSpinner';
+import { PageBody, Toolbar, Notice, B, cx } from '@/components/precision/ui';
+import { Frame, Track, linkCls } from '@/components/pulse/WorkPulseOverview';
+import { deepWords } from '@/lib/pulse/tier-names';
+import type { CoachingPlan, PlanAction } from '@/lib/pulse/code/team-coaching';
+
+interface Data { teams: string[]; department: string | null; plan: CoachingPlan | null; checkAfterDays: number }
+
+const pct = (v: number | null) => (v === null ? '—' : `${Math.round(v * 100)}%`);
+const day = (s: number) => new Date(s * 1000).toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric' });
+
+const RESULT_WORDS: Record<string, string> = {
+  better: 'Moved the right way',
+  worse: 'Moved the wrong way',
+  same: 'No change yet',
+  too_few: 'Too few people to tell',
+};
+const RESULT_INK: Record<string, string> = {
+  better: '#1A7F37', worse: '#B54708', same: '#666666', too_few: '#8F8F8F',
+};
+
+function DidItWork({ a }: { a: PlanAction }) {
+  const d = a.done;
+  if (!d) return null;
+  const waiting = d.result === null;
+  return (
+    <div className="mt-1.5 pl-3 border-l-2 border-[#EAEAEA] text-[12px] text-[#666666]">
+      <p className="m-0">
+        Marked done {day(d.at)} by {d.by}
+        {d.note ? <> · &ldquo;{d.note}&rdquo;</> : null}
+      </p>
+      {d.measure && (
+        <p className="m-0 mt-0.5">
+          {d.measure}: {pct(d.before)} then
+          {waiting
+            ? <>, checked again from {day(d.checkFrom)}</>
+            : <>, {pct(d.now)} now{d.orgBefore !== null && d.orgNow !== null ? <> (organisation {pct(d.orgBefore)} to {pct(d.orgNow)})</> : null}</>}
+        </p>
+      )}
+      {d.result && (
+        <p className="m-0 mt-0.5 font-medium" style={{ color: RESULT_INK[d.result] }}>{RESULT_WORDS[d.result]}</p>
+      )}
+      {d.sharedWith.length > 0 && (
+        <p className="m-0 mt-0.5">Other actions aiming at the same figure were done around the same time, so the change can&apos;t be put down to this one alone.</p>
+      )}
+    </div>
+  );
+}
+
+export default function TeamCoachingPage() {
+  const [data, setData] = useState<Data | null>(null);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
+  const [department, setDepartment] = useState<string>('');
+  const [busy, setBusy] = useState<string | null>(null);
+  const [noteFor, setNoteFor] = useState<string | null>(null);
+  const [note, setNote] = useState('');
+
+  const load = useCallback((dept: string) => {
+    setLoading(true);
+    setError(null);
+    fetch(`/api/pulse/code/coaching${dept ? `?department=${encodeURIComponent(dept)}` : ''}`)
+      .then(async r => {
+        const body = await r.json().catch(() => ({}));
+        if (!r.ok) throw new Error(body.error || "Couldn't load this page. Try again.");
+        return body as Data;
+      })
+      .then(d => { setData(d); setDepartment(d.department ?? ''); })
+      .catch(e => { setData(null); setError(e.message); })
+      .finally(() => setLoading(false));
+  }, []);
+
+  useEffect(() => { load(''); }, [load]);
+
+  const act = async (a: PlanAction, mode: 'done' | 'undo') => {
+    if (!data?.department) return;
+    setBusy(a.key);
+    await fetch('/api/pulse/code/coaching/actions', {
+      method: mode === 'done' ? 'POST' : 'DELETE',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ department: data.department, key: a.key, note: mode === 'done' ? note || null : null }),
+    }).catch(() => {});
+    setBusy(null);
+    setNoteFor(null);
+    setNote('');
+    load(data.department);
+  };
+
+  const plan = data?.plan ?? null;
+  const deep = plan ? deepWords(plan.tierNames) : 'deeper';
+
+  return (
+    <>
+      <TopBar title="Team coaching" subtitle="What one team could do next, and whether what they did worked" />
+      <PageBody className="dash-compact">
+        {(data?.teams.length ?? 0) > 1 && (
+          <Toolbar
+            left={
+              <select
+                aria-label="Team"
+                value={department}
+                onChange={e => { setDepartment(e.target.value); load(e.target.value); }}
+                className={cx(B.select, 'min-w-[240px] text-[14px]')}
+              >
+                {data!.teams.map(t => <option key={t} value={t}>{t}</option>)}
+              </select>
+            }
+          />
+        )}
+
+        {loading && <LoadingSpinner />}
+        {error && <Notice tone="warn" title="Not available.">{error}</Notice>}
+
+        {!loading && !error && !plan && (
+          <Notice tone="info" title="No coaching yet.">
+            No classified coding sessions for this team in the last 30 days, so there is nothing to coach from.
+          </Notice>
+        )}
+
+        {!loading && plan && (
+          <>
+            <Frame
+              title={`Where ${plan.department} is`}
+              judged
+              period="Last 30 days against the 30 before"
+              answer={<>
+                <b>{plan.sessions.toLocaleString('en-GB')} sessions</b> from {plan.people} {plan.people === 1 ? 'person' : 'people'}
+                {plan.figures.deepShare !== null ? <>, <b>{pct(plan.figures.deepShare)}</b> of them judged {deep}</> : null}.
+              </>}
+              note={`Judged by the session classifier. "${deep}" means the top two tiers, as named on Admin → Developer Pulse → Tiers.`}
+            >
+              {plan.where.map((t, i) => <p key={i} className="m-0 py-0.5 text-[13px] leading-5 text-[#333333]">{t}</p>)}
+              {plan.figures.deepShare !== null && plan.org.deepShare !== null && (
+                <div className="mt-2 pt-2 border-t border-[#EAEAEA]">
+                  {[['This team', plan.figures.deepShare], ['The organisation', plan.org.deepShare]].map(([l, v]) => (
+                    <div key={String(l)} className="grid grid-cols-[minmax(0,130px)_minmax(0,1fr)_48px] gap-2.5 items-center py-[3px] text-[13px]">
+                      <span className="text-[#333333]">{l as string}</span>
+                      <Track value={v as number} />
+                      <span className="text-right tabular-nums">{pct(v as number)}</span>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </Frame>
+
+            <div className="grid grid-cols-1 xl:grid-cols-2 gap-4">
+              <Frame
+                title="What to work on"
+                judged
+                period="Last 30 days"
+                answer={plan.workOn.length > 0 ? <>{plan.workOn[0]}</> : <>No kinds of work stand out.</>}
+                note="The share each kind of work takes, against what an admin intended on Admin → Developer Pulse."
+              >
+                {plan.workOn.slice(1).map((t, i) => <p key={i} className="m-0 pb-1 text-[13px] leading-5 text-[#333333]">{t}</p>)}
+                {plan.figures.work.slice(0, 6).map(w => (
+                  <div key={w.workType} className="grid grid-cols-[minmax(0,180px)_minmax(0,1fr)_96px] gap-2.5 items-center py-[3px] text-[13px]">
+                    <span className="text-[#333333] leading-4">{w.label}</span>
+                    <Track value={w.share} floor={w.target === null ? null : w.target / 100} />
+                    <span className="text-right tabular-nums whitespace-nowrap">
+                      {pct(w.share)}{w.target !== null ? <span className="text-[#8F8F8F]"> of {w.target}%</span> : null}
+                    </span>
+                  </div>
+                ))}
+              </Frame>
+
+              <Frame
+                title="Who to learn from"
+                judged
+                period="Last 30 days"
+                answer={plan.learnFrom.length === 0
+                  ? <>Nobody in this team is handing over much yet. The people to learn from are in other teams.</>
+                  : <><b>{plan.learnFrom[0].name}</b> hands over the most: {pct(plan.learnFrom[0].deepShare)} of their sessions were {deep}.</>}
+                note="Named because this page is for admins and managers only."
+              >
+                {plan.learnFrom.map(c => (
+                  <div key={c.name} className="flex items-baseline gap-2.5 py-1.5 border-b border-[#F2F2F2] last:border-b-0 text-[13px]">
+                    <span className="min-w-0 truncate text-[#0A0A0A]">{c.name}</span>
+                    <span className="text-[#777777] whitespace-nowrap">{c.sessions} {c.sessions === 1 ? 'session' : 'sessions'}</span>
+                    <span className="ml-auto tabular-nums text-[#333333]">{pct(c.deepShare)} {deep}</span>
+                  </div>
+                ))}
+              </Frame>
+            </div>
+
+            <Frame
+              title="What to try"
+              period={`Checked again ${plan.actions.some(a => a.done) ? 'from' : 'after'} ${data?.checkAfterDays ?? 30} days`}
+              answer={plan.actions.length === 0
+                ? <>Nothing to suggest: this team is within reach of everything the figures look at.</>
+                : <><b>{plan.actions.length} {plan.actions.length === 1 ? 'thing' : 'things'}</b> worth trying, each tied to the figure it should move.</>}
+              note="Marking one done records the figure as it stands today, for the team and the organisation, so the page can tell you later whether it moved."
+            >
+              {plan.actions.map(a => (
+                <div key={a.key} className="py-2 border-b border-[#F2F2F2] last:border-b-0">
+                  <div className="flex items-start gap-3">
+                    <div className="min-w-0 flex-1">
+                      <p className="m-0 text-[13px] leading-5 text-[#0A0A0A]">{a.text}</p>
+                      {a.because && <p className="m-0 mt-0.5 text-[12px] text-[#777777]">{a.because}</p>}
+                    </div>
+                    <span className="shrink-0 flex gap-1.5">
+                      {a.done ? (
+                        <button type="button" disabled={busy === a.key} onClick={() => act(a, 'undo')} className={linkCls}>Undo</button>
+                      ) : noteFor === a.key ? (
+                        <button type="button" disabled={busy === a.key} onClick={() => act(a, 'done')} className={`${B.secondary} !py-0.5 !px-2 !text-[12px]`}>Save</button>
+                      ) : (
+                        <button type="button" onClick={() => { setNoteFor(a.key); setNote(''); }} className={`${B.secondary} !py-0.5 !px-2 !text-[12px]`}>Mark done</button>
+                      )}
+                    </span>
+                  </div>
+                  {noteFor === a.key && !a.done && (
+                    <input
+                      autoFocus
+                      value={note}
+                      onChange={e => setNote(e.target.value)}
+                      placeholder="What did the team do? (optional)"
+                      maxLength={500}
+                      className="mt-1.5 w-full border border-[#DADADA] rounded-[8px] px-2 py-1 text-[13px]"
+                    />
+                  )}
+                  <DidItWork a={a} />
+                </div>
+              ))}
+            </Frame>
+
+            {plan.pastActions.length > 0 && (
+              <Frame
+                title="Done before"
+                period={`${plan.pastActions.length} ${plan.pastActions.length === 1 ? 'action' : 'actions'}`}
+                answer={<>These are no longer suggested: the figure that raised them has moved.</>}
+              >
+                {plan.pastActions.map(a => (
+                  <div key={a.key} className="py-2 border-b border-[#F2F2F2] last:border-b-0">
+                    <p className="m-0 text-[13px] leading-5 text-[#333333]">{a.text}</p>
+                    <DidItWork a={a} />
+                  </div>
+                ))}
+              </Frame>
+            )}
+          </>
+        )}
+      </PageBody>
+    </>
+  );
+}

@@ -1174,6 +1174,25 @@ export const totpConsumedSteps = pgTable('totp_consumed_steps', {
     consumed_at: bigint({ mode: 'number' }).notNull(),
 });
 
+/**
+ * Team coaching: an action a team lead marked done, with the figure it is meant to move as it
+ * stood that day (the team's and the organisation's), so the page can say later whether it moved.
+ * Keyed by department, which is how teams are identified everywhere on these pages.
+ */
+export const coachingActions = pgTable('coaching_actions', {
+    department: text().notNull(),
+    action_key: text().notNull(),
+    action_text: text().notNull(),
+    metric: text(),
+    baseline: doublePrecision(),
+    org_baseline: doublePrecision(),
+    note: text(),
+    done_by: text().notNull(),
+    done_at: bigint({ mode: 'number' }).notNull(),
+}, (t) => [
+    primaryKey({ columns: [t.department, t.action_key] }),
+]);
+
 export const coachingAcks = pgTable('coaching_acks', {
     user_id: text().notNull(),
     use_case_id: text().notNull(),
@@ -1403,6 +1422,7 @@ export const pgSchema = {
   chargebackPeriods,
   chatAssistantMeta,
   coachingAcks,
+  coachingActions,
   codeAssistantMeta,
   codeMetrics,
   codeOtelMetrics,

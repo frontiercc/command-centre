@@ -126,6 +126,7 @@ export async function POST(request: NextRequest) {
     'codeModelAllowlist',
     'codeSensitiveRepoPatterns',
     'codeClassifierEnabled',
+    'codeEffortTargets',
     'codeClassifierModel',
     'codeClassifierIncludePrompt',
     'codeClassifierConfig',

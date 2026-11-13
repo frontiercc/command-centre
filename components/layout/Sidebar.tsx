@@ -416,6 +416,11 @@ export default function Sidebar({ theme = 'default' }: { theme?: Theme }) {
                   Departments
                 </Link>
               )}
+              {(userRole === 'admin' || userRole === 'manager') && (
+                <Link href="/pulse/code/coaching" className={subLinkCls('/pulse/code/coaching')}>
+                  Team coaching
+                </Link>
+              )}
               {(userRole === 'admin' || userRole === 'manager' || userRole === 'viewer') && !openaiOnly && (
                 <Link href="/pulse/code/framework" className={subLinkCls('/pulse/code/framework')}>
                   Dev Framework Alignment

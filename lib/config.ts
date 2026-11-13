@@ -187,6 +187,8 @@ export interface AppConfig {
   codeFrictionThreshold: number;
   // Developer Pulse session-digest classifier (opt-in judged layer)
   codeClassifierEnabled: boolean;
+  /** Team coaching: the share of sessions an admin intends each kind of work to take (JSON). */
+  codeEffortTargets: string;
   codeClassifierModel: string;
   codeClassifierIncludePrompt: boolean;
   codeClassifierLastRun: string;
@@ -475,6 +477,7 @@ export const CONFIG_KEYS: Record<keyof AppConfig, string> = {
   codeAlertFrictionEnabled: 'code_alert_friction_enabled',
   codeFrictionThreshold: 'code_friction_threshold',
   codeClassifierEnabled: 'code_classifier_enabled',
+  codeEffortTargets: 'code_effort_targets',
   codeClassifierModel: 'code_classifier_model',
   codeClassifierIncludePrompt: 'code_classifier_include_prompt',
   codeClassifierLastRun: 'code_classifier_last_run',
@@ -881,6 +884,7 @@ export async function getAllConfig(): Promise<AppConfig> {
     codeAlertFrictionEnabled: resolve('codeAlertFrictionEnabled', 'false') === 'true',
     codeFrictionThreshold: parseFloat(resolve('codeFrictionThreshold', '0.25')),
     codeClassifierEnabled: resolve('codeClassifierEnabled', 'true') === 'true',
+    codeEffortTargets: resolve('codeEffortTargets', ''),
     codeClassifierModel: resolve('codeClassifierModel', 'claude-haiku-4-5-20251001'),
     codeClassifierIncludePrompt: resolve('codeClassifierIncludePrompt', 'true') === 'true',
     codeClassifierLastRun: resolve('codeClassifierLastRun'),
