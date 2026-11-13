@@ -231,20 +231,23 @@ function Stuck({ rows }: { rows: SoleRow[] }) {
 
 function Unused({ rows, of }: { rows: UnusedRow[]; of: number }) {
   if (of === 0) return null;
+  const never = rows.filter(r => r.lastUsed === null).length;
   return (
     <Frame
       title="Used by nobody"
       period="Last 30 days"
       answer={rows.length === 0
-        ? <>Every one of the {of} skills and connectors on the Board was used this month.</>
-        : <><b>{rows.length} of {of}</b> skills and connectors on the Board were not used at all.</>}
-      note={<>Worth retiring, or worth a nudge. <Link href="/library" className={linkCls}>Open the S&amp;C Board</Link></>}
+        ? <>Every one of the {of} skills and connectors people have claimed was used this month.</>
+        : <><b>{rows.length} of {of}</b> skills and connectors people have claimed went unused this month.{never > 0 ? ` ${never === 1 ? 'One has' : `${never} have`} never been used at all.` : ''}</>}
+      note={<>Only claimed entries are counted: someone wrote a guide and put their name on it. Worth retiring, or worth a nudge. <Link href="/library" className={linkCls}>Open the S&amp;C Board</Link></>}
     >
       {rows.slice(0, 10).map(r => (
         <div key={r.id} className="flex items-baseline gap-2.5 py-1.5 border-b border-[#F2F2F2] last:border-b-0 text-[13px]">
           <Link href={`/library/${r.id}`} className="min-w-0 truncate text-[#0A0A0A] hover:text-[#1F6F8B]">{r.name}</Link>
-          <span className="text-[#777777] whitespace-nowrap">{kindWord(r.kind)}{r.claimed ? ` · claimed${r.author ? ` by ${r.author}` : ''}` : ' · unclaimed'}</span>
-          <span className="ml-auto text-[#8F8F8F] whitespace-nowrap">{r.lastUsed === null ? 'never used' : `last used ${dateOf(r.lastUsed)}`}</span>
+          <span className="text-[#777777] whitespace-nowrap">{kindWord(r.kind)}{r.author ? ` · ${r.author}` : ''}</span>
+          <span className="ml-auto whitespace-nowrap" style={{ color: r.lastUsed === null ? '#B54708' : '#8F8F8F' }}>
+            {r.lastUsed === null ? 'never used' : `last used ${dateOf(r.lastUsed)}`}
+          </span>
         </div>
       ))}
       {rows.length > 10 && <p className="m-0 mt-1.5 text-[13px] text-[#8F8F8F]">and {rows.length - 10} more.</p>}

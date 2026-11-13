@@ -175,7 +175,10 @@ export async function GET(request: NextRequest) {
     department: whoById.get(r.user_id)?.department ?? null,
   }));
 
-  // ── Used by nobody: Board entries with no use in the last 30 days ──
+  // ── Used by nobody: the organisation's OWN published Board entries with no use in the last 30
+  // days. Unclaimed entries are left out (the Board registers every name telemetry sees, so an
+  // unused name nobody chose is not a finding) and so is Anthropic's catalogue, which publishes
+  // itself. What is left is what this organisation put its name to: a nudge or a retirement. ──
   const unusedRows = (await raw.execute(sql`
     SELECT e.id, e.name, e.type, e.is_published,
            COALESCE(NULLIF(au.display_name, ''), ou.display_name, ou.email) AS author,
@@ -187,16 +190,20 @@ export async function GET(request: NextRequest) {
     FROM skill_library_entries e
     LEFT JOIN users ou ON ou.id = e.author_user_id
     LEFT JOIN admin_users au ON au.linked_cowork_user_id = e.author_user_id
+    WHERE e.is_published = 1 AND e.source <> 'anthropic'
+      AND e.name NOT IN ('workspace', 'cowork', 'Claude_in_Chrome')
     ORDER BY e.name
   `)).rows as Array<{ id: number | string; name: string; type: string; is_published: number | string; author: string | null; last_at: number | string | null }>;
   const unused = unusedRows
     .filter(r => r.last_at === null || num(r.last_at) < thirtyDaysAgo)
     .map(r => ({
       id: num(r.id), name: r.name, kind: r.type,
-      author: num(r.is_published) === 1 ? r.author : null,
-      claimed: num(r.is_published) === 1,
+      author: r.author,
+      claimed: true,
       lastUsed: r.last_at === null ? null : num(r.last_at),
-    }));
+    }))
+    // Never used first, then the longest since anyone used it.
+    .sort((a, b) => (a.lastUsed === null ? -1 : b.lastUsed === null ? 1 : a.lastUsed - b.lastUsed));
 
   return NextResponse.json({
     spread,
