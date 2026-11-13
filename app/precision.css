@@ -237,3 +237,8 @@ html[data-theme="precision"] .h-\[120px\] { height: 96px; }
 /* Tailwind's named sizes, stepped down with the rest. */
 html[data-theme="precision"] .text-\[16px\] { font-size: 14px; line-height: 21px; }
 html[data-theme="precision"] .text-\[12px\] { font-size: 11.5px; line-height: 17px; }
+
+/* The page's own base size. Anything with no size class of its own inherits this, instead of the
+   browser's 16px, which is how a few lists (the Board leaderboard among them) ended up a size
+   larger than everything around them. */
+html[data-theme="precision"] body { font-size: 13px; line-height: 20px; }
