@@ -14,7 +14,7 @@ import Link from 'next/link';
 import { Panel, Tag, Muted, Empty, Segmented } from '@/components/precision/ui';
 import { WORK_PULSE_VENDOR_LABELS, type Vendor } from '@/lib/dashboard/vendor';
 import { useOpenAiOnly } from '@/components/shared/VendorSwitch';
-import { QuestionCard, changeFrom, DASH, DASH_SHADES } from '@/components/dashboard/QuestionCard';
+import { QuestionCard, DASH, DASH_SHADES } from '@/components/dashboard/QuestionCard';
 
 type Tier = { t1: number; t2: number; t3: number };
 
@@ -35,6 +35,10 @@ interface OrgSummary {
     skillSpread: { total: number; rows: SpreadRow[] };
     connectorSpread: { total: number; rows: SpreadRow[] };
     activePeople30d: number;
+    deepPeople30d?: number;
+    deepPeopleWeeks?: number[];
+    frontierPeople30d?: number;
+    frontierHalfPeople?: number | null;
   };
 }
 
@@ -44,28 +48,36 @@ const total = (t: Tier) => t.t1 + t.t2 + t.t3;
 const deep = (t: Tier) => (total(t) > 0 ? (t.t2 + t.t3) / total(t) : null);
 const pct = (v: number) => `${Math.round(v * 100)}%`;
 
-/** The last non-null value, and the value four weeks before it. */
-function nowAndBefore(series: Array<number | null>): { now: number | null; before: number | null } {
-  const idx = series.map(v => v !== null).lastIndexOf(true);
-  if (idx < 0) return { now: null, before: null };
-  return { now: series[idx], before: idx >= 4 ? series[idx - 4] : null };
-}
-
 /* ── 10: Work Pulse, four questions ─────────────────────────────── */
+
+/** A share as plain words: "two in three", "about half", "one in four"; a percentage otherwise. */
+function shareWords(v: number): string {
+  const nice: Array<[number, string]> = [
+    [1 / 5, 'one in five'], [1 / 4, 'one in four'], [1 / 3, 'one in three'], [2 / 5, 'two in five'],
+    [1 / 2, 'half'], [3 / 5, 'three in five'], [2 / 3, 'two in three'], [3 / 4, 'three in four'], [4 / 5, 'four in five'],
+  ];
+  const near = nice.reduce((b, n) => (Math.abs(n[0] - v) < Math.abs(b[0] - v) ? n : b));
+  if (v >= 0.9) return 'nearly all';
+  if (v <= 0.1) return 'very few';
+  return Math.abs(near[0] - v) <= 0.03 ? near[1] : `${Math.round(v * 100)}%`;
+}
+const cap = (t: string) => t.charAt(0).toUpperCase() + t.slice(1);
 
 function WorkPulsePanel({ data, product }: { data: OrgSummary; product: string }) {
   const d = data.dashboard;
   const now = deep(data.tierCounts);
   const before = d ? deep(d.priorTierCounts) : null;
-  const oti = d ? nowAndBefore(d.otiWeeks) : { now: null, before: null };
-  const ors = d ? nowAndBefore(d.orsWeeks) : { now: null, before: null };
-  const otiNow = data.signalCards.oti ?? oti.now;
-  const orsNow = data.signalCards.ors ?? ors.now;
-  const answer = now === null
-    ? null
-    : before === null
-      ? <><b>{pct(now)}</b> of the work people handed {product} in the last 30 days was meaningful or frontier.</>
-      : <>People are handing {product} {now > before ? 'deeper' : now < before ? 'less deep' : 'the same depth of'} work: <b>{pct(now)}</b> of it was meaningful or frontier, {Math.round(now * 100) === Math.round(before * 100) ? 'the same as' : now > before ? 'up from' : 'down from'} <b>{pct(before)}</b>{Math.round(now * 100) === Math.round(before * 100) ? ' the 30 days before' : ''}.</>;
+  const people = d?.deepPeople30d ?? null;
+  const active = d?.activePeople30d ?? null;
+  const half = d?.frontierHalfPeople ?? null;
+  const shareChange = now !== null && before !== null
+    ? (Math.round(now * 100) === Math.round(before * 100) ? 'the same as the month before' : `${now > before ? 'up' : 'down'} from ${shareWords(before) === 'half' ? 'about half' : shareWords(before)} the month before`)
+    : null;
+  const answer = people !== null && active !== null && people > 0
+    ? <><b>{people} of {active}</b> people handed {product} real work in the last 30 days{now !== null ? <>, and <b>{shareWords(now)}</b> of all the tasks they gave it were real work</> : null}.</>
+    : now !== null
+      ? <><b>{cap(shareWords(now))}</b> of the tasks people handed {product} in the last 30 days were real work.</>
+      : null;
   return (
     <section className="bg-white border border-[#EAEAEA] rounded-[14px] px-4 py-3.5">
       <div className="flex items-baseline gap-2 flex-wrap">
@@ -76,43 +88,40 @@ function WorkPulsePanel({ data, product }: { data: OrgSummary; product: string }
       {answer && <p className="m-0 mt-2 text-[14px] leading-[22px] text-[#1A1A1A] [&_b]:font-semibold">{answer}</p>}
       <div className="grid grid-cols-2 xl:grid-cols-4 gap-2.5 mt-3">
         <QuestionCard
-          question="Is the work getting more valuable?"
-          judged
-          value={otiNow !== null ? `${otiNow.toFixed(2)}×` : undefined}
-          unit={otiNow !== null ? 'baseline' : undefined}
-          change={changeFrom(oti.now, oti.before, v => `${v.toFixed(2)}×`, 'four weeks ago')}
-          trend={d?.otiWeeks}
-          notMeasured={otiNow === null ? 'Needs a baseline and recent classified work' : undefined}
+          question="People doing real work with it"
+          value={people !== null && active !== null ? `${people} of ${active}` : undefined}
+          unit="people"
+          trend={d?.deepPeopleWeeks}
+          trendKind="bars"
+          notMeasured={people === null ? 'No classified work yet' : undefined}
         />
         <QuestionCard
-          question="How much is meaningful or frontier?"
-          judged
-          value={now !== null ? pct(now) : undefined}
-          change={now !== null && before !== null ? changeFrom(now, before, pct, 'the 30 days before') : null}
+          question="Tasks that are real work"
+          value={now !== null ? cap(shareWords(now)) : undefined}
+          change={shareChange}
           trend={d?.tierWeeks.map(t => (t ? deep(t) : null))}
           notMeasured={now === null ? 'No classified work in the last 30 days' : undefined}
         />
         <QuestionCard
-          question="New capabilities confirmed"
-          value={d ? String(d.capabilitiesRecent) : undefined}
-          unit="last 30 days"
-          sub={<>{data.signalCards.psr ?? 0} in all{d && d.capabilitiesPending > 0 ? <> · <Link href="/admin/pulse?tab=overview" className="text-[#245BF3] hover:underline">{d.capabilitiesPending} waiting for review</Link></> : null}</>}
+          question="New ways of working"
+          value={d ? (d.capabilitiesRecent === 0 ? 'None' : String(d.capabilitiesRecent)) : undefined}
+          unit="confirmed this month"
+          sub={d && d.capabilitiesPending > 0
+            ? <Link href="/admin/pulse?tab=overview" className="text-[#245BF3] font-medium hover:underline">{d.capabilitiesPending} waiting for your review</Link>
+            : undefined}
           trend={d?.capabilityWeeks}
           trendKind="bars"
           notMeasured={!d ? 'Not available' : undefined}
         />
         <QuestionCard
-          question="Is know-how shared, or held by a few?"
-          judged
-          value={orsNow !== null ? orsNow.toFixed(2) : undefined}
-          unit={orsNow !== null ? 'of 1' : undefined}
-          change={changeFrom(ors.now, ors.before, v => v.toFixed(2), 'four weeks ago')}
-          trend={d?.orsWeeks}
-          notMeasured={orsNow === null ? 'Needs departments with several active people' : undefined}
+          question="Frontier work rests on"
+          value={half !== null ? (half === 1 ? 'One person' : `${half} people`) : undefined}
+          sub={half !== null && d ? <>They do half of it, out of {d.frontierPeople30d} doing any. <Link href="/pulse/cio" className="text-[#245BF3] font-medium hover:underline">See who</Link></> : undefined}
+          notMeasured={half === null ? 'No frontier work in the last 30 days' : undefined}
         />
       </div>
       <p className="m-0 mt-3 pt-2.5 border-t border-dashed border-[#EAEAEA] text-[12px] text-[#8F8F8F]">
-        Claude reads each prompt and judges its depth; capabilities are confirmed by a manager. Lines show the last 8 weeks. <Link href="/pulse/cio" className="text-[#245BF3] font-medium hover:underline">Open Work Pulse</Link>
+        Real work means a task Claude judged meaningful or frontier, not routine. A new way of working is one a manager has confirmed. Bars and lines show the last 8 weeks. <Link href="/pulse/cio" className="text-[#245BF3] font-medium hover:underline">Open Work Pulse</Link>
       </p>
     </section>
   );

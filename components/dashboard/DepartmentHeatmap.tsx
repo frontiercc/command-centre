@@ -25,14 +25,14 @@ function list(items: string[]): string {
   return items.length <= 1 ? (items[0] ?? '') : `${items.slice(0, -1).join(', ')} and ${items[items.length - 1]}`;
 }
 
-export default function DepartmentHeatmap({ data: all, targetPct }: { data: DeptStats[]; products?: readonly Product[]; targetPct: number | null }) {
+export default function DepartmentHeatmap({ data: all, targetPct, productNames = 'Claude' }: { data: DeptStats[]; products?: readonly Product[]; targetPct: number | null; /** The products in words for the heading, e.g. "Claude and ChatGPT". */ productNames?: string }) {
   const rows = all
     .filter(d => d.user_count > 0)
     .map(d => ({ ...d, active: d.active_users / d.user_count }))
     .sort((a, b) => b.active - a.active);
   if (rows.length === 0) {
     return (
-      <Panel title="Which departments are using it?">
+      <Panel title={`Which departments are using ${productNames}?`}>
         <Muted>No department data yet. Set people&apos;s departments on the User Insights page.</Muted>
       </Panel>
     );
@@ -50,7 +50,7 @@ export default function DepartmentHeatmap({ data: all, targetPct }: { data: Dept
 
   return (
     <Panel
-      title="Which departments are using it?"
+      title={`Which departments are using ${productNames}?`}
       badge={<Tag tone="neutral">Measured</Tag>}
       right={<span className="text-[13px] text-[#8F8F8F]">Last 7 days</span>}
     >

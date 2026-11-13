@@ -328,7 +328,7 @@ export default function DashboardPage() {
                 />
               </Panel>
             ) : (
-              <DepartmentHeatmap data={data.departmentBreakdown} products={shownProducts} targetPct={data.adoptionTargetPct} />
+              <DepartmentHeatmap data={data.departmentBreakdown} products={shownProducts} targetPct={data.adoptionTargetPct} productNames={vendor === 'openai' ? 'ChatGPT and Codex' : vendor === 'claude' || !data.openaiPresent ? 'Claude' : 'Claude and ChatGPT'} />
             )}
           </div>
         </div>

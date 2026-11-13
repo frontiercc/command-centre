@@ -368,8 +368,39 @@ export async function GET(request: NextRequest) {
     SELECT COUNT(DISTINCT user_id) AS n FROM cowork_messages cm
     WHERE cm.user_id IS NOT NULL AND cm.occurred_at >= ${thirtyDaysAgo} AND ${sql.raw(vendorClause(vendor, 'cm.'))}
   `);
+  // People who handed over meaningful or frontier work in the last 30 days, weekly counts of
+  // the same, and how many people do half of all frontier work (counts only, no names).
+  const deepPeopleRow = await rawGet<{ n: number | string }>(client, sql`
+    SELECT COUNT(DISTINCT cm.user_id) AS n
+    FROM pulse_classifications pc JOIN cowork_messages cm ON cm.id = pc.cowork_message_id
+    WHERE pc.classifier_status = 'classified' AND pc.tier >= 2 AND cm.occurred_at >= ${thirtyDaysAgo}
+      AND cm.user_id IS NOT NULL AND ${sql.raw(vendorClause(vendor, 'cm.'))}
+  `);
+  const deepPeopleWeekRows = await rawAll<{ w: number | string; n: number | string }>(client, sql`
+    SELECT FLOOR((cm.occurred_at - ${firstWeek}) / ${7 * 86400}) AS w, COUNT(DISTINCT cm.user_id) AS n
+    FROM pulse_classifications pc JOIN cowork_messages cm ON cm.id = pc.cowork_message_id
+    WHERE pc.classifier_status = 'classified' AND pc.tier >= 2 AND cm.occurred_at >= ${firstWeek} AND cm.occurred_at < ${thisWeek}
+      AND cm.user_id IS NOT NULL AND ${sql.raw(vendorClause(vendor, 'cm.'))}
+    GROUP BY 1
+  `);
+  const deepPeopleByWeek = new Map(deepPeopleWeekRows.map(r => [Number(r.w), Number(r.n)]));
+  const frontierByPerson = (await rawAll<{ n: number | string }>(client, sql`
+    SELECT COUNT(*) AS n
+    FROM pulse_classifications pc JOIN cowork_messages cm ON cm.id = pc.cowork_message_id
+    WHERE pc.classifier_status = 'classified' AND pc.tier = 3 AND cm.occurred_at >= ${thirtyDaysAgo}
+      AND cm.user_id IS NOT NULL AND ${sql.raw(vendorClause(vendor, 'cm.'))}
+    GROUP BY cm.user_id ORDER BY 1 DESC
+  `)).map(r => Number(r.n));
+  const frontierTotal = frontierByPerson.reduce((a, b) => a + b, 0);
+  let frontierHalfPeople = 0;
+  for (let acc = 0; frontierHalfPeople < frontierByPerson.length && acc < frontierTotal / 2; frontierHalfPeople++) acc += frontierByPerson[frontierHalfPeople];
+
   const dashboard = {
     weeks,
+    deepPeople30d: Number(deepPeopleRow?.n ?? 0),
+    deepPeopleWeeks: weeks.map((_, i) => deepPeopleByWeek.get(i) ?? 0),
+    frontierPeople30d: frontierByPerson.length,
+    frontierHalfPeople: frontierTotal > 0 ? frontierHalfPeople : null,
     otiWeeks: await weekAvg('oti', 'user'),
     orsWeeks: await weekAvg('ors', 'function'),
     tierWeeks: weeks.map((_, i) => tierByWeek.get(i) ?? null),
