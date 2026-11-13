@@ -15,12 +15,13 @@ import FrontierHero from '@/components/pulse/FrontierHero';
 import GenerateBriefingButton from '@/components/pulse/GenerateBriefingButton';
 import { cleanTitle } from '@/components/pulse/CapabilityLog';
 import { Frame } from '@/components/pulse/WorkPulseOverview';
-import { WorkPanel, TaskList, DeeperPanel, ProducedPanel, ColleagueToolsPanel, SpendPanel, type MonthSpend, type Who, type DrillKind } from '@/components/pulse/MyPulsePanels';
+import { WorkPanel, TaskList, DeeperPanel, ByHandPanel, ProducedPanel, ColleagueToolsPanel, SpendPanel, type ByHand, type MonthSpend, type Who, type DrillKind } from '@/components/pulse/MyPulsePanels';
 import { PageBody, Toolbar, Notice, Dot, B, C } from '@/components/precision/ui';
 import { useVendor, useOpenAiOnly, VendorSwitch } from '@/components/shared/VendorSwitch';
 import { WORK_PULSE_VENDOR_LABELS } from '@/lib/dashboard/vendor';
 
 interface PersonalPulseData {
+  humanTime?: ByHand | null;
   period?: MyPeriod | null;
   tierNames?: TierNames | null;
   spendThisMonth?: MonthSpend | null;
@@ -184,6 +185,9 @@ export default function PersonalPulsePage() {
 
             {/* 3. Is the work getting deeper? Six weeks as a grid, then the longer views */}
             <DeeperPanel q={q} who={who} names={data.tierNames ?? undefined} />
+
+            {/* 4. By hand vs with Claude */}
+            <ByHandPanel h={data.humanTime} who={who} onSeeSessions={() => setDrill('humantime')} />
 
             {/* 4 and 5 */}
             <div className="grid grid-cols-1 xl:grid-cols-2 gap-4 items-start">

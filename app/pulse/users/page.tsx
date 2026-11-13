@@ -8,33 +8,37 @@ import { useRouter, useSearchParams } from 'next/navigation';
 import Link from 'next/link';
 import TopBar from '@/components/layout/TopBar';
 import LoadingSpinner from '@/components/shared/LoadingSpinner';
-import StatStrip from '@/components/pulse/StatStrip';
-import JourneyGrid from '@/components/pulse/JourneyGrid';
 import FrontierHero from '@/components/pulse/FrontierHero';
 import type { FrontierView } from '@/lib/pulse/frontier-view';
-import MilestoneCards from '@/components/pulse/MilestoneCards';
-import type { ToolUsed } from '@/components/pulse/MilestoneCards';
 import GenerateBriefingButton from '@/components/pulse/GenerateBriefingButton';
-import WeeklyPulse from '@/components/pulse/WeeklyPulse';
-import HumanTimeCard, { type HumanTimeSummary } from '@/components/pulse/HumanTimeCard';
+import { cleanTitle } from '@/components/pulse/CapabilityLog';
+import { Frame } from '@/components/pulse/WorkPulseOverview';
+import {
+  WorkPanel, TaskList, DeeperPanel, ByHandPanel, ProducedPanel, ColleagueToolsPanel, SpendPanel,
+  type ByHand, type MonthSpend, type Who, type DrillKind,
+} from '@/components/pulse/MyPulsePanels';
+import type { MyPeriod, PulsePeriod } from '@/lib/pulse/period-shape';
+import type { TierNames } from '@/lib/pulse/tier-names';
 import { PageBody, Toolbar, Notice, B, cx } from '@/components/precision/ui';
 import { useVendor, useOpenAiOnly, VendorSwitch } from '@/components/shared/VendorSwitch';
 import { WORK_PULSE_VENDOR_LABELS } from '@/lib/dashboard/vendor';
 
 interface PersonalPulseData {
-  humanTime?: HumanTimeSummary | null;
+  humanTime?: ByHand | null;
+  period?: MyPeriod | null;
+  tierNames?: TierNames | null;
+  spendThisMonth?: MonthSpend | null;
+  canSeeSpendReview?: boolean;
   userId: string | null;
   displayName: string | null;
   department: string | null;
-  metrics: { oti: number | null; dds: number | null; psr: number | null; ors: number | null } | null;
-  priorMetrics: { oti: number | null; dds: number | null; psr: number | null; ors: number | null } | null;
   frontier: FrontierView | null;
   frontierAccess?: { canReview: boolean; canOpenUseCases: boolean };
-  journeyGrid: Array<{ week: number; tier: number; count: number }>;
-  toolsUsed: ToolUsed[];
   weeklyPulse: { body: string; suggestion: string | null; generated_at: number } | null;
-  capabilitiesDetail: { count: number } | null;
-  teamMetrics: { ors: number | null } | null;
+  capabilitiesDetail: {
+    count: number;
+    pending?: Array<{ id: number; title: string; body: string | null; detected_at: number }>;
+  } | null;
   openaiPresent?: boolean;
 }
 
@@ -59,6 +63,9 @@ export default function UsersPickerPage() {
   const [pulseData, setPulseData] = useState<PersonalPulseData | null>(null);
   const [dataLoading, setDataLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  // One period for the page, as on My Pulse.
+  const [period, setPeriod] = useState<PulsePeriod>('quarter');
+  const [drill, setDrill] = useState<DrillKind | null>(null);
 
   const selectedUserId = searchParams.get('userId') ?? '';
   // The All / Claude / ChatGPT switch, the same remembered choice as My Pulse.
@@ -111,7 +118,7 @@ export default function UsersPickerPage() {
     if (!userId) return;
     setDataLoading(true);
     setError(null);
-    fetch(`/api/pulse/me?userId=${encodeURIComponent(userId)}&vendor=${vendor}`)
+    fetch(`/api/pulse/me?userId=${encodeURIComponent(userId)}&vendor=${vendor}&period=${period}`)
       .then(r => {
         if (!r.ok) throw new Error("Couldn't load this page. Try again.");
         return r.json();
@@ -119,7 +126,7 @@ export default function UsersPickerPage() {
       .then(setPulseData)
       .catch(e => setError(e.message))
       .finally(() => setDataLoading(false));
-  }, [vendor]);
+  }, [vendor, period]);
 
   useEffect(() => {
     // The saved view is read after the page loads; wait for it so one view loads, not two.
@@ -215,44 +222,89 @@ export default function UsersPickerPage() {
 
         {pulseData && !dataLoading && (() => {
           const d = pulseData;
-          const m = d.metrics;
-          const pm = d.priorMetrics;
-          const delta = (curr: number | null, prior: number | null) =>
-            pm ? (curr !== null && prior !== null ? Math.round((curr - prior) * 100) / 100 : null) : undefined;
+          const who: Who = { you: false, name: d.displayName ?? 'This person' };
+          const q = d.period ?? null;
+          const pending = d.capabilitiesDetail?.pending ?? [];
+          const product = vendor === 'openai' ? 'ChatGPT' : vendor === 'claude' || !d.openaiPresent ? 'Claude' : 'Claude and ChatGPT';
+          const reviewHref = d.canSeeSpendReview && d.userId ? `/finops/spend-review/${encodeURIComponent(d.userId)}` : null;
 
           return (
             <>
-              <FrontierHero view={d.frontier} canOpenUseCases={d.frontierAccess?.canOpenUseCases ?? false} />
-
-              <HumanTimeCard summary={d.humanTime} surface="cowork" scope="Personal" view={d.openaiPresent ? vendor : 'claude'} />
-
-              <StatStrip
-                oti={m?.oti ?? null} dds={m?.dds ?? null}
-                psr={d.capabilitiesDetail?.count ?? m?.psr ?? null}
-                ors={d.teamMetrics?.ors ?? m?.ors ?? null}
-                hideOrs
-                otiDelta={delta(m?.oti ?? null, pm?.oti ?? null)}
-                ddsDelta={delta(m?.dds ?? null, pm?.dds ?? null)}
-                psrDelta={delta(m?.psr ?? null, pm?.psr ?? null)}
-                orsDelta={delta(m?.ors ?? null, pm?.ors ?? null)}
-                />
-
-              <JourneyGrid data={d.journeyGrid} />
-
-              <MilestoneCards frontier={d.frontier} canReview={d.frontierAccess?.canReview ?? false} canOpenUseCases={d.frontierAccess?.canOpenUseCases ?? false} toolsUsed={d.toolsUsed ?? []} />
-
-              <WeeklyPulse
-                briefing={d.weeklyPulse}
-                userId={d.userId ?? undefined}
-                onGenerate={() => loadUser(selectedUserId)}
-                action={d.weeklyPulse && d.userId ? (
-                  <GenerateBriefingButton
-                    type="user"
-                    userId={d.userId}
-                    onComplete={() => loadUser(selectedUserId)}
+              {q ? (
+                <>
+                  {/* 1. Their work, over the chosen period */}
+                  <WorkPanel
+                    q={q}
+                    product={product}
+                    who={who}
+                    period={period}
+                    onPeriod={setPeriod}
+                    onDrill={setDrill}
+                    drill={drill}
+                    reviewHref={pending.length > 0 ? '#to-review' : null}
+                    names={d.tierNames ?? undefined}
                   />
-                ) : undefined}
-              />
+
+                  {/* The work behind whichever figure was clicked */}
+                  {drill && (
+                    <TaskList kind={drill} period={period} userId={selectedUserId} who={who} onClose={() => setDrill(null)} names={d.tierNames ?? undefined} />
+                  )}
+
+                  {/* 2. Best work this week */}
+                  <FrontierHero view={d.frontier} canOpenUseCases={d.frontierAccess?.canOpenUseCases ?? false} />
+
+                  {/* 3. Is their work getting deeper? */}
+                  <DeeperPanel q={q} who={who} names={d.tierNames ?? undefined} />
+
+                  {/* 4. By hand vs with Claude */}
+                  <ByHandPanel h={d.humanTime} who={who} onSeeSessions={() => setDrill('humantime')} />
+
+                  {/* 5 and 6 */}
+                  <div className="grid grid-cols-1 xl:grid-cols-2 gap-4 items-start">
+                    <ProducedPanel q={q} who={who} period={period} />
+                    <ColleagueToolsPanel q={q} who={who} department={d.department} period={period} />
+                  </div>
+
+                  {/* 7 */}
+                  {d.spendThisMonth && <SpendPanel s={d.spendThisMonth} product={product} who={who} reviewHref={reviewHref} />}
+                </>
+              ) : (
+                <Notice tone="info" title="No work yet.">Nothing has been recorded for this person yet.</Notice>
+              )}
+
+              {/* 8. Their week, in a paragraph */}
+              <Frame
+                title={`${who.name}'s week, in a paragraph`}
+                tag="AI summary"
+                period={
+                  <span className="inline-flex items-center gap-2">
+                    {d.weeklyPulse && new Date(d.weeklyPulse.generated_at * 1000).toLocaleDateString('en-GB', { weekday: 'long', day: 'numeric', month: 'long' })}
+                    {d.userId && <GenerateBriefingButton type="user" userId={d.userId} onComplete={() => loadUser(selectedUserId)} />}
+                  </span>
+                }
+              >
+                {d.weeklyPulse ? (
+                  <div className="grid grid-cols-1 lg:grid-cols-2 gap-4 mt-2 text-[14px] leading-[22px] text-[#1A1A1A]">
+                    <div>{d.weeklyPulse.body.split(/\n\s*\n/).filter(t => t.trim()).map((t, i) => <p key={i} className="m-0 mb-2 last:mb-0">{t}</p>)}</div>
+                    {d.weeklyPulse.suggestion && <p className="m-0"><b className="font-semibold">Suggestion for next week:</b> {d.weeklyPulse.suggestion}</p>}
+                  </div>
+                ) : (
+                  <p className="m-0 mt-2 text-[13px] text-[#8F8F8F]">No paragraph yet. It is written each Sunday, or use Generate now.</p>
+                )}
+              </Frame>
+
+              {/* New ways of working waiting for review */}
+              {pending.length > 0 && (
+                <Frame id="to-review" title="Waiting for review" period={`${pending.length} new ${pending.length === 1 ? 'way' : 'ways'} of working`}
+                  answer={<>Claude thinks {who.name} may have started {pending.length === 1 ? 'a new way of working' : 'new ways of working'}.</>}>
+                  {pending.map(c => (
+                    <div key={c.id} className="py-2 border-b border-[#F2F2F2] last:border-b-0">
+                      <p className="m-0 text-[13px] font-medium text-[#0A0A0A]">{cleanTitle(c.title)}</p>
+                      {c.body && <p className="m-0 mt-0.5 text-[12px] text-[#8F8F8F] line-clamp-1">{c.body}</p>}
+                    </div>
+                  ))}
+                </Frame>
+              )}
             </>
           );
         })()}

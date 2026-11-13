@@ -91,7 +91,7 @@ export function WorkPanel({ q, product, who, period, onPeriod, onDrill, drill, r
       answer={<>{subj(who)} handed {product} <b>{plural(r.now, 'task', 'tasks')} judged {deep}</b> {shape.label.toLowerCase()}, {change}.</>}
       note={<>{t.t2} and {t.t3} are the top two tiers Claude judges each task against; the rest are {t.t1.toLowerCase()}. Click a figure to see the work behind it.</>}
     >
-      <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-4 gap-2.5">
+      <div className="grid grid-cols-1 sm:grid-cols-3 gap-2.5">
         <QuestionCard
           question={`Tasks judged ${deep}`}
           value={`${r.now} of ${r.all}`}
@@ -124,15 +124,62 @@ export function WorkPanel({ q, product, who, period, onPeriod, onDrill, drill, r
               ? <SeeLink onClick={() => onDrill(drill === 'capabilities' ? null : 'capabilities')}>See them</SeeLink>
               : 'Claude flags work that creates something reusable; a manager confirms it.'}
         />
-        <QuestionCard
-          question="Time it would have taken by hand"
-          value={ht ? `≈ ${hours(ht.likelyMinutes)} hours` : undefined}
-          sub={ht ? `against ${hours(ht.claudeMinutes)} hours with Claude` : undefined}
-          trend={ht?.trend}
-          notMeasured={ht ? undefined : `Nothing estimated ${shape.label.toLowerCase()}`}
-          todo={ht ? <SeeLink onClick={() => onDrill(drill === 'humantime' ? null : 'humantime')}>See the {ht.sessions} sessions</SeeLink> : undefined}
-        />
       </div>
+    </Frame>
+  );
+}
+
+/* ── By hand vs with Claude ───────────────────────────────────── */
+
+export interface ByHand {
+  windowDays: number;
+  sessions: number;
+  humanMinutes: { low: number; likely: number; high: number };
+  claudeMinutes: number;
+  ratio: number | null;
+  byKind: Array<{ kind: string; sessions: number; humanMinutes: number; claudeMinutes: number }>;
+  check?: { period: string; reviewed: number; aboutRight: number } | null;
+}
+
+export function ByHandPanel({ h, who, onSeeSessions }: { h: ByHand | null | undefined; who: Who; onSeeSessions?: () => void }) {
+  if (!h || h.sessions === 0) return null;
+  const whose = who.you ? 'your work' : `${who.name}'s work`;
+  const longer = h.ratio === null ? null
+    : h.ratio >= 1.8 && h.ratio < 2.5 ? 'about twice as long'
+      : h.ratio >= 2.5 && h.ratio < 3.5 ? 'about three times as long'
+        : h.ratio >= 1.2 ? `about ${Math.round(h.ratio)} times as long` : null;
+  const kinds = [...h.byKind].sort((a, b) => b.humanMinutes - a.humanMinutes).slice(0, 4);
+  return (
+    <Frame
+      title="By hand vs with Claude"
+      tag="AI estimate"
+      period={`Last ${h.windowDays} days`}
+      answer={<>By hand, {whose} would have taken about <b>{hours(h.humanMinutes.likely)} hours</b>, against <b>{hours(h.claudeMinutes)} hours</b> with Claude{longer ? <>, {longer}</> : null}.</>}
+      note={<>
+        {plural(h.sessions, 'session', 'sessions')} with an estimate. The by-hand figure is Claude&apos;s estimate per session (range {hours(h.humanMinutes.low)} to {hours(h.humanMinutes.high)} hours); the Claude figure is measured active time.
+        {h.check ? ` Spot-checked in ${h.check.period}: ${h.check.aboutRight} of ${h.check.reviewed} about right.` : ' The estimates have not been spot-checked yet.'}
+        {onSeeSessions ? <> <button type="button" onClick={onSeeSessions} className={linkCls}>See the sessions</button></> : null}
+      </>}
+    >
+      {[['With Claude', h.claudeMinutes, false] as const, ['By hand (estimate)', h.humanMinutes.likely, true] as const].map(([l, m, est]) => (
+        <div key={l} className="grid grid-cols-[minmax(0,130px)_minmax(0,1fr)_64px] gap-2.5 items-center py-[3px] text-[13px]">
+          <span className="text-[#333333]">{l}</span>
+          <Track value={m / Math.max(h.claudeMinutes, h.humanMinutes.likely, 1)} striped={est} />
+          <span className="text-right tabular-nums">{est ? '≈' : ''}{hours(m)} h</span>
+        </div>
+      ))}
+      {kinds.length > 0 && (
+        <div className="mt-3 pt-2 border-t border-[#EAEAEA]">
+          <div className="text-[12px] font-semibold text-[#333333] mb-0.5">By kind of work</div>
+          {kinds.map(k => (
+            <div key={k.kind} className="flex items-center gap-2.5 py-1 text-[13px]">
+              <span className="min-w-0 truncate text-[#333333]">{cap(k.kind.replace(/_/g, ' '))}</span>
+              <span className="text-[#8F8F8F] whitespace-nowrap">{plural(k.sessions, 'session', 'sessions')}</span>
+              <span className="ml-auto text-[#333333] whitespace-nowrap tabular-nums">≈{hours(k.humanMinutes)} h by hand · {hours(k.claudeMinutes)} h with Claude</span>
+            </div>
+          ))}
+        </div>
+      )}
     </Frame>
   );
 }
