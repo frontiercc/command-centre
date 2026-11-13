@@ -14,8 +14,8 @@ import { errorResponse } from '@/lib/api/errors';
 import { OPEN_ROUTE_BODY_LIMIT, readJsonLimited } from '@/lib/api/body';
 import { getCoachingFigures } from '@/lib/pulse/code/coaching-figures';
 import { findAction } from '@/lib/pulse/code/team-coaching';
-import { markActionDone, undoActionDone } from '@/lib/pulse/code/coaching-store';
-import { coachingScope } from '@/lib/pulse/code/coaching-scope';
+import { markActionDone, undoActionDone } from '@/lib/pulse/coaching-store';
+import { coachingScope } from '@/lib/pulse/coaching-scope';
 
 export const dynamic = 'force-dynamic';
 
@@ -57,7 +57,7 @@ async function handle(request: NextRequest, session: Session, mode: 'done' | 'un
       return NextResponse.json({ error: 'error' in scope ? scope.error : 'You can only coach your own team.' }, { status: 403 });
     }
     if (mode === 'undo') {
-      await undoActionDone(body.department, body.key);
+      await undoActionDone('code', body.department, body.key);
       await log('success', `undo department=${body.department} key=${body.key}`);
       return NextResponse.json({ ok: true });
     }
@@ -67,6 +67,7 @@ async function handle(request: NextRequest, session: Session, mode: 'done' | 'un
       return NextResponse.json({ error: "This action isn't suggested for the team any more. Reload the page." }, { status: 409 });
     }
     await markActionDone({
+      surface: 'code',
       department: body.department,
       actionKey: found.action.key,
       actionText: found.action.text,

@@ -13,6 +13,8 @@ import CodeClassifierHealthTab from '@/components/pulse/admin/CodeClassifierHeal
 import SecretRemoveButton from '@/components/admin/SecretRemoveButton';
 import GithubIdentityPanel from '@/components/pulse/admin/GithubIdentityPanel';
 import { effectiveCodeHumanTime } from '@/lib/pulse/human-time';
+import { DEFAULT_CODE_CLASSIFIER_CONFIG } from '@/lib/pulse/code/classifier-prompt';
+import { codeWorkTypeLabel } from '@/lib/pulse/code/work-type-labels';
 import { PageBody, Panel, Tabs, Figure, Tag, Pill, Notice, Muted, SubHead, B, T, cx } from '@/components/precision/ui';
 import { ToggleRow, Field } from '@/components/admin/precision-admin';
 
@@ -46,6 +48,22 @@ function PanelActions({ children }: { children: ReactNode }) {
 
 const inlineCode = 'font-mono text-[12px] bg-[#F2F2F2] px-1 rounded-[6px]';
 
+/** The stored intended shares as text for the boxes. A bad or missing value leaves every box empty. */
+function readTargets(raw: unknown): Record<string, string> {
+  if (typeof raw !== 'string' || raw.trim() === '') return {};
+  try {
+    const obj = JSON.parse(raw) as Record<string, unknown>;
+    const out: Record<string, string> = {};
+    for (const [k, v] of Object.entries(obj ?? {})) {
+      const n = Number(v);
+      if (v !== null && v !== '' && Number.isFinite(n)) out[k] = String(Math.round(n));
+    }
+    return out;
+  } catch {
+    return {};
+  }
+}
+
 interface GithubData {
   reposSeen: string[];
   mappings: Array<{ repo: string; github_repo: string }>;
@@ -58,6 +76,8 @@ interface ClassifierData {
   model: string;
   includePrompt: boolean;
   briefings: number;
+  /** The live rubric, so the intended-share panel lists the kinds of work the classifier actually uses. */
+  config?: { workTypes?: Array<{ name: string; description: string }> };
 }
 
 interface ModelRate {
@@ -695,6 +715,10 @@ function CodePulseAdminContent() {
   const [briefingModel, setBriefingModel] = useState('');
   const [humanTimeCode, setHumanTimeCode] = useState<boolean | null>(null);
   const [classifyCodex, setClassifyCodex] = useState(true);
+  // The intended share of sessions per kind of work (config key codeEffortTargets).
+  // Held as text so a box can be left empty, which means no target for that kind.
+  const [targets, setTargets] = useState<Record<string, string>>({});
+  const [targetsBusy, setTargetsBusy] = useState(false);
   // The organisation briefing model a blank Code briefing model falls back to
   // (getOrgBriefingModel) — named on the page so it never shows a guess.
   const [orgBriefingModel, setOrgBriefingModel] = useState('');
@@ -749,9 +773,38 @@ function CodePulseAdminContent() {
         setBriefingModel(d.codeBriefingModel ?? ''); setOrgBriefingModel(d.pulseBriefingModel ?? '');
         setHumanTimeCode(effectiveCodeHumanTime(d.humanTimeCodeEnabled, d.humanTimeEnabled));
         setClassifyCodex(d.codeClassifyCodex !== 'false');
+        setTargets(readTargets(d.codeEffortTargets));
       })
       .catch(() => {});
   }, []);
+
+  const handleTargetsSave = async () => {
+    setTargetsBusy(true);
+    try {
+      const kept: Record<string, number> = {};
+      for (const [name, text] of Object.entries(targets)) {
+        const n = Number(text);
+        if (text.trim() !== '' && Number.isFinite(n)) kept[name] = Math.round(n);
+      }
+      const res = await fetch('/api/config', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        // Nothing set is stored blank, so the key reads as unset rather than as an empty rule.
+        body: JSON.stringify({ codeEffortTargets: Object.keys(kept).length === 0 ? '' : JSON.stringify(kept) }),
+      });
+      const out = await res.json().catch(() => ({}));
+      if (!res.ok) throw new Error(out.error || 'Save failed');
+      // The route drops a value it will not store rather than failing, so a save that
+      // changed nothing must not report success.
+      const dropped = (out.ignored as Array<{ key: string }> | undefined)?.some(i => i.key === 'codeEffortTargets');
+      if (dropped) throw new Error('Not saved. Reload the page and try again.');
+      showToast('Intended shares saved', 'success');
+    } catch (err) {
+      showToast(err instanceof Error ? err.message : 'Save failed', 'error');
+    } finally {
+      setTargetsBusy(false);
+    }
+  };
 
   const handleClassifierSave = async () => {
     setClfBusy(true);
@@ -896,6 +949,67 @@ function CodePulseAdminContent() {
                 </button>
               </PanelActions>
             </Panel>
+
+            {/* Intended share per kind of work: the line Decisions and Team coaching read a team against. */}
+            {(() => {
+              const workTypes = clf?.config?.workTypes?.length
+                ? clf.config.workTypes
+                : DEFAULT_CODE_CLASSIFIER_CONFIG.workTypes;
+              const set = workTypes
+                .map(w => Number(targets[w.name]))
+                .filter(n => Number.isFinite(n));
+              const total = set.reduce((a, n) => a + n, 0);
+              return (
+                <Panel
+                  title="Intended share per kind of work"
+                  subtitle="Decisions and Team coaching read each team against these"
+                  flush
+                >
+                  <p className="m-0 px-4 py-3 text-[13px] text-[#666666] leading-5 border-b border-[#F2F2F2]">
+                    The share of a team&apos;s sessions you intend each kind of work to take. A team five points or
+                    more away from one of these is named on Decisions and gets an action on its coaching plan. Leave a
+                    box empty for a kind you are not steering, and it is left out of both. The kinds come from the
+                    rubric on the Tiers tab.
+                  </p>
+                  <div className="px-4 py-3 flex flex-col gap-2.5">
+                    {workTypes.map(w => {
+                      // The label already restates the rubric's definition, so the definition
+                      // itself is not repeated under it here; the Tiers tab is where it is edited.
+                      const label = codeWorkTypeLabel(w.name, w.description);
+                      return (
+                        <div key={w.name} className="grid grid-cols-[minmax(0,1fr)_96px] gap-3 items-center">
+                          <span className="min-w-0 text-[14px] text-[#0A0A0A] leading-5">{label}</span>
+                          <span className="flex items-center gap-1.5">
+                            <input
+                              type="number"
+                              min={0}
+                              max={100}
+                              step={1}
+                              inputMode="numeric"
+                              value={targets[w.name] ?? ''}
+                              onChange={e => setTargets(t => ({ ...t, [w.name]: e.target.value }))}
+                              aria-label={`Intended share for ${label}`}
+                              className={cx(B.input, 'w-[64px] text-right tabular-nums')}
+                            />
+                            <span className="text-[13px] text-[#8F8F8F]">%</span>
+                          </span>
+                        </div>
+                      );
+                    })}
+                  </div>
+                  <PanelActions>
+                    <button type="button" onClick={handleTargetsSave} disabled={targetsBusy} className={B.primary}>
+                      {targetsBusy ? 'Saving...' : 'Save'}
+                    </button>
+                    <Muted>
+                      {set.length === 0
+                        ? 'Nothing set, so neither page compares effort with intent.'
+                        : `${set.length} of ${workTypes.length} set, adding up to ${total}%.${total === 100 ? '' : ' They do not have to add up to 100, but a team is read against each one on its own.'}`}
+                    </Muted>
+                  </PanelActions>
+                </Panel>
+              );
+            })()}
 
             {/* Module status */}
             {clf && (

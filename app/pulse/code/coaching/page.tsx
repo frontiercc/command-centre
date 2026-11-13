@@ -7,59 +7,33 @@
 // whether that figure moved, against the organisation's own movement over the same time.
 'use client';
 
-import { useCallback, useEffect, useState } from 'react';
+import { Suspense, useCallback, useEffect, useState } from 'react';
+import { useSearchParams } from 'next/navigation';
 import TopBar from '@/components/layout/TopBar';
 import LoadingSpinner from '@/components/shared/LoadingSpinner';
 import { PageBody, Toolbar, Notice, B, cx } from '@/components/precision/ui';
 import { Frame, Track, linkCls } from '@/components/pulse/WorkPulseOverview';
 import { tierNamesOr } from '@/lib/pulse/tier-names';
+import CoachingDone from '@/components/pulse/CoachingDone';
 import { BEYOND_QUICK } from '@/lib/pulse/code/coaching-words';
 import type { CoachingPlan, PlanAction } from '@/lib/pulse/code/team-coaching';
 
 interface Data { teams: string[]; department: string | null; plan: CoachingPlan | null; checkAfterDays: number }
 
 const pct = (v: number | null) => (v === null ? '—' : `${Math.round(v * 100)}%`);
-const day = (s: number) => new Date(s * 1000).toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric' });
 
-const RESULT_WORDS: Record<string, string> = {
-  better: 'Moved the right way',
-  worse: 'Moved the wrong way',
-  same: 'No change yet',
-  too_few: 'Too few people to tell',
-};
-const RESULT_INK: Record<string, string> = {
-  better: '#1A7F37', worse: '#B54708', same: '#666666', too_few: '#8F8F8F',
-};
-
-function DidItWork({ a }: { a: PlanAction }) {
-  const d = a.done;
-  if (!d) return null;
-  const waiting = d.result === null;
+export default function TeamCoachingPage() {
+  // useSearchParams needs a Suspense boundary above it in an app-router page.
   return (
-    <div className="mt-1.5 pl-3 border-l-2 border-[#EAEAEA] text-[12px] text-[#666666]">
-      <p className="m-0">
-        Marked done {day(d.at)} by {d.by}
-        {d.note ? <> · &ldquo;{d.note}&rdquo;</> : null}
-      </p>
-      {d.measure && (
-        <p className="m-0 mt-0.5">
-          {d.measure}: {pct(d.before)} then
-          {waiting
-            ? <>, checked again from {day(d.checkFrom)}</>
-            : <>, {pct(d.now)} now{d.orgBefore !== null && d.orgNow !== null ? <> (organisation {pct(d.orgBefore)} to {pct(d.orgNow)})</> : null}</>}
-        </p>
-      )}
-      {d.result && (
-        <p className="m-0 mt-0.5 font-medium" style={{ color: RESULT_INK[d.result] }}>{RESULT_WORDS[d.result]}</p>
-      )}
-      {d.sharedWith.length > 0 && (
-        <p className="m-0 mt-0.5">Other actions aiming at the same figure were done around the same time, so the change can&apos;t be put down to this one alone.</p>
-      )}
-    </div>
+    <Suspense fallback={<LoadingSpinner />}>
+      <TeamCoaching />
+    </Suspense>
   );
 }
 
-export default function TeamCoachingPage() {
+function TeamCoaching() {
+  // Decisions links here naming a team, so the plan opens on the team that was asked for.
+  const asked = useSearchParams().get('department') ?? '';
   const [data, setData] = useState<Data | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -82,7 +56,7 @@ export default function TeamCoachingPage() {
       .finally(() => setLoading(false));
   }, []);
 
-  useEffect(() => { load(''); }, [load]);
+  useEffect(() => { load(asked); }, [load, asked]);
 
   const act = async (a: PlanAction, mode: 'done' | 'undo') => {
     if (!data?.department) return;
@@ -253,7 +227,7 @@ export default function TeamCoachingPage() {
                       className="mt-1.5 w-full border border-[#DADADA] rounded-[8px] px-2 py-1 text-[13px]"
                     />
                   )}
-                  <DidItWork a={a} />
+                  <CoachingDone a={a} />
                 </div>
               ))}
             </Frame>
@@ -267,7 +241,7 @@ export default function TeamCoachingPage() {
                 {plan.pastActions.map(a => (
                   <div key={a.key} className="py-2 border-b border-[#F2F2F2] last:border-b-0">
                     <p className="m-0 text-[13px] leading-5 text-[#333333]">{a.text}</p>
-                    <DidItWork a={a} />
+                    <CoachingDone a={a} />
                   </div>
                 ))}
               </Frame>

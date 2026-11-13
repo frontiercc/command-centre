@@ -1180,6 +1180,8 @@ export const totpConsumedSteps = pgTable('totp_consumed_steps', {
  * Keyed by department, which is how teams are identified everywhere on these pages.
  */
 export const coachingActions = pgTable('coaching_actions', {
+    // 'code' or 'cowork': the same department has a plan on both, with overlapping action keys.
+    surface: text().notNull().default('code'),
     department: text().notNull(),
     action_key: text().notNull(),
     action_text: text().notNull(),
@@ -1190,7 +1192,7 @@ export const coachingActions = pgTable('coaching_actions', {
     done_by: text().notNull(),
     done_at: bigint({ mode: 'number' }).notNull(),
 }, (t) => [
-    primaryKey({ columns: [t.department, t.action_key] }),
+    primaryKey({ columns: [t.surface, t.department, t.action_key] }),
 ]);
 
 export const coachingAcks = pgTable('coaching_acks', {

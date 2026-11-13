@@ -23,6 +23,7 @@ export interface NavVisibility {
   cowork: boolean;
   coworkOverview: boolean;
   coworkUsers: boolean;
+  coworkCoaching: boolean; // Team coaching: names people, so admin and manager only
   code: boolean;
   codeOverview: boolean;
   codeTeam: boolean;      // Developer Pulse Users and Departments
@@ -98,6 +99,7 @@ export default function PrecisionSidebar(p: PrecisionSidebarProps) {
     items.push({ href: '/pulse/me', label: 'My Pulse' });
     if (vis.coworkUsers) items.push({ href: '/pulse/users', label: 'Users' });
     items.push({ href: '/pulse/dept', label: 'Departments' });
+    if (vis.coworkCoaching) items.push({ href: '/pulse/coaching', label: 'Team coaching' });
     items.push({ href: '/pulse/skills', label: 'Tool usage' });
     productivity.push({ key: 'cowork', label: 'Work Pulse', icon: 'pulse', items, badge: p.pulsePending,
       activeWhen: x => x.startsWith('/pulse') && !x.startsWith('/pulse/code') && !x.startsWith('/pulse/use-cases') });

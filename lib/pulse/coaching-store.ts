@@ -2,20 +2,20 @@
 // SPDX-License-Identifier: Apache-2.0
 
 /**
- * Team coaching's record of actions a team lead marked done (coaching_actions): one row per team
- * and action, with the figure the action is meant to move as it stood that day, for the team and
- * for the organisation, and the lead's note. Undoing deletes the row; otherwise it is permanent,
- * like coaching_acks, so the same conversation never comes back.
+ * Team coaching's record of actions a team lead marked done (coaching_actions), for both surfaces:
+ * one row per surface, team and action, with the figure the action is meant to move as it stood
+ * that day, for the team and for the organisation, and the lead's note. Undoing deletes the row;
+ * otherwise it is permanent, like coaching_acks, so the same conversation never comes back.
  */
 import { and, eq } from 'drizzle-orm';
 import { getTypedClient } from '@/lib/db/client';
 import { schema } from '@/lib/db/schema';
-import type { DoneRecord } from '@/lib/pulse/code/team-coaching';
+import type { DoneRecord, CoachingSurface } from '@/lib/pulse/coaching-core';
 
-export async function listDoneActions(department: string): Promise<DoneRecord[]> {
+export async function listDoneActions(surface: CoachingSurface, department: string): Promise<DoneRecord[]> {
   const client = await getTypedClient();
   const t = schema.coachingActions;
-  const rows = await client.select().from(t).where(eq(t.department, department));
+  const rows = await client.select().from(t).where(and(eq(t.surface, surface), eq(t.department, department)));
   return rows.map(r => ({
     actionKey: r.action_key,
     actionText: r.action_text,
@@ -29,6 +29,7 @@ export async function listDoneActions(department: string): Promise<DoneRecord[]>
 }
 
 export async function markActionDone(a: {
+  surface: CoachingSurface;
   department: string;
   actionKey: string;
   actionText: string;
@@ -42,6 +43,7 @@ export async function markActionDone(a: {
   const client = await getTypedClient();
   const t = schema.coachingActions;
   await client.insert(t).values({
+    surface: a.surface,
     department: a.department,
     action_key: a.actionKey,
     action_text: a.actionText,
@@ -55,8 +57,8 @@ export async function markActionDone(a: {
 }
 
 /** Undo: the row goes, so the plan suggests the action again. */
-export async function undoActionDone(department: string, actionKey: string): Promise<void> {
+export async function undoActionDone(surface: CoachingSurface, department: string, actionKey: string): Promise<void> {
   const client = await getTypedClient();
   const t = schema.coachingActions;
-  await client.delete(t).where(and(eq(t.department, department), eq(t.action_key, actionKey)));
+  await client.delete(t).where(and(eq(t.surface, surface), eq(t.department, department), eq(t.action_key, actionKey)));
 }

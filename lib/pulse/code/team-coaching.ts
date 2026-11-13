@@ -22,49 +22,34 @@ import type { CoachingFigures, TeamFigures, WorkShare } from '@/lib/pulse/code/c
 import { TARGET_GAP_PP } from '@/lib/pulse/code/coaching-figures';
 import type { TierNames } from '@/lib/pulse/tier-names';
 import { BEYOND_QUICK } from '@/lib/pulse/code/coaching-words';
+import {
+  CHECK_AFTER_DAYS, COACHING_MIN_PEOPLE, SAME_WITHIN, DAY_S,
+  compareMetric as coreCompareMetric, coachingResult as coreCoachingResult,
+  planAction as corePlanAction, pastActions as corePastActions,
+  type CoachingResult, type DoneRecord, type PlanAction, type Suggested, type MetricRules,
+} from '@/lib/pulse/coaching-core';
 
 export { BEYOND_QUICK } from '@/lib/pulse/code/coaching-words';
-
-export const CHECK_AFTER_DAYS = 30;
-/** A change under one point reads as no change. */
-export const SAME_WITHIN = 0.01;
-/** Under this many people, a team's change is too small a sample to read. */
-export const COACHING_MIN_PEOPLE = 5;
-
-export type CoachingResult = 'better' | 'worse' | 'same' | 'too_few';
+export { CHECK_AFTER_DAYS, SAME_WITHIN, COACHING_MIN_PEOPLE } from '@/lib/pulse/coaching-core';
+export type { CoachingResult, DoneRecord, PlanAction } from '@/lib/pulse/coaching-core';
 
 /** The figure an action is meant to move. */
 export type CoachingMetric = 'deep_share' | 'hardly_used_share' | `work_share:${string}`;
 
-export interface DoneRecord {
-  actionKey: string;
-  actionText: string;
-  metric: string | null;
-  baseline: number | null;
-  orgBaseline: number | null;
-  note: string | null;
-  doneBy: string;
-  doneAt: number;
-}
-
-export interface PlanAction {
-  key: string;
-  text: string;
-  /** Why the plan suggests it, in one line. */
-  because: string;
-  metric: CoachingMetric | null;
-  done: null | {
-    at: number;
-    by: string;
-    note: string | null;
-    checkFrom: number;
-    measure: string | null;
-    before: number | null;
-    now: number | null;
-    orgBefore: number | null;
-    orgNow: number | null;
-    result: CoachingResult | null;
-    sharedWith: string[];
+/**
+ * How Developer Pulse reads its own figures: deeper is better, fewer people who have hardly used
+ * it is better, and a share of work is read against the share an admin intended rather than
+ * against the organisation.
+ */
+function codeRules(targets: Record<string, number>, work: WorkShare[] = []): MetricRules {
+  return {
+    higherIsBetter: (metric: string) => metric === 'deep_share',
+    targetFor: (metric: string) => {
+      if (!metric.startsWith('work_share:')) return null;
+      const target = targets[metric.slice('work_share:'.length)];
+      return target === undefined ? null : target / 100;
+    },
+    words: (metric: string | null) => metricWords(metric, { t1: '', t2: '', t3: '' }, work),
   };
 }
 
@@ -78,9 +63,9 @@ export interface CoachingPlan {
   where: string[];
   workOn: string[];
   learnFrom: Array<{ name: string; sessions: number; deepShare: number }>;
-  actions: PlanAction[];
+  actions: PlanAction<CoachingMetric>[];
   /** Done actions the plan no longer suggests: the figure that raised them has moved. */
-  pastActions: PlanAction[];
+  pastActions: PlanAction<CoachingMetric>[];
 }
 
 const pct = (v: number) => `${Math.round(v * 100)}%`;
@@ -123,17 +108,9 @@ export function orgMetrics(o: CoachingFigures['org']): Record<string, number | n
 
 /** Whether the figure moved the way the action meant it to. */
 export function compareMetric(metric: string, before: number, now: number, targets: Record<string, number>): 'better' | 'worse' | 'same' {
-  if (metric.startsWith('work_share:')) {
-    const target = targets[metric.slice('work_share:'.length)];
-    if (target === undefined) return 'same';
-    const gapBefore = Math.abs(before - target / 100);
-    const gapNow = Math.abs(now - target / 100);
-    if (Math.abs(gapBefore - gapNow) < SAME_WITHIN) return 'same';
-    return gapNow < gapBefore ? 'better' : 'worse';
-  }
-  if (Math.abs(now - before) < SAME_WITHIN) return 'same';
-  const higherIsBetter = metric === 'deep_share';
-  return (now > before) === higherIsBetter ? 'better' : 'worse';
+  // A share of work with no target set cannot be read either way.
+  if (metric.startsWith('work_share:') && targets[metric.slice('work_share:'.length)] === undefined) return 'same';
+  return coreCompareMetric(metric, before, now, codeRules(targets));
 }
 
 /**
@@ -150,17 +127,14 @@ export function coachingResult(
   if (metric.startsWith('work_share:') || org.before === null || org.now === null) {
     return compareMetric(metric, team.before, team.now, targets);
   }
-  const relative = (team.now - team.before) - (org.now - org.before);
-  return compareMetric(metric, team.before, team.before + relative, targets);
+  return coreCoachingResult(metric, team, org, codeRules(targets));
 }
 
-interface Suggested { key: string; text: string; because: string; metric: CoachingMetric | null }
-
 /** What the plan says and suggests for one team. */
-export function teamParts(t: TeamFigures, f: CoachingFigures): { where: string[]; workOn: string[]; actions: Suggested[] } {
+export function teamParts(t: TeamFigures, f: CoachingFigures): { where: string[]; workOn: string[]; actions: Suggested<CoachingMetric>[] } {
   const where: string[] = [];
   const workOn: string[] = [];
-  const actions: Suggested[] = [];
+  const actions: Suggested<CoachingMetric>[] = [];
   const org = f.org;
 
   if (t.deepShare !== null) {
@@ -293,41 +267,6 @@ export function teamParts(t: TeamFigures, f: CoachingFigures): { where: string[]
   return { where, workOn, actions };
 }
 
-function planAction(
-  a: Suggested,
-  done: DoneRecord | undefined,
-  ctx: { metrics: Record<string, number | null>; org: Record<string, number | null>; people: number; targets: Record<string, number>; nowS: number; done: DoneRecord[]; names: TierNames; work: WorkShare[] },
-): PlanAction {
-  if (!done) return { key: a.key, text: a.text, because: a.because, metric: a.metric, done: null };
-  const checkFrom = done.doneAt + CHECK_AFTER_DAYS * DAY_S;
-  const now = done.metric ? (ctx.metrics[done.metric] ?? null) : null;
-  const orgNow = done.metric ? (ctx.org[done.metric] ?? null) : null;
-  let result: CoachingResult | null = null;
-  if (ctx.nowS >= checkFrom && done.metric && done.baseline !== null && now !== null) {
-    result = ctx.people < COACHING_MIN_PEOPLE
-      ? 'too_few'
-      : coachingResult(done.metric, { before: done.baseline, now }, { before: done.orgBaseline, now: orgNow }, ctx.targets);
-  }
-  const sharedWith = done.metric
-    ? ctx.done
-        .filter(d => d.actionKey !== done.actionKey && d.metric === done.metric && Math.abs(d.doneAt - done.doneAt) < CHECK_AFTER_DAYS * DAY_S)
-        .map(d => d.actionText)
-    : [];
-  return {
-    key: a.key,
-    text: done.actionText,
-    because: a.because,
-    metric: a.metric,
-    done: {
-      at: done.doneAt, by: done.doneBy, note: done.note, checkFrom,
-      measure: metricWords(done.metric, ctx.names, ctx.work),
-      before: done.baseline, now, orgBefore: done.orgBaseline, orgNow, result, sharedWith,
-    },
-  };
-}
-
-const DAY_S = 86400;
-
 /** One team's plan, with whatever has already been marked done. */
 export function buildCoachingPlan(department: string, f: CoachingFigures, done: DoneRecord[], nowS: number): CoachingPlan | null {
   const t = f.teams.find(x => x.department === department);
@@ -335,7 +274,7 @@ export function buildCoachingPlan(department: string, f: CoachingFigures, done: 
   const { where, workOn, actions } = teamParts(t, f);
   const ctx = {
     metrics: teamMetrics(t), org: orgMetrics(f.org), people: t.people,
-    targets: f.targets, nowS, done, names: f.tierNames, work: t.work,
+    nowS, done, rules: codeRules(f.targets, t.work),
   };
   const byKey = new Map(done.map(d => [d.actionKey, d]));
   const current = new Set(actions.map(a => a.key));
@@ -349,16 +288,13 @@ export function buildCoachingPlan(department: string, f: CoachingFigures, done: 
     where,
     workOn,
     learnFrom: t.champions.map(c => ({ name: c.name, sessions: c.sessions, deepShare: c.deepShare })),
-    actions: actions.map(a => planAction(a, byKey.get(a.key), ctx)),
-    pastActions: done
-      .filter(d => !current.has(d.actionKey))
-      .sort((a, b) => b.doneAt - a.doneAt)
-      .map(d => planAction({ key: d.actionKey, text: d.actionText, because: '', metric: null }, d, ctx)),
+    actions: actions.map(a => corePlanAction(a, byKey.get(a.key), ctx)),
+    pastActions: corePastActions(done, current, ctx) as PlanAction<CoachingMetric>[],
   };
 }
 
 /** The action a team lead may mark done, with the figures as they stand today. */
-export function findAction(department: string, key: string, f: CoachingFigures): { action: Suggested; baseline: number | null; orgBaseline: number | null } | null {
+export function findAction(department: string, key: string, f: CoachingFigures): { action: Suggested<CoachingMetric>; baseline: number | null; orgBaseline: number | null } | null {
   const t = f.teams.find(x => x.department === department);
   if (!t) return null;
   const action = teamParts(t, f).actions.find(a => a.key === key);
