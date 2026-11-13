@@ -11,12 +11,13 @@
 import Link from 'next/link';
 import { useEffect, useState, type ReactNode } from 'react';
 import { Tag, B } from '@/components/precision/ui';
-import { DASH, DASH_SHADES, shareWords, cap } from '@/components/dashboard/QuestionCard';
+import { DASH, shareWords, cap } from '@/components/dashboard/QuestionCard';
 import { cleanTitle } from '@/components/pulse/CapabilityLog';
 import type { ByProductData } from '@/components/pulse/ByProductPanel';
 import type { SessionOutputReport } from '@/components/pulse/SessionOutputCard';
 import type { HumanTimeSummary } from '@/components/pulse/HumanTimeCard';
 import type { ActNextItem, DeptProcessBoxItem } from '@/components/pulse/ActNextPanel';
+import { depthColumns, depthSentence, DepthChart, DepthSwitch, type DepthWindow, type TierWeek } from '@/components/pulse/DepthChart';
 import { FAMILY_LABEL, PRODUCT_FAMILY, PRODUCT_LABEL, type WorkProduct } from '@/lib/pulse/cowork/products';
 
 const AMBER = '#DC8A00';
@@ -24,14 +25,14 @@ const words = (v: number) => (v < 0.15 ? `${Math.round(v * 100)}%` : shareWords(
 
 /* ── Frame shared by every panel ────────────────────────────────── */
 
-function Frame({ title, judged, period, answer, children, note, id }: {
-  title: string; judged?: boolean; period?: string; answer?: ReactNode; children?: ReactNode; note?: ReactNode; id?: string;
+export function Frame({ title, judged, tag, period, answer, children, note, id }: {
+  title: string; judged?: boolean; tag?: string; period?: ReactNode; answer?: ReactNode; children?: ReactNode; note?: ReactNode; id?: string;
 }) {
   return (
     <section id={id} className="bg-white border border-[#EAEAEA] rounded-[14px] px-4 py-3.5 min-w-0">
       <div className="flex items-baseline gap-2 flex-wrap">
         <h2 className="m-0 text-[14px] font-semibold text-[#0A0A0A]">{title}</h2>
-        {judged && <Tag tone="neutral">AI-judged</Tag>}
+        {(judged || tag) && <Tag tone="neutral">{tag ?? 'AI-judged'}</Tag>}
         {period && <span className="ml-auto text-[12px] text-[#8F8F8F]">{period}</span>}
       </div>
       {answer && <p className="m-0 mt-2 mb-2.5 text-[14px] leading-[22px] text-[#1A1A1A] [&_b]:font-semibold">{answer}</p>}
@@ -41,7 +42,7 @@ function Frame({ title, judged, period, answer, children, note, id }: {
   );
 }
 
-function Track({ value, colour = DASH, floor, striped }: { value: number; colour?: string; floor?: number | null; striped?: boolean }) {
+export function Track({ value, colour = DASH, floor, striped }: { value: number; colour?: string; floor?: number | null; striped?: boolean }) {
   return (
     <span className="relative block h-[6px] rounded-[3px] bg-[#F1F1F3]">
       <span className="absolute inset-y-0 left-0 rounded-[3px]" style={{ width: `${Math.max(0.5, Math.min(100, value * 100))}%`, background: striped ? `repeating-linear-gradient(45deg, ${colour} 0 3px, #fff 3px 6px)` : colour }} />
@@ -50,7 +51,7 @@ function Track({ value, colour = DASH, floor, striped }: { value: number; colour
   );
 }
 
-const linkCls = 'text-[#245BF3] font-medium hover:underline';
+export const linkCls = 'text-[#245BF3] font-medium hover:underline';
 
 /* ── 2: Use cases to act on next ───────────────────────────────── */
 
@@ -95,68 +96,23 @@ function numberWord(n: number): string {
 
 /* ── 3: Are people handing Claude bigger jobs? ──────────────────── */
 
-interface TierWeek { weekStart: number; t1: number; t2: number; t3: number }
 interface DeptTrend { dept: string; thenVsNow: { then: number; now: number; deltaPp: number; arrow: 'up' | 'flat' | 'down' } | null }
 
 export function BiggerJobs({ weeks, departments, product, window, onWindow }: {
-  weeks: TierWeek[]; departments: DeptTrend[]; product: string; window: 13 | 26 | 52; onWindow: (w: 13 | 26 | 52) => void;
+  weeks: TierWeek[]; departments: DeptTrend[]; product: string; window: DepthWindow; onWindow: (w: DepthWindow) => void;
 }) {
-  const real = (ws: TierWeek[]) => { const t = ws.reduce((a, w) => ({ all: a.all + w.t1 + w.t2 + w.t3, r: a.r + w.t2 + w.t3 }), { all: 0, r: 0 }); return t.all > 0 ? t.r / t.all : null; };
-  if (weeks.length === 0) return null;
-  const first = real(weeks.slice(0, Math.min(4, weeks.length)));
-  const last = real(weeks.slice(-4));
+  const cols = depthColumns(weeks, window, Math.floor(Date.now() / 1000));
   const falling = departments.filter(d => d.thenVsNow?.arrow === 'down').sort((a, b) => a.thenVsNow!.deltaPp - b.thenVsNow!.deltaPp);
-  const fmtDate = (s: number) => new Date(s * 1000).toLocaleDateString('en-GB', { day: 'numeric', month: 'short', timeZone: 'UTC' });
-  const verdict = first !== null && last !== null
-    ? (Math.round(last * 100) > Math.round(first * 100) + 2 ? 'Yes. ' : Math.round(last * 100) < Math.round(first * 100) - 2 ? 'No. ' : 'About the same. ')
-    : '';
-  const n4 = Math.min(4, weeks.length);
-  const firstFrom = fmtDate(weeks[0].weekStart);
-  const lastTo = fmtDate(weeks[weeks.length - 1].weekStart + 6 * 86400);
-  const answer = first !== null && last !== null
-    ? <>{verdict}Over the last {weeks.length} weeks, real work went from <b>{words(first)}</b> of tasks in the first {n4} (from {firstFrom}) to <b>{words(last)}</b> in the most recent {n4} (to {lastTo}).{falling.length === 1 ? ` ${falling[0].dept} is going the other way.` : falling.length > 1 ? ` ${falling.length} departments are going the other way.` : ''}</>
-    : null;
-  // A window longer than the history there is: say so rather than imply the chart covers it.
-  const short = weeks.length < window;
-  const W = 1100, H = 120, left = 36, top = 6, bottom = 18, plotH = H - top - bottom;
-  const n = weeks.length, gap = n > 26 ? 2 : 8, bw = (W - left - gap * (n - 1)) / n;
-  const every = n > 26 ? 4 : n > 13 ? 2 : 1;
+  const others = falling.length === 1 ? ` ${falling[0].dept} is going the other way.` : falling.length > 1 ? ` ${falling.length} departments are going the other way.` : '';
   return (
     <Frame
       title={`Are people handing ${product} bigger jobs?`}
       judged
-      answer={answer}
-      note="Each column is one week, Monday to Sunday, split into routine, meaningful and frontier tasks. Only completed weeks are shown."
+      period={<DepthSwitch window={window} onWindow={onWindow} />}
+      answer={<>{depthSentence(cols, window, '')}{others}</>}
+      note={window === 52 ? 'Each column is one calendar month of tasks, split into routine, meaningful and frontier.' : 'Each column is one completed week, Monday to Sunday, split into routine, meaningful and frontier tasks.'}
     >
-      <div className="flex justify-end -mt-9 mb-3">
-        {short && <span className="mr-3 self-center text-[12px] text-[#8F8F8F]">Only {weeks.length} weeks of history so far</span>}
-        <span className="inline-flex border border-[#EAEAEA] rounded-[8px] overflow-hidden">
-          {([13, 26, 52] as const).map(w => (
-            <button key={w} type="button" onClick={() => onWindow(w)} className={`text-[12px] px-2 py-0.5 ${w === window ? 'bg-[#F2F2F2] text-[#0A0A0A] font-medium' : 'bg-white text-[#666666]'}`}>{w} weeks</button>
-          ))}
-        </span>
-      </div>
-      <svg viewBox={`0 0 ${W} ${H}`} className="w-full h-auto block" role="img" aria-label="Tasks by depth, each week">
-        {[0, 50, 100].map(t => {
-          const y = top + plotH - (t / 100) * plotH;
-          return <g key={t}><line x1={left} x2={W} y1={y} y2={y} stroke="#F0F0F0" /><text x={left - 6} y={y + 4} textAnchor="end" fontSize="11" fill="#8F8F8F">{t}%</text></g>;
-        })}
-        {weeks.map((w, i) => {
-          const tot = w.t1 + w.t2 + w.t3;
-          const x = left + i * (bw + gap);
-          if (tot === 0) return null;
-          let y = top + plotH;
-          return (
-            <g key={w.weekStart}>
-              {[w.t1, w.t2, w.t3].map((v, j) => { const h = (v / tot) * plotH; y -= h; return <rect key={j} x={x} y={y} width={bw} height={h} fill={DASH_SHADES[j]} />; })}
-              {(i % every === 0 || i === n - 1) && <text x={x + bw / 2} y={H - 4} textAnchor="middle" fontSize="11" fill="#8F8F8F">{fmtDate(w.weekStart)}</text>}
-            </g>
-          );
-        })}
-      </svg>
-      <div className="flex flex-wrap gap-x-3.5 mt-1.5 text-[12px] text-[#777777]">
-        {['Routine', 'Meaningful', 'Frontier'].map((l, i) => <span key={l} className="inline-flex items-center gap-1.5"><span className="w-2.5 h-2.5 rounded-[2px]" style={{ background: DASH_SHADES[i] }} />{l}</span>)}
-      </div>
+      <DepthChart cols={cols} />
       {falling.length > 0 && (
         <div className="mt-3 pt-2 border-t border-[#EAEAEA]">
           <div className="text-[12px] font-semibold text-[#333333] mb-0.5">Going the other way</div>
@@ -220,7 +176,7 @@ export function Produced({ output, human }: { output: SessionOutputReport | null
   return (
     <Frame
       title="What did the work produce?"
-      period="Last 13 weeks"
+      period="Last quarter"
       answer={<>{output.rate === null ? 'Not measured yet.' : <><b>{cap(words(output.rate))}</b> of sessions produced a file.</>}{times ? <> By hand, the same work would have taken <b>{times}</b>.</> : null}</>}
       note={<>A session produced a file when Claude saved, sent or published one.{times ? ' The by-hand time is Claude’s estimate.' : ''}</>}
     >
@@ -315,10 +271,10 @@ export function NewWaysOfWorking({ confirmedTotal, confirmedRecent }: { confirme
   return (
     <Frame
       title="New ways of working"
-      period="Last 30 days"
+      period="Last quarter"
       answer={list.length > 0
-        ? <><b>{list.length}</b> {list.length === 1 ? 'is' : 'are'} waiting for your review. {confirmedRecent === 0 ? 'None were' : `${confirmedRecent} ${confirmedRecent === 1 ? 'was' : 'were'}`} confirmed this month.</>
-        : <>Nothing is waiting for review. {confirmedRecent === 0 ? 'None were' : `${confirmedRecent} ${confirmedRecent === 1 ? 'was' : 'were'}`} confirmed this month.</>}
+        ? <><b>{list.length}</b> {list.length === 1 ? 'is' : 'are'} waiting for your review. {confirmedRecent === 0 ? 'None were' : `${confirmedRecent} ${confirmedRecent === 1 ? 'was' : 'were'}`} confirmed this quarter.</>
+        : <>Nothing is waiting for review. {confirmedRecent === 0 ? 'None were' : `${confirmedRecent} ${confirmedRecent === 1 ? 'was' : 'were'}`} confirmed this quarter.</>}
       note="Claude flags work that creates something reusable; a manager confirms it."
     >
       {oldest.length > 0 && (

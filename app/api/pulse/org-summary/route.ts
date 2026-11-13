@@ -298,10 +298,17 @@ export async function GET(request: NextRequest) {
   // ── Dashboard figures (additive) ─────────────────────────────────────────
   // The Dashboard's Work Pulse cards, depth panel and skills-and-connectors panel. Weeks are
   // the 8 completed Monday-UTC weeks; a week with no figure is null, never 0.
+  // Work Pulse asks for the last quarter (?window=quarter): the 13 completed weeks against the
+  // 13 before. The Dashboard keeps the last 30 days against the 30 before, with 8 weeks of trend.
+  const quarterly = request.nextUrl.searchParams.get('window') === 'quarter';
   const sixtyDaysAgo = now - 60 * 24 * 3600;
-  const weeks = weekStarts(now, 9).slice(0, 8);
+  const shown = quarterly ? 13 : 8;
+  const weeks = weekStarts(now, shown + 1).slice(0, shown);
   const firstWeek = weeks[0];
   const thisWeek = weekStarts(now, 1)[0];
+  const bStart = quarterly ? firstWeek : thirtyDaysAgo;
+  const bEnd = quarterly ? thisWeek : now + 1;
+  const pStart = quarterly ? firstWeek - 13 * 7 * 86400 : sixtyDaysAgo;
   const weekAvg = async (col: 'oti' | 'ors', scope: 'user' | 'function') => {
     const rows = await client
       .select({ ps: mt.period_start, v: sql<number | string | null>`AVG(${mt[col]})` })
@@ -328,7 +335,7 @@ export async function GET(request: NextRequest) {
            SUM(CASE WHEN pc.tier = 2 THEN 1 ELSE 0 END) AS t2,
            SUM(CASE WHEN pc.tier = 3 THEN 1 ELSE 0 END) AS t3
     FROM pulse_classifications pc JOIN cowork_messages cm ON cm.id = pc.cowork_message_id
-    WHERE pc.classifier_status = 'classified' AND cm.occurred_at >= ${sixtyDaysAgo} AND cm.occurred_at < ${thirtyDaysAgo}
+    WHERE pc.classifier_status = 'classified' AND cm.occurred_at >= ${pStart} AND cm.occurred_at < ${bStart}
       AND ${sql.raw(vendorClause(vendor, 'cm.'))}
   `);
   const capWeekRows = await rawAll<{ w: number | string; n: number | string }>(client, sql`
@@ -340,7 +347,7 @@ export async function GET(request: NextRequest) {
   `);
   const capByWeek = new Map(capWeekRows.map(r => [Number(r.w), Number(r.n)]));
   const capCounts = await rawGet<{ recent: number | string; pending: number | string }>(client, sql`
-    SELECT SUM(CASE WHEN status = 'confirmed' AND confirmed_at >= ${thirtyDaysAgo} THEN 1 ELSE 0 END) AS recent,
+    SELECT SUM(CASE WHEN status = 'confirmed' AND confirmed_at >= ${bStart} AND confirmed_at < ${bEnd} THEN 1 ELSE 0 END) AS recent,
            SUM(CASE WHEN status = 'candidate' THEN 1 ELSE 0 END) AS pending
     FROM pulse_events WHERE event_type = 'capability_creation'
   `);
@@ -350,30 +357,30 @@ export async function GET(request: NextRequest) {
     const extra = table === 'cowork_mcp_invocations' ? sql`AND cm.mcp_server NOT IN ('workspace', 'cowork')` : sql``;
     const rows = await rawAll<{ name: string; people: number | string; prior: number | string; first_at: number | string }>(client, sql`
       SELECT cm.${sql.raw(col)} AS name,
-             COUNT(DISTINCT CASE WHEN cm.occurred_at >= ${thirtyDaysAgo} THEN cm.user_id END) AS people,
-             COUNT(DISTINCT CASE WHEN cm.occurred_at >= ${sixtyDaysAgo} AND cm.occurred_at < ${thirtyDaysAgo} THEN cm.user_id END) AS prior,
+             COUNT(DISTINCT CASE WHEN cm.occurred_at >= ${bStart} AND cm.occurred_at < ${bEnd} THEN cm.user_id END) AS people,
+             COUNT(DISTINCT CASE WHEN cm.occurred_at >= ${pStart} AND cm.occurred_at < ${bStart} THEN cm.user_id END) AS prior,
              MIN(cm.occurred_at) AS first_at
       FROM ${sql.raw(table)} cm
       WHERE ${vendorSql} ${extra}
       GROUP BY 1
-      HAVING COUNT(DISTINCT CASE WHEN cm.occurred_at >= ${thirtyDaysAgo} THEN cm.user_id END) > 0
+      HAVING COUNT(DISTINCT CASE WHEN cm.occurred_at >= ${bStart} AND cm.occurred_at < ${bEnd} THEN cm.user_id END) > 0
       ORDER BY 2 DESC, 1
     `);
     return {
       total: rows.length,
-      rows: rows.slice(0, 5).map(r => ({ name: r.name, people: Number(r.people), priorPeople: Number(r.prior), isNew: Number(r.first_at) >= thirtyDaysAgo })),
+      rows: rows.slice(0, 5).map(r => ({ name: r.name, people: Number(r.people), priorPeople: Number(r.prior), isNew: Number(r.first_at) >= bStart })),
     };
   };
   const activePeopleRow = await rawGet<{ n: number | string }>(client, sql`
     SELECT COUNT(DISTINCT user_id) AS n FROM cowork_messages cm
-    WHERE cm.user_id IS NOT NULL AND cm.occurred_at >= ${thirtyDaysAgo} AND ${sql.raw(vendorClause(vendor, 'cm.'))}
+    WHERE cm.user_id IS NOT NULL AND cm.occurred_at >= ${bStart} AND cm.occurred_at < ${bEnd} AND ${sql.raw(vendorClause(vendor, 'cm.'))}
   `);
   // People who handed over meaningful or frontier work in the last 30 days, weekly counts of
   // the same, and how many people do half of all frontier work (counts only, no names).
   const deepPeopleRow = await rawGet<{ n: number | string }>(client, sql`
     SELECT COUNT(DISTINCT cm.user_id) AS n
     FROM pulse_classifications pc JOIN cowork_messages cm ON cm.id = pc.cowork_message_id
-    WHERE pc.classifier_status = 'classified' AND pc.tier >= 2 AND cm.occurred_at >= ${thirtyDaysAgo}
+    WHERE pc.classifier_status = 'classified' AND pc.tier >= 2 AND cm.occurred_at >= ${bStart} AND cm.occurred_at < ${bEnd}
       AND cm.user_id IS NOT NULL AND ${sql.raw(vendorClause(vendor, 'cm.'))}
   `);
   const deepPeopleWeekRows = await rawAll<{ w: number | string; n: number | string }>(client, sql`
@@ -387,7 +394,7 @@ export async function GET(request: NextRequest) {
   const frontierByPerson = (await rawAll<{ n: number | string }>(client, sql`
     SELECT COUNT(*) AS n
     FROM pulse_classifications pc JOIN cowork_messages cm ON cm.id = pc.cowork_message_id
-    WHERE pc.classifier_status = 'classified' AND pc.tier = 3 AND cm.occurred_at >= ${thirtyDaysAgo}
+    WHERE pc.classifier_status = 'classified' AND pc.tier = 3 AND cm.occurred_at >= ${bStart} AND cm.occurred_at < ${bEnd}
       AND cm.user_id IS NOT NULL AND ${sql.raw(vendorClause(vendor, 'cm.'))}
     GROUP BY cm.user_id ORDER BY 1 DESC
   `)).map(r => Number(r.n));
@@ -395,8 +402,20 @@ export async function GET(request: NextRequest) {
   let frontierHalfPeople = 0;
   for (let acc = 0; frontierHalfPeople < frontierByPerson.length && acc < frontierTotal / 2; frontierHalfPeople++) acc += frontierByPerson[frontierHalfPeople];
 
+  // Tasks by depth over the same window, for the strip's share of real work.
+  const windowTier = await rawGet<{ t1: number | string | null; t2: number | string | null; t3: number | string | null }>(client, sql`
+    SELECT SUM(CASE WHEN pc.tier = 1 THEN 1 ELSE 0 END) AS t1,
+           SUM(CASE WHEN pc.tier = 2 THEN 1 ELSE 0 END) AS t2,
+           SUM(CASE WHEN pc.tier = 3 THEN 1 ELSE 0 END) AS t3
+    FROM pulse_classifications pc JOIN cowork_messages cm ON cm.id = pc.cowork_message_id
+    WHERE pc.classifier_status = 'classified' AND cm.occurred_at >= ${bStart} AND cm.occurred_at < ${bEnd}
+      AND ${sql.raw(vendorClause(vendor, 'cm.'))}
+  `);
+
   const dashboard = {
+    window: quarterly ? 'quarter' as const : 'month' as const,
     weeks,
+    tierCounts: { t1: Number(windowTier?.t1 ?? 0), t2: Number(windowTier?.t2 ?? 0), t3: Number(windowTier?.t3 ?? 0) },
     deepPeople30d: Number(deepPeopleRow?.n ?? 0),
     deepPeopleWeeks: weeks.map((_, i) => deepPeopleByWeek.get(i) ?? 0),
     frontierPeople30d: frontierByPerson.length,

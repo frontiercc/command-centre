@@ -24,6 +24,8 @@ export interface OrgSummary {
   signalCards: { oti: number | null; dds: number | null; psr: number | null; ors: number | null };
   tierCounts: Tier;
   dashboard?: {
+    window?: 'month' | 'quarter';
+    tierCounts?: Tier;
     weeks: number[];
     otiWeeks: Array<number | null>;
     orsWeeks: Array<number | null>;
@@ -53,25 +55,28 @@ const pct = (v: number) => `${Math.round(v * 100)}%`;
 
 export function WorkPulsePanel({ data, product, title = 'Work Pulse', actions = false }: { data: OrgSummary; product: string; title?: string; /** Add a line under each card saying what to do. */ actions?: boolean }) {
   const d = data.dashboard;
-  const now = deep(data.tierCounts);
+  const q = d?.window === 'quarter';
+  const span = q ? 'the last quarter' : 'the last 30 days';
+  const prior = q ? 'the quarter before' : 'the month before';
+  const now = deep(d?.tierCounts ?? data.tierCounts);
   const before = d ? deep(d.priorTierCounts) : null;
   const people = d?.deepPeople30d ?? null;
   const active = d?.activePeople30d ?? null;
   const half = d?.frontierHalfPeople ?? null;
   const shareChange = now !== null && before !== null
-    ? (Math.round(now * 100) === Math.round(before * 100) ? 'the same as the month before' : `${now > before ? 'up' : 'down'} from ${shareWords(before) === 'half' ? 'about half' : shareWords(before)} the month before`)
+    ? (Math.round(now * 100) === Math.round(before * 100) ? `the same as ${prior}` : `${now > before ? 'up' : 'down'} from ${shareWords(before) === 'half' ? 'about half' : shareWords(before)} ${prior}`)
     : null;
   const answer = people !== null && active !== null && people > 0
-    ? <><b>{people} of {active}</b> people handed {product} real work in the last 30 days{now !== null ? <>, and <b>{shareWords(now)}</b> of all the tasks they gave it were real work</> : null}.</>
+    ? <><b>{people} of {active}</b> people handed {product} real work in {span}{now !== null ? <>, and <b>{shareWords(now)}</b> of all the tasks they gave it were real work</> : null}.</>
     : now !== null
-      ? <><b>{cap(shareWords(now))}</b> of the tasks people handed {product} in the last 30 days were real work.</>
+      ? <><b>{cap(shareWords(now))}</b> of the tasks people handed {product} in {span} were real work.</>
       : null;
   return (
     <section className="bg-white border border-[#EAEAEA] rounded-[14px] px-4 py-3.5">
       <div className="flex items-baseline gap-2 flex-wrap">
         <h2 className="m-0 text-[14px] font-semibold text-[#0A0A0A]">{title}</h2>
         <Tag tone="neutral">AI-judged</Tag>
-        <span className="ml-auto text-[12px] text-[#8F8F8F]">Last 30 days against the 30 before</span>
+        <span className="ml-auto text-[12px] text-[#8F8F8F]">{q ? 'Last quarter against the quarter before' : 'Last 30 days against the 30 before'}</span>
       </div>
       {answer && <p className="m-0 mt-2 text-[14px] leading-[22px] text-[#1A1A1A] [&_b]:font-semibold">{answer}</p>}
       <div className="grid grid-cols-2 xl:grid-cols-4 gap-2.5 mt-3">
@@ -93,7 +98,7 @@ export function WorkPulsePanel({ data, product, title = 'Work Pulse', actions = 
           value={now !== null ? cap(shareWords(now)) : undefined}
           change={shareChange}
           trend={d?.tierWeeks.map(t => (t ? deep(t) : null))}
-          notMeasured={now === null ? 'No classified work in the last 30 days' : undefined}
+          notMeasured={now === null ? `No classified work in ${span}` : undefined}
           todo={actions && now !== null && before !== null
             ? (Math.round(now * 100) > Math.round(before * 100) ? 'Rising. Nothing to do.'
               : Math.round(now * 100) < Math.round(before * 100) ? 'Falling. See the departments below.' : 'Steady.')
@@ -102,7 +107,7 @@ export function WorkPulsePanel({ data, product, title = 'Work Pulse', actions = 
         <QuestionCard
           question="New ways of working"
           value={d ? (d.capabilitiesRecent === 0 ? 'None' : String(d.capabilitiesRecent)) : undefined}
-          unit="confirmed this month"
+          unit={q ? 'confirmed this quarter' : 'confirmed this month'}
           sub={d && d.capabilitiesPending > 0
             ? <Link href="/admin/pulse?tab=overview" className="text-[#245BF3] font-medium hover:underline">{d.capabilitiesPending} waiting for your review</Link>
             : undefined}
@@ -115,14 +120,14 @@ export function WorkPulsePanel({ data, product, title = 'Work Pulse', actions = 
           question="Frontier work rests on"
           value={half !== null ? (half === 1 ? 'One person' : `${half} people`) : undefined}
           sub={half !== null && d ? <>They do half of it, out of {d.frontierPeople30d} doing any. <Link href="/pulse/cio" className="text-[#245BF3] font-medium hover:underline">See who</Link></> : undefined}
-          notMeasured={half === null ? 'No frontier work in the last 30 days' : undefined}
+          notMeasured={half === null ? `No frontier work in ${span}` : undefined}
           todo={actions && d?.frontierTopShare != null
             ? <>If the busiest person left, {d.frontierTopShare < 0.15 ? `${Math.round(d.frontierTopShare * 100)}%` : shareWords(d.frontierTopShare)} of it would go. <Link href="/pulse/dept" className="text-[#245BF3] font-medium hover:underline">See who</Link></>
             : undefined}
         />
       </div>
       <p className="m-0 mt-3 pt-2.5 border-t border-dashed border-[#EAEAEA] text-[12px] text-[#8F8F8F]">
-        Real work means a task Claude judged meaningful or frontier, not routine. A new way of working is one a manager has confirmed. Bars and lines show the last 8 weeks. <Link href="/pulse/cio" className="text-[#245BF3] font-medium hover:underline">Open Work Pulse</Link>
+        Real work means a task Claude judged meaningful or frontier, not routine. A new way of working is one a manager has confirmed. {q ? 'Bars and lines show the quarter week by week.' : 'Bars and lines show the last 8 weeks.'} <Link href="/pulse/cio" className="text-[#245BF3] font-medium hover:underline">Open Work Pulse</Link>
       </p>
     </section>
   );

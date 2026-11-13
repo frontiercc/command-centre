@@ -142,7 +142,7 @@ export default function CioPulsePage() {
 
   useEffect(() => {
     if (!vendorReady) return; // the saved view is read after the page loads
-    fetch(`/api/pulse/org-summary?vendor=${vendor}`)
+    fetch(`/api/pulse/org-summary?vendor=${vendor}&window=quarter`)
       .then(r => r.ok ? r.json() : null)
       .then(d => { if (d) setOrgFull(d); if (d) setOrgSummary({ topSkills: d.topSkills ?? [], topConnectors: d.topConnectors ?? [], topNativeTools: d.topNativeTools ?? [], docSessions: d.docSessions, workMix: d.workMix ?? [], sessionOutput: d.sessionOutput ?? null, byProduct: d.byProduct ?? null, humanTime: d.humanTime ?? null }); })
       .catch(() => {});

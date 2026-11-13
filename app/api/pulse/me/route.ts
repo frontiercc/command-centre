@@ -27,6 +27,34 @@ import { getAllConfig } from '@/lib/config';
 import { canViewSpendReview } from '@/lib/finance/spend-review-access';
 import { isWorkPulseSurface, classifiableSource, classifyChatgptOn } from '@/lib/pulse/work-surfaces';
 import { chatgptSpend } from '@/lib/openai/spend';
+import { buildMyQuarter, type MyQuarter } from '@/lib/pulse/my-quarter';
+import { humanTimeOn } from '@/lib/pulse/human-time-flags';
+import { buildChargeback, type ChargebackReport } from '@/lib/finance/chargeback';
+import { currentPeriod } from '@/lib/finance/period';
+import { priorPeriod } from '@/lib/finance/spend-review';
+
+/** This calendar month's spend for one person, by product, against last month at the same pace. */
+async function monthSpend(userId: string, vendor: 'all' | 'claude' | 'openai', nowS: number) {
+  const period = currentPeriod(nowS);
+  const [cur, last] = await Promise.all([buildChargeback(period, nowS), buildChargeback(priorPeriod(period), nowS)]);
+  const find = (r: ChargebackReport) => [...r.costCentres.flatMap(c => c.users), ...r.unallocated.users].filter(u => u.userId === userId);
+  const sum = (r: ChargebackReport) => {
+    const us = find(r);
+    const t = { cowork: 0, code: 0, chatgpt: 0, codex: 0 };
+    for (const u of us) { t.cowork += u.coworkUsd; t.code += u.codeUsd; t.chatgpt += u.chatgptUsd ?? 0; t.codex += u.codexUsd ?? 0; }
+    return t;
+  };
+  const a = sum(cur), b = sum(last);
+  const pick = (t: typeof a) => [
+    ...(vendor !== 'openai' ? [{ label: 'Claude Cowork', usd: t.cowork }, { label: 'Claude Code', usd: t.code }] : []),
+    ...(vendor !== 'claude' ? [{ label: 'ChatGPT', usd: t.chatgpt }, { label: 'Codex', usd: t.codex }] : []),
+  ];
+  const products = pick(a).filter(p => p.usd > 0);
+  const total = pick(a).reduce((s, p) => s + p.usd, 0);
+  const lastTotal = pick(b).reduce((s, p) => s + p.usd, 0);
+  const elapsed = Math.min(1, Math.max(0.01, (nowS - cur.periodStart) / (cur.periodEnd - cur.periodStart)));
+  return { products, totalUsd: total, lastMonthUsd: lastTotal > 0 ? lastTotal : null, elapsed, estimated: cur.estimated };
+}
 
 // OTI's interpretive status line is gated on the classifier accuracy audit
 // clearing its substantial-agreement floor. No scored audit yet, or below the
@@ -439,8 +467,24 @@ export async function GET(request: NextRequest) {
   const canSeeSpendReview = (await getAllConfig()).chargebackEnabled === true
     && await canViewSpendReview(session, userId);
 
+  // The page's one period: the last quarter. Own try/catch so a failure hides the panels, not the page.
+  let quarter: MyQuarter | null = null;
+  try {
+    quarter = await buildMyQuarter({ userId, department, vendor, nowS: now, showHumanTime: seesPerson, humanTimeOn: await humanTimeOn('cowork') });
+  } catch (err) {
+    console.error('[pulse/me] quarter failed', err);
+  }
+  let spendThisMonth: Awaited<ReturnType<typeof monthSpend>> | null = null;
+  try {
+    spendThisMonth = await monthSpend(userId, vendor, now);
+  } catch (err) {
+    console.error('[pulse/me] month spend failed', err);
+  }
+
   return NextResponse.json({
     humanTime,
+    quarter,
+    spendThisMonth,
     canSeeSpendReview,
     userId,
     displayName,

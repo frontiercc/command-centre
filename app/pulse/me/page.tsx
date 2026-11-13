@@ -8,24 +8,19 @@ import { useSearchParams } from 'next/navigation';
 import Link from 'next/link';
 import TopBar from '@/components/layout/TopBar';
 import LoadingSpinner from '@/components/shared/LoadingSpinner';
-import FrontierHero from '@/components/pulse/FrontierHero';
 import type { FrontierView } from '@/lib/pulse/frontier-view';
-import StatStrip from '@/components/pulse/StatStrip';
-import JourneyGrid from '@/components/pulse/JourneyGrid';
-import MilestoneCards from '@/components/pulse/MilestoneCards';
-import WeeklyPulse from '@/components/pulse/WeeklyPulse';
-import SkillExchange, { type SkillExchangeItem } from '@/components/pulse/SkillExchange';
-import type { ToolUsed } from '@/components/pulse/MilestoneCards';
+import type { MyQuarter } from '@/lib/pulse/my-quarter';
 import GenerateBriefingButton from '@/components/pulse/GenerateBriefingButton';
 import { cleanTitle } from '@/components/pulse/CapabilityLog';
-import HumanTimeCard, { type HumanTimeSummary } from '@/components/pulse/HumanTimeCard';
-import { PageBody, Toolbar, Panel, Strip, Figure, BarRow, Tag, Notice, Dot, B, C } from '@/components/precision/ui';
+import { Frame } from '@/components/pulse/WorkPulseOverview';
+import { QuarterPanel, DeeperPanel, ProducedPanel, ColleagueToolsPanel, SpendPanel, type MonthSpend, type Who } from '@/components/pulse/MyPulseQuarter';
+import { PageBody, Toolbar, Notice, Dot, B, C } from '@/components/precision/ui';
 import { useVendor, useOpenAiOnly, VendorSwitch } from '@/components/shared/VendorSwitch';
 import { WORK_PULSE_VENDOR_LABELS } from '@/lib/dashboard/vendor';
-import { workSpendFigure } from '@/lib/pulse/spend-figure';
 
 interface PersonalPulseData {
-  humanTime?: HumanTimeSummary | null;
+  quarter?: MyQuarter | null;
+  spendThisMonth?: MonthSpend | null;
   canSeeSpendReview?: boolean;
   userId: string | null;
   displayName: string | null;
@@ -47,7 +42,6 @@ interface PersonalPulseData {
   frontier: FrontierView | null;
   frontierAccess?: { canReview: boolean; canOpenUseCases: boolean };
   journeyGrid: Array<{ week: number; tier: number; count: number }>;
-  toolsUsed: ToolUsed[];
   weeklyPulse: { body: string; suggestion: string | null; generated_at: number } | null;
   skillExchange: Array<{ skill_name: string; description: string | null; author_user_id: string | null; run_count: number }>;
   teamId: string | null;
@@ -67,21 +61,13 @@ interface PersonalPulseData {
 }
 
 const TITLE = 'My Pulse';
-const SUBTITLE = 'Your personal delegation journey and milestones';
-
-/** Spend for the last 7 days: an absent figure is "Not measured", never $0. */
-function spendValue(usd: number | null | undefined) {
-  if (usd == null) return <span className="text-[15px] font-medium text-[#8F8F8F] tracking-normal">Not measured</span>;
-  if (usd === 0) return '$0.00';
-  return usd >= 100 ? `$${usd.toFixed(0)}` : `$${usd.toFixed(2)}`;
-}
+const SUBTITLE = 'How your work with Claude is going, and what to try next';
 
 export default function PersonalPulsePage() {
   const searchParams = useSearchParams();
   const viewingUserId = searchParams.get('userId');
 
   const [data, setData] = useState<PersonalPulseData | null>(null);
-  const [skillExchangeData, setSkillExchangeData] = useState<SkillExchangeItem[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [refreshKey, setRefreshKey] = useState(0);
@@ -104,15 +90,6 @@ export default function PersonalPulsePage() {
       .then(([meData, prefs]) => {
         setData(meData);
         setPulseStartAt(prefs.pulse_start_at ?? null);
-        const skillUrl = meData.department
-          ? `/api/pulse/skill-exchange?dept=${encodeURIComponent(meData.department)}`
-          : meData.userId ? `/api/pulse/skill-exchange?userId=${encodeURIComponent(decodeURIComponent(meData.userId))}` : null;
-        if (skillUrl) {
-          fetch(skillUrl)
-            .then(r => r.ok ? r.json() : { skills: [] })
-            .then(d => setSkillExchangeData(d.skills ?? []))
-            .catch(() => setSkillExchangeData([]));
-        }
       })
       .catch(e => setError(e.message))
       .finally(() => setLoading(false));
@@ -146,16 +123,17 @@ export default function PersonalPulsePage() {
   }
 
   const pending = data.capabilitiesDetail?.pending ?? [];
-  const topTools = data.topNativeTools ?? [];
-  const mySpend = workSpendFigure(vendor, data.coworkCostUsd, data.chatgptCostUsd, data.chatgptUnpricedModels?.length ?? 0);
+  const product = vendor === 'openai' ? 'ChatGPT' : vendor === 'claude' || !data.openaiPresent ? 'Claude' : 'Claude and ChatGPT';
+  const who: Who = { you: !viewingUserId, name: data.displayName ?? 'This person' };
+  const reviewHref = data.canSeeSpendReview && data.userId ? `/finops/spend-review/${encodeURIComponent(data.userId)}` : null;
+  const q = data.quarter ?? null;
 
   return (
     <>
       <TopBar title={TITLE} subtitle={SUBTITLE} />
-      <PageBody>
+      <PageBody className="dash-compact">
 
-        {/* Active since + Spend Review link */}
-        {(pulseStartAt || (data.canSeeSpendReview && data.userId) || data.openaiPresent || vendor !== 'all') && (
+        {(pulseStartAt || reviewHref || data.openaiPresent || vendor !== 'all') && (
           <Toolbar
             left={pulseStartAt ? (
               <Dot color={C.good}>
@@ -163,10 +141,8 @@ export default function PersonalPulsePage() {
               </Dot>
             ) : undefined}
           >
-            {data.canSeeSpendReview && data.userId && (
-              <Link href={`/finops/spend-review/${encodeURIComponent(data.userId)}`} className={B.link}>
-                {viewingUserId ? 'Spend review' : 'Your spend review'}
-              </Link>
+            {reviewHref && (
+              <Link href={reviewHref} className={B.link}>{viewingUserId ? 'Spend review' : 'Your spend review'}</Link>
             )}
             <VendorSwitch vendor={vendor} onChange={setVendor} openaiPresent={data.openaiPresent ?? false} labels={WORK_PULSE_VENDOR_LABELS} />
           </Toolbar>
@@ -177,118 +153,65 @@ export default function PersonalPulsePage() {
           </p>
         )}
 
-        {/* 1. Frontier Push hero */}
-        <FrontierHero view={data.frontier} canOpenUseCases={data.frontierAccess?.canOpenUseCases ?? false} />
+        {q ? (
+          <>
+            {/* 1. The quarter */}
+            <QuarterPanel q={q} frontier={data.frontier} product={product} who={who} reviewHref={pending.length > 0 ? '#to-review' : null} />
 
-        <HumanTimeCard summary={data.humanTime} surface="cowork" scope="Personal" view={data.openaiPresent ? vendor : 'claude'} />
-
-        {/* 2. Stat strip with deltas */}
-        <StatStrip
-          oti={data.metrics?.oti ?? null}
-          dds={data.metrics?.dds ?? null}
-          psr={data.capabilitiesDetail?.count ?? data.metrics?.psr ?? null}
-          ors={data.teamMetrics?.ors ?? data.metrics?.ors ?? null}
-          hideOrs
-          otiEarlyRead={data.metrics?.oti_early_read === 1}
-          otiUnderReview={data.otiUnderReview ?? false}
-          otiDelta={data.priorMetrics ? ((data.metrics?.oti ?? null) !== null && (data.priorMetrics?.oti ?? null) !== null ? Math.round(((data.metrics!.oti! - data.priorMetrics!.oti!) * 100)) / 100 : null) : undefined}
-          ddsDelta={data.priorMetrics ? ((data.metrics?.dds ?? null) !== null && (data.priorMetrics?.dds ?? null) !== null ? Math.round(((data.metrics!.dds! - data.priorMetrics!.dds!) * 100)) / 100 : null) : undefined}
-          psrDelta={data.priorMetrics ? ((data.metrics?.psr ?? null) !== null && (data.priorMetrics?.psr ?? null) !== null ? Math.round(((data.metrics!.psr! - data.priorMetrics!.psr!) * 100)) / 100 : null) : undefined}
-          orsDelta={data.priorMetrics ? ((data.metrics?.ors ?? null) !== null && (data.priorMetrics?.ors ?? null) !== null ? Math.round(((data.metrics!.ors! - data.priorMetrics!.ors!) * 100)) / 100 : null) : undefined}
-        />
-
-        {/* 3. Delegation journey grid */}
-        <JourneyGrid data={data.journeyGrid} />
-
-        {/* 4. Milestone cards */}
-        <MilestoneCards frontier={data.frontier} canReview={data.frontierAccess?.canReview ?? false} canOpenUseCases={data.frontierAccess?.canOpenUseCases ?? false} toolsUsed={data.toolsUsed ?? []} />
-
-        {/* 5. Weekly Pulse — generate button appears in empty state when userId known */}
-        <WeeklyPulse
-          briefing={data.weeklyPulse}
-          userId={data.userId ?? undefined}
-          onGenerate={() => setRefreshKey(k => k + 1)}
-          own
-          action={data.weeklyPulse && data.userId ? (
-            <GenerateBriefingButton
-              type="user"
-              userId={data.userId}
-              own
-              onComplete={() => setRefreshKey(k => k + 1)}
-            />
-          ) : undefined}
-        />
-
-        {/* 6. Skill exchange */}
-        <SkillExchange skills={skillExchangeData} />
-
-        {/* 6b. OTel cowork enrichments — cost + friction */}
-        {(mySpend || data.coworkFrictionIndex !== undefined) && (
-          <Strip cols={mySpend && data.coworkFrictionIndex !== undefined ? 2 : undefined}>
-            {mySpend && (
-              <Figure
-                label={`${mySpend.label}, 7 days`}
-                value={mySpend.notPriced ? <span className="text-[15px] font-medium text-[#8F8F8F] tracking-normal">Not priced</span> : spendValue(mySpend.usd)}
-                sub={mySpend.sub}
-              />
-            )}
-            {data.coworkFrictionIndex !== undefined && (
-            <Figure
-              label="Friction index, 7 days"
-              value={data.coworkFrictionIndex == null
-                ? <span className="text-[15px] font-medium text-[#8F8F8F] tracking-normal">No data</span>
-                : `${(data.coworkFrictionIndex * 100).toFixed(1)}%`}
-              sub="Tool failures ÷ total tool calls"
-            />
-            )}
-          </Strip>
-        )}
-
-        {/* 6c. Top native tools (OTel) */}
-        {topTools.length > 0 && (
-          <Panel title="Top native tools" subtitle="30 days" right={<Tag tone="measured">Measured</Tag>} flush>
-            <div className="py-1">
-              {topTools.map((t, i) => (
-                <BarRow
-                  key={t.tool_name}
-                  rank={i + 1}
-                  label={t.tool_name}
-                  value={`${t.usage_count}×`}
-                  pct={Math.round((t.usage_count / topTools[0].usage_count) * 100)}
-                  tone="measured"
-                />
-              ))}
+            {/* 2 and 3 */}
+            <div className="grid grid-cols-1 xl:grid-cols-2 gap-4 items-start">
+              <DeeperPanel q={q} who={who} />
+              <ProducedPanel q={q} who={who} />
             </div>
-          </Panel>
+
+            {/* 4 and 5 */}
+            <div className="grid grid-cols-1 xl:grid-cols-2 gap-4 items-start">
+              <ColleagueToolsPanel q={q} who={who} department={data.department} />
+              {data.spendThisMonth && <SpendPanel s={data.spendThisMonth} product={product} who={who} reviewHref={reviewHref} />}
+            </div>
+          </>
+        ) : (
+          <Notice tone="info" title="No work yet.">Nothing has been recorded for {who.you ? 'you' : 'this person'} yet.</Notice>
         )}
 
-        {/* 7. Pending capability confirmations */}
+        {/* 6. The week, in a paragraph */}
+        <Frame
+          title={who.you ? 'Your week, in a paragraph' : 'Their week, in a paragraph'}
+          tag="AI summary"
+          period={
+            <span className="inline-flex items-center gap-2">
+              {data.weeklyPulse && new Date(data.weeklyPulse.generated_at * 1000).toLocaleDateString('en-GB', { weekday: 'long', day: 'numeric', month: 'long' })}
+              {data.userId && <GenerateBriefingButton type="user" userId={data.userId} own={!viewingUserId} onComplete={() => setRefreshKey(k => k + 1)} />}
+            </span>
+          }
+        >
+          {data.weeklyPulse ? (
+            <div className="grid grid-cols-1 lg:grid-cols-2 gap-4 mt-2 text-[14px] leading-[22px] text-[#1A1A1A]">
+              <div>{data.weeklyPulse.body.split(/\n\s*\n/).filter(t => t.trim()).map((t, i) => <p key={i} className="m-0 mb-2 last:mb-0">{t}</p>)}</div>
+              {data.weeklyPulse.suggestion && <p className="m-0"><b className="font-semibold">Suggestion for next week:</b> {data.weeklyPulse.suggestion}</p>}
+            </div>
+          ) : (
+            <p className="m-0 mt-2 text-[13px] text-[#8F8F8F]">No paragraph yet. It is written each Sunday, or use Generate now.</p>
+          )}
+        </Frame>
+
+        {/* New ways of working waiting for review */}
         {pending.length > 0 && (
-          <Panel
-            title="Capabilities to review"
-            badge={<Tag tone="warn">{pending.length}</Tag>}
-            subtitle="AI may have taken on these types of work for the first time. Confirm to track them."
-            flush
-          >
-            <ul className="m-0 p-0 list-none">
-              {pending.map(c => (
-                <li key={c.id} className="px-4 py-2.5 border-t border-[#F2F2F2] first:border-t-0 flex items-start justify-between gap-4">
-                  <div className="flex-1 min-w-0">
-                    <p className="m-0 text-[14px] font-medium text-[#0A0A0A]">{cleanTitle(c.title)}</p>
-                    {c.body && <p className="m-0 mt-0.5 text-[13px] text-[#8F8F8F] line-clamp-1">{c.body}</p>}
-                  </div>
-                  <div className="flex gap-2 shrink-0">
-                    <button type="button" onClick={() => handleCapabilityAction(c.id, 'confirm')} className={B.primary}>
-                      Confirm
-                    </button>
-                    <button type="button" onClick={() => handleCapabilityAction(c.id, 'dismiss')} className={B.secondary}>
-                      Dismiss
-                    </button>
-                  </div>
-                </li>
-              ))}
-            </ul>
-          </Panel>
+          <Frame id="to-review" title="Waiting for review" period={`${pending.length} new ${pending.length === 1 ? 'way' : 'ways'} of working`}
+            answer={<>Claude thinks {who.you ? 'you' : 'they'} may have started {pending.length === 1 ? 'a new way of working' : 'new ways of working'}. Confirm to track {pending.length === 1 ? 'it' : 'them'}.</>}>
+            {pending.map(c => (
+              <div key={c.id} className="flex items-start gap-3 py-2 border-b border-[#F2F2F2] last:border-b-0">
+                <div className="flex-1 min-w-0">
+                  <p className="m-0 text-[13px] font-medium text-[#0A0A0A]">{cleanTitle(c.title)}</p>
+                  {c.body && <p className="m-0 mt-0.5 text-[12px] text-[#8F8F8F] line-clamp-1">{c.body}</p>}
+                </div>
+                <div className="flex gap-1.5 shrink-0">
+                  <button type="button" onClick={() => handleCapabilityAction(c.id, 'confirm')} className={`${B.secondary} !py-0.5 !px-2 !text-[12px]`}>Confirm</button>
+                  <button type="button" onClick={() => handleCapabilityAction(c.id, 'dismiss')} className={`${B.secondary} !py-0.5 !px-2 !text-[12px]`}>Dismiss</button>
+                </div>
+              </div>
+            ))}
+          </Frame>
         )}
 
       </PageBody>
