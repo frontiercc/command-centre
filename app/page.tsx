@@ -211,7 +211,7 @@ export default function DashboardPage() {
   return (
     <>
       <TopBar title="Dashboard" subtitle="How AI is changing the work across your organisation" />
-      <PageBody>
+      <PageBody className="dash-compact">
         {/* Last refreshed + data source status */}
         <Toolbar
           left={
