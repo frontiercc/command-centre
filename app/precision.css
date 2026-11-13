@@ -18,7 +18,7 @@ html[data-theme="precision"] .ccc-psidebar {
   width: 232px; flex-direction: column; gap: 1px;
   padding: 12px 8px; box-sizing: border-box; overflow-y: auto;
   background: var(--p-subtle); border-right: 1px solid var(--p-line);
-  font-size: 14px; color: var(--p-ink-3);
+  font-size: 13px; color: var(--p-ink-3);
 }
 html[data-theme="precision"] .ccc-psb-brand { display: flex; flex-direction: column; gap: 6px; padding: 6px 8px 12px; }
 html[data-theme="precision"] .ccc-psb-brand img { height: 20px; width: auto; align-self: flex-start; }
@@ -36,7 +36,7 @@ html[data-theme="precision"] .ccc-psb-search kbd {
 }
 html[data-theme="precision"] .ccc-psb-nav { display: flex; flex-direction: column; gap: 1px; }
 html[data-theme="precision"] .ccc-psb-section { display: flex; flex-direction: column; gap: 1px; }
-html[data-theme="precision"] .ccc-psb-label { padding: 14px 8px 4px; font-size: 12px; font-weight: 500; color: var(--p-faint); }
+html[data-theme="precision"] .ccc-psb-label { padding: 14px 8px 4px; font-size: 11px; font-weight: 500; color: var(--p-faint); }
 html[data-theme="precision"] .ccc-psb-link {
   display: flex; align-items: center; gap: 8px; width: 100%; padding: 6px 8px;
   font: inherit; text-align: left; color: var(--p-ink-3); cursor: pointer;

@@ -20,7 +20,7 @@ export default function PeopleByDay({ days, products, activeThisWeek, activeLast
   /** The products in words, e.g. "Claude or ChatGPT". */
   productNames: string;
 }) {
-  const W = 640, H = 200, left = 34, right = 10, top = 14, bottom = 22;
+  const W = 1100, H = 150, left = 30, right = 10, top = 10, bottom = 20;
   const n = days.length;
   const shown = products.filter(p => days.some(d => d.products[p.id] > 0));
   const max = Math.max(4, ...days.flatMap(d => shown.map(p => d.products[p.id])));
