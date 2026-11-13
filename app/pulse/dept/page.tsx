@@ -53,6 +53,7 @@ interface DeptData {
   toolsUsed: ToolUsed[];
   concentrationRisk: Array<{ user_id: string; display_name: string | null; sole_workflows: number }>;
   concentrationDetail: Array<{ user_id: string; display_name: string | null; task_types: string[] }>;
+  skillConcentration?: Array<{ user_id: string; display_name: string | null; skills: string[] }>;
   deptBriefing: { body: string; suggestion: string | null; generated_at: number } | null;
   coworkCostUsd?: number;
   chatgptCostUsd?: number | null;
@@ -229,27 +230,29 @@ export default function DeptPickerPage() {
                   {/* 3. Is the department's work getting deeper? */}
                   <DeeperPanel q={q} who={who} names={names} />
 
-                  {/* 4. By hand vs with Claude */}
-                  <ByHandPanel h={d.humanTime} who={who} />
+                  {/* 4 and 5: what the work took, and what came out of it */}
+                  <div className="grid grid-cols-1 xl:grid-cols-2 gap-4">
+                    <ByHandPanel h={d.humanTime} who={who} />
+                    <ProducedPanel q={q} who={who} period={period} />
+                  </div>
 
-                  {/* 5. Who is in it */}
+                  {/* 6. Who is in it */}
                   <PeoplePanel rows={d.memberRows ?? []} dept={d.dept} names={names} thenVsNow={thenVsNow} />
 
-                  {/* 6 and 7 */}
-                  <div className="grid grid-cols-1 xl:grid-cols-2 gap-4 items-start">
+                  {/* 7 and 8: the two people actions */}
+                  <div className="grid grid-cols-1 xl:grid-cols-2 gap-4">
                     <ConcentrationRisk
                       risks={d.concentrationRisk}
                       ors={d.teamMetrics?.ors ?? d.metrics?.ors ?? null}
                       detail={d.concentrationDetail}
+                      skillConcentration={d.skillConcentration}
+                      names={names}
                     />
-                    {d.coaching && <CoachingPrompts prompts={d.coaching.prompts} />}
+                    <CoachingPrompts prompts={d.coaching?.prompts ?? []} />
                   </div>
 
-                  {/* 8 and 9 */}
-                  <div className="grid grid-cols-1 xl:grid-cols-2 gap-4 items-start">
-                    <ProducedPanel q={q} who={who} period={period} />
-                    <ColleagueToolsPanel q={q} who={who} department={d.dept} period={period} />
-                  </div>
+                  {/* 9. What colleagues elsewhere use */}
+                  <ColleagueToolsPanel q={q} who={who} department={d.dept} period={period} />
                 </>
               ) : (
                 <Notice tone="info" title="No work yet.">Nothing has been recorded for this department yet.</Notice>

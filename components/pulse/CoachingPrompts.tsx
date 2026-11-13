@@ -20,7 +20,8 @@
 
 import { useEffect, useRef, useState } from 'react';
 import Link from 'next/link';
-import { Panel, Tag, Muted, B, cx } from '@/components/precision/ui';
+import { B, cx } from '@/components/precision/ui';
+import { Frame } from '@/components/pulse/WorkPulseOverview';
 
 export interface CoachingPromptItem { userId: string; displayName: string; promptText: string; useCaseId: string; useCaseTitle: string }
 
@@ -51,11 +52,9 @@ export default function CoachingPrompts({ prompts }: { prompts: CoachingPromptIt
 
   useEffect(() => () => { timers.current.forEach(t => clearTimeout(t)); }, []);
 
-  // Whether there was ever anything to coach at all — decided from the
-  // server-fetched prop, never from local state, so a dept with genuinely no
-  // coaching opportunities still renders nothing (distinct from a dept whose
-  // prompts have all just been marked done client-side).
-  if (prompts.length === 0) return null;
+  // A department with nothing to coach still shows the panel, saying so: every panel on these
+  // pages answers its question, and an empty half-width slot reads as a fault. Whether the list
+  // was empty from the server or has just been cleared is told apart in the empty state below.
 
   function finalizeRemoval(key: string) {
     setItems(prev => prev.filter(item => rowKey(item) !== key));
@@ -115,26 +114,32 @@ export default function CoachingPrompts({ prompts }: { prompts: CoachingPromptIt
 
   if (items.length === 0) {
     return (
-      <Panel title="Coaching">
-        <Muted>All coaching marked done.</Muted>
-      </Panel>
+      <Frame
+        title="Coaching"
+        period="Updated weekly"
+        answer={prompts.length === 0
+          ? <>Nothing to coach: everyone doing a use case&rsquo;s work is using its skill.</>
+          : <>All coaching marked done.</>}
+        note="Claude looks for people doing a use case's work without its skill."
+      />
     );
   }
 
+  const open = items.filter(p => !doneKeys.has(rowKey(p))).length;
   return (
-    <Panel
+    <Frame
       title="Coaching"
-      subtitle="People doing matching work without a proven workflow"
-      right={<Tag tone="measured">Measured</Tag>}
-      flush
+      period="Updated weekly"
+      answer={<><b>{open === 1 ? 'One person is' : `${open} people are`}</b> doing a use case&rsquo;s work without its skill. A word from you is usually enough.</>}
+      note="Marked done stays done, so the same conversation never comes back."
     >
       <ul className="m-0 p-0 list-none">
         {items.map(p => {
           const key = rowKey(p);
           if (doneKeys.has(key)) {
             return (
-              <li key={key} className="px-4 py-2.5 border-t border-[#F2F2F2] first:border-t-0 flex items-center justify-between gap-3">
-                <p className="m-0 text-[14px] text-[#8F8F8F]" role="status">
+              <li key={key} className="py-2 border-b border-[#F2F2F2] last:border-b-0 flex items-center justify-between gap-3">
+                <p className="m-0 text-[13px] text-[#8F8F8F]" role="status">
                   Marked done
                   {undoFailedKey === key && <span className="ml-2 text-[#B42318]">Could not undo. Try again.</span>}
                 </p>
@@ -149,11 +154,11 @@ export default function CoachingPrompts({ prompts }: { prompts: CoachingPromptIt
             );
           }
           return (
-            <li key={key} className="px-4 py-2.5 border-t border-[#F2F2F2] first:border-t-0 flex items-start justify-between gap-3">
-              <p className="m-0 text-[14px] leading-5 text-[#333333] min-w-0">
+            <li key={key} className="py-2 border-b border-[#F2F2F2] last:border-b-0 flex items-start justify-between gap-3">
+              <p className="m-0 text-[13px] leading-5 text-[#333333] min-w-0">
                 {p.promptText}{' '}
-                <Link href={`/use-cases/${encodeURIComponent(p.useCaseId)}`} className="text-[13px] font-medium text-[#1F6F8B] hover:underline">
-                  View “{p.useCaseTitle}”
+                <Link href={`/use-cases/${encodeURIComponent(p.useCaseId)}`} className="text-[12px] font-medium text-[#1F6F8B] hover:underline">
+                  Open &ldquo;{p.useCaseTitle}&rdquo;
                 </Link>
                 {failedKey === key && <span className="block text-[13px] text-[#B42318] mt-0.5">Could not save. Try again.</span>}
               </p>
@@ -161,7 +166,7 @@ export default function CoachingPrompts({ prompts }: { prompts: CoachingPromptIt
                 type="button"
                 onClick={() => handleMarkDone(p)}
                 disabled={savingKey === key}
-                className={cx(B.secondary, 'shrink-0')}
+                className={cx(B.secondary, 'shrink-0 !py-0.5 !px-2 !text-[12px]')}
               >
                 {savingKey === key ? 'Saving…' : 'Mark done'}
               </button>
@@ -169,6 +174,6 @@ export default function CoachingPrompts({ prompts }: { prompts: CoachingPromptIt
           );
         })}
       </ul>
-    </Panel>
+    </Frame>
   );
 }
