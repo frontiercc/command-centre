@@ -18,6 +18,7 @@ import {
   type DepthWindow,
 } from '@/components/pulse/DepthChart';
 import { PERIOD_SHAPE, type MyPeriod, type PulsePeriod } from '@/lib/pulse/period-shape';
+import { deepWords, tierList, tierNamesOr, type TierNames } from '@/lib/pulse/tier-names';
 
 const words = (v: number) => (v < 0.15 ? `${Math.round(v * 100)}%` : shareWords(v));
 const hours = (m: number) => { const h = m / 60; return h < 10 ? h.toFixed(1) : Math.round(h).toLocaleString('en-GB'); };
@@ -59,11 +60,13 @@ function SeeLink({ onClick, children }: { onClick: () => void; children: React.R
 
 /* ── 1: Your work ────────────────────────────────────────────── */
 
-export function WorkPanel({ q, product, who, period, onPeriod, onDrill, drill, reviewHref }: {
+export function WorkPanel({ q, product, who, period, onPeriod, onDrill, drill, reviewHref, names }: {
   q: MyPeriod; product: string; who: Who; period: PulsePeriod; onPeriod: (p: PulsePeriod) => void;
-  onDrill: (k: DrillKind | null) => void; drill: DrillKind | null; reviewHref: string | null;
+  onDrill: (k: DrillKind | null) => void; drill: DrillKind | null; reviewHref: string | null; names?: TierNames;
 }) {
   const shape = PERIOD_SHAPE[period];
+  const deep = deepWords(names);
+  const t = tierNamesOr(names);
   const r = q.realWork;
   const change = r.beforeAll === 0
     ? `nothing classified ${shape.prior}`
@@ -85,12 +88,12 @@ export function WorkPanel({ q, product, who, period, onPeriod, onDrill, drill, r
           <PeriodSwitch period={period} onPeriod={onPeriod} />
         </span>
       }
-      answer={<>{subj(who)} handed {product} <b>{plural(r.now, 'piece', 'pieces')} of real work</b> {shape.label.toLowerCase()}, {change}.</>}
-      note="Real work means a task Claude judged meaningful or frontier, not routine. Click a figure to see the work behind it."
+      answer={<>{subj(who)} handed {product} <b>{plural(r.now, 'task', 'tasks')} judged {deep}</b> {shape.label.toLowerCase()}, {change}.</>}
+      note={<>{t.t2} and {t.t3} are the top two tiers Claude judges each task against; the rest are {t.t1.toLowerCase()}. Click a figure to see the work behind it.</>}
     >
       <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-4 gap-2.5">
         <QuestionCard
-          question={`Real work handed to ${product}`}
+          question={`Tasks judged ${deep}`}
           value={`${r.now} of ${r.all}`}
           unit="tasks"
           change={change}
@@ -101,7 +104,7 @@ export function WorkPanel({ q, product, who, period, onPeriod, onDrill, drill, r
           todo={deptLine}
         />
         <QuestionCard
-          question="How much of it is real work"
+          question={`How much is ${deep}`}
           value={q.share.now !== null ? cap(words(q.share.now)) : undefined}
           sub={q.share.now !== null ? <>{plural(r.now, 'of', 'of')} {r.all} tasks{shareChange ? `, ${shareChange}` : ''}</> : undefined}
           trend={q.share.trend}
@@ -141,10 +144,9 @@ interface TaskRow {
   description?: string | null; outputs?: string | null; title?: string; status?: string;
   humanMinutes?: number; claudeMinutes?: number;
 }
-const TIER_WORD = ['', 'Routine', 'Meaningful', 'Frontier'];
 
-export function TaskList({ kind, period, userId, who, onClose }: {
-  kind: DrillKind; period: PulsePeriod; userId: string | null; who: Who; onClose: () => void;
+export function TaskList({ kind, period, userId, who, onClose, names }: {
+  kind: DrillKind; period: PulsePeriod; userId: string | null; who: Who; onClose: () => void; names?: TierNames;
 }) {
   const [rows, setRows] = useState<TaskRow[] | null>(null);
   const [visible, setVisible] = useState(true);
@@ -157,9 +159,10 @@ export function TaskList({ kind, period, userId, who, onClose }: {
       .then(d => { setRows(d.items ?? []); setVisible(!!d.textVisible); })
       .catch(() => setRows([]));
   }, [kind, period, userId]);
+  const tiers = tierList(names);
   const title = kind === 'capabilities' ? 'New ways of working'
     : kind === 'humantime' ? 'Sessions with a by-hand estimate'
-      : kind === 'realwork' ? 'The real work' : 'Every task';
+      : kind === 'realwork' ? `Tasks judged ${deepWords(names)}` : 'Every task';
   return (
     <Frame
       title={title}
@@ -172,7 +175,7 @@ export function TaskList({ kind, period, userId, who, onClose }: {
         <div key={`${r.sessionId ?? r.title}-${i}`} className="py-2 border-b border-[#F2F2F2] last:border-b-0">
           <p className="m-0 flex items-baseline gap-2 flex-wrap text-[13px]">
             <span className="text-[#8F8F8F] tabular-nums w-[52px] shrink-0">{dateOf(r.at)}</span>
-            {r.tier !== undefined && <span className="font-semibold text-[#0A0A0A]">{TIER_WORD[r.tier] ?? `Tier ${r.tier}`}</span>}
+            {r.tier !== undefined && <span className="font-semibold text-[#0A0A0A]">{tiers[r.tier - 1] ?? `Tier ${r.tier}`}</span>}
             {r.taskType && <span className="text-[#666666]">{cap(r.taskType.replace(/_/g, ' '))}</span>}
             {r.title && <span className="font-semibold text-[#0A0A0A]">{r.title}</span>}
             {r.status && <span className="text-[#666666]">{r.status === 'confirmed' ? 'confirmed' : 'waiting for review'}</span>}
@@ -192,7 +195,7 @@ export function TaskList({ kind, period, userId, who, onClose }: {
 
 /* ── 3: Is the work getting deeper? ───────────────────────────── */
 
-export function DeeperPanel({ q, who }: { q: MyPeriod; who: Who }) {
+export function DeeperPanel({ q, who, names }: { q: MyPeriod; who: Who; names?: TierNames }) {
   const [window, setWindow] = useState<DepthWindow>(6);
   const cols = depthColumns(q.weeks, window === 6 ? 13 : window, q.end);
   return (
@@ -200,11 +203,11 @@ export function DeeperPanel({ q, who }: { q: MyPeriod; who: Who }) {
       title={`Is ${poss(who)} work getting deeper?`}
       judged
       period={<DepthSwitch window={window} onWindow={setWindow} />}
-      answer={window === 6 ? gridSentence(q.grid, who.you ? 'you handed over' : `${who.name} handed over`) : depthSentence(cols, window, poss(who))}
+      answer={window === 6 ? gridSentence(q.grid, who.you ? 'you handed over' : `${who.name} handed over`, names) : depthSentence(cols, window, poss(who), names)}
       note={window === 6 ? 'Each number is a count of tasks that week. The last column is the week in progress.'
         : window === 52 ? 'One column per calendar month.' : 'One column per completed week, Monday to Sunday.'}
     >
-      {window === 6 ? <><TierGrid grid={q.grid} /><TierLegend /></> : <DepthChart cols={cols} />}
+      {window === 6 ? <><TierGrid grid={q.grid} names={names} /><TierLegend names={names} /></> : <DepthChart cols={cols} names={names} />}
     </Frame>
   );
 }

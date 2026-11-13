@@ -14,6 +14,7 @@ import Link from 'next/link';
 import { Panel, Tag, Muted, Empty, Segmented } from '@/components/precision/ui';
 import { WORK_PULSE_VENDOR_LABELS, type Vendor } from '@/lib/dashboard/vendor';
 import { useOpenAiOnly } from '@/components/shared/VendorSwitch';
+import { deepWords, tierNamesOr, type TierNames } from '@/lib/pulse/tier-names';
 import { QuestionCard, DASH, DASH_SHADES, shareWords, cap } from '@/components/dashboard/QuestionCard';
 
 type Tier = { t1: number; t2: number; t3: number };
@@ -21,6 +22,7 @@ type Tier = { t1: number; t2: number; t3: number };
 interface SpreadRow { name: string; people: number; priorPeople: number; isNew: boolean }
 
 export interface OrgSummary {
+  tierNames?: TierNames | null;
   signalCards: { oti: number | null; dds: number | null; psr: number | null; ors: number | null };
   tierCounts: Tier;
   dashboard?: {
@@ -54,6 +56,9 @@ const pct = (v: number) => `${Math.round(v * 100)}%`;
 /* ── 10: Work Pulse, four questions ─────────────────────────────── */
 
 export function WorkPulsePanel({ data, product, title = 'Work Pulse', actions = false }: { data: OrgSummary; product: string; title?: string; /** Add a line under each card saying what to do. */ actions?: boolean }) {
+  const names = data.tierNames ?? undefined;
+  const t = tierNamesOr(names);
+  const deepName = deepWords(names);
   const d = data.dashboard;
   const q = d?.window === 'quarter';
   const span = q ? 'the last quarter' : 'the last 30 days';
@@ -68,9 +73,9 @@ export function WorkPulsePanel({ data, product, title = 'Work Pulse', actions = 
     ? (Math.round(now * 100) === Math.round(before * 100) ? `the same as ${prior}` : `${now > before ? 'up' : 'down'} from ${shareWords(before) === 'half' ? 'about half' : shareWords(before)} ${prior}`)
     : null;
   const answer = people !== null && active !== null && people > 0
-    ? <><b>{people} of {active}</b> people handed {product} real work in {span}{now !== null ? <>, and <b>{shareWords(now)}</b> of all the tasks they gave it were real work</> : null}.</>
+    ? <><b>{people} of {active}</b> people handed {product} {deepName} work in {span}{now !== null ? <>, and <b>{shareWords(now)}</b> of all the tasks they gave it were {deepName}</> : null}.</>
     : now !== null
-      ? <><b>{cap(shareWords(now))}</b> of the tasks people handed {product} in {span} were real work.</>
+      ? <><b>{cap(shareWords(now))}</b> of the tasks people handed {product} in {span} were {deepName}.</>
       : null;
   return (
     <section className="bg-white border border-[#EAEAEA] rounded-[14px] px-4 py-3.5">
@@ -82,7 +87,7 @@ export function WorkPulsePanel({ data, product, title = 'Work Pulse', actions = 
       {answer && <p className="m-0 mt-2 text-[14px] leading-[22px] text-[#1A1A1A] [&_b]:font-semibold">{answer}</p>}
       <div className="grid grid-cols-2 xl:grid-cols-4 gap-2.5 mt-3">
         <QuestionCard
-          question="People doing real work with it"
+          question={`People doing ${deepName} work with it`}
           value={people !== null && active !== null ? `${people} of ${active}` : undefined}
           unit="people"
           trend={d?.deepPeopleWeeks}
@@ -90,12 +95,12 @@ export function WorkPulsePanel({ data, product, title = 'Work Pulse', actions = 
           notMeasured={people === null ? 'No classified work yet' : undefined}
           todo={actions && people !== null && active !== null
             ? (active - people > 0
-              ? <>{active - people} {active - people === 1 ? 'person only uses' : 'people only use'} it for routine tasks. <Link href="/pulse/users" className="text-[#1F6F8B] font-medium hover:underline">See who</Link></>
-              : 'Everyone active is doing some real work.')
+              ? <>{active - people} {active - people === 1 ? 'person only uses' : 'people only use'} it for {t.t1.toLowerCase()} tasks. <Link href="/pulse/users" className="text-[#1F6F8B] font-medium hover:underline">See who</Link></>
+              : `Everyone active is doing some ${deepName} work.`)
             : undefined}
         />
         <QuestionCard
-          question="Tasks that are real work"
+          question={`Tasks that are ${deepName}`}
           value={now !== null ? `${(tc.t2 + tc.t3).toLocaleString('en-GB')} of ${total(tc).toLocaleString('en-GB')}` : undefined}
           unit="tasks"
           change={now !== null ? `${shareWords(now)}${shareChange ? `, ${shareChange}` : ''}` : undefined}
@@ -119,17 +124,17 @@ export function WorkPulsePanel({ data, product, title = 'Work Pulse', actions = 
           todo={actions && d ? (d.capabilitiesPending > 0 ? 'Confirm the ones that are real, below.' : 'Nothing waiting for review.') : undefined}
         />
         <QuestionCard
-          question="Frontier work rests on"
+          question={`${t.t3} work rests on`}
           value={half !== null ? (half === 1 ? 'One person' : `${half} people`) : undefined}
           sub={half !== null && d ? <>They do half of it, out of {d.frontierPeople30d} doing any. <Link href="/pulse/cio" className="text-[#1F6F8B] font-medium hover:underline">See who</Link></> : undefined}
-          notMeasured={half === null ? `No frontier work in ${span}` : undefined}
+          notMeasured={half === null ? `No ${t.t3.toLowerCase()} work in ${span}` : undefined}
           todo={actions && d?.frontierTopShare != null
             ? <>If the busiest person left, {d.frontierTopShare < 0.15 ? `${Math.round(d.frontierTopShare * 100)}%` : shareWords(d.frontierTopShare)} of it would go. <Link href="/pulse/dept" className="text-[#1F6F8B] font-medium hover:underline">See who</Link></>
             : undefined}
         />
       </div>
       <p className="m-0 mt-3 pt-2.5 border-t border-dashed border-[#EAEAEA] text-[12px] text-[#8F8F8F]">
-        Real work means a task Claude judged meaningful or frontier, not routine. A new way of working is one a manager has confirmed. {q ? 'Bars and lines show the quarter week by week.' : 'Bars and lines show the last 8 weeks.'} <Link href="/pulse/cio" className="text-[#1F6F8B] font-medium hover:underline">Open Work Pulse</Link>
+        {t.t2} and {t.t3} are the top two tiers Claude judges each task against; the rest are {t.t1.toLowerCase()}. A new way of working is one a manager has confirmed. {q ? 'Bars and lines show the quarter week by week.' : 'Bars and lines show the last 8 weeks.'} <Link href="/pulse/cio" className="text-[#1F6F8B] font-medium hover:underline">Open Work Pulse</Link>
       </p>
     </section>
   );

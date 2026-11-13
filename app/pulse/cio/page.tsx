@@ -172,7 +172,7 @@ export default function CioPulsePage() {
 
   return (
     <>
-      <TopBar title="Work Pulse" subtitle="Are people handing Claude real work, what does it produce, and where to act" />
+      <TopBar title="Work Pulse" subtitle="How deeply people work with Claude, what it produces, and where to act" />
       <PageBody className="dash-compact">
         <Toolbar left="Each panel says its own period">
           <span className="flex flex-wrap items-center justify-end gap-3">
@@ -199,17 +199,18 @@ export default function CioPulsePage() {
           product={product}
           window={delegationWeeks}
           onWindow={setDelegationWeeks}
+          names={orgFull?.tierNames ?? undefined}
         />
 
         {/* 4 and 5 */}
         <div className="grid grid-cols-1 xl:grid-cols-2 gap-4 items-start">
-          <DeptRealWork rows={data.deptRealWork ?? []} floorPct={data.realWorkFloorPct ?? null} />
+          <DeptRealWork rows={data.deptRealWork ?? []} floorPct={data.realWorkFloorPct ?? null} names={orgFull?.tierNames ?? undefined} />
           <Produced output={orgSummary?.sessionOutput} human={orgSummary?.humanTime} />
         </div>
 
         {/* 6 and 7 */}
         <div className="grid grid-cols-1 xl:grid-cols-2 gap-4 items-start">
-          <Products data={orgSummary?.byProduct} />
+          <Products data={orgSummary?.byProduct} names={orgFull?.tierNames ?? undefined} />
           <NewWaysOfWorking confirmedTotal={data.signalCards.psr} confirmedRecent={orgFull?.dashboard?.capabilitiesRecent ?? 0} />
         </div>
 

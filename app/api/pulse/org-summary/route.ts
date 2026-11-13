@@ -9,6 +9,7 @@
 // back as STRINGS on Postgres). otel_events.tool_input is jsonb on Postgres —
 // its `decision` field is read with `->>'decision'`.
 import { NextRequest, NextResponse } from 'next/server';
+import { getTierNames } from '@/lib/pulse/tier-config';
 import { visibleVendor } from '@/lib/sources/openai-visibility';
 import { and, desc, eq, gte, isNotNull, lt, sql } from 'drizzle-orm';
 import { weekStarts } from '@/lib/pulse/period';
@@ -434,6 +435,7 @@ export async function GET(request: NextRequest) {
   };
 
   return NextResponse.json({
+    tierNames: await getTierNames(),
     dashboard,
     signalCards: {
       oti: otiAvg !== null && otiAvg !== undefined ? Math.round(Number(otiAvg) * 100) / 100 : null,

@@ -16,6 +16,7 @@
  */
 import type { ReactNode } from 'react';
 import { DASH_SHADES, shareWords } from '@/components/dashboard/QuestionCard';
+import { deepWords, tierList, type TierNames } from '@/lib/pulse/tier-names';
 
 export interface TierWeek { weekStart: number; t1: number; t2: number; t3: number }
 export type DepthWindow = 6 | 13 | 26 | 52;
@@ -74,10 +75,10 @@ const words = (v: number) => (v < 0.15 ? `${Math.round(v * 100)}%` : shareWords(
 const plural = (c: number, one: string, many: string) => `${c} ${c === 1 ? one : many}`;
 
 /**
- * One sentence on the whole span shown: real work in its first month against its last month.
+ * One sentence on the whole span shown: the top two tiers' share in its first month against its last.
  * A first month with no work is skipped and the sentence says where the work starts.
  */
-export function depthSentence(cols: DepthColumn[], window: DepthWindow, whose: string): ReactNode {
+export function depthSentence(cols: DepthColumn[], window: DepthWindow, whose: string, names?: TierNames): ReactNode {
   const per = window === 52 ? 1 : 4; // columns in a month
   const withData = cols.map((c, i) => (total(c) > 0 ? i : -1)).filter(i => i >= 0);
   if (withData.length < per * 2) return <>Not enough weeks of work yet to compare over {SPAN_WORDS[window]}.</>;
@@ -90,21 +91,22 @@ export function depthSentence(cols: DepthColumn[], window: DepthWindow, whose: s
   const monthName = new Date(cols[firstIdx[0]].start * 1000).toLocaleDateString('en-GB', { month: 'long', timeZone: 'UTC' });
   const firstWhen = !startsLate ? 'in its first month'
     : window === 52 ? `in ${monthName}, the first month with work` : `in the first month with work, from ${cols[firstIdx[0]].label}`;
-  return <>{verdict}Over {SPAN_WORDS[window]}, real work went from <b>{words(first)}</b> of {whose ? `${whose} ` : ''}tasks {firstWhen} to <b>{words(last)}</b> in its last month.</>;
+  return <>{verdict}Over {SPAN_WORDS[window]}, {deepWords(names)} work went from <b>{words(first)}</b> of {whose ? `${whose} ` : ''}tasks {firstWhen} to <b>{words(last)}</b> in its last month.</>;
 }
 
 /** The grid's sentence: this week first, because that is what a new starter needs to see. */
-export function gridSentence(grid: TierWeek[], whose: string): ReactNode {
+export function gridSentence(grid: TierWeek[], whose: string, names?: TierNames): ReactNode {
   const now = grid[grid.length - 1], prev = grid[grid.length - 2];
   const real = (w?: TierWeek) => (w ? w.t2 + w.t3 : 0);
   const six = grid.reduce((s, w) => s + total(w), 0);
   const who = whose ? `${whose} ` : '';
   if (six === 0) return <>No classified tasks in the last six weeks.</>;
+  const deep = deepWords(names);
   if (total(now) > 0) {
-    return <>This week so far, {who}<b>{plural(total(now), 'task', 'tasks')}</b>, {real(now) === 0 ? <>none of them real work yet</> : <><b>{real(now)} of them</b> real work</>}. Six weeks: {plural(six, 'task', 'tasks')}.</>;
+    return <>This week so far, {who}<b>{plural(total(now), 'task', 'tasks')}</b>, {real(now) === 0 ? <>none of them {deep} yet</> : <><b>{real(now)} of them</b> {deep}</>}. Six weeks: {plural(six, 'task', 'tasks')}.</>;
   }
   if (prev && total(prev) > 0) {
-    return <>Nothing yet this week. Last week {who}<b>{plural(total(prev), 'task', 'tasks')}</b>, {real(prev)} of them real work.</>;
+    return <>Nothing yet this week. Last week {who}<b>{plural(total(prev), 'task', 'tasks')}</b>, {real(prev)} of them {deep}.</>;
   }
   return <>Nothing in the last two weeks. Six weeks: {plural(six, 'task', 'tasks')}.</>;
 }
@@ -122,14 +124,15 @@ export function DepthSwitch({ window, onWindow, windows = DEPTH_WINDOWS }: {
 }
 
 /** The delegation journey: a count per tier per week, oldest week on the left, this week last. */
-export function TierGrid({ grid }: { grid: TierWeek[] }) {
+export function TierGrid({ grid, names }: { grid: TierWeek[]; names?: TierNames }) {
+  const [t1, t2, t3] = tierList(names);
   const tiers: Array<[3 | 2 | 1, string, string]> = [
-    [3, 'Frontier', DASH_SHADES[2]],
-    [2, 'Meaningful', DASH_SHADES[1]],
-    [1, 'Routine', DASH_SHADES[0]],
+    [3, t3, DASH_SHADES[2]],
+    [2, t2, DASH_SHADES[1]],
+    [1, t1, DASH_SHADES[0]],
   ];
   const count = (w: TierWeek, t: 3 | 2 | 1) => (t === 3 ? w.t3 : t === 2 ? w.t2 : w.t1);
-  const cols = `minmax(0,78px) repeat(${grid.length}, minmax(0,1fr))`;
+  const cols = `minmax(0,104px) repeat(${grid.length}, minmax(0,1fr))`;
   return (
     <div>
       <div className="grid gap-1 text-[11px] text-[#8F8F8F] pb-1" style={{ gridTemplateColumns: cols }}>
@@ -162,7 +165,7 @@ export function TierGrid({ grid }: { grid: TierWeek[] }) {
   );
 }
 
-export function DepthChart({ cols, height = 80 }: { cols: DepthColumn[]; height?: number }) {
+export function DepthChart({ cols, height = 80, names }: { cols: DepthColumn[]; height?: number; names?: TierNames }) {
   const n = cols.length;
   const gap = n > 13 ? 2 : 4;
   const every = n > 13 ? 2 : 1;
@@ -190,15 +193,15 @@ export function DepthChart({ cols, height = 80 }: { cols: DepthColumn[]; height?
           <span key={c.start} className="flex-1 min-w-0 text-center text-[11px] text-[#8F8F8F] whitespace-nowrap overflow-visible">{i % every === 0 || i === n - 1 ? c.label : ''}</span>
         ))}
       </div>
-      <TierLegend />
+      <TierLegend names={names} />
     </div>
   );
 }
 
-export function TierLegend() {
+export function TierLegend({ names }: { names?: TierNames }) {
   return (
     <div className="flex flex-wrap gap-x-3.5 mt-1.5 text-[12px] text-[#777777]">
-      {['Routine', 'Meaningful', 'Frontier'].map((l, i) => (
+      {tierList(names).map((l, i) => (
         <span key={l} className="inline-flex items-center gap-1.5"><span className="w-2.5 h-2.5 rounded-[2px]" style={{ background: DASH_SHADES[i] }} />{l}</span>
       ))}
     </div>

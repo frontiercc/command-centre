@@ -663,7 +663,7 @@ export default function SystemPage() {
                 placeholder="50"
               />
             </Field>
-            <Field label="Department real-work floor (%)" hint="On Work Pulse, departments where fewer tasks than this are real work (meaningful or frontier) are marked. Blank for 33; 0 for no floor.">
+            <Field label="Department depth floor (%)" hint="On Work Pulse, departments where fewer tasks than this reach the top two tiers (meaningful or frontier, as named on Admin → Work Pulse → Tiers) are marked. Blank for 33; 0 for no floor.">
               <input
                 type="number"
                 value={targetDeptRealWorkPct}

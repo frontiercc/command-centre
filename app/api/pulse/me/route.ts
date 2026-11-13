@@ -10,6 +10,7 @@
 // raw-SQL COUNT/SUM aggregate is Number()-coerced (bigint/numeric
 // come back as STRINGS on Postgres).
 import { NextRequest, NextResponse } from 'next/server';
+import { getTierNames } from '@/lib/pulse/tier-config';
 import { visibleVendor, visibleOpenAi } from '@/lib/sources/openai-visibility';
 import { and, asc, desc, eq, gte, isNotNull, lte, ne, sql } from 'drizzle-orm';
 import { getAdminSession, isDeptScoped, canAccessCoworkPulse, canAccessPulseAdmin } from '@/lib/auth/admin-auth';
@@ -485,6 +486,7 @@ export async function GET(request: NextRequest) {
   }
 
   return NextResponse.json({
+    tierNames: await getTierNames(),
     humanTime,
     period: periodData,
     spendThisMonth,

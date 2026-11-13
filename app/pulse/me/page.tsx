@@ -10,6 +10,7 @@ import TopBar from '@/components/layout/TopBar';
 import LoadingSpinner from '@/components/shared/LoadingSpinner';
 import type { FrontierView } from '@/lib/pulse/frontier-view';
 import type { MyPeriod, PulsePeriod } from '@/lib/pulse/period-shape';
+import type { TierNames } from '@/lib/pulse/tier-names';
 import FrontierHero from '@/components/pulse/FrontierHero';
 import GenerateBriefingButton from '@/components/pulse/GenerateBriefingButton';
 import { cleanTitle } from '@/components/pulse/CapabilityLog';
@@ -21,6 +22,7 @@ import { WORK_PULSE_VENDOR_LABELS } from '@/lib/dashboard/vendor';
 
 interface PersonalPulseData {
   period?: MyPeriod | null;
+  tierNames?: TierNames | null;
   spendThisMonth?: MonthSpend | null;
   canSeeSpendReview?: boolean;
   userId: string | null;
@@ -169,18 +171,19 @@ export default function PersonalPulsePage() {
               onDrill={setDrill}
               drill={drill}
               reviewHref={pending.length > 0 ? '#to-review' : null}
+              names={data.tierNames ?? undefined}
             />
 
             {/* The work behind whichever figure was clicked */}
             {drill && (
-              <TaskList kind={drill} period={period} userId={viewingUserId} who={who} onClose={() => setDrill(null)} />
+              <TaskList kind={drill} period={period} userId={viewingUserId} who={who} onClose={() => setDrill(null)} names={data.tierNames ?? undefined} />
             )}
 
             {/* 2. Best work this week, with what it actually was */}
             <FrontierHero view={data.frontier} canOpenUseCases={data.frontierAccess?.canOpenUseCases ?? false} />
 
             {/* 3. Is the work getting deeper? Six weeks as a grid, then the longer views */}
-            <DeeperPanel q={q} who={who} />
+            <DeeperPanel q={q} who={who} names={data.tierNames ?? undefined} />
 
             {/* 4 and 5 */}
             <div className="grid grid-cols-1 xl:grid-cols-2 gap-4 items-start">

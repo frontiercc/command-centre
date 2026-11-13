@@ -18,6 +18,7 @@ import type { SessionOutputReport } from '@/components/pulse/SessionOutputCard';
 import type { HumanTimeSummary } from '@/components/pulse/HumanTimeCard';
 import type { ActNextItem, DeptProcessBoxItem } from '@/components/pulse/ActNextPanel';
 import { depthColumns, depthSentence, DepthChart, DepthSwitch, type DepthWindow, type TierWeek } from '@/components/pulse/DepthChart';
+import { deepWords, tierNamesOr, type TierNames } from '@/lib/pulse/tier-names';
 import { FAMILY_LABEL, PRODUCT_FAMILY, PRODUCT_LABEL, type WorkProduct } from '@/lib/pulse/cowork/products';
 
 const AMBER = '#DC8A00';
@@ -102,9 +103,10 @@ const ORG_WINDOWS: DepthWindow[] = [13, 26, 52];
 
 interface DeptTrend { dept: string; thenVsNow: { then: number; now: number; deltaPp: number; arrow: 'up' | 'flat' | 'down' } | null }
 
-export function BiggerJobs({ weeks, departments, product, window, onWindow }: {
-  weeks: TierWeek[]; departments: DeptTrend[]; product: string; window: OrgDepthWindow; onWindow: (w: OrgDepthWindow) => void;
+export function BiggerJobs({ weeks, departments, product, window, onWindow, names }: {
+  weeks: TierWeek[]; departments: DeptTrend[]; product: string; window: OrgDepthWindow; onWindow: (w: OrgDepthWindow) => void; names?: TierNames;
 }) {
+  const t = tierNamesOr(names);
   const cols = depthColumns(weeks, window, Math.floor(Date.now() / 1000));
   const falling = departments.filter(d => d.thenVsNow?.arrow === 'down').sort((a, b) => a.thenVsNow!.deltaPp - b.thenVsNow!.deltaPp);
   const others = falling.length === 1 ? ` ${falling[0].dept} is going the other way.` : falling.length > 1 ? ` ${falling.length} departments are going the other way.` : '';
@@ -113,17 +115,17 @@ export function BiggerJobs({ weeks, departments, product, window, onWindow }: {
       title={`Are people handing ${product} bigger jobs?`}
       judged
       period={<DepthSwitch window={window} onWindow={w => onWindow(w as OrgDepthWindow)} windows={ORG_WINDOWS} />}
-      answer={<>{depthSentence(cols, window, '')}{others}</>}
-      note={window === 52 ? 'Each column is one calendar month of tasks, split into routine, meaningful and frontier.' : 'Each column is one completed week, Monday to Sunday, split into routine, meaningful and frontier tasks.'}
+      answer={<>{depthSentence(cols, window, '', names)}{others}</>}
+      note={`Each column is one ${window === 52 ? 'calendar month' : 'completed week, Monday to Sunday'}, split into ${t.t1.toLowerCase()}, ${t.t2.toLowerCase()} and ${t.t3.toLowerCase()} tasks.`}
     >
-      <DepthChart cols={cols} />
+      <DepthChart cols={cols} names={names} />
       {falling.length > 0 && (
         <div className="mt-3 pt-2 border-t border-[#EAEAEA]">
           <div className="text-[12px] font-semibold text-[#333333] mb-0.5">Going the other way</div>
           {falling.slice(0, 3).map(d => (
             <div key={d.dept} className="flex gap-2.5 items-center py-1 text-[13px]">
               <Link href={`/pulse/dept?dept=${encodeURIComponent(d.dept)}`} className="text-[#0A0A0A] hover:text-[#1F6F8B]">{d.dept}</Link>
-              <span className="text-[#777777]">real work is now {words(d.thenVsNow!.now)} of tasks</span>
+              <span className="text-[#777777]">{deepWords(names)} work is now {words(d.thenVsNow!.now)} of tasks</span>
               <span className="ml-auto text-[#333333]">down from {words(d.thenVsNow!.then)}</span>
             </div>
           ))}
@@ -133,26 +135,27 @@ export function BiggerJobs({ weeks, departments, product, window, onWindow }: {
   );
 }
 
-/* ── 4: Which departments are doing real work? ───────────────────── */
+/* ── 4: Which departments do the deepest work? ───────────────────── */
 
-export function DeptRealWork({ rows, floorPct }: { rows: Array<{ dept: string; share: number; tasks: number }>; floorPct: number | null }) {
+export function DeptRealWork({ rows, floorPct, names }: { rows: Array<{ dept: string; share: number; tasks: number }>; floorPct: number | null; names?: TierNames }) {
   if (rows.length === 0) return null;
+  const deep = deepWords(names);
   const floor = floorPct !== null ? floorPct / 100 : null;
   const below = floor === null ? [] : rows.filter(r => r.share < floor);
   const top = rows[0];
   const list = (xs: string[]) => (xs.length <= 1 ? xs[0] ?? '' : `${xs.slice(0, -1).join(', ')} and ${xs[xs.length - 1]}`);
   const answer = below.length === 0
-    ? <>Every department is above your floor of {words(floor ?? 0)} tasks being real work. <b>{top.dept}</b> does the most real work.</>
+    ? <>Every department is above your floor of {words(floor ?? 0)} tasks being {deep}. <b>{top.dept}</b> does the most.</>
     : below.length <= 3
-      ? <><b>{list(below.map(b => b.dept))}</b> {below.length === 1 ? 'is' : 'are'} below your floor of {words(floor!)}. {top.dept} does the most real work.</>
-      : <><b>{below.length} of {rows.length}</b> departments are below your floor of {words(floor!)}. {top.dept} does the most real work.</>;
+      ? <><b>{list(below.map(b => b.dept))}</b> {below.length === 1 ? 'is' : 'are'} below your floor of {words(floor!)}. {top.dept} does the most.</>
+      : <><b>{below.length} of {rows.length}</b> departments are below your floor of {words(floor!)}. {top.dept} does the most.</>;
   return (
     <Frame
-      title="Which departments are doing real work?"
+      title={`Which departments are doing ${deep} work?`}
       judged
       period="Last 4 weeks"
       answer={answer}
-      note={<>Each bar is the share of the department&apos;s tasks that were real work.{floor !== null ? ` The dashed line is your floor, set in Admin → System; departments below it are amber.` : ''} <Link href="/pulse/dept" className={linkCls}>See every department and its people</Link></>}
+      note={<>Each bar is the share of the department&apos;s tasks that were {deep}.{floor !== null ? ` The dashed line is your floor, set in Admin → System; departments below it are amber.` : ''} <Link href="/pulse/dept" className={linkCls}>See every department and its people</Link></>}
     >
       {rows.map(r => {
         const isBelow = floor !== null && r.share < floor;
@@ -213,7 +216,7 @@ export function Produced({ output, human }: { output: SessionOutputReport | null
 
 /* ── 6: Which products are people using? ─────────────────────────── */
 
-export function Products({ data }: { data: ByProductData | null | undefined }) {
+export function Products({ data, names }: { data: ByProductData | null | undefined; names?: TierNames }) {
   if (!data) return null;
   const label = (p: string) => (p === 'claude_chat' ? 'Claude Chat' : p === 'chatgpt' ? 'ChatGPT' : p === 'cowork' ? 'Claude Cowork' : PRODUCT_LABEL[p as WorkProduct] ?? p);
   const family = (p: string) => (p === 'claude_chat' || p === 'chatgpt' || p === 'cowork' ? null : PRODUCT_FAMILY[p as WorkProduct] ?? null);
@@ -226,12 +229,12 @@ export function Products({ data }: { data: ByProductData | null | undefined }) {
       title="Which products are people using?"
       period="Last 30 days"
       answer={lead && lead.people > 0
-        ? <>{label(lead.product)} carries most of the work: <b>{lead.people} people</b>{lead.meaningfulPct !== null ? <>, and <b>{words(lead.meaningfulPct / 100)}</b> of their tasks are real work</> : null}.</>
+        ? <>{label(lead.product)} carries most of the work: <b>{lead.people} people</b>{lead.meaningfulPct !== null ? <>, and <b>{words(lead.meaningfulPct / 100)}</b> of their tasks are {deepWords(names)}</> : null}.</>
         : <>No product has been used in the last 30 days.</>}
-      note={<>Real work is Claude&apos;s judgement of each task. Produced a file counts sessions where Claude saved, sent or published one. Spend for each product is on <Link href="/finops" className={linkCls}>FinOps</Link>.</>}
+      note={<>{tierNamesOr(names).t2} and {tierNamesOr(names).t3} are Claude&apos;s judgement of each task. Produced a file counts sessions where Claude saved, sent or published one. Spend for each product is on <Link href="/finops" className={linkCls}>FinOps</Link>.</>}
     >
       <div className="grid grid-cols-[minmax(0,130px)_minmax(0,1fr)_56px_64px_70px] gap-2.5 text-[11px] text-[#8F8F8F] pb-1">
-        <span /> <span>People</span><span className="text-right">Sessions</span><span className="text-right">Real work</span><span className="text-right">Made a file</span>
+        <span /> <span>People</span><span className="text-right">Sessions</span><span className="text-right">{tierNamesOr(names).t2}+</span><span className="text-right">Made a file</span>
       </div>
       {rows.map(r => {
         const f = family(r.product);
