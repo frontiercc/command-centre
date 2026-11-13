@@ -3,7 +3,6 @@
 
 'use client';
 
-import NeedsAttention from '@/components/usecases/NeedsAttention';
 import { useEffect, useMemo, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import Link from 'next/link';
@@ -289,11 +288,8 @@ export default function UseCasesRegisterPage() {
 
         {error && <Notice tone="error">{error}</Notice>}
 
-        {useCases && <NeedsAttention useCases={useCases} suggestionsWaiting={(visibleSuggestions ?? []).length} />}
-
         {(deptBoxes.length > 0 || orgSuggestions.length > 0) && (
           <Panel
-            id="suggestions"
             title="Suggested use cases"
             badge={<Tag tone="judged">AI-suggested</Tag>}
             subtitle="Drawn from your organisation's own activity"

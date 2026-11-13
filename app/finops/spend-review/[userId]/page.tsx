@@ -660,8 +660,8 @@ function SpendReviewContent() {
                 <Figure label="Measured spend" value={money(data.totals.totalUsd)} sub={data.isCurrentMonth ? 'Month to date' : 'Whole month'} />
                 {claudeShown && <Figure label={surfaceName('cowork', openai)} value={money(data.totals.coworkUsd)} sub={share(data.totals.coworkUsd)} />}
                 {claudeShown && <Figure label={surfaceName('code', openai)} value={money(data.totals.codeUsd)} sub={share(data.totals.codeUsd)} />}
-                {openai && <Figure label="ChatGPT" value={data.totals.chatgptUsd == null ? 'Not measured' : money(data.totals.chatgptUsd)} sub={data.totals.chatgptUsd == null ? undefined : share(data.totals.chatgptUsd)} />}
-                {openai && <Figure label="Codex" value={data.totals.codexUsd == null ? 'Not measured' : money(data.totals.codexUsd)} sub={data.totals.codexUsd == null ? undefined : share(data.totals.codexUsd)} />}
+                {openai && <Figure label="ChatGPT" value={money(data.totals.chatgptUsd ?? 0)} sub={share(data.totals.chatgptUsd ?? 0)} />}
+                {openai && <Figure label="Codex" value={money(data.totals.codexUsd ?? 0)} sub={share(data.totals.codexUsd ?? 0)} />}
                 <Figure label="Sessions" value={String(data.totals.sessions)} />
               </Strip>
               <Muted>
@@ -695,10 +695,12 @@ function SpendReviewContent() {
 
             {data.totals.sessions === 0 ? (
               <div className="border border-dashed border-[#DADADA] bg-white rounded-[14px] px-6 py-8 text-center">
-                <span className="text-[14px] font-medium text-[#0A0A0A]">No measured spend for this month.</span>
+                <span className="text-[14px] font-medium text-[#0A0A0A]">No Code or Cowork spend for this month.</span>
               </div>
             ) : (
               <>
+                <ModelEfficiency data={data} onShowAll={() => setShowAllWork(true)} />
+
                 <Panel
                   title="Where the money goes"
                   badge={<Tag tone="judged">Kind of work is AI-judged</Tag>}
@@ -726,8 +728,6 @@ function SpendReviewContent() {
                     </span>
                   </div>
                 </Panel>
-
-                <ModelEfficiency data={data} onShowAll={() => setShowAllWork(true)} />
 
                 {data.scheduledTasks.length > 0 && <ScheduledTasks tasks={data.scheduledTasks} isCurrentMonth={data.isCurrentMonth} />}
 

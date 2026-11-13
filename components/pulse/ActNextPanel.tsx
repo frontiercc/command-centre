@@ -38,21 +38,17 @@ export default function ActNextPanel({
   items,
   deptBoxes = [],
   fromBothVendors = false,
-  answer,
 }: {
   items: ActNextItem[];
   deptBoxes?: DeptProcessBoxItem[];
   /** OpenAI data is present and shown: the suggestions are mined from Claude and OpenAI prompts together. */
   fromBothVendors?: boolean;
-  /** The answer sentence, written by the page from the counts. */
-  answer?: string | null;
 }) {
   const router = useRouter();
   if (items.length === 0 && deptBoxes.length === 0) return null;
 
   return (
-    <Panel title="What to act on next" subtitle="Updated weekly" flush>
-      {answer && <p className="m-0 px-4 pt-3 text-[16px] leading-6 text-[#0A0A0A]">{answer}</p>}
+    <Panel title="What to act on next" subtitle="Drawn from what is actually happening" flush>
       {deptBoxes.length > 0 && (
         <div className="p-4">
           <SubHead>Department process opportunities</SubHead>

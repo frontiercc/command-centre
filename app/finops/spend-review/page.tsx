@@ -9,7 +9,6 @@ import { useSearchParams } from 'next/navigation';
 import TopBar from '@/components/layout/TopBar';
 import LoadingSpinner from '@/components/shared/LoadingSpinner';
 import { gapPct } from '@/lib/finance/spend-review-format';
-import WhoNeedsALook from '@/components/spend-review/WhoNeedsALook';
 import { MonthPicker, monthOptions, money, pct, ukDate, LimitsNotice, LimitBar, UpdatedLine, type LimitsStatus } from '@/components/spend-review/shared';
 import { PageBody, Toolbar, Panel, PanelFoot, Strip, Figure, T, B, Tag, Chip, Notice, Muted, Segmented, cx } from '@/components/precision/ui';
 import { SURFACE_COLOR, PRODUCT_COLOR } from '@/lib/ui/chart-colours';
@@ -370,8 +369,6 @@ function SpendReviewIndex() {
           <>
             {data.isCurrentMonth && !openaiOnly && <LimitsNotice status={data.limits.status} />}
 
-            {s.people > 0 && <WhoNeedsALook people={data.people} period={period} isCurrentMonth={data.isCurrentMonth} />}
-
             {s.people > 0 && (
               <Strip cols={limitsOn ? 5 : 4}>
                 <Figure
@@ -448,7 +445,7 @@ function SpendReviewIndex() {
               </>
             )}
 
-            <Panel id="people"
+            <Panel
               title="People"
               right={data.people.length > 0 && (
                 <>

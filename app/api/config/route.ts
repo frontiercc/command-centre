@@ -182,7 +182,6 @@ export async function POST(request: NextRequest) {
     'alertsSlackEnabled',
     'alertsSlackWebhookUrl',
     'licensedSeats',
-    'targetDeptAdoptionPct',
     'ssoEnabled',
     'ssoIssuerUrl',
     'ssoClientId',
@@ -261,7 +260,7 @@ export async function POST(request: NextRequest) {
       'pulseUserBriefingModel',
       // Blank = Developer Pulse briefings use the organisation briefing model again.
       'codeBriefingModel',
-      'licensedSeats', 'targetDeptAdoptionPct', 'finopsSeatPriceMonthly', 'chatgptSeats', 'chatgptSeatPriceMonthly',
+      'licensedSeats', 'finopsSeatPriceMonthly', 'chatgptSeats', 'chatgptSeatPriceMonthly',
       'ssoIssuerUrl', 'ssoClientId', 'ssoProviderLabel', 'ssoRedirectBaseUrl',
       'dxInstanceUrl',
       // Blank = the address falls back to CCC_COLLECTOR_ADDRESS, then localhost.

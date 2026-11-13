@@ -344,26 +344,3 @@ export async function getTierMixThisWeekByVendor(endS = nowS()): Promise<Record<
   for (const r of rows) out[r.vendor as 'claude' | 'openai'] = { tier1: Number(r.t1), tier2: Number(r.t2), tier3: Number(r.t3) };
   return out;
 }
-
-/**
- * People active in each of the last `weeks` rolling 7-day windows, oldest first: the
- * dashboard's "Who is using Claude?" columns. A person counts once a window if they sent at
- * least one prompt in any product (the vendor's products only, in a narrowed view). Telemetry
- * only: the Active users figure also counts a recent sign-in, so it can be a little higher.
- */
-export async function getWeeklyActivePeople(vendor: Vendor = 'all', weeks = 8, endS = nowS()): Promise<Array<{ endS: number; people: number }>> {
-  const vendorSql = vendor === 'all' ? 'TRUE' : vendorClause(vendor);
-  const ends = Array.from({ length: weeks }, (_, i) => endS - (weeks - 1 - i) * 7 * DAY);
-  const rows = await rawAll<{ w: number | string; n: number | string }>(sql`
-    SELECT w.idx AS w, COUNT(DISTINCT cm.user_id) AS n
-    FROM (SELECT generate_series(0, ${weeks - 1}) AS idx) w
-    JOIN cowork_messages cm
-      ON cm.user_id IS NOT NULL
-     AND cm.occurred_at >= ${endS} - (${weeks} - w.idx) * ${7 * DAY}
-     AND cm.occurred_at <  ${endS} - (${weeks - 1} - w.idx) * ${7 * DAY}
-     AND ${sql.raw(vendorSql)}
-    GROUP BY w.idx
-  `);
-  const byIdx = new Map(rows.map(r => [Number(r.w), Number(r.n)]));
-  return ends.map((e, i) => ({ endS: e, people: byIdx.get(i) ?? 0 }));
-}

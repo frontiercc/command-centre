@@ -17,8 +17,7 @@ export default function WeeklyDeltaBadge({ pct }: WeeklyDeltaBadgeProps) {
   const abs = Math.round(Math.abs(pct) * 100);
   if (abs < 1) return <span className="text-[13px] text-[#8F8F8F]">No change on last completed week (Mon–Sun)</span>;
   const sign = pct > 0 ? '↑' : '↓';
-  // Change on its own is grey: amber and red are kept for worse than a target.
-  const colour = 'text-[#666666]';
+  const colour = pct > 0 ? 'text-[#1A7F37]' : 'text-[#B42318]';
   return (
     <span className={`text-[13px] tabular-nums ${colour}`}>
       {sign} {abs}% on last completed week (Mon–Sun)
