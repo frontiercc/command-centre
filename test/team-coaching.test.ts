@@ -28,6 +28,13 @@ function team(over: Partial<TeamFigures> = {}): TeamFigures {
       { workType: 'bugfix', label: 'Bug fixing', sessions: 40, share: 0.4, target: null },
     ],
     champions: [{ userId: 'u1', name: 'Ada', sessions: 20, deepShare: 0.8 }],
+    stuck: [],
+    freed: null,
+    repeated: [],
+    newStarters: [],
+    longNothing: null,
+    editAcceptance: null,
+    costlyOnSimple: null,
     ...over,
   };
 }
@@ -48,7 +55,7 @@ describe('what the plan says', () => {
   it('names the team\'s depth against the organisation, and the people to learn from', () => {
     const f = figures(team());
     const p = buildCoachingPlan('Engineering', f, [], 1_700_000_000)!;
-    expect(p.where[0]).toContain('40% of the team');
+    expect(p.where[0]).toContain('40% of them were multi-step work');
     expect(p.where[0]).toContain('against 45% across the organisation');
     expect(p.learnFrom[0].name).toBe('Ada');
     expect(p.actions.some(a => a.key === 'learn_from')).toBe(true);
@@ -132,7 +139,7 @@ describe('a done action', () => {
     const a = p.actions.find(x => x.key === 'learn_from')!;
     // The team went 30% to 40%; the organisation 40% to 45%. Five points better than the trend.
     expect(a.done?.result).toBe('better');
-    expect(a.done?.measure).toBe('Sessions judged delegated work or frontier delegation');
+    expect(a.done?.measure).toBe('Sessions that were multi-step work');
   });
 
   it('says too few to tell for a small team', () => {

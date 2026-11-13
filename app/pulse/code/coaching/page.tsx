@@ -12,7 +12,8 @@ import TopBar from '@/components/layout/TopBar';
 import LoadingSpinner from '@/components/shared/LoadingSpinner';
 import { PageBody, Toolbar, Notice, B, cx } from '@/components/precision/ui';
 import { Frame, Track, linkCls } from '@/components/pulse/WorkPulseOverview';
-import { deepWords } from '@/lib/pulse/tier-names';
+import { tierNamesOr } from '@/lib/pulse/tier-names';
+import { BEYOND_QUICK } from '@/lib/pulse/code/coaching-words';
 import type { CoachingPlan, PlanAction } from '@/lib/pulse/code/team-coaching';
 
 interface Data { teams: string[]; department: string | null; plan: CoachingPlan | null; checkAfterDays: number }
@@ -98,7 +99,7 @@ export default function TeamCoachingPage() {
   };
 
   const plan = data?.plan ?? null;
-  const deep = plan ? deepWords(plan.tierNames) : 'deeper';
+  const tiers = plan ? tierNamesOr(plan.tierNames) : null;
 
   return (
     <>
@@ -135,17 +136,18 @@ export default function TeamCoachingPage() {
               judged
               period="Last 30 days against the 30 before"
               answer={<>
-                <b>{plan.sessions.toLocaleString('en-GB')} sessions</b> from {plan.people} {plan.people === 1 ? 'person' : 'people'}
-                {plan.figures.deepShare !== null ? <>, <b>{pct(plan.figures.deepShare)}</b> of them judged {deep}</> : null}.
+                <b>{plan.sessions.toLocaleString('en-GB')} sessions</b> from {plan.people} {plan.people === 1 ? 'person' : 'people'} in the last 30 days.
               </>}
-              note={`Judged by the session classifier. "${deep}" means the top two tiers, as named on Admin → Developer Pulse → Tiers.`}
+              note={tiers
+                ? `Multi-step work is a session the classifier judged "${tiers.t2}" or "${tiers.t3}": it carried out a task across several actions, rather than answering one question. A session it judged "${tiers.t1}" does not count. Those names are set on Admin → Developer Pulse → Tiers.`
+                : undefined}
             >
               {plan.where.map((t, i) => <p key={i} className="m-0 py-0.5 text-[13px] leading-5 text-[#333333]">{t}</p>)}
               {plan.figures.deepShare !== null && plan.org.deepShare !== null && (
                 <div className="mt-2 pt-2 border-t border-[#EAEAEA]">
-                  {[['This team', plan.figures.deepShare], ['The organisation', plan.org.deepShare]].map(([l, v]) => (
+                  {([[`This team, ${BEYOND_QUICK}`, plan.figures.deepShare], ['The organisation', plan.org.deepShare]] as const).map(([l, v]) => (
                     <div key={String(l)} className="grid grid-cols-[minmax(0,130px)_minmax(0,1fr)_48px] gap-2.5 items-center py-[3px] text-[13px]">
-                      <span className="text-[#333333]">{l as string}</span>
+                      <span className="text-[#333333] leading-4">{l}</span>
                       <Track value={v as number} />
                       <span className="text-right tabular-nums">{pct(v as number)}</span>
                     </div>
@@ -180,18 +182,41 @@ export default function TeamCoachingPage() {
                 period="Last 30 days"
                 answer={plan.learnFrom.length === 0
                   ? <>Nobody in this team is handing over much yet. The people to learn from are in other teams.</>
-                  : <><b>{plan.learnFrom[0].name}</b> hands over the most: {pct(plan.learnFrom[0].deepShare)} of their sessions were {deep}.</>}
+                  : <><b>{plan.learnFrom[0].name}</b> hands over the most, on {pct(plan.learnFrom[0].deepShare)} of their sessions.</>}
                 note="Named because this page is for admins and managers only."
               >
                 {plan.learnFrom.map(c => (
                   <div key={c.name} className="flex items-baseline gap-2.5 py-1.5 border-b border-[#F2F2F2] last:border-b-0 text-[13px]">
                     <span className="min-w-0 truncate text-[#0A0A0A]">{c.name}</span>
                     <span className="text-[#777777] whitespace-nowrap">{c.sessions} {c.sessions === 1 ? 'session' : 'sessions'}</span>
-                    <span className="ml-auto tabular-nums text-[#333333]">{pct(c.deepShare)} {deep}</span>
+                    <span className="ml-auto tabular-nums text-[#333333]">{pct(c.deepShare)}</span>
                   </div>
                 ))}
               </Frame>
             </div>
+
+            {plan.figures.freed && (
+              <Frame
+                title="What it freed"
+                tag="AI estimate"
+                period="Last 30 days"
+                answer={<>
+                  By hand, the team&rsquo;s {plan.figures.freed.sessions} estimated sessions would have taken about{' '}
+                  <b>{Math.round(plan.figures.freed.byHandHours).toLocaleString('en-GB')} hours</b>, against{' '}
+                  <b>{Math.round(plan.figures.freed.aiHours).toLocaleString('en-GB')} hours</b> with the assistant
+                  {plan.figures.freed.topKind ? <>, most of it on {plan.figures.freed.topKind.toLowerCase()}</> : null}.
+                </>}
+                note="Claude's estimate per session, against measured active time. Only sessions carrying both are counted."
+              >
+                {[['With the assistant', plan.figures.freed.aiHours, false] as const, ['By hand (estimate)', plan.figures.freed.byHandHours, true] as const].map(([l, h, est]) => (
+                  <div key={l} className="grid grid-cols-[minmax(0,150px)_minmax(0,1fr)_64px] gap-2.5 items-center py-[3px] text-[13px]">
+                    <span className="text-[#333333]">{l}</span>
+                    <Track value={h / Math.max(plan.figures.freed!.byHandHours, 1)} striped={est} />
+                    <span className="text-right tabular-nums">{est ? '≈' : ''}{Math.round(h).toLocaleString('en-GB')} h</span>
+                  </div>
+                ))}
+              </Frame>
+            )}
 
             <Frame
               title="What to try"

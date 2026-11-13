@@ -20,7 +20,10 @@
  */
 import type { CoachingFigures, TeamFigures, WorkShare } from '@/lib/pulse/code/coaching-figures';
 import { TARGET_GAP_PP } from '@/lib/pulse/code/coaching-figures';
-import { deepWords, type TierNames } from '@/lib/pulse/tier-names';
+import type { TierNames } from '@/lib/pulse/tier-names';
+import { BEYOND_QUICK } from '@/lib/pulse/code/coaching-words';
+
+export { BEYOND_QUICK } from '@/lib/pulse/code/coaching-words';
 
 export const CHECK_AFTER_DAYS = 30;
 /** A change under one point reads as no change. */
@@ -86,9 +89,9 @@ const list = (xs: string[]) => (xs.length <= 1 ? xs.join('') : `${xs.slice(0, -1
 const lower = (s: string) => s.charAt(0).toLowerCase() + s.slice(1);
 
 /** The figure in words, for the "did it work" line. */
-export function metricWords(metric: string | null, names: TierNames, work: WorkShare[]): string | null {
+export function metricWords(metric: string | null, _names: TierNames, work: WorkShare[]): string | null {
   if (!metric) return null;
-  if (metric === 'deep_share') return `Sessions judged ${deepWords(names)}`;
+  if (metric === 'deep_share') return `Sessions that were ${BEYOND_QUICK}`;
   if (metric === 'hardly_used_share') return 'People who have hardly used it';
   if (metric.startsWith('work_share:')) {
     const id = metric.slice('work_share:'.length);
@@ -158,11 +161,10 @@ export function teamParts(t: TeamFigures, f: CoachingFigures): { where: string[]
   const where: string[] = [];
   const workOn: string[] = [];
   const actions: Suggested[] = [];
-  const deep = deepWords(f.tierNames);
   const org = f.org;
 
   if (t.deepShare !== null) {
-    let s = `${pct(t.deepShare)} of the team's ${plural(t.sessions, 'session', 'sessions')} in the last 30 days were judged ${deep}`;
+    let s = `${pct(t.deepShare)} of them were ${BEYOND_QUICK}`;
     if (t.priorDeepShare !== null) {
       const pp = Math.round(t.deepShare * 100) - Math.round(t.priorDeepShare * 100);
       s += pp === 0 ? ', the same as the 30 days before' : `, ${pp > 0 ? 'up' : 'down'} ${Math.abs(pp)} ${Math.abs(pp) === 1 ? 'point' : 'points'} on the 30 days before`;
@@ -194,6 +196,30 @@ export function teamParts(t: TeamFigures, f: CoachingFigures): { where: string[]
     });
   }
 
+  // People using it steadily who still get single-step answers: engaged, getting little back.
+  if (t.stuck.length > 0) {
+    const names = list(t.stuck.map(s => s.name));
+    where.push(`${names} ${t.stuck.length === 1 ? 'uses' : 'use'} it regularly but ${t.stuck.length === 1 ? 'is' : 'are'} still getting single answers rather than ${BEYOND_QUICK}.`);
+    actions.push({
+      key: 'stuck',
+      text: `Sit with ${names} once and hand over one whole task together, start to finish.`,
+      because: `${t.stuck.length === 1 ? 'They have' : 'They have'} ${t.stuck[0].sessions} sessions but only ${pct(t.stuck[0].deepShare)} went beyond a single answer.`,
+      metric: 'deep_share',
+    });
+  }
+
+  // Someone new, before habits set.
+  if (t.newStarters.length > 0) {
+    const s = t.newStarters[0];
+    where.push(`${t.newStarters.length === 1 ? `${s.name} started` : `${t.newStarters.length} people started`} in the last six weeks${t.newStarters.length === 1 ? `, and ${pct(s.deepShare)} of their ${plural(s.sessions, 'session', 'sessions')} so far went beyond a single answer` : ''}.`);
+    actions.push({
+      key: 'new_starters',
+      text: `Pair ${list(t.newStarters.map(x => x.name))} with someone who hands over well, in their first weeks.`,
+      because: 'They are new, and habits set early.',
+      metric: 'deep_share',
+    });
+  }
+
   const top = t.work[0];
   const gaps = t.work
     .filter(w => w.target !== null)
@@ -217,11 +243,49 @@ export function teamParts(t: TeamFigures, f: CoachingFigures): { where: string[]
     workOn.push('Every kind of work is within five points of what was intended.');
   }
 
+  // Long sessions that committed nothing: wrong-shaped task, or missing context.
+  if (t.longNothing && t.longNothing.long >= 4 && t.longNothing.share >= 0.25) {
+    workOn.push(`${t.longNothing.sessions} of ${t.longNothing.long} sessions over an hour committed nothing.`);
+    actions.push({
+      key: 'long_nothing',
+      text: 'Take one of those long sessions and break the task into pieces the assistant can finish.',
+      because: `${pct(t.longNothing.share)} of the team's long sessions ended with no commit.`,
+      metric: null,
+    });
+  }
+
+  // Edits it suggests that the team throws away.
+  if (t.editAcceptance && t.editAcceptance.org !== null && t.editAcceptance.team < t.editAcceptance.org - 0.1) {
+    workOn.push(`The team keeps ${pct(t.editAcceptance.team)} of the edits it suggests, against ${pct(t.editAcceptance.org)} across the organisation.`);
+    actions.push({
+      key: 'edit_acceptance',
+      text: 'Look at what the assistant is being given to work from: low acceptance is usually missing context, not the model.',
+      because: `${pct(t.editAcceptance.team)} of its edits are kept here, against ${pct(t.editAcceptance.org)} elsewhere.`,
+      metric: null,
+    });
+  }
+
+  // The same work, by several people, with nothing shared behind it.
+  for (const r of t.repeated.slice(0, 1)) {
+    workOn.push(`${r.people} people did ${lower(r.label)} ${plural(r.sessions, 'time', 'times')} with no shared skill behind any of it.`);
+    actions.push({
+      key: `codify:${r.workType}`,
+      text: `Write one skill for ${lower(r.label)} and put it on the board, so the team stops starting from scratch.`,
+      because: `${plural(r.sessions, 'session', 'sessions')} of it across ${r.people} people, none using a skill.`,
+      metric: null,
+    });
+  }
+
+  // The dearest habit, pointed at the page that owns money.
+  if (t.costlyOnSimple) {
+    workOn.push(`Most single-answer sessions ran on ${t.costlyOnSimple.model}: ${plural(t.costlyOnSimple.sessions, 'session', 'sessions')}.`);
+  }
+
   if (t.champions.length > 0) {
     actions.push({
       key: 'learn_from',
       text: `Ask ${list(t.champions.map(c => c.name))} to show the team how they work.`,
-      because: `${t.champions.length === 1 ? 'They hand' : 'They hand'} over the most: ${pct(t.champions[0].deepShare)} of their sessions were ${deep}.`,
+      because: `They hand over the most: ${pct(t.champions[0].deepShare)} of their sessions.`,
       metric: 'deep_share',
     });
   }
