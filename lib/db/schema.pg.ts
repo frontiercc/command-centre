@@ -1179,6 +1179,22 @@ export const totpConsumedSteps = pgTable('totp_consumed_steps', {
  * stood that day (the team's and the organisation's), so the page can say later whether it moved.
  * Keyed by department, which is how teams are identified everywhere on these pages.
  */
+export const decisionLog = pgTable('decision_log', {
+    card: text().notNull(),
+    department: text().notNull(),
+    recommended: text().notNull(),
+    chosen: text().notNull(),
+    headline: text().notNull(),
+    /** The card's figures as they stood the day it was decided. */
+    figures_json: text().notNull(),
+    note: text(),
+    decided_by: text().notNull(),
+    decided_at: bigint({ mode: 'number' }).notNull(),
+    look_again_at: bigint({ mode: 'number' }).notNull(),
+}, (t) => [
+    primaryKey({ columns: [t.card, t.department] }),
+]);
+
 export const coachingActions = pgTable('coaching_actions', {
     // 'code' or 'cowork': the same department has a plan on both, with overlapping action keys.
     surface: text().notNull().default('code'),
@@ -1425,6 +1441,7 @@ export const pgSchema = {
   chatAssistantMeta,
   coachingAcks,
   coachingActions,
+  decisionLog,
   codeAssistantMeta,
   codeMetrics,
   codeOtelMetrics,

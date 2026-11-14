@@ -160,6 +160,14 @@ const run = (cmd, args) => execFileSync(cmd, args, { stdio: 'inherit', env: proc
     console.log(`${split.claude} made with Claude Code, ${split.codex} with Codex, ${split.none} with no AI tool recorded.`);
   } catch (e) { console.error(`GitHub tool split failed (${e.message}); continuing with the rest.`); }
 
+  // Tie how much each person ships to how they work, so the sample can carry the
+  // comparison So what is built on. Runs after the split, which it keeps in shape.
+  console.log('\nTying the sample GitHub commits to how its people work...');
+  try {
+    const tied = await require('./github-depth.cjs').tieGithubToDepth(db);
+    console.log(`${tied.deepPerPerson} commits each for the ${tied.deep.people} who hand whole work over, ${tied.shallowPerPerson} for the other ${tied.shallow.people}.`);
+  } catch (e) { console.error(`GitHub depth tie failed (${e.message}); continuing with the rest.`); }
+
   // The sample S&C Board entries, use cases (with their weekly figures and
   // matches) and department process suggestions. Nothing in them is tied to
   // anyone outside the fictional organisation.
