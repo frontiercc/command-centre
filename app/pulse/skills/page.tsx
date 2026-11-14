@@ -318,14 +318,14 @@ export default function SkillsPage() {
 
   if (overviewLoading) return (
     <>
-      <TopBar title="Tool usage" subtitle="Which skills and connectors are spreading, and which are stuck" />
+      <TopBar title="Tool Usage" subtitle="Which skills and connectors are spreading, and which are stuck" />
       <LoadingSpinner />
     </>
   );
 
   if (overviewError) return (
     <>
-      <TopBar title="Tool usage" subtitle="Which skills and connectors are spreading, and which are stuck" />
+      <TopBar title="Tool Usage" subtitle="Which skills and connectors are spreading, and which are stuck" />
       <PageBody>
         <Notice tone="error" title="Failed to load.">{overviewError}</Notice>
       </PageBody>
@@ -337,7 +337,7 @@ export default function SkillsPage() {
 
   return (
     <>
-      <TopBar title="Tool usage" subtitle="Which skills and connectors are spreading, and which are stuck" />
+      <TopBar title="Tool Usage" subtitle="Which skills and connectors are spreading, and which are stuck" />
       <PageBody className="dash-compact">
 
         {/* 1. What is spreading */}

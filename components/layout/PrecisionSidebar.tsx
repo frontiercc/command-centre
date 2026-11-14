@@ -99,8 +99,8 @@ export default function PrecisionSidebar(p: PrecisionSidebarProps) {
     items.push({ href: '/pulse/me', label: 'My Pulse' });
     if (vis.coworkUsers) items.push({ href: '/pulse/users', label: 'Users' });
     items.push({ href: '/pulse/dept', label: 'Departments' });
-    if (vis.coworkCoaching) items.push({ href: '/pulse/coaching', label: 'Team coaching' });
-    items.push({ href: '/pulse/skills', label: 'Tool usage' });
+    if (vis.coworkCoaching) items.push({ href: '/pulse/coaching', label: 'Team Coaching' });
+    items.push({ href: '/pulse/skills', label: 'Tool Usage' });
     productivity.push({ key: 'cowork', label: 'Work Pulse', icon: 'pulse', items, badge: p.pulsePending,
       activeWhen: x => x.startsWith('/pulse') && !x.startsWith('/pulse/code') && !x.startsWith('/pulse/use-cases') });
   }
@@ -114,7 +114,7 @@ export default function PrecisionSidebar(p: PrecisionSidebarProps) {
     }
     if (vis.codeCoaching) {
       items.push({ href: '/pulse/code/so-what', label: 'So What' });
-      items.push({ href: '/pulse/code/coaching', label: 'Team coaching' });
+      items.push({ href: '/pulse/code/coaching', label: 'Team Coaching' });
     }
     if (vis.codeOrg) {
       items.push({ href: '/pulse/code/framework', label: 'Dev Framework Alignment' });

@@ -364,7 +364,7 @@ export default function Sidebar({ theme = 'default' }: { theme?: Theme }) {
                 Departments
               </Link>
               <Link href="/pulse/skills" className={subLinkCls('/pulse/skills')}>
-                Tool usage
+                Tool Usage
               </Link>
             </div>
           )}
@@ -420,7 +420,7 @@ export default function Sidebar({ theme = 'default' }: { theme?: Theme }) {
               )}
               {(userRole === 'admin' || userRole === 'manager') && (
                 <Link href="/pulse/code/coaching" className={subLinkCls('/pulse/code/coaching')}>
-                  Team coaching
+                  Team Coaching
                 </Link>
               )}
               {(userRole === 'admin' || userRole === 'manager' || userRole === 'viewer') && !openaiOnly && (

@@ -78,7 +78,7 @@ function TeamCoaching() {
 
   return (
     <>
-      <TopBar title="Team coaching" subtitle="What one team could do next, and whether what they did worked" />
+      <TopBar title="Team Coaching" subtitle="What one team could do next, and whether what they did worked" />
       <PageBody className="dash-compact">
         {(data?.teams.length ?? 0) > 1 && (
           <Toolbar
