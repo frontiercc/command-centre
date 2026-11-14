@@ -139,8 +139,13 @@ function SoWhatBody() {
 
   return (
     <>
-      <TopBar title="So what" subtitle="What you get if you act, priced from your own engineers" />
+      <TopBar title="So What" subtitle="The gap between your best people and everyone else, and what closing it is worth" />
       <PageBody className="dash-compact">
+        <p className="m-0 mb-3 text-[14px] leading-[21px] text-[#333333] max-w-[860px]">
+          Find insights here on the gap between the people who get the most from AI and everyone else doing the same
+          work, and what closing it is worth to you. Use it to decide on hiring, repeated work, rollout and reliance on
+          key people.
+        </p>
         <Panel>
           <div className="flex items-end gap-3 flex-wrap text-[14px]">
             <label className="flex flex-col gap-1.5">
@@ -180,9 +185,6 @@ function SoWhatBody() {
             </label>
             <button type="button" onClick={() => load(department, ask, hires)} className={cx(B.primary, 'mb-[1px]')}>Answer</button>
           </div>
-          <p className="m-0 mt-2 text-[13px] text-[#8F8F8F]">
-            This product holds no list of open roles, so the question has to be asked. Everything under it is measured.
-          </p>
         </Panel>
 
         {loading && <LoadingSpinner />}
@@ -214,7 +216,7 @@ function SoWhatBody() {
                   </div>
                 )}
                 <p className={cx('m-0 text-[12px] text-[#8F8F8F] leading-5', card.groups ? 'mt-2' : 'mt-3')}>{card.caption}</p>
-                <p className="m-0 mt-1 text-[12px] text-[#8F8F8F] leading-5">{card.cannotSee}</p>
+                {card.cannotSee && <p className="m-0 mt-1 text-[12px] text-[#8F8F8F] leading-5">{card.cannotSee}</p>}
                 <p className="m-0 mt-1">
                   <a
                     href={card.kind === 'key_people'

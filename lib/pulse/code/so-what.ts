@@ -121,7 +121,7 @@ export function refusalFor(g: OutputGroups): string | null {
   if (g.verdict === 'too_few') {
     const small = [
       g.deep.people < MIN_GROUP
-        ? `${people(g.deep.people)} ${g.deep.people === 1 ? 'hands' : 'hand'} whole pieces of work over`
+        ? `${people(g.deep.people)} ${g.deep.people === 1 ? 'does' : 'do'} mostly multi-step work`
         : null,
       g.shallow.people < MIN_GROUP
         ? `${people(g.shallow.people)} ${g.shallow.people === 1 ? 'does' : 'do'} not`
@@ -160,7 +160,7 @@ export function hireCard(g: OutputGroups, hires: number, decision: DecisionRecor
   } else if (covers) {
     headline = `Hold the ${hires} ${hires === 1 ? 'hire' : 'hires'}. Close the gap first.`;
     body.push(
-      `${g.deep.people} of ${g.deep.people + g.shallow.people} hand whole pieces of work to Claude and ship ${timesWord(g)} as much as the other ${g.shallow.people}.`,
+      `${g.deep.people} of ${g.deep.people + g.shallow.people} do mostly multi-step work and ship ${timesWord(g)} as much as the other ${g.shallow.people}.`,
       `If the ${g.shallow.people} worked like the ${g.deep.people}, that is the output of ${round1(worth!)} more ${peopleNoun(round1(worth!))}.`,
       `Look again in ${LOOK_AGAIN_DAYS} days.`,
     );
@@ -168,14 +168,14 @@ export function hireCard(g: OutputGroups, hires: number, decision: DecisionRecor
     headline = `Approve the ${hires} ${hires === 1 ? 'hire' : 'hires'}.`;
     body.push(
       g.shallow.people === 0
-        ? `All ${g.deep.people} already hand whole pieces of work over.`
-        : `The ${g.deep.people} who hand whole pieces of work over ship no more than the ${g.shallow.people} who do not.`,
+        ? `All ${g.deep.people} already do mostly multi-step work.`
+        : `The ${g.deep.people} who do mostly multi-step work ship no more than the ${g.shallow.people} who do not.`,
       'There is no gap to close here, so more output means more people.',
     );
   } else {
     headline = `Hold ${Math.floor(worth!)} of the ${hires}. The gap covers that much.`;
     body.push(
-      `${g.deep.people} of ${g.deep.people + g.shallow.people} hand whole pieces of work to Claude and ship ${timesWord(g)} as much as the other ${g.shallow.people}.`,
+      `${g.deep.people} of ${g.deep.people + g.shallow.people} do mostly multi-step work and ship ${timesWord(g)} as much as the other ${g.shallow.people}.`,
       `If the ${g.shallow.people} worked like the ${g.deep.people}, that is the output of ${round1(worth!)} more ${peopleNoun(round1(worth!))}, which is short of the ${hires} asked for.`,
     );
   }
@@ -229,7 +229,7 @@ export function backfillCard(g: OutputGroups, decision: DecisionRecord | undefin
   } else if (closable) {
     headline = 'Do not replace them yet.';
     body.push(
-      `${g.shallow.people} of ${g.deep.people + g.shallow.people} do not hand whole pieces of work over.`,
+      `${g.shallow.people} of ${g.deep.people + g.shallow.people} do not do mostly multi-step work.`,
       `Closing that gap is worth ${round1(worth!)} ${peopleNoun(round1(worth!))}, which covers the one who left.`,
       `Look again in ${LOOK_AGAIN_DAYS} days.`,
     );
@@ -287,8 +287,8 @@ export function followUpSentence(then: CardFigures, now: CardFigures): string {
 
   if (thenTotal > 0 && nowTotal > 0) {
     parts.push(moved === 0
-      ? `${now.deepPeople} of ${nowTotal} hand whole pieces of work over, the same as then. Nobody has moved across since then.`
-      : `Since then, ${now.deepPeople} of ${nowTotal} hand whole pieces of work over, against ${then.deepPeople} of ${thenTotal} on the day it was decided.`);
+      ? `${now.deepPeople} of ${nowTotal} do mostly multi-step work, the same as then.`
+      : `Since then, ${now.deepPeople} of ${nowTotal} do mostly multi-step work. It was ${then.deepPeople} of ${thenTotal} when you decided.`);
   }
   if (then.commits > 0) {
     const change = now.commits - then.commits;
@@ -333,7 +333,7 @@ function foundCard(
     headline,
     body,
     caption,
-    cannotSee: 'We cannot see work done without Claude, so this counts only what went through it.',
+    cannotSee: '',
     groups: null,
     recommended: 'go',
     buttons: { go: "We'll do this", hold: 'Not now' },
@@ -371,7 +371,7 @@ export function standardJobCard(j: StandardJob, decision: DecisionRecord | undef
     EVERYONE,
     `Make ${j.label.toLowerCase()} a standard skill.`,
     [
-      `${j.people} engineers do this work. ${j.deepPeople} hand the job over whole and spend ${Math.round(j.deepMinutes)} minutes on it. The other ${j.shallowPeople} spend ${minutesWord(j.shallowMinutes)}.`,
+      `${j.people} engineers do this work. The ${j.deepPeople} who do it as multi-step work spend ${Math.round(j.deepMinutes)} minutes on it. The other ${j.shallowPeople} spend ${minutesWord(j.shallowMinutes)}.`,
       `Moving them across frees about ${Math.round(j.hoursAMonth)} hours a month.`,
     ],
     `Measured active time on both sides, over the last ${WINDOW_DAYS} days. Not an estimate of how long the work would take by hand.`,
@@ -401,7 +401,7 @@ export function expandCard(waves: Wave[], decision: DecisionRecord | undefined, 
   const last = measured[0];
   if (!last) return null;
   const body = [
-    `Your last wave of ${last.people} took ${weeksWord(last.weeksToHalf!)} for half of them to start handing whole pieces of work over.`,
+    `Your last wave of ${last.people} took ${weeksWord(last.weeksToHalf!)} for half of them to start doing multi-step work.`,
     `${last.reached} of the ${last.people} have got there so far.`,
   ];
   if (measured.length > 1) {
@@ -414,7 +414,7 @@ export function expandCard(waves: Wave[], decision: DecisionRecord | undefined, 
     EVERYONE,
     (last.weeksToHalf ?? 0) <= 12 ? 'Give Claude to the next wave of engineers.' : 'Hold the next wave until this one lands.',
     body,
-    'Each wave is the engineers whose first session was in the same month. Measured from their first session to their first handed-over piece of work.',
+    'A wave is everyone whose first session was in the same month. Measured to their first multi-step session.',
     { label: 'Weeks for half a wave to get there', value: last.weeksToHalf ?? 0, unit: ' weeks', lowerIsBetter: true },
     decision,
     nowS,
@@ -451,7 +451,7 @@ export function keyPeopleCard(k: KeyPeople, decision: DecisionRecord | undefined
     k.department,
     `Spread what ${k.holders === 1 ? 'one person' : 'two people'} in ${k.department} know.`,
     [
-      `${Math.round(k.share * 100)}% of the work handed over whole in this team of ${k.people} comes from ${k.holders === 1 ? 'one person' : 'two people'}.`,
+      `${Math.round(k.share * 100)}% of the multi-step work in this team of ${k.people} comes from ${k.holders === 1 ? 'one person' : 'two people'}.`,
       'If they leave, the team loses it.',
     ],
     `Counted from sessions over the last ${WINDOW_DAYS} days. The people are named on the team's own coaching plan, not here.`,

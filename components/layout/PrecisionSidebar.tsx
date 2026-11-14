@@ -113,7 +113,7 @@ export default function PrecisionSidebar(p: PrecisionSidebarProps) {
       items.push({ href: '/pulse/code/dept', label: 'Departments' });
     }
     if (vis.codeCoaching) {
-      items.push({ href: '/pulse/code/so-what', label: 'So what' });
+      items.push({ href: '/pulse/code/so-what', label: 'So What' });
       items.push({ href: '/pulse/code/coaching', label: 'Team coaching' });
     }
     if (vis.codeOrg) {
