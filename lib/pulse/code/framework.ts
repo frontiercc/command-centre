@@ -5,7 +5,7 @@
 // Pure crosswalk: maps measured Developer Pulse signals onto DX Core 4 boxes.
 // No IO, no LLM, no causation. Fit labels keep the measured/proxy/not-captured line honest.
 
-export type FitLevel = 'measured' | 'proxy' | 'ai_specific' | 'not_captured';
+export type FitLevel = 'measured' | 'proxy' | 'ai_judged' | 'ai_specific' | 'not_captured';
 export type SpaceDim = 'activity' | 'efficiency' | 'performance' | 'satisfaction' | 'communication';
 
 export interface CodeSignals {
@@ -44,6 +44,19 @@ export interface FrameworkBox {
   subtitle: string;
   cells: CrosswalkCell[];
   externalNote: string;
+  /** The framework's own measures Command Centre cannot see (they come from other tooling). */
+  notCaptured: string[];
+}
+
+/**
+ * How much of a box's framework area Command Centre can see: its framework cells with a figure,
+ * out of those cells plus the measures it cannot see. AI-specific cells sit outside the
+ * frameworks, so they count on neither side.
+ */
+export function frameworkCoverage(box: FrameworkBox): { covered: number; total: number } {
+  const inFramework = box.cells.filter(c => c.fit !== 'ai_specific');
+  const covered = inFramework.filter(c => c.fit !== 'not_captured').length;
+  return { covered, total: inFramework.length + box.notCaptured.length };
 }
 
 // Engaged hours is null-not-zero — a code_metrics row can exist with BOTH
@@ -88,6 +101,7 @@ export function buildCrosswalk(s: CodeSignals): FrameworkBox[] {
       subtitle: 'How fast is AI-assisted work moving?',
       externalNote:
         'Lead time and deployment frequency come from your CD pipeline. Connect DX to fill these.',
+      notCaptured: ['Lead time', 'Deployment frequency'],
       cells: [
         { label: 'AI-assisted commits (7d)', value: num(s.commitCount), fit: 'proxy', space: 'activity',
           note: `Count of commits made inside ${sessionsIn}, not total delivery.` },
@@ -104,6 +118,7 @@ export function buildCrosswalk(s: CodeSignals): FrameworkBox[] {
       subtitle: 'Is the AI-assisted work landing cleanly?',
       externalNote:
         'Change-failure rate and time to restore come from your CI and incident tooling. Connect DX to fill these.',
+      notCaptured: ['Change-failure rate', 'Time to restore'],
       cells: [
         codexGap({ label: 'Edit acceptance rate', value: pct(accRate), fit: 'proxy', space: 'performance',
           note: 'Trust signal, not a change-failure rate.' }),
@@ -117,6 +132,7 @@ export function buildCrosswalk(s: CodeSignals): FrameworkBox[] {
       subtitle: 'Is the developer experience good?',
       externalNote:
         'The Developer Experience Index (DXI) is a survey signal Command Centre does not capture. Connect DX to fill this.',
+      notCaptured: ['Developer Experience Index (DXI)'],
       cells: [
         codexGap({ label: 'Engaged AI time (hrs, 7d)', value: num(s.engagedHours), fit: 'proxy', space: 'efficiency' }),
         { label: 'Cache efficiency', value: pct(s.cacheHitRatio), fit: 'ai_specific', space: 'efficiency',
@@ -129,9 +145,10 @@ export function buildCrosswalk(s: CodeSignals): FrameworkBox[] {
       subtitle: 'Where is the effort going?',
       externalNote:
         'Business impact (% time on new capability vs maintenance) comes from your planning tooling. Connect DX to fill this.',
+      notCaptured: ['Business impact'],
       cells: [
         s.hasWorkMix
-          ? { label: 'AI-judged work mix', value: 'See Work Mix', fit: 'proxy', space: 'performance',
+          ? { label: 'AI-judged work mix', value: 'See Work Mix', fit: 'ai_judged', space: 'performance',
               note: 'Judged by Haiku: the one non-measured signal here.' }
           : { label: 'AI-judged work mix', value: null, fit: 'not_captured', space: 'performance',
               note: 'Session classifier is off. Enable it in Developer Pulse admin.' },

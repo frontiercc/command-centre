@@ -38,6 +38,7 @@ export interface OrgSummary {
     capabilitiesPending: number;
     skillSpread: { total: number; rows: SpreadRow[] };
     connectorSpread: { total: number; rows: SpreadRow[] };
+    /** Counted once per product used, so All is Claude plus ChatGPT. */
     activePeople30d: number;
     deepPeople30d?: number;
     deepPeopleWeeks?: number[];
@@ -126,7 +127,7 @@ export function WorkPulsePanel({ data, product, title = 'Work Pulse', actions = 
         <QuestionCard
           question={`${t.t3} work rests on`}
           value={half !== null ? (half === 1 ? 'One person' : `${half} people`) : undefined}
-          sub={half !== null && d ? <>They do half of it, out of {d.frontierPeople30d} doing any. <Link href="/pulse/cio" className="text-[#1F6F8B] font-medium hover:underline">See who</Link></> : undefined}
+          sub={half !== null && d ? <>They do half of it, out of {d.frontierPeople30d} doing any. <Link href="/pulse/dept" className="text-[#1F6F8B] font-medium hover:underline">See who</Link></> : undefined}
           notMeasured={half === null ? `No ${t.t3.toLowerCase()} work in ${span}` : undefined}
           todo={actions && d?.frontierTopShare != null
             ? <>If the busiest person left, {d.frontierTopShare < 0.15 ? `${Math.round(d.frontierTopShare * 100)}%` : shareWords(d.frontierTopShare)} of it would go. <Link href="/pulse/dept" className="text-[#1F6F8B] font-medium hover:underline">See who</Link></>

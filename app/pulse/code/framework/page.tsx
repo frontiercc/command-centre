@@ -71,7 +71,8 @@ export default function FrameworkPage() {
             <span className="flex flex-wrap items-center gap-2">
               <span>How to read the tags:</span>
               <Tag tone="measured">Measured</Tag>
-              <Tag tone="warn">Proxy</Tag>
+              <Tag>Proxy</Tag>
+              <Tag tone="judged">AI-judged</Tag>
               <Tag tone="judged">AI-specific (outside the frameworks)</Tag>
               <Tag>Not captured here</Tag>
             </span>
@@ -90,7 +91,7 @@ export default function FrameworkPage() {
         </div>
 
         {isMock && (
-          <Notice tone="warn" title={<Tag tone="warn">Demo data</Tag>}>
+          <Notice tone="info" title={<Tag>Demo data</Tag>}>
             Illustrative getDX overlay; connect a real DX workspace to show live numbers.
           </Notice>
         )}
@@ -109,7 +110,7 @@ export default function FrameworkPage() {
         {data.dx?.data && (
           <Panel
             title="Your DX numbers"
-            right={isMock ? <Tag tone="warn">Demo data</Tag> : undefined}
+            right={isMock ? <Tag>Demo data</Tag> : undefined}
             flush
           >
             <div className="px-4 pt-3 text-[13px] font-medium text-[#666666]">DORA</div>

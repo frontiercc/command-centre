@@ -13,6 +13,7 @@
 import { sql, type SQL } from 'drizzle-orm';
 import { getTypedClient } from '@/lib/db/client';
 import { codeSessionVendor } from '@/lib/pulse/code/vendor-view';
+import { codexActionCounts } from '@/lib/pulse/code/aggregator';
 import { getCodeWorkTypeDefinitions } from '@/lib/pulse/code/tier-config';
 import { codeWorkTypeLabel } from '@/lib/pulse/code/work-type-labels';
 import { getCodeTierNames } from '@/lib/pulse/code/weekly-tiers';
@@ -274,6 +275,16 @@ export async function getCoachingFigures(vendor: Vendor, nowS = Math.floor(Date.
       AND ${codeSessionVendor(sql`css.session_id`, vendor)}
   `)).rows as Row[];
 
+  // A Codex session's commits are in its own actions (codex_actions): Claude Code's telemetry, which
+  // fills commit_count, never sees them. The same counts the per-product figures and the classifier use.
+  const codexIds = [...new Set(rows.map(r => r.session_id).filter(id => id.startsWith('codex:')))];
+  if (codexIds.length > 0) {
+    const counts = await codexActionCounts(client, codexIds);
+    for (const r of rows) {
+      if (r.session_id.startsWith('codex:')) r.commit_count = counts.get(r.session_id)?.commits ?? 0;
+    }
+  }
+
   // When each person's very first session was, so the plan can spot new starters.
   const firstRows = (await (client as unknown as { execute: (q: SQL) => Promise<{ rows: unknown[] }> }).execute(sql`
     SELECT user_id, MIN(first_at) AS first_at FROM code_session_stats
@@ -336,6 +347,8 @@ export async function getCoachingFigures(vendor: Vendor, nowS = Math.floor(Date.
       newStarters: newStarters(rs, firstEver, nowS),
       longNothing: longNothing(rs),
       editAcceptance: (() => {
+        // Edit decisions come from Claude Code's telemetry alone; Codex sends none.
+        if (vendor === 'openai') return null;
         const team = acceptanceOf(new Set(rs.map(r => r.user_id)));
         return team === null ? null : { team, org: acceptanceOf(new Set(inWindow.map(r => r.user_id))) };
       })(),

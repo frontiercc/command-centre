@@ -99,8 +99,10 @@ export default function PrecisionSidebar(p: PrecisionSidebarProps) {
     items.push({ href: '/pulse/me', label: 'My Pulse' });
     if (vis.coworkUsers) items.push({ href: '/pulse/users', label: 'Users' });
     items.push({ href: '/pulse/dept', label: 'Departments' });
-    if (vis.coworkCoaching) items.push({ href: '/pulse/coaching', label: 'Team Coaching' });
-    items.push({ href: '/pulse/skills', label: 'Tool Usage' });
+    if (vis.coworkCoaching) {
+      items.push({ href: '/pulse/so-what', label: 'So What' });
+      items.push({ href: '/pulse/coaching', label: 'Team Coaching' });
+    }
     productivity.push({ key: 'cowork', label: 'Work Pulse', icon: 'pulse', items, badge: p.pulsePending,
       activeWhen: x => x.startsWith('/pulse') && !x.startsWith('/pulse/code') && !x.startsWith('/pulse/use-cases') });
   }

@@ -17,13 +17,24 @@ export function vendorClause(vendor: Vendor, p = ''): string {
 }
 
 /**
- * Skill and connector rows for Work Pulse's switch (All / Claude / ChatGPT):
- * its OpenAI view is ChatGPT alone, so Codex tools are left out of it, as
- * Developer Pulse shows them. The other views are vendorClause's.
+ * A person counted once for each vendor they used: their id with 'claude' or 'openai'. Counting
+ * these in the All view makes it Claude's count plus ChatGPT's, so the three views add up; in the
+ * Claude or OpenAI view it is the same as counting people.
+ */
+export function personPerProduct(p = ''): string {
+  return `(${p}user_id || ':' || CASE WHEN ${p}source IN (${OPENAI_LIST}) THEN 'openai' ELSE 'claude' END)`;
+}
+
+/**
+ * Skill and connector rows for Work Pulse's switch (All / Claude / ChatGPT).
+ * Tools used in Claude Code and Codex (surface 'code') are Developer Pulse's,
+ * so every view leaves them out; the OpenAI view is then ChatGPT alone.
  */
 export function workPulseToolClause(vendor: Vendor, p = ''): string {
-  if (vendor === 'openai') return `${p}source IN ('chatgpt_chat', 'chatgpt_work')`;
-  return vendorClause(vendor, p);
+  const notCode = `${p}surface IS DISTINCT FROM 'code'`;
+  if (vendor === 'openai') return `(${p}source IN ('chatgpt_chat', 'chatgpt_work') AND ${notCode})`;
+  if (vendor === 'claude') return `(${vendorClause(vendor, p)} AND ${notCode})`;
+  return notCode;
 }
 
 /** cowork_messages rows of one kind of work. */

@@ -2,7 +2,7 @@
 // SPDX-License-Identifier: Apache-2.0
 
 // Work Pulse briefings' per-product facts: classified prompts and people for
-// each of the four Work Pulse products, and the share of work at Tier 2 or 3
+// each of the four Work Pulse products, and the share of work in the two deeper tiers
 // for Claude and for OpenAI, worked out here so the model never calculates.
 // Empty when no ChatGPT prompt was classified in the window, so a Claude-only
 // hub's briefings are unchanged.
@@ -12,6 +12,7 @@ import { getTypedClient } from '@/lib/db/client';
 import { schema } from '@/lib/db/schema';
 import { productExpr, vendorExpr } from '@/lib/dashboard/product-sql';
 import { PRODUCTS } from '@/lib/dashboard/vendor';
+import { getTierNames } from '@/lib/pulse/tier-config';
 
 const WORK_PULSE_PRODUCTS = PRODUCTS.filter(p => p.kind !== 'code');
 
@@ -70,7 +71,8 @@ export async function buildProductFacts(opts: {
     const c = counts.get(p.id) ?? { prompts: 0, people: 0 };
     return `${p.label}: ${c.prompts} classified prompts, ${c.people} ${c.people === 1 ? 'person' : 'people'}`;
   });
-  lines.push(`Share of work at Tier 2 or 3: Claude ${share('claude')}, ChatGPT ${share('openai')}`);
+  const t = await getTierNames();
+  lines.push(`Share of work that was ${t.t2.toLowerCase()} or ${t.t3.toLowerCase()}: Claude ${share('claude')}, ChatGPT ${share('openai')}`);
   return lines;
 }
 

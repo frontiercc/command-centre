@@ -137,6 +137,18 @@ const run = (cmd, args) => execFileSync(cmd, args, { stdio: 'inherit', env: proc
     await db.query("UPDATE config SET value = '90' WHERE key = $1 AND CASE WHEN value ~ '^[0-9]{1,9}$' THEN value::int < 90 ELSE false END", [key]);
   }
 
+  // The Team Coaching and So What people (13-team-coaching.cjs, 14-so-what.cjs)
+  // must have only the activity those scripts give them. The other scripts give
+  // everyone with a department activity, so take theirs away until those two
+  // run, last.
+  await db.query("UPDATE admin_users SET department = NULL WHERE linked_cowork_user_id LIKE 'ff-coach-%' OR linked_cowork_user_id LIKE 'ff-sw-%'");
+  await db.query("UPDATE users SET department = NULL WHERE id LIKE 'ff-coach-%' OR id LIKE 'ff-sw-%'");
+  // And clear their sessions from the last load, which later scripts would otherwise add to.
+  for (const script of ['13-team-coaching.cjs', '14-so-what.cjs']) {
+    try { run('node', [path.join(__dirname, script), '--clean']); }
+    catch { console.error(`${script} --clean failed; continuing with the rest.`); }
+  }
+
   for (const [prefix, script] of STEPS) {
     // Command Centre grades sample messages like any others. Clear those
     // grades first, or a re-run cannot replace the messages they belong to.
@@ -151,6 +163,100 @@ const run = (cmd, args) => execFileSync(cmd, args, { stdio: 'inherit', env: proc
   console.log('\nAdding ChatGPT and Codex activity...');
   try { run('npx', ['tsx', path.join(__dirname, '11-chatgpt-codex.ts')]); }
   catch { console.error('11-chatgpt-codex.ts failed; continuing with the rest.'); }
+
+  // Most sample scripts place their prompts at any hour, so over half the sample's Work Pulse
+  // work fell in the evening or at the weekend, which no real organisation looks like. Move each
+  // sample Claude session that starts out of hours to a working hour (9am to 5pm, the
+  // organisation's timezone) on the same day, or the Friday before for a weekend. A whole session
+  // moves together, so its length, its week and its order are kept. ChatGPT's sample is already
+  // in working hours and is left alone, as are the Team Coaching and So What people, who are
+  // placed in working hours by their own scripts below.
+  console.log('\nKeeping the sample to working hours...');
+  try {
+    const db4 = new Client({ connectionString: process.env.DATABASE_URL, ssl });
+    await db4.connect();
+    const tz = (await db4.query(`SELECT value FROM config WHERE key = 'telemetry_silence_timezone'`)).rows[0]?.value || 'Europe/London';
+    const nowS4 = Math.floor(Date.now() / 1000);
+    await db4.query('BEGIN');
+    await db4.query(`
+      CREATE TEMP TABLE wh ON COMMIT DROP AS
+      SELECT session_id, start_at, (to_timestamp(start_at) AT TIME ZONE $1) AS local_start
+      FROM (SELECT session_id, MIN(occurred_at) AS start_at FROM cowork_messages
+            WHERE session_id IS NOT NULL AND surface IN ('cowork', 'chat')
+              AND (source IS NULL OR source NOT IN ('chatgpt_chat', 'chatgpt_work', 'codex'))
+              AND (id LIKE 'ff%' OR id LIKE 'seedme%')
+              AND id NOT LIKE 'ff-coach-%' AND id NOT LIKE 'ff-sw-%'
+            GROUP BY session_id) s`, [tz]);
+    await db4.query(`ALTER TABLE wh ADD COLUMN delta bigint`);
+    // Weekdays 9am to 5pm stay; anything else moves to 9am plus up to eight hours, the minute
+    // spread by the session's own id, on the same day or the Friday before a weekend.
+    await db4.query(`
+      UPDATE wh SET delta = CASE
+        WHEN extract(isodow FROM local_start) BETWEEN 1 AND 5 AND extract(hour FROM local_start) BETWEEN 9 AND 16 THEN 0
+        ELSE (extract(epoch FROM (
+               (date_trunc('day', local_start)
+                 - (CASE extract(isodow FROM local_start) WHEN 6 THEN 1 WHEN 7 THEN 2 ELSE 0 END) * interval '1 day'
+                 + interval '9 hours' + (abs(hashtext(session_id)) % 28800) * interval '1 second')
+               AT TIME ZONE $1)) - start_at)::bigint
+      END`, [tz]);
+    // Never into the future: a session moved past now goes back a day.
+    await db4.query(`UPDATE wh SET delta = delta - 86400 WHERE start_at + delta > $1`, [nowS4 - 3600]);
+    await db4.query(`DELETE FROM wh WHERE delta = 0`);
+    const moved = (await db4.query(`SELECT COUNT(*) AS n FROM wh`)).rows[0].n;
+    await db4.query(`UPDATE cowork_messages m SET occurred_at = m.occurred_at + wh.delta FROM wh WHERE m.session_id = wh.session_id`);
+    await db4.query(`UPDATE chat_assistant_meta a SET occurred_at = a.occurred_at + wh.delta FROM wh WHERE a.conversation_id = wh.session_id`);
+    await db4.query(`UPDATE cowork_session_stats s SET first_event_at = s.first_event_at + wh.delta, last_event_at = s.last_event_at + wh.delta FROM wh WHERE s.session_id = wh.session_id`);
+    await db4.query(`UPDATE cowork_sessions s SET started_at = s.started_at + wh.delta, ended_at = s.ended_at + wh.delta FROM wh WHERE s.id = wh.session_id`);
+    await db4.query(`UPDATE cowork_skill_invocations i SET occurred_at = i.occurred_at + wh.delta FROM wh WHERE i.session_id = wh.session_id`);
+    await db4.query(`UPDATE cowork_mcp_invocations i SET occurred_at = i.occurred_at + wh.delta FROM wh WHERE i.session_id = wh.session_id`);
+    await db4.query(`UPDATE pulse_classifications p SET classified_at = p.classified_at + wh.delta FROM cowork_messages m, wh WHERE p.cowork_message_id = m.id AND m.session_id = wh.session_id`);
+    await db4.query('COMMIT');
+    await db4.end();
+    console.log(`${moved} sessions moved into working hours (${tz}).`);
+  } catch (e) { console.error(`Working hours step failed (${e.message}); continuing with the rest.`); }
+
+  // Team Coaching people, after every other script so none adds to their activity.
+  console.log('\nAdding the Team Coaching people...');
+  try { run('node', [path.join(__dirname, '13-team-coaching.cjs')]); }
+  catch { console.error('13-team-coaching.cjs failed; continuing with the rest.'); }
+
+  // So What's cards, after Team Coaching for the same reason.
+  console.log('\nAdding the So What people and decisions...');
+  try { run('node', [path.join(__dirname, '14-so-what.cjs')]); }
+  catch { console.error('14-so-what.cjs failed; continuing with the rest.'); }
+
+  // The sample's activity starts inside the quarter, so every skill and
+  // connector would read as first used this quarter ("new"). Give each one,
+  // bar the one first used most recently for each of Claude and ChatGPT, a
+  // use from before the quarter: a copy of its first use, 100 to 114 days ago.
+  // Work Pulse's tools only (not Claude Code or Codex). Marked ffold- so a
+  // re-run replaces exactly these.
+  console.log('\nAdding older skill and connector use...');
+  try {
+    let older = 0;
+    for (const [table, col, extra] of [
+      ['cowork_skill_invocations', 'skill_name', 'invocation_type'],
+      ['cowork_mcp_invocations', 'mcp_server', 'mcp_tool, success'],
+    ]) {
+      await db.query(`DELETE FROM ${table} WHERE id LIKE 'ffold-%'`);
+      const res = await db.query(`
+        WITH firsts AS (
+          SELECT DISTINCT ON (${col}, v) *
+          FROM (SELECT *, CASE WHEN source IN ('chatgpt_chat', 'chatgpt_work') THEN 'openai' ELSE 'claude' END AS v
+                FROM ${table}
+                WHERE surface IS DISTINCT FROM 'code' AND source IS DISTINCT FROM 'codex' AND ${col} IS NOT NULL) t
+          ORDER BY ${col}, v, occurred_at),
+        ranked AS (SELECT *, ROW_NUMBER() OVER (PARTITION BY v ORDER BY occurred_at DESC) AS rn FROM firsts)
+        INSERT INTO ${table} (id, user_id, session_id, ${col}, occurred_at, ingested_at, ${extra}, source, surface)
+        SELECT 'ffold-' || md5(id), user_id, session_id, ${col},
+               $1::bigint - (100 + abs(hashtext(id)) % 15) * 86400, $1::bigint - (100 + abs(hashtext(id)) % 15) * 86400,
+               ${extra}, source, surface
+        FROM ranked WHERE rn > 1
+        ON CONFLICT (id) DO NOTHING`, [Math.floor(Date.now() / 1000)]);
+      older += res.rowCount;
+    }
+    console.log(`${older} skills and connectors given an earlier use.`);
+  } catch (e) { console.error(`Older skill and connector use failed (${e.message}); continuing with the rest.`); }
 
   // GitHub commits made with Claude Code, with Codex and with no AI tool
   // recorded, from the sample's own Claude Code and Codex commits.
@@ -262,6 +368,14 @@ const run = (cmd, args) => execFileSync(cmd, args, { stdio: 'inherit', env: proc
     "      AND mcp_server NOT IN ('workspace', 'cowork', 'Claude_in_Chrome')",
     "    ON CONFLICT (name) DO NOTHING`, [now]);",
     "  console.log(skills.rowCount + ' skills and ' + connectors.rowCount + ' connectors added.');",
+    "  // Anthropic's skills get the Hub's built-in description where they have none, as at ingest.",
+    "  const entries = (k.anthropicSkillDescriptionEntries || k.default.anthropicSkillDescriptionEntries)();",
+    "  let described = 0;",
+    "  for (const [name, d] of entries) {",
+    "    const r = await db.query(`UPDATE skill_library_entries SET description = $2 WHERE name = $1 AND source = 'anthropic' AND (description IS NULL OR description = '')`, [name, d]);",
+    "    described += r.rowCount;",
+    "  }",
+    "  console.log(described + ' Anthropic skills described.');",
     "  await db.end();",
     "  process.exit(0);",
     "}).catch((e) => { console.error(e); process.exit(1); });",
@@ -287,6 +401,44 @@ const run = (cmd, args) => execFileSync(cmd, args, { stdio: 'inherit', env: proc
   console.log('\nWorking out the weekly history...');
   try { run('node', [path.join(__dirname, '12-weekly-history.cjs')]); }
   catch { console.error('12-weekly-history.cjs failed; continuing.'); }
+
+  // Team Coaching on both Pulses: for every team, an action marked done 35 days ago (its follow-up
+  // shows), one marked done 5 days ago (waiting for its check) and one done 40 days ago that the
+  // plan no longer suggests ("Done before"). The figures they were saved with are sample values.
+  // Marked done by a sample lead, so a re-run replaces exactly these.
+  console.log('\nMarking sample Team Coaching actions done...');
+  {
+    const db3 = new Client({ connectionString: process.env.DATABASE_URL, ssl });
+    await db3.connect();
+    const by = 'team.lead@acmecorp.example';
+    const nowS3 = Math.floor(Date.now() / 1000);
+    await db3.query('DELETE FROM coaching_actions WHERE done_by = $1', [by]);
+    const teams = (await db3.query(`
+      SELECT DISTINCT COALESCE(NULLIF(au.department, ''), NULLIF(u.department, '')) AS d
+        FROM users u LEFT JOIN admin_users au ON au.linked_cowork_user_id = u.id
+       WHERE u.email LIKE '%@acmecorp.example' AND COALESCE(NULLIF(au.department, ''), NULLIF(u.department, '')) IS NOT NULL`)).rows.map((r) => r.d);
+    // [surface, key, wording, figure, team then, organisation then, days ago, note]
+    const ACTIONS = [
+      ['cowork', 'learn_from', 'Ask the people who get the most out of it to show the team how they work.', 'deep_share', 0.5, 0.58, 35, 'Two lunchtime sessions, run by the team.'],
+      ['cowork', 'produced_nothing', 'Take one of those sessions and ask for the finished document, not the answer to a question.', 'produced_nothing_share', 0.9, null, 5, null],
+      ['cowork', 'hardly_used', 'Ask the people who have hardly used it what stopped them, before anything else.', 'hardly_used_share', 0.55, 0.3, 40, 'Most had not been shown where to start.'],
+      ['code', 'learn_from', 'Ask the people who hand over the most to show the team how they work.', 'deep_share', 0.38, 0.42, 35, 'Paired sessions on two real tickets.'],
+      ['code', 'new_starters', 'Pair the new starters with someone who hands over well, in their first weeks.', 'deep_share', 0.4, 0.43, 5, null],
+      ['code', 'hardly_used', 'Ask the people who have hardly used it what stopped them, before anything else.', 'hardly_used_share', 0.5, 0.25, 40, 'Set-up was the blocker; now fixed.'],
+    ];
+    let n = 0;
+    for (const d of teams) {
+      for (const [surface, key, text, metric, baseline, orgBaseline, daysAgo, note] of ACTIONS) {
+        await db3.query(
+          `INSERT INTO coaching_actions (surface, department, action_key, action_text, metric, baseline, org_baseline, note, done_by, done_at)
+           VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10) ON CONFLICT DO NOTHING`,
+          [surface, d, key, text, metric, baseline, orgBaseline, note, by, nowS3 - daysAgo * 86400]);
+        n++;
+      }
+    }
+    await db3.end();
+    console.log(`${n} actions across ${teams.length} teams.`);
+  }
 
   // The Hub sets a person's last-seen time whenever their activity arrives.
   // The sample writes activity straight to the tables, so set it here from

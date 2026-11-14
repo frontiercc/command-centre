@@ -93,6 +93,7 @@ function SoWhatBody() {
   const [busy, setBusy] = useState<string | null>(null);
   const [noteFor, setNoteFor] = useState<string | null>(null);
   const [note, setNote] = useState('');
+  const [failed, setFailed] = useState<string | null>(null);
 
   const load = useCallback((dept: string, question: string, asked: string) => {
     setLoading(true);
@@ -118,7 +119,8 @@ function SoWhatBody() {
 
   const decide = async (card: Card, chosen: Choice | 'undo') => {
     setBusy(card.key);
-    await fetch('/api/pulse/code/so-what/decisions', {
+    setFailed(null);
+    const r = await fetch('/api/pulse/code/so-what/decisions', {
       method: chosen === 'undo' ? 'DELETE' : 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
@@ -128,7 +130,12 @@ function SoWhatBody() {
         chosen: chosen === 'undo' ? 'hold' : chosen,
         note: chosen === 'undo' ? null : note || null,
       }),
-    }).catch(() => {});
+    }).catch(() => null);
+    // Say so when it did not save, rather than leaving the card as it was with no word.
+    if (!r || !r.ok) {
+      const body = r ? await r.json().catch(() => ({})) : {};
+      setFailed(body.error || "That didn't save. Try again.");
+    }
     setBusy(null);
     setNoteFor(null);
     setNote('');
@@ -189,6 +196,7 @@ function SoWhatBody() {
 
         {loading && <LoadingSpinner />}
         {error && <Notice tone="warn" title="Not available.">{error}</Notice>}
+        {failed && <Notice tone="warn" title="Not saved.">{failed}</Notice>}
 
         {!loading && !error && cards.length === 0 && (
           <Notice tone="info" title="Nothing asked yet.">

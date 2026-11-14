@@ -63,8 +63,8 @@ async function seedCodex() {
     VALUES ('openai', 'organisation', ?, 'rolling', ?, ?, 3, ?)`, [ORG_SCOPE_ID, NOW - 7 * DAY, NOW, NOW]);
 }
 
-function get() {
-  return route.GET(new NextRequest('http://localhost/api/pulse/code/value'));
+function get(vendor?: 'all' | 'claude' | 'openai') {
+  return route.GET(new NextRequest(`http://localhost/api/pulse/code/value${vendor ? `?vendor=${vendor}` : ''}`));
 }
 
 describe('GET /api/pulse/code/value with Codex', () => {
@@ -91,23 +91,26 @@ describe('GET /api/pulse/code/value with Codex', () => {
     expect(body.measured.costPerCommit).toBeCloseTo(0.5, 6);
   });
 
-  it('counts the from-data team across Claude Code and Codex, each person once', async () => {
+  it('counts Active Code users per tool on the All view, and the from-data team once per person', async () => {
     await seedCodex();
     let body = await (await get()).json();
     expect(body.measured.activeUsers).toBe(2);
     expect(body.calibrations.teamSize.value).toBe(2);
     expect(body.split.claudeCode.activeUsers).toBe(1);
     expect(body.split.codex.activeUsers).toBe(1);
-    // user-1 also uses Codex: still two people
+    // user-1 also uses Codex: counted in each tool, so Active Code users is Claude Code's plus
+    // Codex's (1 + 2), while the team behind the estimate is still two people.
     await sql.run(`INSERT INTO codex_turns (id, user_id, session_id, model, started_at, uncached_input_tokens)
       VALUES ('ct-2', 'user-1', 'codex:s-3', 'gpt-6', ?, 10)`, [NOW - DAY]);
     body = await (await get()).json();
-    expect(body.measured.activeUsers).toBe(2);
     expect(body.split.codex.activeUsers).toBe(2);
+    expect(body.measured.activeUsers).toBe(body.split.claudeCode.activeUsers + body.split.codex.activeUsers);
+    expect(body.measured.activeUsers).toBe(3);
+    expect(body.calibrations.teamSize.value).toBe(2);
     // A Codex turn outside the 30 days does not count
     await sql.run(`INSERT INTO users (id, email, display_name) VALUES ('user-old', 'old@example.com', 'Old') ON CONFLICT DO NOTHING`);
     await sql.run(`INSERT INTO codex_turns (id, user_id, session_id, model, started_at) VALUES ('ct-old', 'user-old', 'codex:s-old', 'gpt-6', ?)`, [NOW - 40 * DAY]);
-    expect((await (await get()).json()).measured.activeUsers).toBe(2);
+    expect((await (await get()).json()).measured.activeUsers).toBe(3);
   });
 
   it('Time saved counts commits on the same basis as the Commits figure', async () => {
@@ -142,6 +145,38 @@ describe('GET /api/pulse/code/value with Codex', () => {
     expect(body.split.codex.spend30d).toBeNull();
     expect(body.split.codex.unpricedModels).toEqual(['no-such-model']);
     expect(body.measured.spend30d).toBeCloseTo(2, 6);
+  });
+
+  it('follows the switch: Claude leaves Codex out, Codex leaves Claude Code out', async () => {
+    await seedCodex();
+    await sql.exec(`UPDATE code_metrics_vendor SET session_count = 5, spend_usd = 3 WHERE vendor = 'openai'`);
+
+    const claude = await (await get('claude')).json();
+    expect(claude.vendor).toBe('claude');
+    expect(claude.split).toBeNull();
+    expect(claude.measured.spend30d).toBeCloseTo(2, 6);
+    expect(claude.measured.commitCount).toBe(4);
+    expect(claude.measured.activeUsers).toBe(1);
+    expect(claude.measured.prCount).toBe(1);
+
+    const codex = await (await get('openai')).json();
+    expect(codex.vendor).toBe('openai');
+    expect(codex.split).toBeNull();
+    expect(codex.measured.spend30d).toBeCloseTo(2, 6);
+    expect(codex.measured.commitCount).toBe(3);
+    expect(codex.measured.activeUsers).toBe(1);
+    expect(codex.measured.sessionCount).toBe(5);
+    // Codex sends no pull requests or engaged time: not measured, never 0.
+    expect(codex.measured.prCount).toBeNull();
+    expect(codex.measured.engagedHours).toBeNull();
+    expect(codex.measured.costPerPr).toBeNull();
+    expect(codex.measured.costPerEngagedHour).toBeNull();
+    // Codex's own row spend over Codex's own commits and sessions.
+    expect(codex.measured.costPerCommit).toBeCloseTo(1, 6);
+    expect(codex.measured.costPerSession).toBeCloseTo(0.6, 6);
+    expect(codex.observedLift).toBeNull();
+    const rows = codex.timeSaved.rows.map((r: { label: string }) => r.label);
+    expect(rows).toEqual(['AI-assisted commits']);
   });
 
   it('leaves Codex out while ChatGPT and Codex are hidden', async () => {

@@ -10,6 +10,7 @@ import { useRouter, useSearchParams } from 'next/navigation';
 import TopBar from '@/components/layout/TopBar';
 import { useConnectedProducts } from '@/components/shared/VendorSwitch';
 import LoadingSpinner from '@/components/shared/LoadingSpinner';
+import ToolRiskPanels from '@/components/library/ToolRiskPanels';
 import {
   PageBody, Toolbar, Panel, PanelFoot, Strip, Figure, Bar, T, Tag, B, Chip, Notice, Muted, cx,
 } from '@/components/precision/ui';
@@ -268,13 +269,13 @@ function HeadlineStrip({ data }: { data: LibraryData }) {
           sub={
             <>
               <span className="tabular-nums">{ur.total_count.toLocaleString()} uses</span>
-              {gapToNext > 0 && <span className="tabular-nums text-[#B54708]"> · {gapToNext} behind #{ur.rank - 1}</span>}
+              {gapToNext > 0 && <span className="tabular-nums"> · {gapToNext} behind #{ur.rank - 1}</span>}
               <span className="block tabular-nums">{ur.skill_count} skill · {ur.connector_count} connector</span>
             </>
           }
         />
       ) : (
-        <Figure label="Your standing" value="—" sub={`Start using skills in ${connected?.openai ? (connected.claude ? 'Claude or ChatGPT' : 'ChatGPT') : 'Claude'} to earn your rank.`} />
+        <Figure label="Your standing" value={<span className="text-[14px] font-normal tracking-normal text-[#8F8F8F]">Not ranked yet</span>} sub={`Start using skills in ${connected?.openai ? (connected.claude ? 'Claude or ChatGPT' : 'ChatGPT') : 'Claude'} to earn your rank.`} />
       )}
     </Strip>
   );
@@ -289,7 +290,7 @@ interface StripCard {
   description: string | null;
   install_guide?: string | null;
   badge: string;
-  badgeTone: 'measured' | 'warn';
+  badgeTone: 'measured' | 'neutral';
   meta: string;
 }
 
@@ -302,7 +303,7 @@ function HighlightCard({ card }: { card: StripCard }) {
       <span className="flex items-center gap-2 min-w-0">
         <span className="font-mono text-[13px] font-semibold truncate">{fmt(card.name)}</span>
         <span className={cx('ml-auto text-[12px] font-medium tabular-nums whitespace-nowrap shrink-0',
-          card.badgeTone === 'warn' ? 'text-[#B54708]' : 'text-[#1F6F8B]')}>
+          card.badgeTone === 'neutral' ? 'text-[#666666]' : 'text-[#1F6F8B]')}>
           {card.badge}
         </span>
       </span>
@@ -374,7 +375,7 @@ function Highlights({ entries, recentEntries, deptPicks, userDept }: {
     .slice(0, 3)
     .map(e => ({
       id: e.id, name: e.name, type: e.type, description: e.description, install_guide: null,
-      badge: 'No owner', badgeTone: 'warn',
+      badge: 'No owner', badgeTone: 'neutral',
       meta: `${e.invocation_count} uses · nobody has claimed this yet`,
     }));
 
@@ -500,7 +501,7 @@ function TabbedTopList({
                         {e.is_published === 0 && (
                           <Link
                             href={`/library/submit?name=${encodeURIComponent(e.name)}&type=${e.type}`}
-                            className="text-[13px] font-medium text-[#B54708] hover:underline"
+                            className="text-[13px] font-medium text-[#1F6F8B] hover:underline"
                           >
                             Unclaimed
                           </Link>
@@ -744,7 +745,7 @@ function UnclaimedBanner({ count, onDismiss, onClaim }: { count: number; onDismi
   if (count === 0) return null;
   return (
     <Notice
-      tone="warn"
+      tone="info"
       title={
         <>
           <LineIcon d={ICON.flag} className="inline-block align-[-2px] mr-1.5" />
@@ -755,7 +756,7 @@ function UnclaimedBanner({ count, onDismiss, onClaim }: { count: number; onDismi
         <span className="flex items-center gap-3">
           <button
             type="button"
-            className="text-[14px] font-medium text-[#8A5300] hover:underline"
+            className="text-[14px] font-medium text-[#1F6F8B] hover:underline"
             onClick={() => { onClaim(); onDismiss(); }}
           >
             Claim one
@@ -764,7 +765,7 @@ function UnclaimedBanner({ count, onDismiss, onClaim }: { count: number; onDismi
             type="button"
             onClick={onDismiss}
             aria-label="Dismiss"
-            className="text-[#B08A4A] hover:text-[#5C3A00]"
+            className="text-[#8F8F8F] hover:text-[#0A0A0A]"
           >
             <svg className="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2} aria-hidden="true">
               <path strokeLinecap="round" strokeLinejoin="round" d="M6 18L18 6M6 6l12 12" />
@@ -852,7 +853,7 @@ function AnthropicCatalog({ entries, onVote }: { entries: LibraryEntry[]; onVote
               <Link href={`/library/${e.id}`} className="font-mono text-[13px] font-semibold text-[#0A0A0A] hover:underline truncate">{fmt(e.name)}</Link>
               <Tag>Anthropic</Tag>
             </span>
-            <span className="text-[14px] leading-5 text-[#4D4D4D] line-clamp-2">{e.description ?? 'No description yet.'}</span>
+            {e.description && <span className="text-[14px] leading-5 text-[#4D4D4D] line-clamp-2">{e.description}</span>}
             <span className="flex items-center gap-1.5 mt-auto">
               <span className="relative">
                 <InstallButton
@@ -891,7 +892,7 @@ function FilteredList({ entries, onVote }: { entries: LibraryEntry[]; onVote: (i
                   <Tag>{e.type}</Tag>
                   <ProductTags e={e} show={showProducts} />
                   {e.source === 'anthropic' && <Tag>Anthropic</Tag>}
-                  {isUnclaimed && <Tag tone="warn">Unclaimed</Tag>}
+                  {isUnclaimed && <Tag>Unclaimed</Tag>}
                 </div>
                 {e.description && <p className="m-0 mt-0.5 text-[#666666] truncate">{e.description}</p>}
                 {rw && <p className="m-0 mt-0.5 text-[13px] text-[#8F8F8F] tabular-nums truncate">{rw}</p>}
@@ -903,7 +904,7 @@ function FilteredList({ entries, onVote }: { entries: LibraryEntry[]; onVote: (i
                 {isUnclaimed ? (
                   <Link
                     href={`/library/submit?name=${encodeURIComponent(e.name)}&type=${e.type}`}
-                    className={cx(SMALL_BTN, '!border-[#F5D9A8] !text-[#8A5300] !bg-[#FFFAF0]')}
+                    className={SMALL_BTN}
                   >
                     Claim
                   </Link>
@@ -1060,7 +1061,7 @@ export default function LibraryPage() {
             >
               {f.label}
               {f.claimed === 'false' && data?.unclaimed_count ? (
-                <span className="ml-1.5 tabular-nums text-[#8A5300]">{data.unclaimed_count}</span>
+                <span className="ml-1.5 tabular-nums">{data.unclaimed_count}</span>
               ) : null}
             </Chip>
           ))}
@@ -1113,6 +1114,8 @@ export default function LibraryPage() {
               <div className="flex flex-col gap-4 min-w-0">
                 <LeaderboardSidebar users={data.leaderboard} userRank={data.user_rank} />
                 <SkillsToTry skills={data.skills_to_try} />
+                {/* Skills and connectors only one person uses, and claimed ones nobody uses */}
+                <ToolRiskPanels />
               </div>
             </div>
 

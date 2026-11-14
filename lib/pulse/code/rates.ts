@@ -50,13 +50,16 @@ function openai(inRate: number, cachedRate: number, outRate: number): ModelRate 
 /**
  * OpenAI's published USD rates for ChatGPT Enterprise token-based agreements
  * ("ChatGPT Rate Card (Enterprise token-based pricing)", help.openai.com
- * article 20001415, read 2026-11-01), Standard mode, keyed by the rate card's
+ * article 20001415, read 2026-11-14), Standard mode, keyed by the rate card's
  * model names in lower case with hyphens. Whether the export names models
  * exactly this way is unconfirmed: a model seen with no match is listed as
  * unpriced on the Rates tab, where an admin adds its exact name. Customers on
  * credit-based agreements are priced at these same list rates, as Claude is
  * priced at Anthropic's list rates whatever the plan. Extra charges (web
- * search, voice, fast mode, long context, regional processing) are not included.
+ * search, voice, fast mode, long context, regional processing) are not included,
+ * nor is image generation, which the card prices separately for image and text
+ * tokens. The card marks GPT-5.6 Sol's rates as promotional until at least
+ * 21 November 2026, and GPT-6 Astra Law's until at least 31 December 2026.
  */
 export const OPENAI_DEFAULT_RATES: ModelRates = {
   // Chat
@@ -67,6 +70,7 @@ export const OPENAI_DEFAULT_RATES: ModelRates = {
   'gpt-6.1-sol': openai(2, 0.1, 10),
   'gpt-6.1-terra': openai(1, 0.05, 5),
   'gpt-6-astra': openai(10, 1, 50),
+  'gpt-6-astra-law': openai(10, 1, 50),
   'gpt-6-sol': openai(2, 0.2, 10),
   'gpt-6-luna': openai(0.1, 0.01, 0.5),
   'gpt-5.6-sol': openai(4, 0.4, 20),
@@ -75,6 +79,10 @@ export const OPENAI_DEFAULT_RATES: ModelRates = {
   'gpt-6-rosalind-research': openai(15, 1.5, 75),
   'gpt-5.5-rosalind-research': openai(5, 0.5, 25),
   'gpt-5.5-rosalind-discovery': openai(5, 0.5, 25),
+  // Daybreak Red, Trusted Access for Cyber (GPT-6 Cyber in Codex only)
+  'gpt-5.5-cyber': openai(12.5, 1.25, 75),
+  'gpt-5.6-cyber': openai(12.5, 1.25, 75),
+  'gpt-6-cyber': openai(20, 2, 100),
   'gpt-5.3-codex': openai(1.75, 0.175, 14),
   'gpt-5.2': openai(1.75, 0.175, 14),
   // Deep research
@@ -83,8 +91,11 @@ export const OPENAI_DEFAULT_RATES: ModelRates = {
 
 /** On the rate card for Chat only: never suggested for Codex work. */
 export const OPENAI_CHAT_ONLY_MODELS = new Set(['gpt-6-pro', 'gpt-6', 'gpt-5.3']);
-/** Research and deep-research models: priced, but never suggested as a cheaper model for everyday work. */
-export const OPENAI_SPECIALIST_MODELS = new Set(['gpt-6-rosalind-research', 'gpt-5.5-rosalind-research', 'gpt-5.5-rosalind-discovery', 'o4-mini-deep-research']);
+/** Research, law and cyber models, which need approved access: priced, but never suggested as a cheaper model for everyday work. */
+export const OPENAI_SPECIALIST_MODELS = new Set([
+  'gpt-6-rosalind-research', 'gpt-5.5-rosalind-research', 'gpt-5.5-rosalind-discovery', 'o4-mini-deep-research',
+  'gpt-6-astra-law', 'gpt-5.5-cyber', 'gpt-5.6-cyber', 'gpt-6-cyber',
+]);
 
 // Published Anthropic API pricing, $/MTok (input / output), from
 // platform.claude.com/docs/en/about-claude/pricing (checked 2026-11-05).

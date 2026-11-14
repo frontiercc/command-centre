@@ -21,24 +21,7 @@ import type { HumanTimeSummary } from '@/components/pulse/HumanTimeCard';
 import { useVendor, useOpenAiOnly, VendorSwitch } from '@/components/shared/VendorSwitch';
 import { WORK_PULSE_VENDOR_LABELS, type Vendor } from '@/lib/dashboard/vendor';
 
-interface WorkMixItem {
-  task_type: string;
-  messages: number;
-  tier3: number;
-  tier2: number;
-  tier1: number;
-  claude?: number;
-  openai?: number;
-}
-
-type RowVendor = 'claude' | 'openai';
-
 interface OrgSummarySlice {
-  topSkills: Array<{ skill_name: string; vendor?: RowVendor; tag?: string; usage_count: number; user_count: number }>;
-  topConnectors: Array<{ mcp_server: string; vendor?: RowVendor; tag?: string; usage_count: number; user_count: number }>;
-  topNativeTools?: Array<{ tool_name: string; usage_count: number; user_count: number }>;
-  docSessions?: { sessions_with_uploads: number; total_uploads: number };
-  workMix?: WorkMixItem[];
   sessionOutput?: SessionOutputReport | null;
   byProduct?: ByProductData | null;
   humanTime?: HumanTimeSummary | null;
@@ -144,7 +127,7 @@ export default function CioPulsePage() {
     if (!vendorReady) return; // the saved view is read after the page loads
     fetch(`/api/pulse/org-summary?vendor=${vendor}&window=quarter`)
       .then(r => r.ok ? r.json() : null)
-      .then(d => { if (d) setOrgFull(d); if (d) setOrgSummary({ topSkills: d.topSkills ?? [], topConnectors: d.topConnectors ?? [], topNativeTools: d.topNativeTools ?? [], docSessions: d.docSessions, workMix: d.workMix ?? [], sessionOutput: d.sessionOutput ?? null, byProduct: d.byProduct ?? null, humanTime: d.humanTime ?? null }); })
+      .then(d => { if (d) setOrgFull(d); if (d) setOrgSummary({ sessionOutput: d.sessionOutput ?? null, byProduct: d.byProduct ?? null, humanTime: d.humanTime ?? null }); })
       .catch(() => {});
   }, [refreshKey, vendor, vendorReady]);
 
@@ -202,16 +185,17 @@ export default function CioPulsePage() {
           names={orgFull?.tierNames ?? undefined}
         />
 
-        {/* 4 and 5 */}
+        {/* 4 to 7 in two columns, each panel straight under the one above, so a
+            tall panel leaves no gap beside a short one. Narrow screens keep the order 4, 5, 6, 7. */}
         <div className="grid grid-cols-1 xl:grid-cols-2 gap-4 items-start">
-          <DeptRealWork rows={data.deptRealWork ?? []} floorPct={data.realWorkFloorPct ?? null} names={orgFull?.tierNames ?? undefined} />
-          <Produced output={orgSummary?.sessionOutput} human={orgSummary?.humanTime} />
-        </div>
-
-        {/* 6 and 7 */}
-        <div className="grid grid-cols-1 xl:grid-cols-2 gap-4 items-start">
-          <Products data={orgSummary?.byProduct} names={orgFull?.tierNames ?? undefined} />
-          <NewWaysOfWorking confirmedTotal={data.signalCards.psr} confirmedRecent={orgFull?.dashboard?.capabilitiesRecent ?? 0} />
+          <div className="flex flex-col gap-4 min-w-0">
+            <DeptRealWork rows={data.deptRealWork ?? []} floorPct={data.realWorkFloorPct ?? null} names={orgFull?.tierNames ?? undefined} />
+            <Produced output={orgSummary?.sessionOutput} human={orgSummary?.humanTime} />
+          </div>
+          <div className="flex flex-col gap-4 min-w-0">
+            <Products data={orgSummary?.byProduct} names={orgFull?.tierNames ?? undefined} />
+            <NewWaysOfWorking confirmedTotal={data.signalCards.psr} confirmedRecent={orgFull?.dashboard?.capabilitiesRecent ?? 0} vendor={vendor} />
+          </div>
         </div>
 
         {/* 8. Monthly briefing */}

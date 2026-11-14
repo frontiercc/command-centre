@@ -5,6 +5,8 @@
 // GET /api/pulse/coaching. Admins pick any team; a manager sees their own department.
 // Marking an action done saves the figure it is meant to move, so the page can say later
 // whether that figure moved, against the organisation's own movement over the same time.
+// The plan reads every platform Work Pulse covers (Claude Cowork, Claude in Office/Google, Claude
+// Chat and ChatGPT); there is no switch, so one team has one plan and one record.
 'use client';
 
 import { Suspense, useCallback, useEffect, useState } from 'react';
@@ -18,10 +20,64 @@ import { tierNamesOr } from '@/lib/pulse/tier-names';
 import { MEANINGFUL_WORK } from '@/lib/pulse/cowork/coaching-words';
 import type { CoworkCoachingPlan, CoworkMetric } from '@/lib/pulse/cowork/team-coaching';
 import type { PlanAction } from '@/lib/pulse/coaching-core';
+import type { ProducedSession } from '@/lib/pulse/cowork/coaching-figures';
+import { PRODUCT_FAMILY, PRODUCT_LABEL, type WorkProduct } from '@/lib/pulse/cowork/products';
 
-interface Data { teams: string[]; department: string | null; plan: CoworkCoachingPlan | null; checkAfterDays: number }
+interface Data {
+  teams: string[];
+  department: string | null;
+  plan: CoworkCoachingPlan | null;
+  checkAfterDays: number;
+  /** Whether ChatGPT is connected and shown, so the page names what its figures cover. */
+  openaiPresent: boolean;
+}
 
 const pct = (v: number | null) => (v === null ? '—' : `${Math.round(v * 100)}%`);
+
+/** At most this many produced sessions show before "Show all". */
+const PRODUCED_SHOWN = 10;
+
+/** Where a session happened, as the panels name the platforms. */
+function whereWords(s: ProducedSession): string {
+  const app = s.product as WorkProduct | null;
+  if (app && app in PRODUCT_LABEL && PRODUCT_FAMILY[app] !== 'cowork') {
+    return `Claude in ${PRODUCT_LABEL[app]}`;
+  }
+  return s.platform === 'claude_chat' ? 'Claude Chat' : s.platform === 'chatgpt' ? 'ChatGPT' : 'Claude Cowork';
+}
+
+/** What came out when the platform gave no name for it. */
+function unnamed(s: ProducedSession): string {
+  return s.platform === 'claude_chat' ? 'An artifact or a file, name not recorded' : 'A file, name not recorded';
+}
+
+/** The sessions that produced something, newest first, with the names of what came out. */
+function ProducedList({ items }: { items: ProducedSession[] }) {
+  const [all, setAll] = useState(false);
+  if (items.length === 0) return null;
+  const shown = all ? items : items.slice(0, PRODUCED_SHOWN);
+  return (
+    <div className="mt-2 pt-2 border-t border-[#F2F2F2]">
+      <div className="text-[12px] font-semibold text-[#333333] mb-0.5">What was produced, newest first</div>
+      {shown.map((s, i) => (
+        <div key={i} className="py-1.5 border-b border-[#F2F2F2] last:border-b-0">
+          <div className="text-[13px] leading-5 text-[#0A0A0A] break-words">
+            {s.outputs ?? <span className="text-[#777777]">{unnamed(s)}</span>}
+          </div>
+          <div className="text-[12px] leading-5 text-[#777777]">
+            {s.at ? new Date(s.at * 1000).toLocaleDateString('en-GB', { day: 'numeric', month: 'short' }) : 'Date not recorded'}
+            {' · '}{s.name}{' · '}{s.kind ? `${s.kind.charAt(0).toUpperCase()}${s.kind.slice(1)}` : 'Kind of work not judged'}{' · '}{whereWords(s)}
+          </div>
+        </div>
+      ))}
+      {items.length > PRODUCED_SHOWN && (
+        <button type="button" onClick={() => setAll(!all)} className={cx(linkCls, 'mt-1.5')}>
+          {all ? 'Show fewer' : `Show all ${items.length}`}
+        </button>
+      )}
+    </div>
+  );
+}
 
 export default function WorkTeamCoachingPage() {
   // useSearchParams needs a Suspense boundary above it in an app-router page.
@@ -75,6 +131,9 @@ function TeamCoaching() {
 
   const plan = data?.plan ?? null;
   const tiers = plan ? tierNamesOr(plan.tierNames) : null;
+  // Every platform: Claude alone until ChatGPT is connected and shown.
+  const chatgptShown = data?.openaiPresent ?? false;
+  const who = chatgptShown ? 'AI' : 'Claude';
 
   return (
     <>
@@ -182,11 +241,11 @@ function TeamCoaching() {
                   answer={<>
                     By hand, the team&rsquo;s {plan.figures.freed.sessions} estimated sessions would have taken about{' '}
                     <b>{Math.round(plan.figures.freed.byHandHours).toLocaleString('en-GB')} hours</b>, against{' '}
-                    <b>{Math.round(plan.figures.freed.aiHours).toLocaleString('en-GB')} hours</b> with Claude.
+                    <b>{Math.round(plan.figures.freed.aiHours).toLocaleString('en-GB')} hours</b> with {who}.
                   </>}
-                  note="Claude's estimate per session, against measured active time. Only sessions carrying both are counted."
+                  note={`Claude's estimate per session, against measured active time. Only sessions carrying both are counted: Claude Cowork and Claude in Office/Google${chatgptShown ? ', and ChatGPT' : ''}. Claude Chat sessions carry no estimate.`}
                 >
-                  {[['With Claude', plan.figures.freed.aiHours, false] as const, ['By hand (estimate)', plan.figures.freed.byHandHours, true] as const].map(([l, h, est]) => (
+                  {[[`With ${who}`, plan.figures.freed.aiHours, false] as const, ['By hand (estimate)', plan.figures.freed.byHandHours, true] as const].map(([l, h, est]) => (
                     <div key={l} className="grid grid-cols-[minmax(0,150px)_minmax(0,1fr)_64px] gap-2.5 items-center py-[3px] text-[13px]">
                       <span className="text-[#333333]">{l}</span>
                       <Track value={h / Math.max(plan.figures.freed!.byHandHours, 1)} striped={est} />
@@ -203,7 +262,7 @@ function TeamCoaching() {
                   answer={<>
                     <b>{plan.figures.producedNothing.measured - plan.figures.producedNothing.sessions} of {plan.figures.producedNothing.measured} sessions</b> ended with something saved, sent or published.
                   </>}
-                  note="A session counts as producing something when a file was written, sent or published in it. Sessions the platform cannot read are left out of both figures."
+                  note={`A session counts as producing something when a file was written, sent or published in it, in Claude Chat when a reply made an artifact or a file${chatgptShown ? ', and in ChatGPT when a reply listed a file' : ''}. Sessions that could not be read are left out of both figures. Names are the file names and titles as they were saved, without folders, with personal data masked.`}
                 >
                   {([['Produced something', 1 - plan.figures.producedNothing.share], ['Produced nothing', plan.figures.producedNothing.share]] as const).map(([l, v]) => (
                     <div key={l} className="grid grid-cols-[minmax(0,150px)_minmax(0,1fr)_48px] gap-2.5 items-center py-[3px] text-[13px]">
@@ -212,6 +271,7 @@ function TeamCoaching() {
                       <span className="text-right tabular-nums">{pct(v)}</span>
                     </div>
                   ))}
+                  <ProducedList items={plan.figures.produced ?? []} />
                 </Frame>
               )}
             </div>
@@ -222,7 +282,7 @@ function TeamCoaching() {
               answer={plan.actions.length === 0
                 ? <>Nothing to suggest: this team is within reach of everything the figures look at.</>
                 : <><b>{plan.actions.length} {plan.actions.length === 1 ? 'thing' : 'things'}</b> worth trying, each tied to the figure it should move.</>}
-              note="Marking one done records the figure as it stands today, for the team and the organisation, so the page can tell you later whether it moved."
+              note="Marking one done records the figure as it stands today across every platform, for the team and the organisation, so the page can tell you later whether it moved."
             >
               {plan.actions.map(a => (
                 <div key={a.key} className="py-2 border-b border-[#F2F2F2] last:border-b-0">

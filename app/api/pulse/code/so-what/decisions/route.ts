@@ -16,7 +16,7 @@ import { getOutputGroups } from '@/lib/pulse/code/output-groups';
 import { getFinds } from '@/lib/pulse/code/so-what-finds';
 import { recordDecision, undoDecision, listDecisions } from '@/lib/pulse/code/decision-log';
 import { buildSoWhat, cardFigures, FOUND_CARDS, type CardKind, type Choice, type Question } from '@/lib/pulse/code/so-what';
-import { coachingScope } from '@/lib/pulse/coaching-scope';
+import { decisionScope } from '@/lib/pulse/coaching-scope';
 
 export const dynamic = 'force-dynamic';
 
@@ -66,10 +66,12 @@ async function handle(request: NextRequest, session: Session, mode: 'decide' | '
   try {
     const vendor = parseVendor(request.nextUrl.searchParams.get('vendor'));
     const groups = await getOutputGroups(vendor);
-    const scope = coachingScope(session, groups.map(g => g.department), body.department);
-    if ('error' in scope || scope.department !== body.department) {
+    // An admin decides for any team and for the cards about the whole organisation; a manager only
+    // for their own team.
+    const scope = decisionScope(session, groups.map(g => g.department), body.department);
+    if ('error' in scope) {
       await log('denied', where);
-      return NextResponse.json({ error: 'error' in scope ? scope.error : 'You can only decide for your own team.' }, { status: 403 });
+      return NextResponse.json({ error: scope.error }, { status: 403 });
     }
     if (mode === 'undo') {
       await undoDecision(body.card, body.department);

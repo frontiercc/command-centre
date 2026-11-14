@@ -28,7 +28,6 @@ const EXACT: Record<string, Crumbs> = {
   '/pulse/me': { trail: ['Work Pulse'], page: 'My Pulse' },
   '/pulse/users': { trail: ['Work Pulse'], page: 'Users' },
   '/pulse/dept': { trail: ['Work Pulse'], page: 'Departments' },
-  '/pulse/skills': { trail: ['Work Pulse'], page: 'Tool usage' },
   '/pulse/code': { trail: ['Developer Pulse'], page: 'Overview' },
   '/pulse/code/me': { trail: ['Developer Pulse'], page: 'My Developer Pulse' },
   '/pulse/code/users': { trail: ['Developer Pulse'], page: 'Users' },

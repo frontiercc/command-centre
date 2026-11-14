@@ -230,7 +230,7 @@ export function teamParts(t: TeamFigures, f: CoachingFigures): { where: string[]
 
   // Edits it suggests that the team throws away.
   if (t.editAcceptance && t.editAcceptance.org !== null && t.editAcceptance.team < t.editAcceptance.org - 0.1) {
-    workOn.push(`The team keeps ${pct(t.editAcceptance.team)} of the edits it suggests, against ${pct(t.editAcceptance.org)} across the organisation.`);
+    workOn.push(`The team keeps ${pct(t.editAcceptance.team)} of the edits Claude Code suggests, against ${pct(t.editAcceptance.org)} across the organisation. Codex sends no edit decisions, so this is Claude Code alone.`);
     actions.push({
       key: 'edit_acceptance',
       text: 'Look at what the assistant is being given to work from: low acceptance is usually missing context, not the model.',
@@ -268,13 +268,18 @@ export function teamParts(t: TeamFigures, f: CoachingFigures): { where: string[]
 }
 
 /** One team's plan, with whatever has already been marked done. */
-export function buildCoachingPlan(department: string, f: CoachingFigures, done: DoneRecord[], nowS: number): CoachingPlan | null {
+export function buildCoachingPlan(department: string, f: CoachingFigures, done: DoneRecord[], nowS: number, checkOn?: CoachingFigures): CoachingPlan | null {
   const t = f.teams.find(x => x.department === department);
   if (!t) return null;
   const { where, workOn, actions } = teamParts(t, f);
+  // A done action is judged on the figures it was saved on: every platform, whatever the switch
+  // shows. Left out, the plan's own figures are used.
+  const base = checkOn ?? f;
+  const bt = base.teams.find(x => x.department === department);
   const ctx = {
-    metrics: teamMetrics(t), org: orgMetrics(f.org), people: t.people,
-    nowS, done, rules: codeRules(f.targets, t.work),
+    metrics: bt ? teamMetrics(bt) : { deep_share: null, hardly_used_share: null },
+    org: orgMetrics(base.org), people: bt?.people ?? 0,
+    nowS, done, rules: codeRules(base.targets, bt?.work ?? t.work),
   };
   const byKey = new Map(done.map(d => [d.actionKey, d]));
   const current = new Set(actions.map(a => a.key));

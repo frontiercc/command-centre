@@ -12,16 +12,15 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { getTierNames } from '@/lib/pulse/tier-config';
 import { visibleVendor, visibleOpenAi } from '@/lib/sources/openai-visibility';
-import { and, asc, desc, eq, gte, isNotNull, lte, ne, sql } from 'drizzle-orm';
+import { and, desc, eq, lte, sql } from 'drizzle-orm';
 import { getAdminSession, isDeptScoped, canAccessCoworkPulse, canAccessPulseAdmin } from '@/lib/auth/admin-auth';
 import { buildFrontierView, resolveViewerUserId } from '@/lib/pulse/frontier-view';
 import { promptTextVisibleFor, logPromptRead } from '@/lib/auth/content-access';
 import { getTypedClient } from '@/lib/db/client';
 import { schema } from '@/lib/db/schema';
-import { getCoworkCostUsd, getCoworkFrictionIndex } from '@/lib/pulse/aggregator';
+import { getCoworkFrictionIndex } from '@/lib/pulse/aggregator';
 import { hasOpenAiData } from '@/lib/dashboard/queries';
-import { vendorClause, workPulseToolClause } from '@/lib/dashboard/product-sql';
-import { messageVendor } from '@/lib/pulse/vendor-filter';
+import { vendorClause } from '@/lib/dashboard/product-sql';
 import { getPublishedAgreement } from '@/lib/pulse/audit/cycle';
 import { readHumanTime } from '@/lib/pulse/human-time-summary';
 import { getAllConfig } from '@/lib/config';
@@ -112,14 +111,11 @@ export async function GET(request: NextRequest) {
       userId: null,
       metrics: null,
       frontier: null,
-      journeyGrid: [],
       weeklyPulse: null,
-      skillExchange: [],
     });
   }
 
   const now = Math.floor(Date.now() / 1000);
-  const sixWeeksAgo = now - 42 * 24 * 3600;
 
   // The Claude / OpenAI switch: a vendor view reads the aggregator's per-vendor
   // figures and narrows classifications, skills and connectors by source.
@@ -175,39 +171,6 @@ export async function GET(request: NextRequest) {
     .orderBy(desc(pm.computed_at))
     .limit(1);
   const priorMetrics = priorMetricsRows[0];
-
-  // 6-week journey grid: group classifications by week number and tier
-  // Use cowork_messages.occurred_at (when the work happened) not classified_at
-  // (when the AI ran — batch classification skews everything to the same week)
-  const classifications = await client
-    .select({
-      tier: schema.pulseClassifications.tier,
-      task_type: schema.pulseClassifications.task_type,
-      occurred_at: schema.coworkMessages.occurred_at,
-    })
-    .from(schema.pulseClassifications)
-    .innerJoin(schema.coworkMessages, eq(schema.coworkMessages.id, schema.pulseClassifications.cowork_message_id))
-    .where(and(
-      eq(schema.pulseClassifications.user_id, userId),
-      eq(schema.pulseClassifications.classifier_status, 'classified'),
-      gte(schema.coworkMessages.occurred_at, sixWeeksAgo),
-      messageVendor(vendor),
-    ))
-    .orderBy(asc(schema.coworkMessages.occurred_at));
-
-  // Build grid: array of { weekIndex: 0-5, tier: 1|2|3, count }
-  const gridMap = new Map<string, number>();
-  for (const row of classifications) {
-    const weekIndex = Math.min(5, Math.floor((now - row.occurred_at) / (7 * 24 * 3600)));
-    // Wk 1 = most recent, Wk 6 = oldest
-    const displayWeek = weekIndex;
-    const key = `${displayWeek}-${row.tier}`;
-    gridMap.set(key, (gridMap.get(key) ?? 0) + 1);
-  }
-  const journeyGrid = Array.from(gridMap.entries()).map(([key, count]) => {
-    const [week, tier] = key.split('-').map(Number);
-    return { week, tier, count };
-  });
 
   // Weekly pulse briefing
   const weeklyPulseRows = await client
@@ -268,25 +231,6 @@ export async function GET(request: NextRequest) {
     .orderBy(desc(pm.computed_at))
     .limit(1) : [];
   const teamOrs = deptOrsRows[0]?.ors ?? teamOrsRows[0]?.ors ?? null;
-
-  let skillExchange: Array<{
-    skill_name: string; description: string | null;
-    author_user_id: string | null; run_count: number;
-  }> = [];
-
-  if (teamId) {
-    skillExchange = await client
-      .select({
-        skill_name: schema.pulseSkills.skill_name,
-        description: schema.pulseSkills.description,
-        author_user_id: schema.pulseSkills.author_user_id,
-        run_count: schema.pulseSkills.run_count,
-      })
-      .from(schema.pulseSkills)
-      .where(eq(schema.pulseSkills.team_id, teamId))
-      .orderBy(desc(schema.pulseSkills.run_count))
-      .limit(20);
-  }
 
   // Unclassified messages for this user (pending classification). NOT-IN
   // subquery kept as one raw statement.
@@ -361,59 +305,8 @@ export async function GET(request: NextRequest) {
     pending: isSelf || otherSeesPrompt ? pendingCandidates : pendingCandidates.map(c => ({ ...c, body: null })),
   };
 
-  // Skills and connectors used in the last 7 days
-  const sevenDaysAgoTools = now - 7 * 24 * 3600;
-  const skillsUsedRaw = await rawAll<{ name: string; cnt: number | string }>(client, sql`
-    SELECT skill_name AS name, COUNT(*) AS cnt
-    FROM cowork_skill_invocations
-    WHERE user_id = ${userId} AND occurred_at >= ${sevenDaysAgoTools}
-      AND ${sql.raw(workPulseToolClause(vendor))}
-    GROUP BY skill_name
-  `);
-  const skillsUsed = skillsUsedRaw.map(r => ({ name: r.name, cnt: Number(r.cnt) }));
-
-  const connectorsUsedRaw = await rawAll<{ name: string; cnt: number | string }>(client, sql`
-    SELECT mcp_server AS name, COUNT(*) AS cnt
-    FROM cowork_mcp_invocations
-    WHERE user_id = ${userId} AND occurred_at >= ${sevenDaysAgoTools}
-      AND mcp_server NOT IN ('workspace', 'cowork', 'Claude_in_Chrome')
-      AND ${sql.raw(workPulseToolClause(vendor))}
-    GROUP BY mcp_server
-  `);
-  const connectorsUsed = connectorsUsedRaw.map(r => ({ name: r.name, cnt: Number(r.cnt) }));
-
-  const toolsUsed: Array<{ name: string; type: 'skill' | 'connector'; count: number }> = [
-    ...skillsUsed.map(r => ({ name: r.name, type: 'skill' as const, count: r.cnt })),
-    ...connectorsUsed.map(r => ({ name: r.name, type: 'connector' as const, count: r.cnt })),
-  ].sort((a, b) => b.count - a.count);
-
-  // Top native tools from OTel session stats — 30-day window, aggregate JSON arrays in JS
-  const thirtyDaysAgo = now - 30 * 24 * 3600;
-  const userNativeToolRows = await client
-    .select({ unique_tools: schema.coworkSessionStats.unique_tools })
-    .from(schema.coworkSessionStats)
-    .innerJoin(schema.coworkSessions, eq(schema.coworkSessions.id, schema.coworkSessionStats.session_id))
-    .where(and(
-      eq(schema.coworkSessions.user_id, userId),
-      isNotNull(schema.coworkSessionStats.unique_tools),
-      ne(schema.coworkSessionStats.unique_tools, '[]'),
-      gte(schema.coworkSessions.started_at, thirtyDaysAgo),
-    ));
-
-  const userToolCounts = new Map<string, number>();
-  for (const row of userNativeToolRows) {
-    let tools: string[] = [];
-    try { tools = JSON.parse(row.unique_tools ?? '[]') as string[]; } catch { continue; }
-    for (const t of tools) userToolCounts.set(t, (userToolCounts.get(t) ?? 0) + 1);
-  }
-  const topNativeTools = Array.from(userToolCounts.entries())
-    .map(([tool_name, usage_count]) => ({ tool_name, usage_count }))
-    .sort((a, b) => b.usage_count - a.usage_count)
-    .slice(0, 5);
-
   // OTel cowork enrichments — 7-day window
   const sevenDaysAgoOtel = now - 7 * 24 * 3600;
-  const coworkCostUsd = await getCoworkCostUsd(userId, sevenDaysAgoOtel, now);
   const openaiPresent = await visibleOpenAi(hasOpenAiData());
   const chatgpt = vendor === 'claude' || !openaiPresent ? undefined : await chatgptSpend({ since: sevenDaysAgoOtel, userIds: [userId] });
   const coworkFrictionIndex = await getCoworkFrictionIndex(userId, sevenDaysAgoOtel, now);
@@ -473,20 +366,13 @@ export async function GET(request: NextRequest) {
     priorMetrics: priorMetrics ?? null,
     frontier,
     frontierAccess: { canReview: session.role === 'admin', canOpenUseCases: canAccessPulseAdmin(session.role) },
-    journeyGrid,
     pendingClassifications,
     weeklyPulse: weeklyPulse ?? null,
-    skillExchange,
     capabilitiesDetail,
     teamId,
     teamMetrics: { ors: teamOrs },
-    toolsUsed,
-    // Claude Cowork only (no ChatGPT spend or tool calls are recorded): absent in the OpenAI view.
-    coworkCostUsd: vendor === 'openai' ? undefined : coworkCostUsd,
-    chatgptCostUsd: chatgpt === undefined ? undefined : chatgpt?.usd ?? null,
     chatgptUnpricedModels: chatgpt?.unpricedModels ?? [],
     coworkFrictionIndex: vendor === 'openai' ? undefined : coworkFrictionIndex,
-    topNativeTools: vendor === 'openai' ? [] : topNativeTools,
     otiUnderReview,
     vendor,
     openaiPresent,

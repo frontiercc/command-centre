@@ -2,9 +2,11 @@
 // SPDX-License-Identifier: Apache-2.0
 
 // GET /api/pulse/coaching?department=: one team's Work Pulse coaching plan
-// (lib/pulse/cowork/team-coaching.ts) from the figures in cowork/coaching-figures.ts. Admins choose
-// any team; a manager gets their own department only. It names people (the ones to learn from), so
-// admin and manager only, and every read is access-logged.
+// (lib/pulse/cowork/team-coaching.ts) from the figures in cowork/coaching-figures.ts, across every
+// platform shown (Claude's alone when an admin has hidden ChatGPT). There is no platform switch on
+// this page, so one team has one plan and one record of what was done. Admins choose any team; a
+// manager gets their own department only. It names people (the ones to learn from), so admin and
+// manager only, and every read is access-logged.
 import { NextRequest, NextResponse } from 'next/server';
 import { getAdminSession, canAccessPulseAdmin } from '@/lib/auth/admin-auth';
 import { logAccess } from '@/lib/audit/log';
@@ -14,6 +16,8 @@ import { buildCoworkCoachingPlan } from '@/lib/pulse/cowork/team-coaching';
 import { CHECK_AFTER_DAYS } from '@/lib/pulse/coaching-core';
 import { listDoneActions } from '@/lib/pulse/coaching-store';
 import { coachingScope } from '@/lib/pulse/coaching-scope';
+import { visibleOpenAi, visibleVendor } from '@/lib/sources/openai-visibility';
+import { hasOpenAiData } from '@/lib/dashboard/queries';
 
 export const dynamic = 'force-dynamic';
 
@@ -30,7 +34,8 @@ export async function GET(request: NextRequest) {
     return NextResponse.json({ error: 'Forbidden' }, { status: 403 });
   }
   try {
-    const figures = await getCoworkCoachingFigures();
+    // Every platform shown: Claude's alone when an admin has hidden ChatGPT.
+    const figures = await getCoworkCoachingFigures(await visibleVendor(null));
     const all = figures.teams.map(t => t.department).sort((a, b) => a.localeCompare(b));
     const scope = coachingScope(session, all, request.nextUrl.searchParams.get('department'));
     if ('error' in scope) {
@@ -41,7 +46,10 @@ export async function GET(request: NextRequest) {
     const plan = scope.department
       ? buildCoworkCoachingPlan(scope.department, figures, await listDoneActions('cowork', scope.department), Math.floor(Date.now() / 1000))
       : null;
-    return NextResponse.json({ teams: scope.teams, department: scope.department, plan, checkAfterDays: CHECK_AFTER_DAYS });
+    return NextResponse.json({
+      teams: scope.teams, department: scope.department, plan, checkAfterDays: CHECK_AFTER_DAYS,
+      openaiPresent: await visibleOpenAi(hasOpenAiData()),
+    });
   } catch (err) {
     return errorResponse('pulse/coaching', err);
   }

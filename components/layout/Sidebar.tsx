@@ -363,9 +363,6 @@ export default function Sidebar({ theme = 'default' }: { theme?: Theme }) {
               <Link href="/pulse/dept" className={subLinkCls('/pulse/dept')}>
                 Departments
               </Link>
-              <Link href="/pulse/skills" className={subLinkCls('/pulse/skills')}>
-                Tool Usage
-              </Link>
             </div>
           )}
         </div>}

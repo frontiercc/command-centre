@@ -8,13 +8,12 @@ import { useRouter } from 'next/navigation';
 import Link from 'next/link';
 import TopBar from '@/components/layout/TopBar';
 import LoadingSpinner from '@/components/shared/LoadingSpinner';
-import { formatSuggestionEvidenceLine, formatSuggestionProducts, type SuggestionProducts } from '@/lib/usecases/suggestion-format';
-import DeptProcessBoxes from '@/components/usecases/DeptProcessBoxes';
+import { type SuggestionProducts } from '@/lib/usecases/suggestion-format';
 import ProcessCanvasCard from '@/components/usecases/ProcessCanvasCard';
 import type { ProcessCanvas } from '@/lib/usecases/suggestion-store';
-import { groupDeptBoxes, surfaceLabels } from '@/lib/usecases/dept-boxes';
+import { surfaceLabels, surfaceOf } from '@/lib/usecases/dept-boxes';
 import { useConnectedProducts } from '@/components/shared/VendorSwitch';
-import { PageBody, Toolbar, Panel, PanelFoot, SubHead, T, Tag, Pill, B, Notice, Empty, cx } from '@/components/precision/ui';
+import { PageBody, Toolbar, Panel, PanelFoot, T, Tag, Pill, B, Notice, Empty, Bar, cx } from '@/components/precision/ui';
 
 interface UseCase {
   id: string;
@@ -50,6 +49,16 @@ interface SuggestionDraft {
 }
 
 const STATUS_ORDER: UseCase['status'][] = ['confirmed', 'candidate', 'archived'];
+
+/** The suggestions list's filter: every suggestion, the cross-department ones, or one department. */
+const ALL = '__all';
+const ACROSS = '__across';
+/** Rows the suggestions list shows before Show all. */
+const SUGGESTIONS_SHOWN = 5;
+
+/** The measured people and sessions behind a suggestion: its canvas when it has one, else its evidence. */
+function suggestionPeople(s: SuggestionDraft): number { return s.canvas?.people ?? s.evidence.distinctUsers; }
+function suggestionSessions(s: SuggestionDraft): number { return s.canvas?.sessions ?? s.evidence.sessionCount; }
 
 const STATUS_LABEL: Record<UseCase['status'], string> = {
   confirmed: 'Confirmed',
@@ -115,7 +124,8 @@ export default function UseCasesRegisterPage() {
   const [actingId, setActingId] = useState<string | null>(null);
   const [refreshing, setRefreshing] = useState(false);
   const [openSuggestionId, setOpenSuggestionId] = useState<string | null>(null);
-  const [expandedAcrossId, setExpandedAcrossId] = useState<string | null>(null);
+  const [suggestFilter, setSuggestFilter] = useState<string>(ALL);
+  const [showAllSuggestions, setShowAllSuggestions] = useState(false);
 
   // Admin gate — mirrors app/pulse/users/page.tsx
   useEffect(() => {
@@ -193,15 +203,12 @@ export default function UseCasesRegisterPage() {
   const handleAddSuggestion = (s: SuggestionDraft) => patchSuggestion(s.id, 'add');
   const handleDismissSuggestion = (s: SuggestionDraft) => patchSuggestion(s.id, 'dismiss');
 
-  // After confirming/dismissing one canvas, advance to the department's next
-  // open one rather than closing — a box saying "5 process opportunities" must
-  // let the reader walk all five.
+  // After confirming or dismissing one suggestion, move to the next in the list as shown rather
+  // than closing, so the reader can walk every suggestion in the filter.
   const nextSiblingId = (id: string): string | null => {
-    const current = suggestions?.find(s => s.id === id);
-    if (!current?.department) return null;
-    const siblings = deptBoxes.find(b => b.suggestions.some(s => s.id === id))?.suggestions ?? [current];
-    const idx = siblings.findIndex(s => s.id === id);
-    return siblings[idx + 1]?.id ?? siblings[idx - 1]?.id ?? null;
+    const idx = rankedSuggestions.findIndex(s => s.id === id);
+    if (idx < 0) return null;
+    return rankedSuggestions[idx + 1]?.id ?? rankedSuggestions[idx - 1]?.id ?? null;
   };
   const handleConfirmCanvas = async () => {
     if (!openSuggestionId) return;
@@ -230,14 +237,48 @@ export default function UseCasesRegisterPage() {
   const visibleSuggestions = suggestions ?? [];
   const connected = useConnectedProducts();
 
-  // One box per department; Work and Code suggestions are lists inside it.
-  const { deptBoxes, orgSuggestions } = useMemo(() => {
-    return {
-      deptBoxes: groupDeptBoxes(visibleSuggestions, surfaceLabels(connected)),
-      orgSuggestions: visibleSuggestions.filter(s => !s.department),
-    };
+  const labels = surfaceLabels(connected);
+
+  // One list, ranked by the people behind each suggestion, then its sessions; ties keep the
+  // store's order (newest first). The chips filter it to the cross-department ones or one department.
+  const { rankedSuggestions, chips } = useMemo(() => {
+    const ranked = visibleSuggestions
+      .map((s, i) => ({ s, i }))
+      .sort((a, b) =>
+        suggestionPeople(b.s) - suggestionPeople(a.s)
+        || suggestionSessions(b.s) - suggestionSessions(a.s)
+        || a.i - b.i)
+      .map(x => x.s);
+    const byDept = new Map<string, number>();
+    for (const s of visibleSuggestions) if (s.department) byDept.set(s.department, (byDept.get(s.department) ?? 0) + 1);
+    const across = visibleSuggestions.filter(s => !s.department).length;
+    const chipList: Array<{ key: string; label: string; count: number }> = [
+      { key: ALL, label: 'All', count: visibleSuggestions.length },
+      ...(across > 0 ? [{ key: ACROSS, label: 'Across departments', count: across }] : []),
+      ...[...byDept.entries()].sort((a, b) => a[0].localeCompare(b[0])).map(([d, n]) => ({ key: d, label: d, count: n })),
+    ];
+    const filteredList = suggestFilter === ALL ? ranked
+      : suggestFilter === ACROSS ? ranked.filter(s => !s.department)
+        : ranked.filter(s => s.department === suggestFilter);
+    return { rankedSuggestions: filteredList, chips: chipList };
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [suggestions, connected]);
+  }, [suggestions, suggestFilter]);
+
+  const shownSuggestions = showAllSuggestions ? rankedSuggestions : rankedSuggestions.slice(0, SUGGESTIONS_SHOWN);
+  const topPeople = Math.max(1, ...rankedSuggestions.map(suggestionPeople));
+
+  /** Where a suggestion was found: its department (or the departments it spans) and the products. */
+  const whereLine = (s: SuggestionDraft): string => {
+    const where = s.department
+      ?? ['Across departments', ...(s.evidence.departments.length > 0 ? [s.evidence.departments.join(', ')] : [])].join(' · ');
+    // Product names only: the sessions are counted once, beside the bar.
+    const names = s.products
+      ? ([['Claude Cowork', s.products.cowork], ['Claude Code', s.products.code], ['ChatGPT', s.products.chatgpt], ['Codex', s.products.codex]] as const)
+          .filter(([, n]) => n > 0).map(([name]) => name)
+      : [];
+    const products = names.length > 1 ? `${names.slice(0, -1).join(', ')} and ${names[names.length - 1]}` : names[0] ?? '';
+    return `${where} · ${products || labels[surfaceOf(s)]}`;
+  };
 
   const openSuggestion = suggestions?.find(s => s.id === openSuggestionId) ?? null;
 
@@ -288,7 +329,7 @@ export default function UseCasesRegisterPage() {
 
         {error && <Notice tone="error">{error}</Notice>}
 
-        {(deptBoxes.length > 0 || orgSuggestions.length > 0) && (
+        {visibleSuggestions.length > 0 && (
           <Panel
             title="Suggested use cases"
             badge={<Tag tone="judged">AI-suggested</Tag>}
@@ -300,63 +341,72 @@ export default function UseCasesRegisterPage() {
             }
             flush
           >
-            {deptBoxes.length > 0 && (
-              <div className="p-4">
-                <SubHead>By department, process opportunities</SubHead>
-                <DeptProcessBoxes boxes={deptBoxes} onOpen={setOpenSuggestionId} />
-              </div>
-            )}
-
-            {orgSuggestions.length > 0 && (
-              <div className={deptBoxes.length > 0 ? 'border-t border-[#F2F2F2]' : ''}>
-                {deptBoxes.length > 0 && (
-                  <div className="px-4 pt-3 pb-1"><SubHead>Across departments</SubHead></div>
-                )}
-                {/* Cards, three to a row, like the dashboard recommendations (no priority edge). */}
-                <ul className="m-0 px-4 pb-4 pt-2 list-none grid items-start gap-3 grid-cols-1 md:grid-cols-2 xl:grid-cols-3">
-                  {orgSuggestions.map(s => {
-                    const expanded = expandedAcrossId === s.id;
-                    return (
-                      <li key={s.id} className="bg-[#F8F9FB] rounded-[12px] px-4 py-3 flex flex-col gap-1.5">
-                        {/* Three lines of description until the card is opened. */}
+            <div className="px-4 pt-3 pb-1 flex flex-wrap gap-1.5">
+              {chips.map(c => (
+                <button
+                  key={c.key}
+                  type="button"
+                  onClick={() => { setSuggestFilter(c.key); setShowAllSuggestions(false); }}
+                  aria-pressed={suggestFilter === c.key}
+                  className={cx(
+                    'text-[12px] font-medium px-2 py-0.5 rounded-full border tabular-nums',
+                    suggestFilter === c.key
+                      ? 'bg-[#E4EFF3] text-[#185A71] border-[#E4EFF3]'
+                      : 'bg-white text-[#4D4D4D] border-[#EAEAEA] hover:border-[#DADADA]',
+                  )}
+                >
+                  {c.label} {c.count}
+                </button>
+              ))}
+            </div>
+            <ul className="m-0 p-0 list-none">
+              {shownSuggestions.map(s => {
+                const people = suggestionPeople(s);
+                const sessions = suggestionSessions(s);
+                return (
+                  <li key={s.id} className="px-4 py-2.5 border-t border-[#F2F2F2] first:border-t-0 flex flex-col gap-1.5">
+                    <div className="flex items-start gap-3">
+                      <div className="min-w-0 flex-1">
+                        <div className="text-[14px] font-semibold text-[#0A0A0A] leading-5">{s.title}</div>
+                        <div className="text-[13px] text-[#8F8F8F]">{whereLine(s)}</div>
+                      </div>
+                      <div className="flex items-center gap-2 shrink-0">
+                        <button type="button" onClick={() => setOpenSuggestionId(s.id)} className={B.secondary}>Review</button>
                         <button
                           type="button"
-                          aria-expanded={expanded}
-                          onClick={() => setExpandedAcrossId(expanded ? null : s.id)}
-                          className="flex-1 flex flex-col gap-1.5 text-left"
+                          onClick={() => handleAddSuggestion(s)}
+                          disabled={actingId === s.id}
+                          className={B.secondary}
                         >
-                          <span className="text-[14px] font-semibold text-[#0A0A0A] leading-5">{s.title}</span>
-                          {s.description && (
-                            <span className={cx('text-[13px] leading-5 text-[#4D4D4D]', !expanded && 'line-clamp-3')}>{s.description}</span>
-                          )}
+                          {actingId === s.id ? 'Working…' : 'Add'}
                         </button>
-                        <span className="text-[13px] text-[#1F6F8B] tabular-nums">{formatSuggestionEvidenceLine(s)}</span>
-                        {s.products && formatSuggestionProducts(s.products) && (
-                          <span className="text-[13px] text-[#1F6F8B] tabular-nums">Found in {formatSuggestionProducts(s.products)}</span>
-                        )}
-                        <div className="flex items-center gap-2 pt-1">
-                          <button
-                            type="button"
-                            onClick={() => handleAddSuggestion(s)}
-                            disabled={actingId === s.id}
-                            className={B.secondary}
-                          >
-                            {actingId === s.id ? 'Working…' : 'Add'}
-                          </button>
-                          <button
-                            type="button"
-                            onClick={() => handleDismissSuggestion(s)}
-                            disabled={actingId === s.id}
-                            className="w-7 h-7 shrink-0 rounded-[10px] text-[16px] leading-none text-[#8F8F8F] hover:bg-[#EAEAEA] hover:text-[#0A0A0A] disabled:opacity-50"
-                            aria-label="Dismiss suggestion"
-                          >
-                            &times;
-                          </button>
-                        </div>
-                      </li>
-                    );
-                  })}
-                </ul>
+                        <button
+                          type="button"
+                          onClick={() => handleDismissSuggestion(s)}
+                          disabled={actingId === s.id}
+                          className="w-7 h-7 shrink-0 rounded-[10px] text-[16px] leading-none text-[#8F8F8F] hover:bg-[#EAEAEA] hover:text-[#0A0A0A] disabled:opacity-50"
+                          aria-label="Dismiss suggestion"
+                        >
+                          &times;
+                        </button>
+                      </div>
+                    </div>
+                    <div className="flex items-center gap-3">
+                      <div className="flex-1"><Bar pct={(people / topPeople) * 100} /></div>
+                      <span className="text-[13px] text-[#8F8F8F] tabular-nums whitespace-nowrap">
+                        {people} {people === 1 ? 'user' : 'users'} · {sessions} {sessions === 1 ? 'session' : 'sessions'}
+                      </span>
+                    </div>
+                  </li>
+                );
+              })}
+            </ul>
+            {rankedSuggestions.length > SUGGESTIONS_SHOWN && (
+              <div className="px-4 py-2.5 border-t border-[#F2F2F2] text-[13px] text-[#8F8F8F] tabular-nums">
+                Showing {shownSuggestions.length} of {rankedSuggestions.length} ·{' '}
+                <button type="button" onClick={() => setShowAllSuggestions(v => !v)} className={B.link}>
+                  {showAllSuggestions ? 'Show fewer' : 'Show all'}
+                </button>
               </div>
             )}
             <PanelFoot>
@@ -469,9 +519,7 @@ export default function UseCasesRegisterPage() {
       </PageBody>
 
       {openSuggestion && (() => {
-        const siblings = openSuggestion.department
-          ? (deptBoxes.find(b => b.suggestions.some(s => s.id === openSuggestion.id))?.suggestions ?? [openSuggestion])
-          : [openSuggestion];
+        const siblings = rankedSuggestions.some(s => s.id === openSuggestion.id) ? rankedSuggestions : [openSuggestion];
         const idx = siblings.findIndex(s => s.id === openSuggestion.id);
         return (
           <ProcessCanvasCard

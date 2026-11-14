@@ -184,7 +184,7 @@ function DeptContent() {
 
             <div className="grid grid-cols-1 xl:grid-cols-2 gap-4">
               <CodeWorkMix rows={detail.workMix ?? []} who={who(detail.dept)} names={detail.tierNames ?? undefined} />
-              <ByHandPanel h={detail.humanTime} who={who(detail.dept)} />
+              <ByHandPanel h={detail.humanTime} who={who(detail.dept)} tool={openaiOnly || vendor === 'openai' ? 'Codex' : codexPresent && vendor === 'all' ? 'AI' : 'Claude Code'} />
             </div>
 
             <CodeStatStrip metrics={detail.metrics} githubRepos={detail.githubRepos} view={codexView ? vendor : 'claude'} split={detail.metricsSplit} />

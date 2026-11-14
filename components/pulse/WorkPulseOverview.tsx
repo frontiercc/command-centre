@@ -20,6 +20,7 @@ import type { ActNextItem, DeptProcessBoxItem } from '@/components/pulse/ActNext
 import { depthColumns, depthSentence, DepthChart, DepthSwitch, type DepthWindow, type TierWeek } from '@/components/pulse/DepthChart';
 import { deepWords, tierNamesOr, type TierNames } from '@/lib/pulse/tier-names';
 import { FAMILY_LABEL, PRODUCT_FAMILY, PRODUCT_LABEL, type WorkProduct } from '@/lib/pulse/cowork/products';
+import type { Vendor } from '@/lib/dashboard/vendor';
 
 const AMBER = '#DC8A00';
 const words = (v: number) => (v < 0.15 ? `${Math.round(v * 100)}%` : shareWords(v));
@@ -185,11 +186,11 @@ export function Produced({ output, human }: { output: SessionOutputReport | null
       title="What did the work produce?"
       period="Last quarter"
       answer={<>{output.rate === null ? 'Not measured yet.' : <><b>{cap(words(output.rate))}</b> of sessions produced a file.</>}{times ? <> By hand, the same work would have taken <b>{times}</b>.</> : null}</>}
-      note={<>A session produced a file when Claude saved, sent or published one.{times ? ' The by-hand time is Claude’s estimate.' : ''}</>}
+      note={<>A session produced a file when Claude saved, sent or published one, in Claude Chat when a reply made an artifact or a file, and in ChatGPT when a reply listed a file.{times ? ' The by-hand time is Claude’s estimate.' : ''}</>}
     >
       {ratio !== null && human && (
         <div className="mb-3">
-          {[['With Claude', human.claudeMinutes, false], ['By hand (estimate)', human.humanMinutes.likely, true]].map(([l, m, est]) => (
+          {[[`With ${human.byProduct ? 'AI' : 'Claude'}`, human.claudeMinutes, false], ['By hand (estimate)', human.humanMinutes.likely, true]].map(([l, m, est]) => (
             <div key={String(l)} className="grid grid-cols-[minmax(0,120px)_minmax(0,1fr)_60px] gap-2.5 items-center py-[3px] text-[13px]">
               <span className="text-[#333333]">{l as string}</span>
               <Track value={(m as number) / Math.max(human.claudeMinutes, human.humanMinutes.likely)} striped={est as boolean} />
@@ -231,10 +232,10 @@ export function Products({ data, names }: { data: ByProductData | null | undefin
       answer={lead && lead.people > 0
         ? <>{label(lead.product)} carries most of the work: <b>{lead.people} people</b>{lead.meaningfulPct !== null ? <>, and <b>{words(lead.meaningfulPct / 100)}</b> of their tasks are {deepWords(names)}</> : null}.</>
         : <>No product has been used in the last 30 days.</>}
-      note={<>{tierNamesOr(names).t2} and {tierNamesOr(names).t3} are Claude&apos;s judgement of each task. Produced a file counts sessions where Claude saved, sent or published one. Spend for each product is on <Link href="/finops" className={linkCls}>FinOps</Link>.</>}
+      note={<>{tierNamesOr(names).t2} and {tierNamesOr(names).t3} are Claude&apos;s judgement of each task. Produced counts sessions where Claude saved, sent or published a file, Claude Chat conversations where a reply made an artifact or a file, and ChatGPT conversations where a reply listed a file. Spend for each product is on <Link href="/finops" className={linkCls}>FinOps</Link>.</>}
     >
       <div className="grid grid-cols-[minmax(0,130px)_minmax(0,1fr)_56px_64px_70px] gap-2.5 text-[11px] text-[#8F8F8F] pb-1">
-        <span /> <span>People</span><span className="text-right">Sessions</span><span className="text-right">{tierNamesOr(names).t2}+</span><span className="text-right">Made a file</span>
+        <span /> <span>People</span><span className="text-right">Sessions</span><span className="text-right">{tierNamesOr(names).t2}+</span><span className="text-right">Produced</span>
       </div>
       {rows.map(r => {
         const f = family(r.product);
@@ -261,11 +262,12 @@ export function Products({ data, names }: { data: ByProductData | null | undefin
 
 interface Candidate { id: number; title: string; detected_at: number; department: string | null; display_name: string | null }
 
-export function NewWaysOfWorking({ confirmedTotal, confirmedRecent }: { confirmedTotal: number | null; confirmedRecent: number }) {
+export function NewWaysOfWorking({ confirmedTotal, confirmedRecent, vendor }: { confirmedTotal: number | null; confirmedRecent: number; vendor: Vendor }) {
   const [list, setList] = useState<Candidate[] | null>(null);
   const [busy, setBusy] = useState<number | null>(null);
-  const load = () => fetch('/api/pulse/capabilities').then(r => (r.ok ? r.json() : null)).then(d => setList(d?.candidates ?? [])).catch(() => setList([]));
-  useEffect(() => { load(); }, []);
+  const load = () => fetch(`/api/pulse/capabilities?vendor=${vendor}`).then(r => (r.ok ? r.json() : null)).then(d => setList(d?.candidates ?? [])).catch(() => setList([]));
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  useEffect(() => { load(); }, [vendor]);
   if (list === null) return null;
   const act = async (id: number, action: 'confirm' | 'dismiss') => {
     setBusy(id);

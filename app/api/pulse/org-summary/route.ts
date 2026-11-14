@@ -11,7 +11,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { getTierNames } from '@/lib/pulse/tier-config';
 import { visibleVendor } from '@/lib/sources/openai-visibility';
-import { and, desc, eq, gte, isNotNull, lt, sql } from 'drizzle-orm';
+import { and, eq, gte, isNotNull, lt, sql } from 'drizzle-orm';
 import { weekStarts } from '@/lib/pulse/period';
 import { getAdminSession, canAccessOrgOverview } from '@/lib/auth/admin-auth';
 import { getTypedClient } from '@/lib/db/client';
@@ -21,9 +21,9 @@ import { buildByProduct } from '@/lib/pulse/cowork/by-product';
 import { getConnectedProducts, isOpenAiOnly } from '@/lib/sources/connected';
 import { getConfigValue } from '@/lib/config';
 import { readHumanTime } from '@/lib/pulse/human-time-summary';
-import { vendorClause, vendorExpr, toolTagExpr, workPulseToolClause } from '@/lib/dashboard/product-sql';
+import { vendorClause, workPulseToolClause, personPerProduct } from '@/lib/dashboard/product-sql';
 import { messageVendor } from '@/lib/pulse/vendor-filter';
-import { getDocSessions } from '@/lib/pulse/cowork/doc-sessions';
+import { isWorkPulseSurface } from '@/lib/pulse/work-surfaces';
 
 export const dynamic = 'force-dynamic';
 
@@ -130,101 +130,6 @@ export async function GET(request: NextRequest) {
     ));
   const tierRow = tierRows[0];
 
-  // Work Mix (30 days) — breakdown of classified work by task_type, with a
-  // tier split per type. Judged layer (same classifier that drives DDS/OTI/
-  // ORS above) — always on for Cowork, no separate opt-in flag.
-  const workMixRaw = await client
-    .select({
-      task_type: schema.pulseClassifications.task_type,
-      messages: sql<number | string>`COUNT(*)`,
-      tier3: sql<number | string>`SUM(CASE WHEN ${schema.pulseClassifications.tier} = 3 THEN 1 ELSE 0 END)`,
-      tier2: sql<number | string>`SUM(CASE WHEN ${schema.pulseClassifications.tier} = 2 THEN 1 ELSE 0 END)`,
-      tier1: sql<number | string>`SUM(CASE WHEN ${schema.pulseClassifications.tier} = 1 THEN 1 ELSE 0 END)`,
-      openai: sql<number | string>`SUM(CASE WHEN ${messageVendor('openai')} THEN 1 ELSE 0 END)`,
-    })
-    .from(schema.pulseClassifications)
-    .innerJoin(schema.coworkMessages, eq(schema.coworkMessages.id, schema.pulseClassifications.cowork_message_id))
-    .where(and(
-      eq(schema.pulseClassifications.classifier_status, 'classified'),
-      gte(schema.coworkMessages.occurred_at, thirtyDaysAgo),
-      messageVendor(vendor),
-    ))
-    .groupBy(schema.pulseClassifications.task_type)
-    .orderBy(desc(sql`COUNT(*)`));
-  const workMix = workMixRaw.map(r => ({
-    task_type: r.task_type,
-    messages: Number(r.messages),
-    tier3: Number(r.tier3), tier2: Number(r.tier2), tier1: Number(r.tier1),
-    claude: Number(r.messages) - Number(r.openai),
-    openai: Number(r.openai),
-  }));
-
-  // Top 5 skills org-wide (30 days). A skill of the same name from Claude and
-  // from OpenAI is two different skills, so each row carries its vendor.
-  const topSkills = await rawAll<{ skill_name: string; vendor: string; tag: string; usage_count: number | string; user_count: number | string }>(client, sql`
-    SELECT cm.skill_name, ${sql.raw(vendorExpr('cm.'))} AS vendor, ${sql.raw(toolTagExpr('cm.'))} AS tag,
-           COUNT(*) AS usage_count,
-           COUNT(DISTINCT cm.user_id) AS user_count
-    FROM cowork_skill_invocations cm
-    WHERE cm.occurred_at >= ${thirtyDaysAgo} AND ${vendorSql}
-    GROUP BY 1, 2, 3
-    ORDER BY usage_count DESC
-    LIMIT 5
-  `).then(rows => rows.map(r => ({
-    skill_name: r.skill_name,
-    vendor: r.vendor as 'claude' | 'openai',
-    tag: r.tag,
-    usage_count: Number(r.usage_count),
-    user_count: Number(r.user_count),
-  })));
-
-  // Top 5 connectors org-wide (30 days), each with its vendor.
-  const topConnectors = await rawAll<{ mcp_server: string; vendor: string; tag: string; usage_count: number | string; user_count: number | string }>(client, sql`
-    SELECT cm.mcp_server, ${sql.raw(vendorExpr('cm.'))} AS vendor, ${sql.raw(toolTagExpr('cm.'))} AS tag,
-           COUNT(*) AS usage_count,
-           COUNT(DISTINCT cm.user_id) AS user_count
-    FROM cowork_mcp_invocations cm
-    WHERE cm.occurred_at >= ${thirtyDaysAgo}
-      AND cm.mcp_server NOT IN ('workspace', 'cowork')
-      AND ${vendorSql}
-    GROUP BY 1, 2, 3
-    ORDER BY usage_count DESC
-    LIMIT 5
-  `).then(rows => rows.map(r => ({
-    mcp_server: r.mcp_server,
-    vendor: r.vendor as 'claude' | 'openai',
-    tag: r.tag,
-    usage_count: Number(r.usage_count),
-    user_count: Number(r.user_count),
-  })));
-
-  // Top native tools from OTel session stats (30 days) — aggregate JSON arrays in JS
-  const nativeToolRows = await client
-    .select({ unique_tools: schema.coworkSessionStats.unique_tools, user_id: schema.coworkSessions.user_id })
-    .from(schema.coworkSessionStats)
-    .innerJoin(schema.coworkSessions, eq(schema.coworkSessions.id, schema.coworkSessionStats.session_id))
-    .where(and(
-      isNotNull(schema.coworkSessionStats.unique_tools),
-      sql`${schema.coworkSessionStats.unique_tools} != '[]'`,
-      gte(schema.coworkSessions.started_at, thirtyDaysAgo),
-    ));
-
-  const toolCounts = new Map<string, { usage: number; users: Set<string> }>();
-  for (const row of nativeToolRows) {
-    let tools: string[] = [];
-    try { tools = JSON.parse(row.unique_tools ?? '[]') as string[]; } catch { continue; }
-    for (const t of tools) {
-      const entry = toolCounts.get(t) ?? { usage: 0, users: new Set() };
-      entry.usage++;
-      if (row.user_id) entry.users.add(row.user_id);
-      toolCounts.set(t, entry);
-    }
-  }
-  const topNativeTools = Array.from(toolCounts.entries())
-    .map(([tool_name, e]) => ({ tool_name, usage_count: e.usage, user_count: e.users.size }))
-    .sort((a, b) => b.usage_count - a.usage_count)
-    .slice(0, 5);
-
   // OTel model mix — top models by request count (30 days)
   const modelMixRaw = await rawAll<{ model: string; cnt: number | string }>(client, sql`
     SELECT model, COUNT(*) AS cnt
@@ -257,21 +162,15 @@ export async function GET(request: NextRequest) {
       : null,
   };
 
-  // Document-upload sessions org-wide (30 days), Claude Cowork and ChatGPT alike.
-  const docSessions = await getDocSessions({ since: thirtyDaysAgo, vendor });
-
   // Session output rate — additive, own module, 13 completed Monday-UTC weeks.
   // Never throws the whole route: a failure here returns null and the card hides,
   // rather than taking down every other signal on /pulse/cio with it.
-  // Only Claude's telemetry records files made; OpenAI's Compliance API does
-  // not, so the ChatGPT view has no card and the other views say the figure
-  // is Claude's once ChatGPT is connected.
+  // Every platform, following the switch: Claude Cowork and Office from their
+  // telemetry, Claude Chat from what its replies made, ChatGPT from the files
+  // OpenAI lists on its replies.
   let sessionOutput = null;
   try {
-    if (vendor !== 'openai') {
-      const report = await buildSessionOutputRate();
-      sessionOutput = { ...report, claudeOnly: (await getConnectedProducts()).openai };
-    }
+    sessionOutput = { ...(await buildSessionOutputRate(undefined, vendor)), claudeOnly: false };
   } catch (e) {
     console.error('[org-summary] session output rate failed', e);
   }
@@ -350,7 +249,9 @@ export async function GET(request: NextRequest) {
   const capCounts = await rawGet<{ recent: number | string; pending: number | string }>(client, sql`
     SELECT SUM(CASE WHEN status = 'confirmed' AND confirmed_at >= ${bStart} AND confirmed_at < ${bEnd} THEN 1 ELSE 0 END) AS recent,
            SUM(CASE WHEN status = 'candidate' THEN 1 ELSE 0 END) AS pending
-    FROM pulse_events WHERE event_type = 'capability_creation'
+    FROM pulse_events pe WHERE event_type = 'capability_creation'
+      AND (${sql.raw(vendor === 'all' ? 'TRUE' : 'FALSE')} OR EXISTS (SELECT 1 FROM cowork_messages cm WHERE cm.id = pe.cowork_message_id
+        AND ${sql.raw(vendorClause(vendor, 'cm.'))}))
   `);
   // Skills and connectors by the number of people using them: last 30 days against the 30
   // before, and whether each was first seen in the last 30 days.
@@ -358,8 +259,8 @@ export async function GET(request: NextRequest) {
     const extra = table === 'cowork_mcp_invocations' ? sql`AND cm.mcp_server NOT IN ('workspace', 'cowork')` : sql``;
     const rows = await rawAll<{ name: string; people: number | string; prior: number | string; first_at: number | string }>(client, sql`
       SELECT cm.${sql.raw(col)} AS name,
-             COUNT(DISTINCT CASE WHEN cm.occurred_at >= ${bStart} AND cm.occurred_at < ${bEnd} THEN cm.user_id END) AS people,
-             COUNT(DISTINCT CASE WHEN cm.occurred_at >= ${pStart} AND cm.occurred_at < ${bStart} THEN cm.user_id END) AS prior,
+             COUNT(DISTINCT CASE WHEN cm.occurred_at >= ${bStart} AND cm.occurred_at < ${bEnd} THEN ${sql.raw(personPerProduct('cm.'))} END) AS people,
+             COUNT(DISTINCT CASE WHEN cm.occurred_at >= ${pStart} AND cm.occurred_at < ${bStart} THEN ${sql.raw(personPerProduct('cm.'))} END) AS prior,
              MIN(cm.occurred_at) AS first_at
       FROM ${sql.raw(table)} cm
       WHERE ${vendorSql} ${extra}
@@ -372,20 +273,25 @@ export async function GET(request: NextRequest) {
       rows: rows.slice(0, 5).map(r => ({ name: r.name, people: Number(r.people), priorPeople: Number(r.prior), isNew: Number(r.first_at) >= bStart })),
     };
   };
+  // People active on Work Pulse's own platforms (Claude Cowork, Office/Google, Claude Chat, ChatGPT):
+  // someone who only uses Claude Code or Codex is Developer Pulse's, not this page's.
+  // People figures count a person once for each product they used (personPerProduct), so the
+  // All view is Claude's figure plus ChatGPT's, here and in the skill and connector spread.
   const activePeopleRow = await rawGet<{ n: number | string }>(client, sql`
-    SELECT COUNT(DISTINCT user_id) AS n FROM cowork_messages cm
-    WHERE cm.user_id IS NOT NULL AND cm.occurred_at >= ${bStart} AND cm.occurred_at < ${bEnd} AND ${sql.raw(vendorClause(vendor, 'cm.'))}
+    SELECT COUNT(DISTINCT ${sql.raw(personPerProduct('cm.'))}) AS n FROM cowork_messages cm
+    WHERE cm.user_id IS NOT NULL AND cm.occurred_at >= ${bStart} AND cm.occurred_at < ${bEnd}
+      AND ${isWorkPulseSurface(sql`cm.surface`, true)} AND ${sql.raw(vendorClause(vendor, 'cm.'))}
   `);
   // People who handed over meaningful or frontier work in the last 30 days, weekly counts of
   // the same, and how many people do half of all frontier work (counts only, no names).
   const deepPeopleRow = await rawGet<{ n: number | string }>(client, sql`
-    SELECT COUNT(DISTINCT cm.user_id) AS n
+    SELECT COUNT(DISTINCT ${sql.raw(personPerProduct('cm.'))}) AS n
     FROM pulse_classifications pc JOIN cowork_messages cm ON cm.id = pc.cowork_message_id
     WHERE pc.classifier_status = 'classified' AND pc.tier >= 2 AND cm.occurred_at >= ${bStart} AND cm.occurred_at < ${bEnd}
       AND cm.user_id IS NOT NULL AND ${sql.raw(vendorClause(vendor, 'cm.'))}
   `);
   const deepPeopleWeekRows = await rawAll<{ w: number | string; n: number | string }>(client, sql`
-    SELECT FLOOR((cm.occurred_at - ${firstWeek}) / ${7 * 86400}) AS w, COUNT(DISTINCT cm.user_id) AS n
+    SELECT FLOOR((cm.occurred_at - ${firstWeek}) / ${7 * 86400}) AS w, COUNT(DISTINCT ${sql.raw(personPerProduct('cm.'))}) AS n
     FROM pulse_classifications pc JOIN cowork_messages cm ON cm.id = pc.cowork_message_id
     WHERE pc.classifier_status = 'classified' AND pc.tier >= 2 AND cm.occurred_at >= ${firstWeek} AND cm.occurred_at < ${thisWeek}
       AND cm.user_id IS NOT NULL AND ${sql.raw(vendorClause(vendor, 'cm.'))}
@@ -397,7 +303,7 @@ export async function GET(request: NextRequest) {
     FROM pulse_classifications pc JOIN cowork_messages cm ON cm.id = pc.cowork_message_id
     WHERE pc.classifier_status = 'classified' AND pc.tier = 3 AND cm.occurred_at >= ${bStart} AND cm.occurred_at < ${bEnd}
       AND cm.user_id IS NOT NULL AND ${sql.raw(vendorClause(vendor, 'cm.'))}
-    GROUP BY cm.user_id ORDER BY 1 DESC
+    GROUP BY ${sql.raw(personPerProduct('cm.'))} ORDER BY 1 DESC
   `)).map(r => Number(r.n));
   const frontierTotal = frontierByPerson.reduce((a, b) => a + b, 0);
   let frontierHalfPeople = 0;
@@ -448,13 +354,8 @@ export async function GET(request: NextRequest) {
       t2: Number(tierRow?.t2 ?? 0),
       t3: Number(tierRow?.t3 ?? 0),
     },
-    topSkills,
-    topConnectors,
-    topNativeTools,
-    docSessions,
     modelMix,
     permissionDecisions,
-    workMix,
     sessionOutput,
     byProduct,
     humanTime,

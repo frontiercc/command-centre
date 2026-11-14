@@ -507,7 +507,7 @@ export default function ModelEfficiencySection({ period }: { period: string }) {
             <div className="border-t border-[#EAEAEA] px-4 py-3 flex flex-col gap-2">
               <span className="text-[14px] font-semibold text-[#0A0A0A]">Opportunities to review</span>
               {isShareBasedOnly && (
-                <Notice tone="warn">Share-based: there is no friction check on {surfaceLabel(surface, openai)}, so review manually before acting.</Notice>
+                <Notice tone="info">Share-based: there is no friction check on {surfaceLabel(surface, openai)}, so review manually before acting.</Notice>
               )}
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
                 {opportunities.map((activity) => (

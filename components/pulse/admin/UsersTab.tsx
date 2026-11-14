@@ -6,6 +6,7 @@
 import { useEffect, useState } from 'react';
 import Link from 'next/link';
 import GenerateBriefingButton from '@/components/pulse/GenerateBriefingButton';
+import { deepShareOf } from '@/lib/pulse/tier-names';
 import { Panel, Muted, Tag, B, T, cx } from '@/components/precision/ui';
 import { PRODUCTS } from '@/lib/dashboard/vendor';
 
@@ -29,7 +30,7 @@ interface UserRow {
   failed_count: number;
 }
 
-type SortKey = 'name' | 'dept' | 'dds' | 'oti' | 'last_active';
+type SortKey = 'name' | 'dept' | 'deep' | 'last_active';
 
 function timeAgo(ts: number | null): string {
   if (!ts) return '—';
@@ -58,8 +59,7 @@ function sortUsers(users: UserRow[], key: SortKey, asc: boolean): UserRow[] {
     switch (key) {
       case 'name': va = (a.display_name ?? a.email).toLowerCase(); vb = (b.display_name ?? b.email).toLowerCase(); break;
       case 'dept': va = (a.department ?? '').toLowerCase(); vb = (b.department ?? '').toLowerCase(); break;
-      case 'dds': va = a.dds ?? -1; vb = b.dds ?? -1; break;
-      case 'oti': va = a.oti ?? -1; vb = b.oti ?? -1; break;
+      case 'deep': va = deepShareOf(a.tier_1_count, a.tier_2_count, a.tier_3_count) ?? -1; vb = deepShareOf(b.tier_1_count, b.tier_2_count, b.tier_3_count) ?? -1; break;
       case 'last_active': va = a.last_active_at ?? 0; vb = b.last_active_at ?? 0; break;
       default: return 0;
     }
@@ -72,7 +72,7 @@ function sortUsers(users: UserRow[], key: SortKey, asc: boolean): UserRow[] {
 export default function UsersTab() {
   const [users, setUsers] = useState<UserRow[]>([]);
   const [loading, setLoading] = useState(true);
-  const [sortKey, setSortKey] = useState<SortKey>('dds');
+  const [sortKey, setSortKey] = useState<SortKey>('deep');
   const [sortAsc, setSortAsc] = useState(false);
   const [search, setSearch] = useState('');
 
@@ -153,8 +153,7 @@ export default function UsersTab() {
             <tr className={T.headRow}>
               <SortHdr k="name" label="Name" />
               <SortHdr k="dept" label="Department" />
-              <SortHdr k="dds" label="Depth" right />
-              <SortHdr k="oti" label="Valuable work" right />
+              <SortHdr k="deep" label="Meaningful or frontier" right />
               <th scope="col" className={T.th}>Tier mix</th>
               <SortHdr k="last_active" label="Last active" />
               <th scope="col" className={T.th}>Briefing</th>
@@ -179,11 +178,11 @@ export default function UsersTab() {
                   </div>
                 </td>
                 <td className={T.tdMute}>{u.department ?? '—'}</td>
-                <td className={cx(T.tdRight, 'font-medium')}>
-                  {u.dds != null ? u.dds.toFixed(2) : '—'}
-                </td>
-                <td className={T.tdRight}>
-                  {u.oti != null ? `${u.oti.toFixed(2)}×` : '—'}
+                <td className={cx(T.tdRight, 'font-medium tabular-nums')}>
+                  {(() => {
+                    const share = deepShareOf(u.tier_1_count, u.tier_2_count, u.tier_3_count);
+                    return share === null ? 'Not judged' : `${Math.round(share * 100)}% of tasks`;
+                  })()}
                 </td>
                 <td className={T.td}>
                   <TierBar

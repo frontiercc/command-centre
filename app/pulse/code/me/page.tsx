@@ -235,7 +235,7 @@ function MyCodePulseContent() {
             {/* 4 and 5 */}
             <div className="grid grid-cols-1 xl:grid-cols-2 gap-4">
               <CodeWorkMix rows={data.workMix ?? []} who={who} names={data.tierNames ?? undefined} />
-              <ByHandPanel h={data.humanTime} who={who} />
+              <ByHandPanel h={data.humanTime} who={who} tool={openaiOnly || vendor === 'openai' ? 'Codex' : data.codexPresent && vendor === 'all' ? 'AI' : 'Claude Code'} />
             </div>
 
             {/* 6. The measured detail behind it */}

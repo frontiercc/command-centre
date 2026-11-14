@@ -400,6 +400,12 @@ export async function GET(request: NextRequest) {
     .orderBy(desc(csc.tier), desc(css.active_secs))
     .limit(1);
   const b = bestRows[0];
+  // A Codex session's actions and commits are in codex_actions, not Claude Code's telemetry.
+  if (b && b.session_id.startsWith('codex:')) {
+    const c = (await codexActionCounts(client, [b.session_id])).get(b.session_id);
+    b.actions = c?.tools ?? 0;
+    b.commits = c?.commits ?? 0;
+  }
   const bestSession = b
     ? {
         sessionId: b.session_id,

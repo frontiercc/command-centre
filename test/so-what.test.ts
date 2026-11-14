@@ -157,7 +157,7 @@ describe('a decided card', () => {
 
   it('compares the figures as they stood with the figures now', () => {
     const c = hireCard(team({ deep: 7, shallow: 3 }), 3, decision(), NOW);
-    expect(c.decided!.followUp!.sentence).toContain('Since then, 7 of 10 hand whole pieces of work over, against 4 of 10 on the day it was decided');
+    expect(c.decided!.followUp!.sentence).toContain('Since then, 7 of 10 do mostly multi-step work. It was 4 of 10 when you decided.');
   });
 
   it('answers only the question that was asked', () => {
@@ -187,7 +187,7 @@ describe('the follow-up sentence', () => {
 
   it('says plainly when nobody has moved', () => {
     const s = followUpSentence(figures(), figures());
-    expect(s).toContain('Nobody has moved across since then.');
+    expect(s).toContain('4 of 10 do mostly multi-step work, the same as then.');
     expect(s).toContain('ships the same as it did then');
   });
 
@@ -214,7 +214,7 @@ describe('the cards the page finds on its own', () => {
   it('prices a standard job in hours a month, from measured time on both sides', () => {
     const c = standardJobCard(job, undefined, NOW);
     expect(c.headline).toBe('Make new functionality a standard skill.');
-    expect(c.body.join(' ')).toContain('12 hand the job over whole and spend 40 minutes');
+    expect(c.body.join(' ')).toContain('The 12 who do it as multi-step work spend 40 minutes on it');
     expect(c.body.join(' ')).toContain('The other 28 spend 3 hours');
     expect(c.body.join(' ')).toContain('frees about 467 hours a month');
     expect(c.caption).toContain('Not an estimate');
@@ -222,7 +222,7 @@ describe('the cards the page finds on its own', () => {
   });
 
   it('says expand when the last wave got there quickly, and hold when it did not', () => {
-    expect(expandCard([wave], undefined, NOW)!.headline).toContain('Give Claude to the next wave');
+    expect(expandCard([wave], undefined, NOW)!.headline).toContain('Give AI coding to the next wave');
     expect(expandCard([{ ...wave, weeksToHalf: 20 }], undefined, NOW)!.headline).toContain('Hold the next wave');
   });
 
@@ -249,7 +249,7 @@ describe('the cards the page finds on its own', () => {
   it('names no one on the key-person card', () => {
     const c = keyPeopleCard({ department: 'Engineering', people: 10, holders: 2, share: 0.72 }, undefined, NOW);
     expect(c.headline).toBe('Spread what two people in Engineering know.');
-    expect(c.body.join(' ')).toContain('72% of the work handed over whole in this team of 10');
+    expect(c.body.join(' ')).toContain('72% of the multi-step work in this team of 10');
     expect(c.caption).toContain('named on the team');
   });
 
@@ -297,12 +297,12 @@ describe('the follow-up on a found card', () => {
 describe('the refusal reads properly', () => {
   it('agrees its verbs when only one person is in a group', () => {
     const g = team({ deep: 1 });
-    expect(refusalFor(g)).toContain('1 person hands whole pieces of work over');
-    expect(refusalFor(g)).not.toContain('person hand ');
+    expect(refusalFor(g)).toContain('1 person does mostly multi-step work');
+    expect(refusalFor(g)).not.toContain('person do mostly');
   });
 
   it('agrees them in the plural too', () => {
-    expect(refusalFor(team({ deep: 2 }))).toContain('2 people hand whole pieces of work over');
+    expect(refusalFor(team({ deep: 2 }))).toContain('2 people do mostly multi-step work');
     expect(refusalFor(team({ shallow: 1 }))).toContain('1 person does not');
   });
 });

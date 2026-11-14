@@ -20,6 +20,7 @@
 // model-written prose. A value that was not measured is null and the UI leaves
 // it out; it is never rendered as zero.
 import { and, desc, eq, gte, inArray, notInArray, sql } from 'drizzle-orm';
+import { personProductKey } from '@/lib/openai/sources';
 import { getTypedClient } from '@/lib/db/client';
 import { schema } from '@/lib/db/schema';
 import { messageVendor } from '@/lib/pulse/vendor-filter';
@@ -463,7 +464,8 @@ export async function buildFrontierView(
 
   // Best work: rank the window's sessions; person = top 1, dept = top N (one per person).
   const recent = allSessions.filter(s => s.occurredAt >= bestSince);
-  const tier3People = new Set(recent.filter(s => s.tier === 3).map(s => s.userId)).size;
+  // A person once for each product they used, so the All view is Claude's figure plus ChatGPT's.
+  const tier3People = new Set(recent.filter(s => s.tier === 3).map(s => personProductKey(s.userId, s.sessionId))).size;
 
   // Facts for every session any box might show.
   const candidateIds = new Set<string>([
@@ -513,7 +515,7 @@ export async function buildFrontierView(
       const peers = await peerSessions(dept);
       othersAtDepth = new Set(peers
         .filter(p => p.userId !== s.userId && p.taskType === s.taskType && p.tier >= s.tier)
-        .map(p => p.userId)).size;
+        .map(p => personProductKey(p.userId, p.sessionId))).size;
     }
     return {
       kind,

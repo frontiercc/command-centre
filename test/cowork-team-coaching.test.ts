@@ -33,6 +33,7 @@ function team(over: Partial<CoworkTeamFigures> = {}): CoworkTeamFigures {
     stuck: [],
     freed: null,
     producedNothing: null,
+    produced: [],
     repeated: [],
     newStarters: [],
     soloWork: [],
@@ -207,6 +208,16 @@ describe('a done action', () => {
     ];
     const p = buildCoworkCoachingPlan('Finance', figures(team()), two, NOW)!;
     expect(p.actions.find(x => x.key === 'learn_from')!.done!.sharedWith).toHaveLength(1);
+  });
+
+  it('judges it on the figures it was saved on, whatever view the plan is showing', () => {
+    // The plan shows one platform (0.9), but the action was saved across every platform (0.3 then, 0.4 now).
+    const view = figures(team({ deepShare: 0.9 }));
+    const everyPlatform = figures(team({ deepShare: 0.4 }));
+    const p = buildCoworkCoachingPlan('Finance', view, done(), NOW, everyPlatform)!;
+    const a = p.actions.find(x => x.key === 'learn_from')!;
+    expect(a.done!.now).toBe(0.4);
+    expect(a.done!.result).toBe('better');
   });
 
   it('moves an action the plan no longer suggests into what was done before', () => {

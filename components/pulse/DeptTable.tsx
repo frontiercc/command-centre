@@ -5,42 +5,20 @@
 
 import Link from 'next/link';
 import { Panel, T, Muted } from '@/components/precision/ui';
-import { orsLevel, readOrs } from '@/lib/pulse/metrics/ors-status';
 
 export interface DeptRow {
   department: string;
   member_count: number;
-  avg_dds: number | null;
-  avg_oti: number | null;
-  avg_ors: number | null;
+  /** The share of the department's judged tasks that were meaningful or frontier. Null when none were judged. */
+  deep_share: number | null;
+  tasks: number;
 }
 
 interface DeptTableProps {
   depts: DeptRow[];
 }
 
-function fmt(val: number | null, decimals = 2): string {
-  if (val === null) return '—';
-  return val.toFixed(decimals);
-}
-
-function ResilienceCell({ ors }: { ors: number | null }) {
-  if (ors === null) return <span className="text-[#8F8F8F]">—</span>;
-  // The same bands as the overview's headline (lib/pulse/metrics/ors-status.ts):
-  // only "Concentrated" is a warning; "Early stage" is amber without one.
-  const level = orsLevel(ors);
-  const concentrated = level === 'concentrated';
-  const early = level === 'early';
-  return (
-    <span
-      className={concentrated ? 'font-medium text-[#B54708]' : early ? 'text-[#B54708]' : 'text-[#0A0A0A]'}
-      title={concentrated || early ? readOrs(ors).status : undefined}
-    >
-      {ors.toFixed(2)}{concentrated && <><span aria-hidden="true"> ⚠️</span><span className="sr-only"> (concentration risk)</span></>}
-    </span>
-  );
-}
-
+/** Each department described by its work, never by a score. */
 export default function DeptTable({ depts }: DeptTableProps) {
   if (depts.length === 0) {
     return (
@@ -58,9 +36,8 @@ export default function DeptTable({ depts }: DeptTableProps) {
             <tr className={T.headRow}>
               <th scope="col" className={T.th}>Department</th>
               <th scope="col" className={T.thRight}>Members</th>
-              <th scope="col" className={T.thRight} title="Average delegation depth score">Delegation depth</th>
-              <th scope="col" className={T.thRight} title="Average output against baseline">More valuable work</th>
-              <th scope="col" className={T.thRight} title="Operational resilience score; amber below 0.70">Resilience</th>
+              <th scope="col" className={T.thRight}>Tasks judged</th>
+              <th scope="col" className={T.thRight} title="The share of the department's judged tasks that were meaningful or frontier">Meaningful or frontier</th>
               <th scope="col" className={T.th}><span className="sr-only">Open</span></th>
             </tr>
           </thead>
@@ -69,9 +46,8 @@ export default function DeptTable({ depts }: DeptTableProps) {
               <tr key={d.department} className={T.row}>
                 <td className={`${T.td} font-medium text-[#0A0A0A]`}>{d.department}</td>
                 <td className={`${T.tdRight} text-[#666666]`}>{d.member_count}</td>
-                <td className={T.tdRight}>{fmt(d.avg_dds)}</td>
-                <td className={T.tdRight}>{d.avg_oti !== null ? `${fmt(d.avg_oti)}×` : '—'}</td>
-                <td className={T.tdRight}><ResilienceCell ors={d.avg_ors} /></td>
+                <td className={`${T.tdRight} text-[#666666] tabular-nums`}>{d.tasks.toLocaleString('en-GB')}</td>
+                <td className={`${T.tdRight} tabular-nums`}>{d.deep_share === null ? 'Not judged' : `${Math.round(d.deep_share * 100)}%`}</td>
                 <td className={`${T.td} text-right`}>
                   <Link
                     href={`/pulse/dept?dept=${encodeURIComponent(d.department)}`}

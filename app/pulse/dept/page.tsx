@@ -18,9 +18,7 @@ import type { MyPeriod, PulsePeriod } from '@/lib/pulse/period-shape';
 import type { TierNames } from '@/lib/pulse/tier-names';
 import FrontierHero from '@/components/pulse/FrontierHero';
 import type { FrontierView } from '@/lib/pulse/frontier-view';
-import type { ToolUsed } from '@/components/pulse/MilestoneCards';
 import ConcentrationRisk from '@/components/pulse/ConcentrationRisk';
-import type { MemberRow } from '@/components/pulse/MemberTable';
 import GenerateBriefingButton from '@/components/pulse/GenerateBriefingButton';
 import CoachingPrompts, { type CoachingPromptItem } from '@/components/pulse/CoachingPrompts';
 import { PageBody, Toolbar, Notice, B, cx } from '@/components/precision/ui';
@@ -37,7 +35,6 @@ interface DeptData {
   tierNames?: TierNames | null;
   dept: string;
   members: Array<{ id: string; display_name: string | null; email: string }>;
-  memberMetrics: MemberRow[];
   metrics: {
     oti: number | null; dds: number | null; psr: number | null;
     ors: number | null; event_count: number;
@@ -49,16 +46,12 @@ interface DeptData {
     psr: number | null; ors: number | null;
     orsBreadth?: number | null; orsOverlap?: number | null; orsPropagation?: number | null;
   } | null;
-  journeyHeatmap: Array<{ week: number; tier: number; count: number }>;
   frontier: FrontierView | null;
   frontierAccess?: { canReview: boolean; canOpenUseCases: boolean };
-  toolsUsed: ToolUsed[];
   concentrationRisk: Array<{ user_id: string; display_name: string | null; sole_workflows: number }>;
   concentrationDetail: Array<{ user_id: string; display_name: string | null; task_types: string[] }>;
   skillConcentration?: Array<{ user_id: string; display_name: string | null; skills: string[] }>;
   deptBriefing: { body: string; suggestion: string | null; generated_at: number } | null;
-  coworkCostUsd?: number;
-  chatgptCostUsd?: number | null;
   chatgptUnpricedModels?: string[];
   coworkFrictionIndex?: number | null;
   openaiPresent?: boolean;
@@ -223,7 +216,7 @@ export default function DeptPickerPage() {
                   />
 
                   {drill && (
-                    <TaskList kind={drill} period={period} userId={null} who={who} onClose={() => setDrill(null)} names={names} />
+                    <TaskList kind={drill} period={period} userId={null} dept={selectedDept} who={who} onClose={() => setDrill(null)} names={names} vendor={vendor} tool={product === 'Claude and ChatGPT' ? 'AI' : product} />
                   )}
 
                   {/* 2. Best work this week */}
@@ -234,7 +227,7 @@ export default function DeptPickerPage() {
 
                   {/* 4 and 5: what the work took, and what came out of it */}
                   <div className="grid grid-cols-1 xl:grid-cols-2 gap-4">
-                    <ByHandPanel h={d.humanTime} who={who} />
+                    <ByHandPanel h={d.humanTime} who={who} tool={product === 'Claude and ChatGPT' ? 'AI' : product} />
                     <ProducedPanel q={q} who={who} period={period} uploads={d.docSessions ? { sessions: d.docSessions.sessions_with_uploads, files: d.docSessions.total_uploads } : null} />
                   </div>
 

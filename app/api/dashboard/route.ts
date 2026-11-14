@@ -5,8 +5,6 @@ import { NextRequest, NextResponse } from 'next/server';
 import { visibleVendor, visibleOpenAi } from '@/lib/sources/openai-visibility';
 import { errorResponse } from '@/lib/api/errors';
 import {
-  getActiveUsersThisWeek,
-  getActiveUsersLastWeek,
   getEventsLast24h,
   getOpenAlertCount,
   getOpenAlertsBySeverity,
@@ -88,8 +86,9 @@ export async function GET(request: NextRequest) {
     ] = await Promise.all([
       getCoworkActiveProjectCount(weekAgo),
       getCoworkProjectStats(weekAgo),
-      vendor === 'all' ? getActiveUsersThisWeek() : getActiveUsersForVendor(vendor, nowS),
-      vendor === 'all' ? getActiveUsersLastWeek() : getActiveUsersForVendor(vendor, weekAgo),
+      // All is Claude's people plus OpenAI's, so it adds up to the split shown beside it.
+      vendor === 'all' ? getActiveUsersByVendor(nowS).then(v => v.claude + v.openai) : getActiveUsersForVendor(vendor, nowS),
+      vendor === 'all' ? getActiveUsersByVendor(weekAgo).then(v => v.claude + v.openai) : getActiveUsersForVendor(vendor, weekAgo),
       getOpenAlertCount(),
       getOpenAlertsBySeverity(),
       getSecurityMetrics(),

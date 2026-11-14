@@ -180,10 +180,23 @@ describe('processOtlpLogs', () => {
   it('skill_activated for a known Anthropic-bundled skill auto-registers as published (source=anthropic, is_published=1)', async () => {
     await processOtlpLogs(
       makePayload('claude_code.skill_activated', { 'skill.name': 'docx' }));
-    const entry = (await sql.get("SELECT source, is_published FROM skill_library_entries WHERE name = 'docx'")) as any;
+    const entry = (await sql.get("SELECT source, is_published, description FROM skill_library_entries WHERE name = 'docx'")) as any;
     expect(entry).not.toBeNull();
     expect(entry.source).toBe('anthropic');
     expect(entry.is_published).toBe(1);
+    // Its built-in description arrives with it.
+    expect(entry.description).toContain('Word documents');
+  });
+
+  it("an Anthropic skill's built-in description fills an empty entry and never replaces an admin's own", async () => {
+    await sql.run("INSERT INTO skill_library_entries (name, type, surface, source, is_published, created_at, updated_at) VALUES ('internal-comms', 'skill', 'cowork', 'anthropic', 1, 1, 1)");
+    await sql.run("INSERT INTO skill_library_entries (name, type, surface, source, is_published, description, created_at, updated_at) VALUES ('xlsx', 'skill', 'cowork', 'anthropic', 1, 'Our own words', 1, 1)");
+    await processOtlpLogs(makePayload('claude_code.skill_activated', { 'skill.name': 'internal-comms' }));
+    await processOtlpLogs(makePayload('claude_code.skill_activated', { 'skill.name': 'xlsx' }));
+    const filled = (await sql.get("SELECT description FROM skill_library_entries WHERE name = 'internal-comms'")) as any;
+    expect(filled.description).toContain('internal communications');
+    const kept = (await sql.get("SELECT description FROM skill_library_entries WHERE name = 'xlsx'")) as any;
+    expect(kept.description).toBe('Our own words');
   });
 
   it('routes api_request with cost_usd and model', async () => {

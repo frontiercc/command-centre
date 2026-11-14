@@ -26,14 +26,20 @@
  * Null-not-zero throughout: a week with no measured sessions returns
  * `rate: null`, never 0 — "we measured nothing" and "nothing was produced"
  * are different claims.
+ *
+ * Claude Chat conversations count too, from what their replies made
+ * (chat_assistant_meta: an artifact or a generated file is something produced).
+ * A conversation with no reply on record is not measured and is left out, the
+ * same as an unaggregated Cowork session. A conversation starts at its first prompt.
  */
 
-import { and, gte, isNotNull, lt } from 'drizzle-orm';
+import { and, gte, isNotNull, lt, sql } from 'drizzle-orm';
 import { getTypedClient } from '@/lib/db/client';
 import { schema } from '@/lib/db/schema';
 import { weekStarts } from '@/lib/pulse/period';
 import { buildSessionTaskTypeMap, MECHANISM_TASK_TYPES } from '@/lib/finance/model-efficiency';
 import { outputRate } from './session-output';
+import type { Vendor } from '@/lib/dashboard/vendor';
 
 const WEEK_SECS = 7 * 24 * 60 * 60;
 
@@ -130,7 +136,7 @@ interface StatsRow {
  *
  * `nowS` is injectable so tests pin the window rather than racing the clock.
  */
-export async function buildSessionOutputRate(nowS: number = Math.floor(Date.now() / 1000)): Promise<SessionOutputRateReport> {
+export async function buildSessionOutputRate(nowS: number = Math.floor(Date.now() / 1000), vendor: Vendor = 'all'): Promise<SessionOutputRateReport> {
   // weekStarts(ts, n) yields n Monday-UTC starts ending with the week containing
   // ts; anchoring a week back gives the last COMPLETED weeks, never the partial
   // current one (same call shape as buildGovernanceRollup).
@@ -141,7 +147,9 @@ export async function buildSessionOutputRate(nowS: number = Math.floor(Date.now(
   const client = await getTypedClient();
   const css = schema.coworkSessionStats;
 
-  const rows = (await client
+  const exec = client as unknown as { execute: (q: unknown) => Promise<{ rows: unknown[] }> };
+  const withClaude = vendor !== 'openai';
+  const rows = !withClaude ? [] as StatsRow[] : (await client
     .select({ session_id: css.session_id, first_event_at: css.first_event_at, produced_output: css.produced_output })
     .from(css)
     .where(and(
@@ -150,6 +158,36 @@ export async function buildSessionOutputRate(nowS: number = Math.floor(Date.now(
       gte(css.first_event_at, windowStart),
       lt(css.first_event_at, windowEnd),
     ))) as StatsRow[];
+
+  // ChatGPT: one row per conversation started in the window; a reply OpenAI lists files on made
+  // something. Replies stored before the count was kept are not measured and are left out.
+  if (vendor !== 'claude') {
+    const gptRows = (await exec.execute(sql`
+      SELECT g.session_id, g.first_at AS first_event_at,
+             (SELECT CASE WHEN COUNT(r.files_count) = 0 THEN NULL
+                          WHEN SUM(r.files_count) > 0 THEN 1 ELSE 0 END
+              FROM openai_replies r WHERE r.session_id = g.session_id) AS produced_output
+      FROM chatgpt_session_time g
+      WHERE g.first_at >= ${windowStart} AND g.first_at < ${windowEnd}
+    `)).rows as StatsRow[];
+    for (const r of gptRows) if (r.produced_output !== null) rows.push(r);
+  }
+
+  // Claude Chat: one row per conversation started in the window, produced from its replies.
+  const chatRows = !withClaude ? [] as StatsRow[] : (await exec.execute(sql`
+    SELECT c.session_id, c.first_at AS first_event_at,
+           (SELECT CASE WHEN COUNT(*) = 0 THEN NULL
+                        WHEN SUM(m.artifacts_count + m.generated_files_count) > 0 THEN 1 ELSE 0 END
+            FROM chat_assistant_meta m WHERE m.conversation_id = c.session_id) AS produced_output
+    FROM (
+      SELECT cm.session_id, MIN(cm.occurred_at) AS first_at
+      FROM cowork_messages cm
+      WHERE cm.surface = 'chat' AND cm.message_type = 'cowork_user_message' AND cm.session_id IS NOT NULL
+      GROUP BY cm.session_id
+      HAVING MIN(cm.occurred_at) >= ${windowStart} AND MIN(cm.occurred_at) < ${windowEnd}
+    ) c
+  `)).rows as StatsRow[];
+  for (const r of chatRows) if (r.produced_output !== null) rows.push(r);
 
   // Seed every window week so an empty week renders as a measured gap rather
   // than vanishing from the series.

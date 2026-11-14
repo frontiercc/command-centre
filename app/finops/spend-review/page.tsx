@@ -90,7 +90,7 @@ function EfficiencyBoard({ boards, period }: { boards: Board[]; period: string }
     >
       {earlier && (
         <div className="px-4 pt-3">
-          <Notice tone="warn">
+          <Notice tone="info">
             Showing {monthLabel(boardPeriod)}: nobody has 10 sessions{vendorWork} in {monthLabel(period)} yet, which the comparison needs to be fair. The board switches to {monthLabel(period)} once enough work is in, usually within the first week.
           </Notice>
         </div>

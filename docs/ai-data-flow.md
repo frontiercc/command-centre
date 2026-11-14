@@ -146,7 +146,7 @@ For Claude Cowork sessions and Claude Chat and ChatGPT conversations that the fr
 
 ### Human time estimates
 
-For each Tier 2 or 3 Claude Cowork session or ChatGPT conversation in the last 30 days that has measured active time, a separate call estimates how long the same result would take by hand. A ChatGPT conversation's time is measured from the times of its prompts and replies; OpenAI's Compliance API names no output files, so none are sent for it. It carries up to eight masked prompts of 600 characters, up to ten names of files the session produced (file names only, masked, never content), the session's connector names, the person's department name and the kind of work. The reply must be three whole numbers of minutes in order; anything else is refused, with one repair attempt and three attempts in all. Only the three numbers are stored, always presented as estimates beside the measured time of the session or conversation.
+For each Tier 2 or 3 Claude Cowork session or ChatGPT conversation in the last 30 days that has measured active time, a separate call estimates how long the same result would take by hand. A ChatGPT conversation's time is measured from the times of its prompts and replies; no file names are sent for it. It carries up to eight masked prompts of 600 characters, up to ten names of files the session produced (file names only, masked, never content), the session's connector names, the person's department name and the kind of work. The reply must be three whole numbers of minutes in order; anything else is refused, with one repair attempt and three attempts in all. Only the three numbers are stored, always presented as estimates beside the measured time of the session or conversation.
 
 ### Briefings
 
@@ -231,7 +231,7 @@ The sync runs about every five minutes and reads four logs: ChatGPT conversation
 What it stores:
 
 - ChatGPT Chat and ChatGPT Work prompts, beside Claude Cowork prompts, and Codex prompts, beside Claude Code prompts: the first 4,000 characters and a 250-character preview, with the names of files attached in ChatGPT. They go through the same personal-data and intent detection as other prompts.
-- For each ChatGPT reply, its model and time. Never its text.
+- For each ChatGPT reply, its model, its time, and how many files the export lists on it and their names (names only, never a folder, with personal data masked). Never its text or the files' contents.
 - The names of the skills ChatGPT used and of the connectors called through Codex and ChatGPT Work.
 - For each Codex turn, the model, token counts and OpenAI's own cost figures.
 - For each Codex tool call, the tool name, whether it failed and whether it was a `git commit`. The command is read only to spot a commit and is never stored.

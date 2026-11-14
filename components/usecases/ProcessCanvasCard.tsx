@@ -150,6 +150,10 @@ export default function ProcessCanvasCard({
             <p className="m-0 text-[14px] leading-6 text-[#333333] max-w-[66ch]">{canvas.story}</p>
           )}
 
+          {!canvas && suggestion.description && (
+            <p className="m-0 text-[14px] leading-6 text-[#333333] max-w-[66ch]">{suggestion.description}</p>
+          )}
+
           {canvas && (
             <div>
               <SubHead>The opportunity</SubHead>

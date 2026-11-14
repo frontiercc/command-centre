@@ -19,6 +19,7 @@ import {
   type DepthWindow,
 } from '@/components/pulse/DepthChart';
 import { PERIOD_SHAPE, type MyPeriod, type PulsePeriod } from '@/lib/pulse/period-shape';
+import type { Vendor } from '@/lib/dashboard/vendor';
 import { deepWords, DeepWords, tierList, tierNamesOr, type TierNames } from '@/lib/pulse/tier-names';
 
 const words = (v: number) => (v < 0.15 ? `${Math.round(v * 100)}%` : shareWords(v));
@@ -141,7 +142,7 @@ export function WorkPanel({ q, product, who, period, onPeriod, onDrill, drill, r
   );
 }
 
-/* ── By hand vs with Claude ───────────────────────────────────── */
+/* ── By hand vs with the AI that was counted ──────────────────── */
 
 export interface ByHand {
   windowDays: number;
@@ -153,7 +154,11 @@ export interface ByHand {
   check?: { period: string; reviewed: number; aboutRight: number } | null;
 }
 
-export function ByHandPanel({ h, who, onSeeSessions }: { h: ByHand | null | undefined; who: Who; onSeeSessions?: () => void }) {
+/**
+ * `tool` names what the "with" side counts, so the title is never wrong: Claude, ChatGPT or AI on
+ * Work Pulse, Claude Code, Codex or AI on Developer Pulse. Claude when not given.
+ */
+export function ByHandPanel({ h, who, onSeeSessions, tool = 'Claude' }: { h: ByHand | null | undefined; who: Who; onSeeSessions?: () => void; tool?: string }) {
   if (!h || h.sessions === 0) return null;
   const whose = who.you ? 'your work' : `${who.name}'s work`;
   const longer = h.ratio === null ? null
@@ -163,17 +168,17 @@ export function ByHandPanel({ h, who, onSeeSessions }: { h: ByHand | null | unde
   const kinds = [...h.byKind].sort((a, b) => b.humanMinutes - a.humanMinutes).slice(0, 4);
   return (
     <Frame
-      title="By hand vs with Claude"
+      title={`By hand vs with ${tool}`}
       tag="AI estimate"
       period={`Last ${h.windowDays} days`}
-      answer={<>By hand, {whose} would have taken about <b>{hours(h.humanMinutes.likely)} hours</b>, against <b>{hours(h.claudeMinutes)} hours</b> with Claude{longer ? <>, {longer}</> : null}.</>}
+      answer={<>By hand, {whose} would have taken about <b>{hours(h.humanMinutes.likely)} hours</b>, against <b>{hours(h.claudeMinutes)} hours</b> with {tool}{longer ? <>, {longer}</> : null}.</>}
       note={<>
-        {plural(h.sessions, 'session', 'sessions')} with an estimate. The by-hand figure is Claude&apos;s estimate per session (range {hours(h.humanMinutes.low)} to {hours(h.humanMinutes.high)} hours); the Claude figure is measured active time.
+        {plural(h.sessions, 'session', 'sessions')} with an estimate. The by-hand figure is Claude&apos;s estimate per session (range {hours(h.humanMinutes.low)} to {hours(h.humanMinutes.high)} hours); the time with {tool} is measured active time.
         {h.check ? ` Spot-checked in ${h.check.period}: ${h.check.aboutRight} of ${h.check.reviewed} about right.` : ' The estimates have not been spot-checked yet.'}
         {onSeeSessions ? <> <button type="button" onClick={onSeeSessions} className={linkCls}>See the sessions</button></> : null}
       </>}
     >
-      {[['With Claude', h.claudeMinutes, false] as const, ['By hand (estimate)', h.humanMinutes.likely, true] as const].map(([l, m, est]) => (
+      {[[`With ${tool}`, h.claudeMinutes, false] as const, ['By hand (estimate)', h.humanMinutes.likely, true] as const].map(([l, m, est]) => (
         <div key={l} className="grid grid-cols-[minmax(0,130px)_minmax(0,1fr)_64px] gap-2.5 items-center py-[3px] text-[13px]">
           <span className="text-[#333333]">{l}</span>
           <Track value={m / Math.max(h.claudeMinutes, h.humanMinutes.likely, 1)} striped={est} />
@@ -187,7 +192,7 @@ export function ByHandPanel({ h, who, onSeeSessions }: { h: ByHand | null | unde
             <div key={k.kind} className="flex items-center gap-2.5 py-1 text-[13px]">
               <span className="min-w-0 truncate text-[#333333]">{cap(k.kind.replace(/_/g, ' '))}</span>
               <span className="text-[#8F8F8F] whitespace-nowrap">{plural(k.sessions, 'session', 'sessions')}</span>
-              <span className="ml-auto text-[#333333] whitespace-nowrap tabular-nums">≈{hours(k.humanMinutes)} h by hand · {hours(k.claudeMinutes)} h with Claude</span>
+              <span className="ml-auto text-[#333333] whitespace-nowrap tabular-nums">≈{hours(k.humanMinutes)} h by hand · {hours(k.claudeMinutes)} h with {tool}</span>
             </div>
           ))}
         </div>
@@ -202,22 +207,31 @@ interface TaskRow {
   sessionId?: string; at: number; tier?: number; taskType?: string; text?: string | null;
   description?: string | null; outputs?: string | null; title?: string; status?: string;
   humanMinutes?: number; claudeMinutes?: number;
+  /** Whose it is, on a department's list. */
+  name?: string | null;
 }
 
-export function TaskList({ kind, period, userId, who, onClose, names }: {
+export function TaskList({ kind, period, userId, who, onClose, names, vendor = 'all', dept, tool = 'Claude' }: {
   kind: DrillKind; period: PulsePeriod; userId: string | null; who: Who; onClose: () => void; names?: TierNames;
+  /** A department's work instead of one person's: every member's, each row naming whose. */
+  dept?: string;
+  /** What the "with" side of a by-hand estimate counts, as ByHandPanel says it. */
+  tool?: string;
+  /** The page's All / Claude / ChatGPT view, so the list is the same sessions as the panel above it. */
+  vendor?: Vendor;
 }) {
   const [rows, setRows] = useState<TaskRow[] | null>(null);
   const [visible, setVisible] = useState(true);
   useEffect(() => {
     setRows(null);
-    const qs = new URLSearchParams({ kind, period });
-    if (userId) qs.set('userId', userId);
+    const qs = new URLSearchParams({ kind, period, vendor });
+    if (dept) qs.set('dept', dept);
+    else if (userId) qs.set('userId', userId);
     fetch(`/api/pulse/me/tasks?${qs}`)
       .then(r => (r.ok ? r.json() : { items: [], textVisible: false }))
       .then(d => { setRows(d.items ?? []); setVisible(!!d.textVisible); })
       .catch(() => setRows([]));
-  }, [kind, period, userId]);
+  }, [kind, period, userId, vendor, dept]);
   const tiers = tierList(names);
   const title = kind === 'capabilities' ? 'New ways of working'
     : kind === 'humantime' ? 'Sessions with a by-hand estimate'
@@ -234,12 +248,13 @@ export function TaskList({ kind, period, userId, who, onClose, names }: {
         <div key={`${r.sessionId ?? r.title}-${i}`} className="py-2 border-b border-[#F2F2F2] last:border-b-0">
           <p className="m-0 flex items-baseline gap-2 flex-wrap text-[13px]">
             <span className="text-[#8F8F8F] tabular-nums w-[52px] shrink-0">{dateOf(r.at)}</span>
+            {r.name && <span className="font-medium text-[#0A0A0A]">{r.name}</span>}
             {r.tier !== undefined && <span className="font-semibold text-[#0A0A0A]">{tiers[r.tier - 1] ?? `Tier ${r.tier}`}</span>}
             {r.taskType && <span className="text-[#666666]">{cap(r.taskType.replace(/_/g, ' '))}</span>}
             {r.title && <span className="font-semibold text-[#0A0A0A]">{r.title}</span>}
             {r.status && <span className="text-[#666666]">{r.status === 'confirmed' ? 'confirmed' : 'waiting for review'}</span>}
             {r.humanMinutes !== undefined && (
-              <span className="text-[#666666]">≈ {hours(r.humanMinutes)} h by hand against {hours(r.claudeMinutes ?? 0)} h with Claude</span>
+              <span className="text-[#666666]">≈ {hours(r.humanMinutes)} h by hand against {hours(r.claudeMinutes ?? 0)} h with {tool}</span>
             )}
           </p>
           {(r.description || r.text) && (

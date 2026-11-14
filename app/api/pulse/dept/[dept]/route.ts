@@ -16,7 +16,7 @@
 // Postgres).
 import { NextRequest, NextResponse } from 'next/server';
 import { visibleVendor, visibleOpenAi } from '@/lib/sources/openai-visibility';
-import { and, desc, eq, gte, inArray, isNotNull, lt, lte, notInArray, sql } from 'drizzle-orm';
+import { and, desc, eq, gte, inArray, isNotNull, lt, lte, sql } from 'drizzle-orm';
 import { getAdminSession, isDeptScoped, canAccessCoworkPulse, canAccessPulseAdmin } from '@/lib/auth/admin-auth';
 import { buildMyPeriod, type MyPeriod, type PulsePeriod } from '@/lib/pulse/my-period';
 import { getTierNames } from '@/lib/pulse/tier-config';
@@ -28,8 +28,7 @@ import { getTypedClient } from '@/lib/db/client';
 import { schema } from '@/lib/db/schema';
 import { getDocSessions } from '@/lib/pulse/cowork/doc-sessions';
 import { hasOpenAiData } from '@/lib/dashboard/queries';
-import { messageVendor, skillVendor, connectorVendor } from '@/lib/pulse/vendor-filter';
-import { getCoworkCostUsd } from '@/lib/pulse/aggregator';
+import { messageVendor, skillVendor } from '@/lib/pulse/vendor-filter';
 import { weekStart, weekStarts } from '@/lib/pulse/period';
 import {
   buildDepthSegments, buildBandSegments, buildThenVsNow, countDataWeeks, countLatestSegmentDataWeeks,
@@ -77,7 +76,6 @@ export async function GET(
   }
   const client = await getTypedClient();
   const now = Math.floor(Date.now() / 1000);
-  const sixWeeksAgo = now - 42 * 24 * 3600;
   const twoWeeksAgo = now - 14 * 24 * 3600;
 
   const u = schema.users;
@@ -92,7 +90,6 @@ export async function GET(
   const pc = schema.pulseClassifications;
   const cm = schema.coworkMessages;
   const csi = schema.coworkSkillInvocations;
-  const cmi = schema.coworkMcpInvocations;
   const pb = schema.pulseBriefings;
 
   // Department members
@@ -127,14 +124,11 @@ export async function GET(
     return NextResponse.json({
       dept,
       members: [],
-      memberMetrics: [],
       metrics: null,
-      journeyHeatmap: [],
       concentrationRisk: [],
       concentrationDetail: [],
       skillConcentration: [],
       frontier: null,
-      toolsUsed: [],
     });
   }
 
@@ -242,27 +236,6 @@ export async function GET(
     dds: numOrNull(r.dds), oti: numOrNull(r.oti), last_active: numOrNull(r.last_active),
   })));
 
-  // 6-week journey heatmap (aggregated across all dept members)
-  // Use cowork_messages.occurred_at (when the work happened) not classified_at
-  const classifications = await client
-    .select({ tier: pc.tier, occurred_at: cm.occurred_at })
-    .from(pc)
-    .innerJoin(cm, eq(cm.id, pc.cowork_message_id))
-    .where(and(inArray(pc.user_id, memberIds), eq(pc.classifier_status, 'classified'), gte(cm.occurred_at, sixWeeksAgo), messageVendor(vendor)))
-    .orderBy(cm.occurred_at);
-
-  const heatmapMap = new Map<string, number>();
-  for (const row of classifications) {
-    const weekIndex = Math.min(5, Math.floor((now - row.occurred_at) / (7 * 24 * 3600)));
-    const displayWeek = weekIndex; // Wk 1 = most recent, Wk 6 = oldest
-    const key = `${displayWeek}-${row.tier}`;
-    heatmapMap.set(key, (heatmapMap.get(key) ?? 0) + 1);
-  }
-  const journeyHeatmap = Array.from(heatmapMap.entries()).map(([key, count]) => {
-    const [week, tier] = key.split('-').map(Number);
-    return { week, tier, count };
-  });
-
   // Concentration risk: Tier 3 task types run by only one member in past 2 weeks
   const tier3ByType = await client
     .select({ user_id: pc.user_id, task_type: pc.task_type, cnt: sql<number | string>`COUNT(*)` })
@@ -348,32 +321,6 @@ export async function GET(
     });
   }
 
-  // Tools used — skills and connectors across dept members in last 7 days
-  const sevenDaysAgoTools = now - 7 * 24 * 3600;
-  const deptSkillsRows = await client
-    .select({ name: csi.skill_name, cnt: sql<number | string>`COUNT(*)` })
-    .from(csi)
-    .where(and(inArray(csi.user_id, memberIds), gte(csi.occurred_at, sevenDaysAgoTools), skillVendor(vendor)))
-    .groupBy(csi.skill_name);
-  const deptSkills = deptSkillsRows.map(r => ({ name: r.name, cnt: Number(r.cnt) }));
-
-  const deptConnectorsRows = await client
-    .select({ name: cmi.mcp_server, cnt: sql<number | string>`COUNT(*)` })
-    .from(cmi)
-    .where(and(
-      inArray(cmi.user_id, memberIds),
-      gte(cmi.occurred_at, sevenDaysAgoTools),
-      notInArray(cmi.mcp_server, ['workspace', 'cowork']),
-      connectorVendor(vendor),
-    ))
-    .groupBy(cmi.mcp_server);
-  const deptConnectors = deptConnectorsRows.map(r => ({ name: r.name, cnt: Number(r.cnt) }));
-
-  const deptToolsUsed = [
-    ...deptSkills.map(r => ({ name: r.name, type: 'skill' as const, count: r.cnt })),
-    ...deptConnectors.map(r => ({ name: r.name, type: 'connector' as const, count: r.cnt })),
-  ].sort((a, b) => b.count - a.count);
-
   // Frontier boxes + feed. Own try/catch so a failure hides
   // the boxes, not the page.
   let frontier = null;
@@ -397,27 +344,8 @@ export async function GET(
   // Document-upload sessions for dept members (30 days), Claude Cowork and ChatGPT alike.
   const docSessions = await getDocSessions({ since: thirtyDaysAgo, memberIds, vendor });
 
-  // OTel cowork enrichments — sum cost and aggregate friction across dept members
   const sevenDaysAgoOtel = now - 7 * 24 * 3600;
-  let deptCoworkCostUsd = 0;
   const openaiPresent = await visibleOpenAi(hasOpenAiData());
-  let deptFailedTools = 0;
-  let deptTotalTools = 0;
-  for (const memberId of memberIds) {
-    deptCoworkCostUsd += await getCoworkCostUsd(memberId, sevenDaysAgoOtel, now);
-    const fiRows = await client
-      .select({
-        failed_tools: sql<number | string>`COUNT(*) FILTER (WHERE ${cm.tool_success} = 0)`,
-        total_tools: sql<number | string>`COUNT(*) FILTER (WHERE ${cm.message_type} = 'cowork_tool_metadata')`,
-      })
-      .from(cm)
-      .where(and(eq(cm.user_id, memberId), gte(cm.occurred_at, sevenDaysAgoOtel), lte(cm.occurred_at, now)));
-    deptFailedTools += Number(fiRows[0]?.failed_tools ?? 0);
-    deptTotalTools += Number(fiRows[0]?.total_tools ?? 0);
-  }
-  const deptCoworkFrictionIndex = deptTotalTools > 0
-    ? deptFailedTools / deptTotalTools
-    : null;
 
   // ── Delegation view ───────────────────────────────────────────────────────
   const weeksParamRaw = Number(request.nextUrl.searchParams.get('weeks'));
@@ -564,26 +492,19 @@ export async function GET(
     tierNames: await getTierNames(),
     dept,
     members,
-    memberMetrics,
     metrics: metrics ?? null,
     priorMetrics: priorMetrics ?? null,
     teamMetrics: {
       psr: deptPsr, ors: deptOrs,
       orsBreadth: deptOrsBreadth, orsOverlap: deptOrsOverlap, orsPropagation: deptOrsPropagation,
     },
-    journeyHeatmap,
     concentrationRisk,
     concentrationDetail,
     skillConcentration,
     frontier,
     frontierAccess: { canReview: session.role === 'admin', canOpenUseCases: canAccessPulseAdmin(session.role) },
-    toolsUsed: deptToolsUsed,
     deptBriefing: deptBriefing ?? null,
-    // Claude Cowork only (no ChatGPT spend or tool calls are recorded): absent in the OpenAI view.
-    coworkCostUsd: vendor === 'openai' ? undefined : deptCoworkCostUsd,
-    chatgptCostUsd: deptChatgpt === undefined ? undefined : deptChatgpt?.usd ?? null,
     chatgptUnpricedModels: deptChatgpt?.unpricedModels ?? [],
-    coworkFrictionIndex: vendor === 'openai' ? undefined : deptCoworkFrictionIndex,
     vendor,
     openaiPresent,
     docSessions,

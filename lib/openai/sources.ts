@@ -22,3 +22,13 @@ export const OPENAI_USER_SOURCE = 'openai';
 export function isOpenAiSource(source: string | null | undefined): source is OpenAiSource {
   return !!source && (OPENAI_SOURCES as readonly string[]).includes(source);
 }
+
+/**
+ * A person counted once for each vendor they used, read from a session id: the OpenAI sync's
+ * sessions start 'chatgpt:' or 'codex:'. Counting these keys makes an All-view people figure
+ * Claude's plus OpenAI's (the same rule as personPerProduct in lib/dashboard/product-sql.ts).
+ */
+export function personProductKey(userId: string, sessionId: string | null | undefined): string {
+  const openai = !!sessionId && (sessionId.startsWith('chatgpt:') || sessionId.startsWith('codex:'));
+  return `${userId}:${openai ? 'openai' : 'claude'}`;
+}

@@ -23,3 +23,21 @@ export function coachingScope(
   if (!own) return { error: 'Your account has no department, so there is no team to coach. An admin can set it.' };
   return { teams: [own], department: own };
 }
+
+/** The name So What files a card about the whole organisation under, rather than one team. */
+export const EVERYONE = 'Everyone';
+
+/**
+ * Whether a caller may take a So What decision for `department`: an admin for any team and for the
+ * cards about the whole organisation (EVERYONE), a manager only for their own team. Returns the
+ * reason when they may not.
+ */
+export function decisionScope(
+  session: { role?: UserRole; department?: string | null },
+  allTeams: string[],
+  department: string,
+): { ok: true } | { error: string } {
+  const scope = coachingScope(session, [...allTeams, EVERYONE], department);
+  if ('error' in scope) return scope;
+  return scope.department === department ? { ok: true } : { error: 'You can only decide for your own team.' };
+}

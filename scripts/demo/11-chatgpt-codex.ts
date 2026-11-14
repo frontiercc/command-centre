@@ -65,6 +65,33 @@ function tierAt(at: number, startS: number, nowS: number): number {
   const nowMs = Date.now();
   const nowS = Math.floor(nowMs / 1000);
   const startS = nowS - DAYS * 86400;
+  // The generator's ids depend on the day it runs, so a load on another day cannot recognise an
+  // earlier one and would add a second copy. Clear the sample's own ChatGPT and Codex rows first:
+  // only the sample's people (@acmecorp.example), only ChatGPT and Codex.
+  {
+    const c0 = await getTypedClient();
+    const x = c0 as unknown as { execute: (q: unknown) => Promise<{ rowCount?: number | null }> };
+    const people = sql`(SELECT id FROM users WHERE email LIKE '%@acmecorp.example')`;
+    const openai = sql`('chatgpt_chat', 'chatgpt_work', 'codex')`;
+    const msgs = sql`(SELECT id FROM cowork_messages WHERE source IN ${openai} AND user_id IN ${people})`;
+    for (const t of ['pulse_classifications', 'pulse_events', 'pulse_skill_runs']) {
+      await x.execute(sql`DELETE FROM ${sql.raw(t)} WHERE cowork_message_id IN ${msgs}`);
+    }
+    const cleared = await x.execute(sql`DELETE FROM cowork_messages WHERE source IN ${openai} AND user_id IN ${people}`);
+    await x.execute(sql`DELETE FROM cowork_skill_invocations WHERE source IN ${openai} AND user_id IN ${people}`);
+    await x.execute(sql`DELETE FROM cowork_mcp_invocations WHERE source IN ${openai} AND user_id IN ${people}`);
+    for (const t of ['openai_replies', 'chatgpt_session_time', 'codex_actions', 'codex_turns']) {
+      await x.execute(sql`DELETE FROM ${sql.raw(t)} WHERE user_id IN ${people}`);
+    }
+    // Spend: the sample's people, and the stand-in's one Workspace Agent row, which has no person.
+    await x.execute(sql`DELETE FROM openai_costs WHERE user_id IN ${people} OR (user_id IS NULL AND product = 'workspace_agents')`);
+    await x.execute(sql`DELETE FROM cowork_sessions WHERE id LIKE 'chatgpt:%' AND user_id IN ${people}`);
+    await x.execute(sql`DELETE FROM code_session_classifications WHERE session_id LIKE 'codex:%' AND user_id IN ${people}`);
+    await x.execute(sql`DELETE FROM code_session_stats WHERE session_id LIKE 'codex:%' AND user_id IN ${people}`);
+    await x.execute(sql`DELETE FROM use_case_week_matches WHERE (session_id LIKE 'chatgpt:%' OR session_id LIKE 'codex:%') AND user_id IN ${people}`);
+    console.log(`Cleared ${cleared.rowCount ?? 0} earlier ChatGPT and Codex sample prompts.`);
+  }
+
   const { events } = buildEvents({ nowMs, days: DAYS, horizonHours: 0 });
   // Files in the order the export would list them, oldest first.
   const files = (buildFiles(events) as Array<{ endMs: number; body: string }>)
@@ -74,6 +101,29 @@ function tierAt(at: number, startS: number, nowS: number): number {
   const stats = await importOpenAiFiles(files, nowS);
   const prompts = Object.values(stats.prompts as Record<string, number>).reduce((a, b) => a + b, 0);
   console.log(`${files.length} export files, ${prompts} ChatGPT and Codex prompts.`);
+
+  // How many files each ChatGPT reply lists, for replies loaded before the sync kept the count:
+  // the import skips a reply it already has, so those stay blank otherwise. The generator's ids are
+  // fixed, so its replies are the stored ones; a reply with no files field made none, as the sync reads it.
+  const replyFiles = new Map<string, number>();
+  for (const e of events as Array<{ eventType: string; record: { message?: { id?: string; author?: { type?: string }; files?: unknown[] } } }>) {
+    const m = e.record?.message;
+    if (e.eventType !== 'CONVERSATION_MESSAGE' || m?.author?.type !== 'assistant' || !m.id) continue;
+    replyFiles.set(`chatgpt-reply:${m.id}`, Array.isArray(m.files) ? m.files.length : 0);
+  }
+  const client0 = await getTypedClient();
+  const raw0 = client0 as unknown as { execute: (q: unknown) => Promise<{ rows: unknown[]; rowCount?: number | null }> };
+  const entries = [...replyFiles.entries()];
+  let filled = 0;
+  for (let i = 0; i < entries.length; i += 1000) {
+    const part = entries.slice(i, i + 1000);
+    const res = await raw0.execute(sql`
+      UPDATE openai_replies r SET files_count = v.n
+        FROM (VALUES ${sql.join(part.map(([id, n]) => sql`(${id}, ${n}::int)`), sql`, `)}) AS v(id, n)
+       WHERE r.id = v.id AND r.files_count IS NULL`);
+    filled += res.rowCount ?? 0;
+  }
+  console.log(`${filled} ChatGPT replies given their file count.`);
 
   // ChatGPT conversation times (each rollup covers the 30 days before the time given).
   let times = 0;

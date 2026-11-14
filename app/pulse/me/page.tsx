@@ -45,9 +45,7 @@ interface PersonalPulseData {
   } | null;
   frontier: FrontierView | null;
   frontierAccess?: { canReview: boolean; canOpenUseCases: boolean };
-  journeyGrid: Array<{ week: number; tier: number; count: number }>;
   weeklyPulse: { body: string; suggestion: string | null; generated_at: number } | null;
-  skillExchange: Array<{ skill_name: string; description: string | null; author_user_id: string | null; run_count: number }>;
   teamId: string | null;
   capabilitiesDetail: {
     count: number;
@@ -55,11 +53,8 @@ interface PersonalPulseData {
     pending: Array<{ id: number; title: string; body: string | null; tier: number | null; detected_at: number }>;
   } | null;
   teamMetrics: { ors: number | null } | null;
-  coworkCostUsd?: number;
-  chatgptCostUsd?: number | null;
   chatgptUnpricedModels?: string[];
   coworkFrictionIndex?: number | null;
-  topNativeTools?: Array<{ tool_name: string; usage_count: number }>;
   otiUnderReview?: boolean;
   openaiPresent?: boolean;
 }
@@ -177,7 +172,7 @@ export default function PersonalPulsePage() {
 
             {/* The work behind whichever figure was clicked */}
             {drill && (
-              <TaskList kind={drill} period={period} userId={viewingUserId} who={who} onClose={() => setDrill(null)} names={data.tierNames ?? undefined} />
+              <TaskList kind={drill} period={period} userId={viewingUserId} who={who} onClose={() => setDrill(null)} names={data.tierNames ?? undefined} vendor={vendor} tool={product === 'Claude and ChatGPT' ? 'AI' : product} />
             )}
 
             {/* 2. Best work this week, with what it actually was */}
@@ -187,7 +182,7 @@ export default function PersonalPulsePage() {
             <DeeperPanel q={q} who={who} names={data.tierNames ?? undefined} />
 
             {/* 4. By hand vs with Claude */}
-            <ByHandPanel h={data.humanTime} who={who} onSeeSessions={() => setDrill('humantime')} />
+            <ByHandPanel h={data.humanTime} who={who} onSeeSessions={() => setDrill('humantime')} tool={product === 'Claude and ChatGPT' ? 'AI' : product} />
 
             {/* 4 and 5 */}
             <div className="grid grid-cols-1 xl:grid-cols-2 gap-4 items-start">

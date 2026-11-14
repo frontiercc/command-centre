@@ -10,9 +10,13 @@
  * monitored record's. Windows are the last 30 whole days against the 30 before, counted on when the
  * prompt happened, which is what the rest of Work Pulse counts on.
  *
- * The unit is the prompt, not the session, because that is what the Cowork classifier judges. Where
- * a figure is about a whole session (what it freed, whether anything came out of it) the session
- * stats are read on their own, so one long session is not counted once per prompt.
+ * The unit is the prompt, not the session, because that is what the Work Pulse classifier judges.
+ * Where a figure is about a whole session (what it freed, whether anything came out of it) the
+ * sessions are read on their own, so one long session is not counted once per prompt.
+ *
+ * Every platform Work Pulse covers is read: Claude Cowork, Claude in Office/Google, Claude Chat and
+ * ChatGPT, narrowed by the All / Claude / ChatGPT switch. Sessions come from
+ * lib/pulse/cowork/work-sessions.ts, so a platform is never counted two ways.
  */
 import { sql, type SQL } from 'drizzle-orm';
 import { getTypedClient } from '@/lib/db/client';
@@ -20,6 +24,11 @@ import { getTierNames } from '@/lib/pulse/tier-config';
 import { MECHANISM_TASK_TYPES } from '@/lib/finance/model-efficiency';
 import { getConfigValue } from '@/lib/config';
 import { kindLabel } from '@/lib/pulse/cowork/coaching-words';
+import { vendorClause } from '@/lib/dashboard/product-sql';
+import { isWorkPulseSurface } from '@/lib/pulse/work-surfaces';
+import { skillVendor } from '@/lib/pulse/vendor-filter';
+import { readSessionsPerPerson, readWorkSessions, type WorkPlatform } from '@/lib/pulse/cowork/work-sessions';
+import type { Vendor } from '@/lib/dashboard/vendor';
 import type { TierNames } from '@/lib/pulse/tier-names';
 
 const DAY = 86400;
@@ -44,6 +53,8 @@ export const NEW_STARTER_DAYS = 42;
 export const OUTPUT_MIN_SESSIONS = 5;
 /** At or above this share of sessions producing nothing, there is something to say. */
 export const PRODUCED_NOTHING_SHARE = 0.6;
+/** At most this many produced sessions are listed per team, newest first. */
+export const PRODUCED_LIST_MAX = 200;
 /** At most this many people are named as ones to learn from, per team. */
 export const CHAMPIONS_PER_TEAM = 3;
 /** A team this far below the organisation, as a share, is behind it. */
@@ -73,6 +84,9 @@ export interface CoworkTeamFigures {
   freed: { sessions: number; byHandHours: number; aiHours: number } | null;
   /** Sessions that ended with nothing saved, sent or published. */
   producedNothing: { sessions: number; measured: number; share: number } | null;
+  /** The sessions that produced something, newest first: who, when, where, the kind of work, and the
+   *  names of what came out where the platform gave them. Admin and manager only, as the page is. */
+  produced: ProducedSession[];
   /** Work several people repeat with no skill behind it: worth codifying once. */
   repeated: Array<{ taskType: string; label: string; prompts: number; people: number }>;
   /** People whose first prompt was recent, with how far they have got so far. */
@@ -81,6 +95,18 @@ export interface CoworkTeamFigures {
   soloWork: Array<{ taskType: string; label: string; name: string; prompts: number }>;
   /** New ways of working the classifier flagged in the window. */
   capabilities: number;
+}
+
+export interface ProducedSession {
+  at: number | null;
+  name: string;
+  platform: WorkPlatform;
+  /** The Claude in Office or Google app, where it was one. */
+  product: string | null;
+  /** The session's main kind of work, as the classifier judged its prompts. Null when none were judged. */
+  kind: string | null;
+  /** The names of what came out, comma-separated. Null where the platform gave none. */
+  outputs: string | null;
 }
 
 export interface CoworkCoachingFigures {
@@ -110,6 +136,10 @@ interface SessionRow {
   active_secs: number | string | null;
   produced_output: number | string | null;
   human_minutes: number | string | null;
+  platform: WorkPlatform;
+  last_at: number | null;
+  outputs: string | null;
+  product: string | null;
 }
 
 const NO_DEPARTMENT = 'No department';
@@ -190,6 +220,34 @@ function producedNothing(sessions: SessionRow[]): CoworkTeamFigures['producedNot
   return { sessions: nothing, measured: measured.length, share: nothing / measured.length };
 }
 
+/** The sessions that produced something, newest first, with who and the session's main kind of work. */
+function producedSessions(sessions: SessionRow[], rows: Row[]): ProducedSession[] {
+  const names = new Map<string, string>();
+  const kinds = new Map<string, Map<string, number>>();
+  for (const r of rows) {
+    if (r.name) names.set(r.user_id, r.name);
+    if (!r.session_id || MECHANISM_TASK_TYPES.has(r.task_type)) continue;
+    const k = kinds.get(r.session_id) ?? new Map<string, number>();
+    k.set(r.task_type, (k.get(r.task_type) ?? 0) + 1);
+    kinds.set(r.session_id, k);
+  }
+  return sessions
+    .filter(s => n(s.produced_output) === 1)
+    .map(s => {
+      const top = [...(kinds.get(s.session_id)?.entries() ?? [])].sort((a, b) => b[1] - a[1] || a[0].localeCompare(b[0]))[0];
+      return {
+        at: s.last_at,
+        name: names.get(s.user_id) ?? 'Someone in the team',
+        platform: s.platform,
+        product: s.product,
+        kind: top ? kindLabel(top[0]) : null,
+        outputs: s.outputs,
+      };
+    })
+    .sort((a, b) => (b.at ?? 0) - (a.at ?? 0))
+    .slice(0, PRODUCED_LIST_MAX);
+}
+
 /** Kinds of work several people repeat with no skill used in any of those sessions. */
 function repeatedWithoutSkill(rows: Row[], sessionsWithSkill: Set<string>): CoworkTeamFigures['repeated'] {
   const by = new Map<string, { prompts: number; people: Set<string>; withSkill: number }>();
@@ -247,12 +305,18 @@ function soloWork(rows: Row[]): CoworkTeamFigures['soloWork'] {
     .slice(0, 3);
 }
 
-export async function getCoworkCoachingFigures(nowS = Math.floor(Date.now() / 1000)): Promise<CoworkCoachingFigures> {
+/**
+ * The figures for every team and the organisation. `vendor` is the switch's view; a route passes
+ * the visible one, so ChatGPT is left out whenever an admin has hidden it.
+ */
+export async function getCoworkCoachingFigures(vendor: Vendor = 'all', nowS = Math.floor(Date.now() / 1000)): Promise<CoworkCoachingFigures> {
   const since = nowS - 30 * DAY;
   const priorSince = nowS - 60 * DAY;
   const client = await getTypedClient();
   const run = async (q: SQL) =>
     (await (client as unknown as { execute: (query: SQL) => Promise<{ rows: unknown[] }> }).execute(q)).rows;
+  // The prompts Work Pulse judges, on every platform it covers, narrowed by the switch.
+  const onWorkPulse = sql`${isWorkPulseSurface(sql`cm.surface`, true)} AND ${sql.raw(vendorClause(vendor, 'cm.'))}`;
 
   const rows = (await run(sql`
     SELECT pc.user_id,
@@ -266,32 +330,39 @@ export async function getCoworkCoachingFigures(nowS = Math.floor(Date.now() / 10
     LEFT JOIN users u ON u.id = pc.user_id
     LEFT JOIN admin_users au ON au.linked_cowork_user_id = pc.user_id
     WHERE pc.classifier_status = 'classified'
-      AND COALESCE(cm.surface, 'cowork') = 'cowork'
+      AND ${onWorkPulse}
       AND cm.occurred_at >= ${priorSince}
   `)) as Row[];
 
   // Sessions are read on their own, so a long session counts once rather than once per prompt.
-  const sessionRows = (await run(sql`
-    SELECT css.session_id, css.user_id, ${departmentSql()} AS department,
-           css.active_secs, css.produced_output, css.human_minutes_likely AS human_minutes
-    FROM cowork_session_stats css
-    LEFT JOIN users u ON u.id = css.user_id
-    LEFT JOIN admin_users au ON au.linked_cowork_user_id = css.user_id
-    WHERE css.last_event_at >= ${since}
-  `)) as SessionRow[];
+  const sessionRows: SessionRow[] = (await readWorkSessions({ since, vendor })).map(s => ({
+    session_id: s.sessionId,
+    user_id: s.userId,
+    department: s.department,
+    active_secs: s.activeSecs,
+    produced_output: s.produced === null ? null : s.produced ? 1 : 0,
+    human_minutes: s.humanMinutes,
+    platform: s.platform,
+    last_at: s.lastAt,
+    outputs: s.outputs,
+    product: s.product,
+  }));
+  // How many conversations each person had, on every platform: hardly used is about sittings.
+  const sessionsByUser = await readSessionsPerPerson({ since, vendor });
 
   // When each person's very first judged prompt was, so the plan can spot new starters.
   const firstRows = (await run(sql`
     SELECT pc.user_id, MIN(cm.occurred_at) AS first_at
     FROM pulse_classifications pc
     JOIN cowork_messages cm ON cm.id = pc.cowork_message_id
+    WHERE pc.classifier_status = 'classified' AND ${onWorkPulse}
     GROUP BY pc.user_id
   `)) as Array<{ user_id: string; first_at: number | string }>;
   const firstEver = new Map(firstRows.map(r => [r.user_id, n(r.first_at)]));
 
   // Which sessions used a skill at all, for the work worth codifying.
   const skillRows = (await run(sql`
-    SELECT DISTINCT session_id FROM cowork_skill_invocations WHERE occurred_at >= ${since}
+    SELECT DISTINCT session_id FROM cowork_skill_invocations WHERE occurred_at >= ${since} AND ${skillVendor(vendor)}
   `)) as Array<{ session_id: string }>;
   const sessionsWithSkill = new Set(skillRows.map(r => r.session_id));
 
@@ -317,15 +388,9 @@ export async function getCoworkCoachingFigures(nowS = Math.floor(Date.now() / 10
   const byTeamBefore = group(before);
   const sessionsByTeam = group(sessionRows);
 
-  const sessionsPerUser = (ss: SessionRow[]) => {
-    const by = new Map<string, number>();
-    for (const s of ss) by.set(s.user_id, (by.get(s.user_id) ?? 0) + 1);
-    return by;
-  };
-
   const teams: CoworkTeamFigures[] = [...byTeam.entries()].map(([department, rs]) => {
     const teamSessions = sessionsByTeam.get(department) ?? [];
-    const p = peopleFigures(rs, sessionsPerUser(teamSessions));
+    const p = peopleFigures(rs, sessionsByUser);
     const priorRows = byTeamBefore.get(department) ?? [];
     const priorPeople = new Set(priorRows.map(r => r.user_id)).size;
     return {
@@ -342,6 +407,7 @@ export async function getCoworkCoachingFigures(nowS = Math.floor(Date.now() / 10
       stuck: p.stuck,
       freed: freedFrom(teamSessions),
       producedNothing: producedNothing(teamSessions),
+      produced: producedSessions(teamSessions, rows.filter(r => (r.department || NO_DEPARTMENT) === department)),
       repeated: repeatedWithoutSkill(rs, sessionsWithSkill),
       newStarters: newStarters(rs, firstEver, nowS),
       soloWork: soloWork(rs),
@@ -349,7 +415,7 @@ export async function getCoworkCoachingFigures(nowS = Math.floor(Date.now() / 10
     };
   }).sort((a, b) => b.prompts - a.prompts);
 
-  const orgPeople = peopleFigures(inWindow, sessionsPerUser(sessionRows));
+  const orgPeople = peopleFigures(inWindow, sessionsByUser);
   const orgBeforePeople = new Set(before.map(r => r.user_id)).size;
   return {
     tierNames,

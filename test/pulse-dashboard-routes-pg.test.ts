@@ -220,26 +220,18 @@ async function runSpec(): Promise<void> {
     expect(meBody.capabilitiesDetail.confirmed).toHaveLength(2);
     expect(meBody.capabilitiesDetail.pending).toHaveLength(1);
 
-    // GROUP BY count coercion proof (skills/connectors used).
-    const toolsMap = new Map(meBody.toolsUsed.map((t: { name: string; count: number }) => [t.name, t.count]));
-    expect(toolsMap.get('brand-review')).toBe(3);
-    expect(typeof toolsMap.get('brand-review')).toBe('number');
-    expect(toolsMap.get('slack')).toBe(2);
-
-    // Native tools JSON aggregation.
-    expect(meBody.topNativeTools.map((t: { tool_name: string }) => t.tool_name).sort()).toEqual(['bash', 'read']);
+    // These figures were worked out but never shown on any page, so the route no longer sends them.
+    for (const gone of ['toolsUsed', 'topNativeTools', 'skillExchange', 'journeyGrid', 'coworkCostUsd', 'chatgptCostUsd']) {
+      expect(meBody).not.toHaveProperty(gone);
+    }
 
     // ORS resolves via the preferred dept-scope (scope_type='function') path,
     // matching admin1's linked department — the realistic case, since
     // users.team_id is never populated in any real deployment.
     expect(meBody.teamMetrics.ors).toBeCloseTo(3.3, 6);
 
-    // Mocked OTel enrichment passthroughs.
-    expect(meBody.coworkCostUsd).toBe(5.25);
+    // Mocked OTel enrichment passthrough.
     expect(meBody.coworkFrictionIndex).toBe(0.1);
-
-    expect(meBody.skillExchange).toHaveLength(1);
-    expect(meBody.skillExchange[0].skill_name).toBe('brand-review');
 
     // ═══════════════════════════ /api/pulse/cio ═══════════════════════════
     const { GET: cioGET } = await import('../app/api/pulse/cio/route');
@@ -281,24 +273,16 @@ async function runSpec(): Promise<void> {
     // CLASS_BASE, which is NOT always NOW's month near a month boundary).
     // Dominant tier for u1 in that month is unambiguously 3 (2 tier-3 vs 1
     // tier-2), for u2 it's 1.
-    const expectedMonth = new Date((CLASS_BASE - 4 * DAY) * 1000).toISOString().slice(0, 7);
-    expect(cioBody.adoptionFunnel).toContainEqual({ month: expectedMonth, tier1: 1, tier2: 0, tier3: 1 });
+    // These figures were worked out but never shown on any page, so the route no longer sends them.
+    for (const gone of ['adoptionFunnel', 'heroSplit', 'fileCategoryMix', 'weeklyVolume', 'coworkCostUsd', 'chatgptCostUsd']) {
+      expect(cioBody).not.toHaveProperty(gone);
+    }
 
     // Capability creation log — 3 confirmed rows org-wide, LEFT JOINed to
     // users + cowork_messages.
     expect(cioBody.capabilityLog).toHaveLength(3);
     expect(cioBody.capabilityLog.map((r: { title: string }) => r.title).sort()).toEqual(['Cap One', 'Cap Two', 'Cap U2']);
 
-    // Numeric-money coercion proof: cost_usd (`numeric` on pg → STRING) SUM.
-    expect(cioBody.coworkCostUsd).toBeCloseTo(4.25, 6);
-    expect(typeof cioBody.coworkCostUsd).toBe('number');
-
-    // Weekly volume trend — 8 rows, deterministic completed-week delta.
-    expect(cioBody.weeklyVolume.series).toHaveLength(8);
-    expect(cioBody.weeklyVolume.delta.current).toBe(7);
-    expect(cioBody.weeklyVolume.delta.prior).toBe(6);
-    expect(cioBody.weeklyVolume.tier3Delta.current).toBe(6);
-    expect(cioBody.weeklyVolume.tier3Delta.prior).toBe(5);
 
     // ═══════════════════════ /api/pulse/org-summary ═══════════════════════
     const { GET: orgSummaryGET } = await import('../app/api/pulse/org-summary/route');
@@ -314,14 +298,10 @@ async function runSpec(): Promise<void> {
     // Tier counts (30d) bucketed by cowork_messages.occurred_at.
     expect(orgSummaryBody.tierCounts).toEqual({ t1: 1, t2: 1, t3: 2 });
 
-    // Work Mix (30d) — same classified rows grouped by task_type instead of flattened by tier.
-    expect(orgSummaryBody.workMix).toContainEqual({ task_type: 'coding', messages: 2, tier3: 2, tier2: 0, tier1: 0, claude: 2, openai: 0 });
-    expect(orgSummaryBody.workMix).toContainEqual({ task_type: 'drafting', messages: 1, tier3: 0, tier2: 1, tier1: 0, claude: 1, openai: 0 });
-    expect(orgSummaryBody.workMix).toContainEqual({ task_type: 'chat', messages: 1, tier3: 0, tier2: 0, tier1: 1, claude: 1, openai: 0 });
-
-    // GROUP BY + COUNT(DISTINCT) coercion — topSkills/topConnectors.
-    expect(orgSummaryBody.topSkills).toContainEqual({ skill_name: 'brand-review', vendor: 'claude', tag: 'Claude', usage_count: 3, user_count: 1 });
-    expect(orgSummaryBody.topConnectors).toContainEqual({ mcp_server: 'slack', vendor: 'claude', tag: 'Claude', usage_count: 2, user_count: 1 });
+    // These figures were worked out but never shown on any page, so the route no longer sends them.
+    for (const gone of ['workMix', 'topSkills', 'topConnectors', 'topNativeTools', 'docSessions']) {
+      expect(orgSummaryBody).not.toHaveProperty(gone);
+    }
 
     // modelMix GROUP BY count coercion.
     const modelCnt = new Map(orgSummaryBody.modelMix.map((m: { model: string; cnt: number }) => [m.model, m.cnt]));
@@ -331,11 +311,6 @@ async function runSpec(): Promise<void> {
     // jsonb Policy A extraction: 2 accept / 3 total = 66.7%.
     expect(orgSummaryBody.permissionDecisions).toEqual({ accepted: 2, total: 3, approval_rate: 66.7 });
 
-    // Document-upload sessions aggregate (COUNT + SUM coercion).
-    expect(orgSummaryBody.docSessions).toEqual({ sessions_with_uploads: 1, total_uploads: 2 });
-
-    // Native tools aggregated from the same cowork_session_stats row.
-    expect(orgSummaryBody.topNativeTools.map((t: { tool_name: string }) => t.tool_name).sort()).toEqual(['bash', 'read']);
   } finally {
     await cleanup();
   }

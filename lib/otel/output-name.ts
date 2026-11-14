@@ -63,8 +63,22 @@ export function outputFileName(toolName: string, toolParameters: unknown, toolIn
   if (!OUTPUT_TOOLS.has(toolName)) return null;
   let names = fromObject(toolParameters);
   if (!names.length) names = fromObject(parse(toolInput));
+  return joinNames(names);
+}
+
+/** Names joined once each, capped, and passed through the PII scrub. Null when there are none. */
+function joinNames(names: string[]): string | null {
   if (!names.length) return null;
   const joined = [...new Set(names)].join(', ');
   const capped = joined.length > MAX_LEN ? `${joined.slice(0, MAX_LEN - 1)}…` : joined;
   return redactPii(capped);
+}
+
+/**
+ * The names of what an AI reply made, from the names its platform lists: Claude Chat's artifact
+ * titles and generated file names, a ChatGPT reply's file names. The same rule as a Cowork output:
+ * the name only, never a directory or any content, scrubbed of personal data. Null when none.
+ */
+export function replyOutputNames(names: Array<string | null | undefined>): string | null {
+  return joinNames(names.filter((x): x is string => typeof x === 'string' && x.trim() !== '').map(baseName).filter(Boolean));
 }

@@ -16,6 +16,7 @@ import { getCoworkCoachingFigures } from '@/lib/pulse/cowork/coaching-figures';
 import { findCoworkAction } from '@/lib/pulse/cowork/team-coaching';
 import { markActionDone, undoActionDone } from '@/lib/pulse/coaching-store';
 import { coachingScope } from '@/lib/pulse/coaching-scope';
+import { visibleVendor } from '@/lib/sources/openai-visibility';
 
 export const dynamic = 'force-dynamic';
 
@@ -50,7 +51,8 @@ async function handle(request: NextRequest, session: Session, mode: 'done' | 'un
   const body = await parse(request);
   if (!body) return NextResponse.json({ error: 'department and key are required' }, { status: 400 });
   try {
-    const figures = await getCoworkCoachingFigures();
+    // Every platform shown, as the page reads it, so the follow-up compares like with like.
+    const figures = await getCoworkCoachingFigures(await visibleVendor(null));
     const scope = coachingScope(session, figures.teams.map(t => t.department), body.department);
     if ('error' in scope || scope.department !== body.department) {
       await log('denied', `${mode} department=${body.department} key=${body.key}`);

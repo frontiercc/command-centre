@@ -197,7 +197,11 @@ function buildVerdicts(d: OrgSummary, vendor: Vendor): Verdict[] {
       status: darkCount > activeCount ? 'attention' : activeCount > 0 ? 'building' : 'neutral',
       plain: darkCount > 0
         ? `${activeCount} active repo${activeCount === 1 ? '' : 's'} this week; ${darkCount} repo${darkCount === 1 ? ' has' : 's have'} gone quiet for 30+ days. Quiet repos are the expansion opportunity.`
-        : `${activeCount} repo${activeCount === 1 ? '' : 's'} with ${w.tool} activity this week and nothing has gone quiet.`,
+        : `${activeCount} repo${activeCount === 1 ? '' : 's'} with ${vendor === 'all' && d.codexPresent ? 'Claude Code' : w.tool} activity this week and nothing has gone quiet.`,
+      // Codex reports no repository, so with Codex data the All view's repos are Claude Code's alone.
+      note: vendor === 'all' && d.codexPresent
+        ? 'Repos Claude Code worked in. Codex does not report which repository it worked in, so its repos are on the Codex view, worked out from GitHub.'
+        : undefined,
     },
   ];
   // Codex reports no repository, so on the Codex tab the reach comes from

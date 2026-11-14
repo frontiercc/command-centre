@@ -18,6 +18,10 @@ import { readCodeMetrics, hasCodexData } from '@/lib/pulse/code/vendor-view';
 import { chatgptCostUsd } from '@/lib/openai/spend';
 import { openaiShown } from '@/lib/sources/openai-visibility';
 import { kindClause } from '@/lib/dashboard/product-sql';
+import { getTierNames } from '@/lib/pulse/tier-config';
+import type { TierNames } from '@/lib/pulse/tier-names';
+import { readWorkSessions } from '@/lib/pulse/cowork/work-sessions';
+import { visibleVendor } from '@/lib/sources/openai-visibility';
 
 export type SeriesPoint = WeeklyPoint;
 
@@ -25,7 +29,13 @@ export interface Person360 {
   userId: string;
   displayName: string | null;
   department: string | null;
-  cowork: { tierCounts: { t1: number; t2: number; t3: number }; dds: number | null; oti: number | null } | null;
+  /** Work Pulse, described: the tier counts, this customer's tier names, and what the person's
+   *  sessions produced over the last 30 days (measured; null when nothing could be seen). */
+  cowork: {
+    tierCounts: { t1: number; t2: number; t3: number };
+    tierNames: TierNames;
+    produced: { produced: number; measured: number } | null;
+  } | null;
   code: {
     spendUsd: number | null; sessions: number; commits: number; autonomy: number | null;
     engagedHours: number | null; linesAdded: number; editAcceptRate: number | null;
@@ -63,8 +73,6 @@ export async function getPerson360(userId: string): Promise<Person360> {
   const pm = schema.pulseMetrics;
   const coworkRows = await client
     .select({
-      dds: pm.dds,
-      oti: pm.oti,
       tier_1_count: pm.tier_1_count,
       tier_2_count: pm.tier_2_count,
       tier_3_count: pm.tier_3_count,
@@ -75,13 +83,16 @@ export async function getPerson360(userId: string): Promise<Person360> {
     .limit(1);
   const coworkRow = coworkRows[0];
 
-  const cowork = coworkRow
-    ? {
-        tierCounts: { t1: coworkRow.tier_1_count, t2: coworkRow.tier_2_count, t3: coworkRow.tier_3_count },
-        dds: coworkRow.dds,
-        oti: coworkRow.oti,
-      }
-    : null;
+  let cowork: Person360['cowork'] = null;
+  if (coworkRow) {
+    const sessions = (await readWorkSessions({ since: Math.floor(Date.now() / 1000) - 30 * 86400, vendor: await visibleVendor(null), userIds: [userId] }))
+      .filter(s => s.produced !== null);
+    cowork = {
+      tierCounts: { t1: coworkRow.tier_1_count, t2: coworkRow.tier_2_count, t3: coworkRow.tier_3_count },
+      tierNames: await getTierNames(),
+      produced: sessions.length > 0 ? { produced: sessions.filter(s => s.produced).length, measured: sessions.length } : null,
+    };
+  }
 
   // Code — latest user-scope rolling row: Claude Code and, once it has
   // arrived, Codex (Developer Pulse's All view, lib/pulse/code/vendor-view.ts).

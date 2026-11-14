@@ -2,7 +2,7 @@
 // SPDX-License-Identifier: Apache-2.0
 
 import { describe, it, expect } from 'vitest';
-import { buildCrosswalk, type CodeSignals } from '@/lib/pulse/code/framework';
+import { buildCrosswalk, frameworkCoverage, type CodeSignals } from '@/lib/pulse/code/framework';
 
 const full: CodeSignals = {
   spendUsd: 1234.5, autonomyRatio: 3.2, commitCount: 87, prCount: 12,
@@ -49,6 +49,23 @@ describe('buildCrosswalk', () => {
     const impact = buildCrosswalk(noMix).find(b => b.dimension === 'impact')!;
     const mix = impact.cells.find(c => c.label.toLowerCase().includes('work mix'))!;
     expect(mix.fit).toBe('not_captured');
+  });
+
+  it('marks the work mix AI-judged, not a proxy', () => {
+    const impact = buildCrosswalk(full).find(b => b.dimension === 'impact')!;
+    const mix = impact.cells.find(c => c.label.toLowerCase().includes('work mix'))!;
+    expect(mix.fit).toBe('ai_judged');
+  });
+
+  it('counts coverage from framework cells only: AI-specific cells count on neither side', () => {
+    const cover = Object.fromEntries(buildCrosswalk(full).map(b => [b.dimension, frameworkCoverage(b)]));
+    expect(cover.speed).toEqual({ covered: 3, total: 5 });
+    expect(cover.quality).toEqual({ covered: 2, total: 4 });
+    expect(cover.effectiveness).toEqual({ covered: 1, total: 2 });
+    expect(cover.impact).toEqual({ covered: 1, total: 2 });
+    // A cell with no figure is not covered.
+    const offMix = buildCrosswalk({ ...full, hasWorkMix: false }).find(b => b.dimension === 'impact')!;
+    expect(frameworkCoverage(offMix)).toEqual({ covered: 0, total: 2 });
   });
 
   it('every box carries an externalNote pointing at the data that would fill it', () => {

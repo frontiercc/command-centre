@@ -113,10 +113,12 @@ describe('getPerson360', () => {
     expect(result.displayName).toBe('Ada Lovelace');
     expect(result.department).toBe('Engineering');
 
+    // Described, never scored: the tier counts with the customer's tier names, and what the
+    // person's sessions produced (none could be read here, so not measured, never 0).
     expect(result.cowork).toEqual({
       tierCounts: { t1: 3, t2: 5, t3: 2 },
-      dds: 2.5,
-      oti: 1.8,
+      tierNames: { t1: 'Administrative', t2: 'Meaningful', t3: 'Frontier' },
+      produced: null,
     });
 
     expect(result.code).toEqual({

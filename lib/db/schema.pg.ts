@@ -249,6 +249,10 @@ export const openaiReplies = pgTable('openai_replies', {
     model: text(),
     occurred_at: bigint({ mode: 'number' }).notNull(),
     ingested_at: bigint({ mode: 'number' }).notNull().default(sql`extract(epoch from now())`),
+    /** Files OpenAI's export lists on the reply (a count only); a reply with no files field made none, 0. NULL on rows stored before the count was kept (migration 0053): not measured. */
+    files_count: integer(),
+    /** The names of the files OpenAI lists on the reply, masked (migration 0054). Never the reply's text. */
+    file_names: text(),
 }, (t) => [
     index('idx_openai_replies_user_time').on(t.user_id, t.occurred_at),
     index('idx_openai_replies_session').on(t.session_id),
@@ -314,6 +318,8 @@ export const chatAssistantMeta = pgTable('chat_assistant_meta', {
     model: text(),
     artifacts_count: integer().notNull().default(0),
     generated_files_count: integer().notNull().default(0),
+    /** The titles of the reply's artifacts and the names of its generated files, masked (migration 0054). Never the reply's text. */
+    output_names: text(),
     occurred_at: bigint({ mode: 'number' }).notNull(),
     ingested_at: bigint({ mode: 'number' }).default(sql`extract(epoch from now())`),
 }, (t) => [

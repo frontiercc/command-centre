@@ -28,6 +28,16 @@ export function DeepWords(names: TierNames | null | undefined): string {
   return w.charAt(0).toUpperCase() + w.slice(1);
 }
 
+/**
+ * The share of judged tasks in the two deeper tiers, from tier counts: what the pages describe a
+ * person's or a team's work with, in place of the old depth score. Null when nothing was judged.
+ */
+export function deepShareOf(t1: number | null | undefined, t2: number | null | undefined, t3: number | null | undefined): number | null {
+  const a = Number(t1 ?? 0), b = Number(t2 ?? 0), c = Number(t3 ?? 0);
+  const total = a + b + c;
+  return total > 0 ? (b + c) / total : null;
+}
+
 /** The three names lowest first, for a chart legend or grid rows. */
 export function tierList(names: TierNames | null | undefined): [string, string, string] {
   const t = tierNamesOr(names);

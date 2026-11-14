@@ -214,3 +214,30 @@ describe('number check', () => {
     expect((await getLatestCodeBriefing())?.body).toBe('Last week body.');
   });
 });
+
+describe('Codex in the briefing', () => {
+  it('counts Codex sessions where over a quarter of actions failed in the friction line', async () => {
+    await seedOrgRollingMetric();
+    await setConfigValue('anthropicAiApiKey', 'sk-test-key');
+    // Codex data exists, and one Codex session failed 3 of its 6 actions this week.
+    await sql.run(`INSERT INTO cowork_messages (id, session_id, user_id, message_type, surface, source, content_full, occurred_at)
+                   VALUES ('cx-p', 'codex:f1', 'user-1', 'code_user_message', 'code', 'codex', 'text', ?)`, [NOW - 600]);
+    for (let i = 0; i < 6; i++) {
+      await sql.run(`INSERT INTO codex_actions (id, user_id, session_id, failed, occurred_at) VALUES (?, 'user-1', 'codex:f1', ?, ?)`,
+        [`cxa${i}`, i < 3 ? 1 : 0, NOW - 600 + i]);
+    }
+    try {
+      const mockCreate = await getMockCreate();
+      mockCreate.mockReset();
+      let prompt = '';
+      mockCreate.mockImplementation(async (opts: { messages: Array<{ content: string }> }) => {
+        prompt = opts.messages[0].content;
+        return mockBriefingResponse(['A steady week.', 'Work carried on.', 'Nothing stood out.'], 'Keep going.');
+      });
+      await generateCodeBriefing();
+      expect(prompt).toContain('high_friction_sessions_this_week: 1 (over a quarter of tool actions failed)');
+    } finally {
+      await sql.exec(`DELETE FROM codex_actions; DELETE FROM cowork_messages WHERE id = 'cx-p';`);
+    }
+  });
+});

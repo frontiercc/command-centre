@@ -101,7 +101,6 @@ describe('Work Pulse figures by vendor', () => {
       expect(openai.adoptionHero.weeklyActive).toBe(2);
       expect(openai.adoptionHero.meaningfulWorkPct).toBe(0);
       expect(openai.adoptionHero.avgDds).toBe(1);
-      expect(openai.coworkCostUsd).toBeUndefined();
       const claude = await cio('claude');
       expect(claude.adoptionHero.weeklyActive).toBe(2);
       expect(claude.adoptionHero.meaningfulWorkPct).toBe(100);
@@ -109,10 +108,11 @@ describe('Work Pulse figures by vendor', () => {
       const allView = await cio('all');
       expect(allView.openaiPresent).toBe(true);
       expect(allView.adoptionHero.weeklyActive).toBe(3);
-      expect(allView.heroSplit.claude.weeklyActive).toBe(2);
-      expect(allView.heroSplit.openai.weeklyActive).toBe(2);
+      // Worked out but never shown on any page, so the route no longer sends them.
+      for (const gone of ['heroSplit', 'coworkCostUsd', 'chatgptCostUsd']) expect(allView).not.toHaveProperty(gone);
       // No ChatGPT cost record yet: the spend figure says so rather than $0.
-      expect(allView.chatgptCostUsd).toBeNull();
+      const { chatgptSpend } = await import('@/lib/openai/spend');
+      expect(await chatgptSpend({ since: 0 })).toBeNull();
 
       // ChatGPT spend: the tokens in OpenAI's cost records at the built-in USD
       // rates (gpt-6: $2 in, $10 out per million), beside Claude Cowork's, never in it.
@@ -123,11 +123,7 @@ describe('Work Pulse figures by vendor', () => {
            ('c2', 'u-both', ?, 'codex', 'gpt-5.5-codex', 1000000, 0, 9, 'CREDITS')`,
         [hourAgo, hourAgo],
       );
-      const withCost = await cio('all');
-      expect(withCost.chatgptCostUsd).toBe(4.25);
-      expect(withCost.coworkCostUsd).toBe(allView.coworkCostUsd);
-      expect((await cio('openai')).chatgptCostUsd).toBe(4.25);
-      expect((await cio('claude')).chatgptCostUsd).toBeUndefined();
+      expect((await chatgptSpend({ since: hourAgo - 60 }))?.usd).toBe(4.25);
 
       // A person's erasure removes their per-vendor rows and OpenAI spend too.
       const { deleteUserData } = await import('@/lib/db/queries');
@@ -152,16 +148,16 @@ describe('Work Pulse figures by vendor', () => {
         'ChatGPT Chat: 2 classified prompts, 2 people',
         'Claude Cowork: 2 classified prompts, 1 person',
         'ChatGPT Work: 1 classified prompts, 1 person',
-        'Share of work at Tier 2 or 3: Claude 100%, ChatGPT 0%',
+        'Share of work that was meaningful or frontier: Claude 100%, ChatGPT 0%',
       ]);
       // One person who used Claude only: no facts, so the briefing is unchanged.
       expect(await buildProductFacts({ periodStart: NOW - 3600, periodEnd: NOW + 1, userIds: ['u-claude'] })).toEqual([]);
       const { buildCioBriefingUserMessage } = await import('@/lib/pulse/briefings/prompts/cio');
       const msg = buildCioBriefingUserMessage({
         period_label: 'October 2026', weekly_active_users: 3, total_classified_events: 6,
-        tier_1_pct: 50, tier_2_pct: 17, tier_3_pct: 33, avg_dds: 1.5, avg_oti: null,
+        tier_lines: [], produced_line: '', floor_line: '',
         confirmed_capability_creation_count: 0, concentration_risk_count: 0, deep_work: [],
-        teams_with_ors_below_threshold: [], departments_with_ors_count: 0, dept_process_opportunities: [],
+        dept_process_opportunities: [],
         products: lines,
       });
       expect(msg).toContain(productFactsBlock(lines).trim());

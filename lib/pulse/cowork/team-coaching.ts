@@ -214,13 +214,20 @@ export function teamParts(t: CoworkTeamFigures, f: CoworkCoachingFigures): { whe
   return { where, workOn, actions };
 }
 
-/** One team's plan, with whatever has already been marked done. */
-export function buildCoworkCoachingPlan(department: string, f: CoworkCoachingFigures, done: DoneRecord[], nowS: number): CoworkCoachingPlan | null {
+/**
+ * One team's plan, with whatever has already been marked done. `checkOn` is the figures a done
+ * action is judged on: every platform, whatever the switch shows, since that is what was saved
+ * when it was marked done. Left out, the plan's own figures are used.
+ */
+export function buildCoworkCoachingPlan(department: string, f: CoworkCoachingFigures, done: DoneRecord[], nowS: number, checkOn?: CoworkCoachingFigures): CoworkCoachingPlan | null {
   const t = f.teams.find(x => x.department === department);
   if (!t) return null;
   const { where, workOn, actions } = teamParts(t, f);
+  const base = checkOn ?? f;
+  const bt = base.teams.find(x => x.department === department);
   const ctx = {
-    metrics: teamMetrics(t), org: orgMetrics(f.org), people: t.people,
+    metrics: bt ? teamMetrics(bt) : { deep_share: null, hardly_used_share: null, produced_nothing_share: null },
+    org: orgMetrics(base.org), people: bt?.people ?? 0,
     nowS, done, rules: coworkRules(),
   };
   const byKey = new Map(done.map(d => [d.actionKey, d]));

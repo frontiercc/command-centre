@@ -18,8 +18,6 @@ import { promptTextVisibleFor, logPromptRead } from '@/lib/auth/content-access';
 import { getTypedClient } from '@/lib/db/client';
 import { schema } from '@/lib/db/schema';
 import { weekStart, weekStarts } from '@/lib/pulse/period';
-import { assertPulseMetricsColumn } from '@/lib/pulse/trends';
-import { getFileCategoryMix } from '@/lib/pulse/cowork/file-categories';
 import {
   buildBandSegments, buildDepthSegments, buildThenVsNow,
   countDataWeeks, countLatestSegmentDataWeeks, MIN_CHART_DATA_WEEKS,
@@ -29,21 +27,10 @@ import { buildActNext, buildDeptProcessBoxes, type ActNextRow } from '@/lib/puls
 import type { DeptProcessBox } from '@/lib/usecases/suggestion-store';
 import { type Vendor } from '@/lib/dashboard/vendor';
 import { hasOpenAiData } from '@/lib/dashboard/queries';
-import { vendorClause } from '@/lib/dashboard/product-sql';
 import { messageVendor } from '@/lib/pulse/vendor-filter';
 import { chatgptSpend } from '@/lib/openai/spend';
 
 export const dynamic = 'force-dynamic';
-
-// ─── Raw-execution facade (mirrors lib/db/queries.ts's rawAll) ────────────────
-interface RawFacade {
-  execute?: (q: unknown) => Promise<{ rows: unknown[]; rowCount: number | null }>;
-}
-async function rawAll<T>(client: unknown, query: unknown): Promise<T[]> {
-  const c = client as RawFacade;
-  const res = await c.execute!(query);
-  return res.rows as T[];
-}
 
 export async function GET(request: NextRequest) {
   const session = await getAdminSession(request);
@@ -136,11 +123,6 @@ export async function GET(request: NextRequest) {
 
   // ── Adoption hero numbers ─────────────────────────────────────────────────
   const hero = await heroFor(vendor);
-  // In the All view with both vendors present, each headline figure also
-  // carries its Claude and OpenAI parts.
-  const heroSplit = vendor === 'all' && openaiPresent
-    ? { claude: await heroFor('claude'), openai: await heroFor('openai') }
-    : null;
 
   // Capability concentration risk — % of Tier 3 tasks on top 3 users
   const tier3UserCounts = await client
@@ -202,54 +184,6 @@ export async function GET(request: NextRequest) {
     orsPropagation: round2(orgOrs?.propagation),
   };
 
-  // ── Adoption funnel (Priority 6) ─────────────────────────────────────────
-  // Group pulse_classifications by user+month for last 6 months.
-  // Determine dominant tier per user per month (most frequent tier).
-  // Count users per dominant-tier per month.
-  const sixMonthsAgo = now - 180 * 24 * 3600;
-
-  // month bucket via to_char(...) AT TIME ZONE 'UTC'
-  // — kept as one raw statement since Postgres's strict GROUP BY
-  // needs the bucket expression, mirroring lib/db/queries.ts's day-bucket idiom.
-  const monthExpr = sql`to_char(to_timestamp(classified_at) AT TIME ZONE 'UTC', 'YYYY-MM')`;
-  const classificationsByMonth = await rawAll<{
-    user_id: string; month: string; tier: number; cnt: number | string;
-  }>(client, sql`
-     SELECT pulse_classifications.user_id,
-            ${monthExpr} AS month,
-            tier,
-            COUNT(*) AS cnt
-     FROM pulse_classifications
-     JOIN cowork_messages ON cowork_messages.id = pulse_classifications.cowork_message_id
-     WHERE classifier_status = 'classified'
-       AND classified_at >= ${sixMonthsAgo}
-       AND ${sql.raw(vendorClause(vendor, 'cowork_messages.'))}
-     GROUP BY pulse_classifications.user_id, month, tier
-     ORDER BY pulse_classifications.user_id, month, cnt DESC
-  `);
-
-  // For each user+month, keep only the dominant tier (first row per user+month after sort)
-  const dominantMap = new Map<string, number>(); // "user_id|month" -> dominant tier
-  for (const row of classificationsByMonth) {
-    const key = `${row.user_id}|${row.month}`;
-    if (!dominantMap.has(key)) dominantMap.set(key, row.tier);
-  }
-
-  // Count users per month per dominant tier
-  const funnelCounts = new Map<string, { tier1: number; tier2: number; tier3: number }>();
-  for (const [key, tier] of dominantMap) {
-    const month = key.split('|')[1];
-    const entry = funnelCounts.get(month) ?? { tier1: 0, tier2: 0, tier3: 0 };
-    if (tier === 1) entry.tier1++;
-    else if (tier === 2) entry.tier2++;
-    else if (tier === 3) entry.tier3++;
-    funnelCounts.set(month, entry);
-  }
-
-  const adoptionFunnel = Array.from(funnelCounts.entries())
-    .sort(([a], [b]) => a.localeCompare(b))
-    .map(([month, counts]) => ({ month, ...counts }));
-
   // ── AI Intelligence Briefing ───────────────────────────────────────────────
 
   const briefingRows = await client
@@ -298,72 +232,9 @@ export async function GET(request: NextRequest) {
     r.user_id && promptVisible.has(r.user_id) ? r : { ...r, body: null, content_preview: null });
   if (promptVisible.size > 0) await logPromptRead(request, session, 'pulse/cio/capability-log');
 
-  // ── Org-wide weekly volume trend ───────────────────────────────────────────
-  // pulse_metrics has no 'organisation' scope — only 'user' | 'team' | 'function'
-  // weekly rows are written (lib/pulse/aggregator.ts). Department ('function')
-  // rows only cover users whose admin_users record has both a department and a
-  // linked_cowork_user_id, which can under-count the org. Summing the 'user'
-  // scope weekly rows instead covers every classified user, matching how the
-  // rest of this route already aggregates (avgDds/avgOti above use
-  // `scope_type = 'user'`) — the simplest option consistent with the existing
-  // query pattern. Missing weeks / users contribute 0, not null, since this is
-  // a sum across many rows rather than a single scope's series.
-  // These columns are interpolated into raw SQL below (hand-rolled GROUP BY
-  // summation, not the getWeeklySeries/getWeeklyDelta helpers), so they must
-  // be checked against the same allowlist those helpers use
-  // (lib/pulse/trends.ts COLUMN_ALLOWLIST.pulse_metrics) before use.
-  assertPulseMetricsColumn('event_count');
-  assertPulseMetricsColumn('tier_3_count');
-
-  const orgWeeks = weekStarts(now, 8);
-  const orgCurrentWeek = weekStart(now);
+  // ChatGPT models with no price yet, for the unpriced-models notice.
   const wm = metricsFor(vendor);
-  const weeklyUserRows = await client
-    .select({
-      period_start: wm.t.period_start,
-      event_count: sql<number | string | null>`SUM(${wm.t.event_count})`,
-      tier_3_count: sql<number | string | null>`SUM(${wm.t.tier_3_count})`,
-    })
-    .from(wm.t)
-    .where(and(wm.only, eq(wm.t.granularity, 'week'), eq(wm.t.scope_type, 'user'), gte(wm.t.period_start, orgWeeks[0])))
-    .groupBy(wm.t.period_start);
-  const weeklyByWeek = new Map(weeklyUserRows.map(r => [r.period_start, {
-    event_count: r.event_count !== null ? Number(r.event_count) : null,
-    tier_3_count: r.tier_3_count !== null ? Number(r.tier_3_count) : null,
-  }]));
-
-  const weeklyVolume = orgWeeks.map(ws => {
-    const row = weeklyByWeek.get(ws);
-    return {
-      weekStart: ws,
-      eventCount: row ? (row.event_count ?? 0) : 0,
-      tier3Count: row ? (row.tier_3_count ?? 0) : 0,
-      partial: ws === orgCurrentWeek,
-    };
-  });
-
-  // Completed-week delta for event_count (volume), same convention as Developer Pulse.
-  const completedVolume = weeklyVolume.filter(w => !w.partial);
-  const currentVol = completedVolume.length > 0 ? completedVolume[completedVolume.length - 1].eventCount : null;
-  const priorVol = completedVolume.length > 1 ? completedVolume[completedVolume.length - 2].eventCount : null;
-  const volumePct = priorVol !== null && priorVol !== 0 && currentVol !== null ? (currentVol - priorVol) / priorVol : null;
-
-  // Same completed-week delta convention for tier_3_count (frontier work volume).
-  const currentTier3 = completedVolume.length > 0 ? completedVolume[completedVolume.length - 1].tier3Count : null;
-  const priorTier3 = completedVolume.length > 1 ? completedVolume[completedVolume.length - 2].tier3Count : null;
-  const tier3Pct = priorTier3 !== null && priorTier3 !== 0 && currentTier3 !== null ? (currentTier3 - priorTier3) / priorTier3 : null;
-
-  // OTel cowork enrichments — org-wide 7-day cost, Claude Cowork only.
-  // ChatGPT's spend comes from OpenAI's cost records, read apart below.
-  const orgCoworkCostRows = await client
-    .select({ cowork_cost: sql<number | string>`COALESCE(SUM(${schema.coworkMessages.cost_usd}), 0)` })
-    .from(schema.coworkMessages)
-    .where(and(eq(schema.coworkMessages.message_type, 'cowork_api_request'), gte(schema.coworkMessages.occurred_at, sevenDaysAgo)));
-  const orgCoworkCostUsd = Number(orgCoworkCostRows[0]?.cowork_cost ?? 0);
   const orgChatgpt = vendor === 'claude' || !openaiPresent ? undefined : await chatgptSpend({ since: sevenDaysAgo });
-
-  // ── Files touched by category — org-wide, 30-day window ────────────────────
-  const fileCategoryMix = await getFileCategoryMix(30);
 
   // ── Delegation depth over time ────────────────────────────────────────────
   // Weekly 'function'-scope rows per department; current week excluded.
@@ -491,21 +362,11 @@ export async function GET(request: NextRequest) {
   return NextResponse.json({
     vendor,
     openaiPresent,
-    adoptionFunnel,
     adoptionHero: { ...hero, concentrationPct },
-    heroSplit,
     signalCards,
     briefing: briefing ?? null,
     capabilityLog,
-    coworkCostUsd: vendor === 'openai' ? undefined : orgCoworkCostUsd,
-    chatgptCostUsd: orgChatgpt === undefined ? undefined : orgChatgpt?.usd ?? null,
     chatgptUnpricedModels: orgChatgpt?.unpricedModels ?? [],
-    fileCategoryMix,
-    weeklyVolume: {
-      series: weeklyVolume,
-      delta: { current: currentVol, prior: priorVol, pct: volumePct },
-      tier3Delta: { current: currentTier3, prior: priorTier3, pct: tier3Pct },
-    },
     delegation: {
       window: delegationWindow,
       org: {

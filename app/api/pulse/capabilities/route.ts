@@ -6,12 +6,14 @@
 // query-builder LEFT JOINs. The PATCH handler's UPDATE + conditional INSERT
 // are two independent, sequentially-awaited statements with no transaction.
 import { NextRequest, NextResponse } from 'next/server';
-import { and, desc, eq } from 'drizzle-orm';
+import { and, desc, eq, sql } from 'drizzle-orm';
 import { getAdminSession, canAccessPulseAdmin } from '@/lib/auth/admin-auth';
 import { getTypedClient } from '@/lib/db/client';
 import { schema } from '@/lib/db/schema';
 import { getConfigValue } from '@/lib/config';
 import { randomUUID } from 'crypto';
+import { visibleVendor } from '@/lib/sources/openai-visibility';
+import { vendorClause } from '@/lib/dashboard/product-sql';
 
 export const dynamic = 'force-dynamic';
 
@@ -41,9 +43,17 @@ export async function GET(request: NextRequest) {
     if (!filterUserId) return NextResponse.json({ candidates: [], pendingCount: 0 });
   }
 
+  // Work Pulse's switch: only work found in that vendor's prompts. Without the
+  // parameter (the sidebar count, the review queue) every vendor counts.
+  const vendorParam = request.nextUrl.searchParams.get('vendor');
+  const vendor = vendorParam ? await visibleVendor(vendorParam) : 'all';
+  const vendorCond = vendor === 'all'
+    ? undefined
+    : sql`EXISTS (SELECT 1 FROM cowork_messages cm WHERE cm.id = ${pe.cowork_message_id} AND ${sql.raw(vendorClause(vendor, 'cm.'))})`;
+
   const whereClause = filterUserId
-    ? and(eq(pe.event_type, 'capability_creation'), eq(pe.status, statusFilter), eq(pe.user_id, filterUserId))
-    : and(eq(pe.event_type, 'capability_creation'), eq(pe.status, statusFilter));
+    ? and(eq(pe.event_type, 'capability_creation'), eq(pe.status, statusFilter), eq(pe.user_id, filterUserId), vendorCond)
+    : and(eq(pe.event_type, 'capability_creation'), eq(pe.status, statusFilter), vendorCond);
 
   const candidates = await client
     .select({

@@ -101,6 +101,12 @@ function taskTypeFor(text) {
   return pick(TASK_TYPES);
 }
 
+// Names for what a Claude Chat reply made, as the Compliance API gives them (titles and file names).
+const ARTIFACT_TITLES = ['Quarterly summary', 'Supplier comparison', 'Renewal risk notes', 'Onboarding checklist',
+  'Campaign brief', 'Variance commentary', 'Interview scorecard', 'Contract clause summary'];
+const FILE_NAMES = ['budget-variance.xlsx', 'board-summary.docx', 'pipeline-review.xlsx', 'policy-update.docx',
+  'launch-plan.pptx', 'account-health.csv', 'hiring-plan.docx', 'contract-redlines.docx'];
+
 async function main() {
   const url = process.env.DATABASE_URL;
   if (!url) { console.error('DATABASE_URL not set — run inside the hub container.'); process.exit(1); }
@@ -118,6 +124,8 @@ async function main() {
     await c.query(`DELETE FROM cowork_messages WHERE id LIKE $1 AND surface = 'chat'`, [`${MARKER}%`]);
     await c.query(`DELETE FROM cowork_session_stats WHERE session_id LIKE $1`, [`${MARKER}%`]);
     await c.query(`DELETE FROM cowork_sessions WHERE id LIKE $1`, [`${MARKER}%`]);
+    // The replies' metadata (model, and how many artifacts and generated files each made).
+    await c.query(`DELETE FROM chat_assistant_meta WHERE id LIKE $1`, [`${MARKER}%`]);
     console.log('[chat] cleared prior seed rows.');
     if (CLEAN_ONLY) { console.log('[chat] --clean complete.'); return; }
 
@@ -147,6 +155,9 @@ async function main() {
         const trend = (N_DAYS - daysAgo) / N_DAYS;
         const depth = 0.25 + 0.45 * trend; // share at tier 2 or 3
         const t3Share = 0.15 + 0.35 * trend; // of those, share at tier 3
+        // About one conversation in three ends with an artifact or a generated file, made by its
+        // last reply, so Work Pulse can say whether Claude Chat produced something.
+        const makes = Math.random() < 1 / 3 ? (Math.random() < 0.6 ? 'artifact' : 'file') : null;
         for (let i = 0; i < nMsgs; i++) {
           const ts = dayStart + rand(0, Math.max(1, dayEnd - dayStart - 1));
           const text = pick(CHAT_PROMPTS);
@@ -162,6 +173,15 @@ async function main() {
             `INSERT INTO pulse_classifications (cowork_message_id, user_id, tier, task_type, classifier_confidence, classifier_model, classified_at)
              VALUES ($1,$2,$3,$4,$5,'claude-haiku-4-5-20251001',$6)`,
             [msgId, u.id, tier, taskTypeFor(text), 0.85 + Math.random() * 0.12, ts + 30]);
+          // Claude's reply a little later: its model and what it made, never its text
+          // (the same row lib/compliance/chat-sync.ts writes).
+          const last = i === nMsgs - 1;
+          // What the last reply made, by name only: an artifact's title or a file's name.
+          const made = last && makes === 'artifact' ? pick(ARTIFACT_TITLES) : last && makes === 'file' ? pick(FILE_NAMES) : null;
+          await c.query(
+            `INSERT INTO chat_assistant_meta (id, conversation_id, user_id, model, artifacts_count, generated_files_count, output_names, occurred_at, ingested_at)
+             VALUES ($1,$2,$3,'claude-sonnet-4-6',$4,$5,$6,$7,$8)`,
+            [uid('reply'), convId, u.id, last && makes === 'artifact' ? 1 : 0, last && makes === 'file' ? 1 : 0, made, ts + rand(20, 240), now]);
           if (startedAt === null || ts < startedAt) startedAt = ts;
           n++;
         }

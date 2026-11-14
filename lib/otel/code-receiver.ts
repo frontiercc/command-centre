@@ -17,7 +17,7 @@ import { getCustomCategories } from '@/lib/intent/custom';
 import { createIntentAlerts } from '@/lib/alerts/intent-alerts';
 import { createPiiAlertsWithDedup } from '@/lib/alerts/pii-alerts';
 import { recordPiiAlertFailure } from '@/lib/alerts/pii-alert-failure';
-import { isKnownAnthropicSkill } from '@/lib/library/known-anthropic-skills';
+import { isKnownAnthropicSkill, anthropicSkillDescription } from '@/lib/library/known-anthropic-skills';
 import { resolveCodifiedSkillName } from '@/lib/library/codified-skill-name';
 import { CONTENT_PREVIEW_CHARS, CONTENT_FULL_CHARS } from '@/lib/otel/content-limits';
 import { resolveOtelUser } from '@/lib/otel/resolve-user';
@@ -566,12 +566,17 @@ export async function processCodeOtlpLogs(payload: unknown): Promise<ProcessResu
                 // real org owner to claim them; everything else lands unclaimed as usual.
                 const nowSec = Math.floor(Date.now() / 1000);
                 if (anthropicSkill) {
+                  // Its built-in description fills an entry that has none; an admin's own wording stays.
                   await tx.insert(schema.skillLibraryEntries).values({
                     name: skillName, type: 'skill', surface: 'code',
+                    description: anthropicSkillDescription(skillName),
                     source: 'anthropic', is_published: 1, created_at: nowSec, updated_at: nowSec,
                   }).onConflictDoUpdate({
                     target: schema.skillLibraryEntries.name,
-                    set: { source: 'anthropic', is_published: 1, updated_at: sql`excluded.updated_at` },
+                    set: {
+                      source: 'anthropic', is_published: 1, updated_at: sql`excluded.updated_at`,
+                      description: sql`COALESCE(${schema.skillLibraryEntries.description}, excluded.description)`,
+                    },
                   });
                 } else if (!resolved.codified) {
                   // A codified skill already has its (claimed) Board entry, so

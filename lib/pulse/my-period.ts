@@ -14,7 +14,7 @@
  */
 import { sql, type SQL } from 'drizzle-orm';
 import { getTypedClient } from '@/lib/db/client';
-import { vendorClause, workPulseToolClause } from '@/lib/dashboard/product-sql';
+import { vendorClause, workPulseToolClause, personPerProduct } from '@/lib/dashboard/product-sql';
 import { isBuiltInTool } from '@/lib/finance/spend-review-builtins';
 import { categorizeFilePath } from '@/lib/pulse/cowork/file-categories';
 import type { Vendor } from '@/lib/dashboard/vendor';
@@ -122,8 +122,8 @@ export async function buildMyPeriod(opts: {
   let people: { deep: number; active: number } | null = null;
   if (group) {
     const pr = await rows<{ deep: number | string; active: number | string }>(sql`
-      SELECT COUNT(DISTINCT CASE WHEN pc.tier >= 2 THEN pc.user_id END) AS deep,
-             COUNT(DISTINCT pc.user_id) AS active
+      SELECT COUNT(DISTINCT CASE WHEN pc.tier >= 2 THEN ${sql.raw(personPerProduct('cm.'))} END) AS deep,
+             COUNT(DISTINCT ${sql.raw(personPerProduct('cm.'))}) AS active
       FROM pulse_classifications pc JOIN cowork_messages cm ON cm.id = pc.cowork_message_id
       WHERE ${whoIn('pc.user_id')} AND pc.classifier_status = 'classified'
         AND cm.occurred_at >= ${start} AND cm.occurred_at < ${end} AND ${msgVendor}`);
@@ -197,17 +197,19 @@ export async function buildMyPeriod(opts: {
 
   // ── Skills and connectors: the person's own, and what colleagues use that they don't ──
   const toolV = sql.raw(workPulseToolClause(vendor));
-  const toolRows = await rows<{ type: 'skill' | 'connector'; name: string; user_id: string; c: number | string }>(sql`
-    SELECT 'skill' AS type, skill_name AS name, user_id, COUNT(*) AS c FROM cowork_skill_invocations
+  // `who` is the person per product (personPerProduct), so a colleague on both Claude and ChatGPT
+  // counts once in each, as every All-view people figure does.
+  const toolRows = await rows<{ type: 'skill' | 'connector'; name: string; user_id: string; who: string; c: number | string }>(sql`
+    SELECT 'skill' AS type, skill_name AS name, user_id, ${sql.raw(personPerProduct())} AS who, COUNT(*) AS c FROM cowork_skill_invocations
       WHERE occurred_at >= ${start} AND occurred_at < ${end} AND ${toolV}
         ${group ? sql`` : department ? sql`AND (${whoIn('user_id')} OR user_id IN (${deptMembers(department)}))` : sql``}
-      GROUP BY skill_name, user_id
+      GROUP BY skill_name, user_id, 4
     UNION ALL
-    SELECT 'connector' AS type, mcp_server AS name, user_id, COUNT(*) AS c FROM cowork_mcp_invocations
+    SELECT 'connector' AS type, mcp_server AS name, user_id, ${sql.raw(personPerProduct())} AS who, COUNT(*) AS c FROM cowork_mcp_invocations
       WHERE occurred_at >= ${start} AND occurred_at < ${end} AND ${toolV}
         AND mcp_server NOT IN ('workspace', 'cowork', 'Claude_in_Chrome')
         ${group ? sql`` : department ? sql`AND (${whoIn('user_id')} OR user_id IN (${deptMembers(department)}))` : sql``}
-      GROUP BY mcp_server, user_id`);
+      GROUP BY mcp_server, user_id, 4`);
   const own = new Map<string, number>();
   const others = new Map<string, { type: 'skill' | 'connector'; name: string; people: Set<string> }>();
   for (const r of toolRows) {
@@ -215,7 +217,7 @@ export async function buildMyPeriod(opts: {
     const key = `${r.type}:${r.name}`;
     if (ownIds.has(r.user_id)) { own.set(key, (own.get(key) ?? 0) + n(r.c)); continue; }
     const e = others.get(key) ?? { type: r.type, name: r.name, people: new Set<string>() };
-    e.people.add(r.user_id);
+    e.people.add(r.who);
     others.set(key, e);
   }
   const untried = [...others.entries()].filter(([k, e]) => !own.has(k) && e.people.size >= 2)

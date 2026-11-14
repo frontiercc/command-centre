@@ -950,7 +950,7 @@ function CodePulseAdminContent() {
               </PanelActions>
             </Panel>
 
-            {/* Intended share per kind of work: the line Decisions and Team coaching read a team against. */}
+            {/* Intended share per kind of work: the line Team Coaching reads a team against. */}
             {(() => {
               const workTypes = clf?.config?.workTypes?.length
                 ? clf.config.workTypes
@@ -962,14 +962,13 @@ function CodePulseAdminContent() {
               return (
                 <Panel
                   title="Intended share per kind of work"
-                  subtitle="Decisions and Team coaching read each team against these"
+                  subtitle="Team Coaching reads each team against these"
                   flush
                 >
                   <p className="m-0 px-4 py-3 text-[13px] text-[#666666] leading-5 border-b border-[#F2F2F2]">
                     The share of a team&apos;s sessions you intend each kind of work to take. A team five points or
-                    more away from one of these is named on Decisions and gets an action on its coaching plan. Leave a
-                    box empty for a kind you are not steering, and it is left out of both. The kinds come from the
-                    rubric on the Tiers tab.
+                    more away from one of these gets an action on its coaching plan. Leave a box empty for a kind you
+                    are not steering, and it is left out. The kinds come from the rubric on the Tiers tab.
                   </p>
                   <div className="px-4 py-3 flex flex-col gap-2.5">
                     {workTypes.map(w => {
@@ -1003,7 +1002,7 @@ function CodePulseAdminContent() {
                     </button>
                     <Muted>
                       {set.length === 0
-                        ? 'Nothing set, so neither page compares effort with intent.'
+                        ? 'Nothing set, so Team Coaching does not compare effort with intent.'
                         : `${set.length} of ${workTypes.length} set, adding up to ${total}%.${total === 100 ? '' : ' They do not have to add up to 100, but a team is read against each one on its own.'}`}
                     </Muted>
                   </PanelActions>

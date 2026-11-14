@@ -134,7 +134,8 @@ describe('generateDeptBriefing', () => {
     // did tier-3 work alone across 3 distinct task types this period, so the
     // concentration-risk count must be 1 (one user meets the >=3 threshold).
     const userMessage = mockCreate.mock.calls[0][0].messages[0].content as string;
-    expect(userMessage).toContain('Users with concentration risk: 1');
+    expect(userMessage).toContain('People who are the only one doing three or more kinds of the deepest work: 1');
+    expect(userMessage).not.toMatch(/DDS|OTI|delegation depth score/i);
     expect(userMessage).toContain('Active users: 2');
   });
 });

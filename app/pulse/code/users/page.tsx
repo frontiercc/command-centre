@@ -229,7 +229,7 @@ function CodeUsersContent() {
 
               <div className="grid grid-cols-1 xl:grid-cols-2 gap-4">
                 <CodeWorkMix rows={data.workMix ?? []} who={who} names={data.tierNames ?? undefined} />
-                <ByHandPanel h={data.humanTime} who={who} />
+                <ByHandPanel h={data.humanTime} who={who} tool={openaiOnly || vendor === 'openai' ? 'Codex' : codexPresent && vendor === 'all' ? 'AI' : 'Claude Code'} />
               </div>
 
               <CodeStatStrip metrics={data.metrics} githubRepos={data.githubRepos} view={codexView ? vendor : 'claude'} split={data.metricsSplit} />

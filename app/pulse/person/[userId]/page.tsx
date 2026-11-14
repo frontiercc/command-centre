@@ -3,6 +3,7 @@
 
 'use client';
 
+import { deepShareOf, DeepWords, tierList, type TierNames } from '@/lib/pulse/tier-names';
 import { useEffect, useState, type ReactNode } from 'react';
 import { useParams, useRouter } from 'next/navigation';
 import Link from 'next/link';
@@ -19,7 +20,11 @@ interface Person360Data {
   userId: string;
   displayName: string | null;
   department: string | null;
-  cowork: { tierCounts: { t1: number; t2: number; t3: number }; dds: number | null; oti: number | null } | null;
+  cowork: {
+    tierCounts: { t1: number; t2: number; t3: number };
+    tierNames: TierNames;
+    produced: { produced: number; measured: number } | null;
+  } | null;
   code: {
     spendUsd: number | null; sessions: number; commits: number; autonomy: number | null;
     engagedHours: number | null; linesAdded: number; editAcceptRate: number | null;
@@ -155,8 +160,13 @@ export default function Person360Page() {
             ) : (
               <>
                 <FigureGrid cols={2}>
-                  {fig('Delegation depth', cowork.dds == null ? '—' : cowork.dds.toFixed(2), 'Average tier, 14 days', 'judged')}
-                  {fig('More valuable work', cowork.oti == null ? '—' : `${cowork.oti.toFixed(2)}×`, 'Output against their own start', 'judged')}
+                  {(() => {
+                    const share = deepShareOf(cowork.tierCounts.t1, cowork.tierCounts.t2, cowork.tierCounts.t3);
+                    const tasks = cowork.tierCounts.t1 + cowork.tierCounts.t2 + cowork.tierCounts.t3;
+                    return fig(DeepWords(cowork.tierNames), share === null ? 'Not judged' : `${Math.round(share * 100)}%`, `Of ${tasks.toLocaleString('en-GB')} judged tasks`, 'judged');
+                  })()}
+                  {fig('Produced something', cowork.produced === null ? 'Not measured' : `${Math.round((cowork.produced.produced / cowork.produced.measured) * 100)}%`,
+                    cowork.produced === null ? 'No session could be read, last 30 days' : `${cowork.produced.produced} of ${cowork.produced.measured} sessions, last 30 days`, 'measured')}
                 </FigureGrid>
                 <div className="px-4 py-3 border-t border-[#EAEAEA]">
                   <SubHead>Tier mix</SubHead>
@@ -165,7 +175,7 @@ export default function Person360Page() {
                       <span key={i} className="flex items-center gap-1.5">
                         <span className={`w-2.5 h-2 rounded-full inline-block ${TIER_SWATCH[i]}`} />
                         <span className="font-semibold text-[#0A0A0A]">{n}</span>
-                        <span className="text-[13px] text-[#8F8F8F]">T{i + 1}</span>
+                        <span className="text-[13px] text-[#8F8F8F]">{tierList(cowork.tierNames)[i]}</span>
                       </span>
                     ))}
                   </div>

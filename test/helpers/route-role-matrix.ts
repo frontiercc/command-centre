@@ -171,6 +171,9 @@ export const ROUTE_ROLE_MATRIX: Record<string, MatrixEntry> = {
   'pulse/code/classifier POST': ADMIN,
   'pulse/code/dept/[dept] GET': CODE_PULSE, // + own-department check for contributor roles
   'pulse/code/so-what GET': ADMIN_MANAGER, // + own-team check for a manager
+  'pulse/so-what GET': ADMIN_MANAGER, // + own-team check for a manager
+  'pulse/so-what/decisions POST': ADMIN_MANAGER,
+  'pulse/so-what/decisions DELETE': ADMIN_MANAGER,
   'pulse/code/so-what/decisions POST': ADMIN_MANAGER,
   'pulse/code/so-what/decisions DELETE': ADMIN_MANAGER,
   'pulse/code/coaching GET': ADMIN_MANAGER, // + own-department check for a manager

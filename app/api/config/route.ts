@@ -268,8 +268,8 @@ export async function POST(request: NextRequest) {
       'dxInstanceUrl',
       // Blank = the address falls back to CCC_COLLECTOR_ADDRESS, then localhost.
       'otelCollectorAddress',
-      // Blank = no intended share for any kind of work, so Decisions and Team coaching
-      // stop comparing effort with intent. Emptying every box has to mean that.
+      // Blank = no intended share for any kind of work, so Team Coaching
+      // stops comparing effort with intent. Emptying every box has to mean that.
       'codeEffortTargets',
       'openaiWorkspaceId', 'openaiOrganizationId',
     ]);

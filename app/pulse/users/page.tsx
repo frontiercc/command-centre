@@ -22,6 +22,7 @@ import type { TierNames } from '@/lib/pulse/tier-names';
 import { PageBody, Toolbar, Notice, B, cx } from '@/components/precision/ui';
 import { useVendor, useOpenAiOnly, VendorSwitch } from '@/components/shared/VendorSwitch';
 import { WORK_PULSE_VENDOR_LABELS } from '@/lib/dashboard/vendor';
+import { deepShareOf, deepWords } from '@/lib/pulse/tier-names';
 
 interface PersonalPulseData {
   humanTime?: ByHand | null;
@@ -47,7 +48,9 @@ interface UserListRow {
   display_name: string | null;
   email: string;
   department: string | null;
-  dds: number | null;
+  tier_1_count: number | null;
+  tier_2_count: number | null;
+  tier_3_count: number | null;
 }
 
 export default function UsersPickerPage() {
@@ -96,9 +99,11 @@ export default function UsersPickerPage() {
   useEffect(() => {
     if (!adminChecked) return;
     if (deptScoped && !userDept) { setUsersLoading(false); return; }
+    if (!vendorReady) return; // the saved view is read after the page loads
+    // The depth beside each name follows the switch.
     const url = deptScoped && userDept
-      ? `/api/pulse/admin/users?dept=${encodeURIComponent(userDept)}`
-      : '/api/pulse/admin/users';
+      ? `/api/pulse/admin/users?dept=${encodeURIComponent(userDept)}&vendor=${vendor}`
+      : `/api/pulse/admin/users?vendor=${vendor}`;
     fetch(url)
       .then(r => r.json())
       .then(d => {
@@ -112,7 +117,7 @@ export default function UsersPickerPage() {
       })
       .catch(() => {})
       .finally(() => setUsersLoading(false));
-  }, [adminChecked, deptScoped, userDept]); // eslint-disable-line react-hooks/exhaustive-deps
+  }, [adminChecked, deptScoped, userDept, vendor, vendorReady]); // eslint-disable-line react-hooks/exhaustive-deps
 
   const loadUser = useCallback((userId: string) => {
     if (!userId) return;
@@ -190,7 +195,10 @@ export default function UsersPickerPage() {
                     <option key={u.id} value={u.id}>
                       {u.display_name ?? u.email}
                       {u.department ? ` · ${u.department}` : ''}
-                      {u.dds != null ? ` (depth ${u.dds.toFixed(2)})` : ''}
+                      {(() => {
+                        const share = deepShareOf(u.tier_1_count, u.tier_2_count, u.tier_3_count);
+                        return share === null ? '' : ` (${Math.round(share * 100)}% ${deepWords(pulseData?.tierNames)})`;
+                      })()}
                     </option>
                   ))}
                 </select>
@@ -247,7 +255,7 @@ export default function UsersPickerPage() {
 
                   {/* The work behind whichever figure was clicked */}
                   {drill && (
-                    <TaskList kind={drill} period={period} userId={selectedUserId} who={who} onClose={() => setDrill(null)} names={d.tierNames ?? undefined} />
+                    <TaskList kind={drill} period={period} userId={selectedUserId} who={who} onClose={() => setDrill(null)} names={d.tierNames ?? undefined} vendor={vendor} tool={product === 'Claude and ChatGPT' ? 'AI' : product} />
                   )}
 
                   {/* 2. Best work this week */}
@@ -257,7 +265,7 @@ export default function UsersPickerPage() {
                   <DeeperPanel q={q} who={who} names={d.tierNames ?? undefined} />
 
                   {/* 4. By hand vs with Claude */}
-                  <ByHandPanel h={d.humanTime} who={who} onSeeSessions={() => setDrill('humantime')} />
+                  <ByHandPanel h={d.humanTime} who={who} onSeeSessions={() => setDrill('humantime')} tool={product === 'Claude and ChatGPT' ? 'AI' : product} />
 
                   {/* 5 and 6 */}
                   <div className="grid grid-cols-1 xl:grid-cols-2 gap-4 items-start">
