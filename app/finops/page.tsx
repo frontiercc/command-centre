@@ -604,7 +604,8 @@ export default function CostChargebackPage() {
                         {fmtTokensCompact(tokensTotal(report.surfaces.total.tokens))} tokens
                       </span>
                     )}
-                    <Tag>{basisTag}</Tag>
+                    {/* A long pricing note: wraps on narrow screens instead of widening the page. */}
+                    <span className="text-[12px] leading-4 text-[#666666] border border-[#EAEAEA] rounded-[10px] px-2 py-0.5">{basisTag}</span>
                   </>
                 }
               />

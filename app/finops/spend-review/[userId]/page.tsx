@@ -472,7 +472,7 @@ function WorkTableRow({ w, open, onToggle, modelOrder, name, peerDays }: {
   return (
     <>
       <tr className={cx(T.row, 'cursor-pointer', open && 'bg-[#FAFAFA]')} onClick={onToggle}>
-        <td className={cx(T.td, 'min-w-[12rem]')}>
+        <td className={cx(T.td, 'min-w-[10rem]')}>
           <button
             type="button"
             aria-expanded={open}
@@ -490,6 +490,11 @@ function WorkTableRow({ w, open, onToggle, modelOrder, name, peerDays }: {
                   <span className="inline-flex items-center gap-1 text-[#1F6F8B]"><span className="w-1.5 h-1.5 rounded-full bg-[#6BA3B8]" />AI-judged</span>
                 )}
               </span>
+              {/* Phones: the typical session and route columns are hidden, so they show here. */}
+              <span className="sm:hidden mt-1 flex flex-col items-start gap-1 text-[13px] text-[#666666]">
+                <span>Typical session {w.typicalSessionUsd === null ? 'not measured' : money(w.typicalSessionUsd)}{w.peer?.typicalSessionUsd != null ? `, colleagues ${money(w.peer.typicalSessionUsd)}` : ''}</span>
+                <ReviewChip w={w} />
+              </span>
             </span>
           </button>
         </td>
@@ -498,11 +503,11 @@ function WorkTableRow({ w, open, onToggle, modelOrder, name, peerDays }: {
           <span className="block text-[13px] text-[#8F8F8F]">{pct(w.share)} of spend</span>
           <span className="block mt-1"><Bar pct={Math.max(1, Math.round(w.share * 100))} tone="measured" height={4} /></span>
         </td>
-        <td className={cx(T.tdRight, 'whitespace-nowrap')}>
+        <td className={cx(T.tdRight, 'whitespace-nowrap hidden sm:table-cell')}>
           <span className="block text-[#0A0A0A]">{w.typicalSessionUsd === null ? <span className="text-[#8F8F8F]">not measured</span> : money(w.typicalSessionUsd)}</span>
           <span className="block text-[13px] text-[#8F8F8F] min-h-[1rem]">{w.peer?.typicalSessionUsd != null && `colleagues ${money(w.peer.typicalSessionUsd)}`}</span>
         </td>
-        <td className={T.tdRight}><ReviewChip w={w} /></td>
+        <td className={cx(T.tdRight, 'hidden sm:table-cell')}><ReviewChip w={w} /></td>
       </tr>
       {open && (
         <tr id={detailId} className="bg-[#FAFAFA]">
@@ -543,8 +548,8 @@ function WhereTheMoneyGoes({ data, name, showAll, onShowAll }: { data: Review; n
             <tr className={T.headRow}>
               <th scope="col" className={T.th}>Kind of work</th>
               <th scope="col" className={T.thRight}>Spend</th>
-              <th scope="col" className={T.thRight}>Typical session</th>
-              <th scope="col" className={T.thRight}>Route</th>
+              <th scope="col" className={cx(T.thRight, 'hidden sm:table-cell')}>Typical session</th>
+              <th scope="col" className={cx(T.thRight, 'hidden sm:table-cell')}>Route</th>
             </tr>
           </thead>
           <tbody>

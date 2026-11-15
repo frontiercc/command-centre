@@ -31,7 +31,7 @@ export default function TopBar({ title, subtitle }: { title: ReactNode; subtitle
           <span className="ccc-pbar-current">{heading}</span>
           {/* One chart colour (petrol) for measured and AI-judged alike; panels tag AI-judged figures. */}
           {askOk && pathname !== '/ask' && (
-            <button type="button" onClick={() => openAskDrawer()} className="ml-auto inline-flex items-center gap-1.5 text-[13px] font-medium px-2.5 py-1 rounded-[10px] border border-[#DADADA] bg-white text-[#0A0A0A] hover:bg-[#FAFAFA]">
+            <button type="button" onClick={() => openAskDrawer()} className="ml-auto shrink-0 whitespace-nowrap inline-flex items-center gap-1.5 text-[13px] font-medium px-2.5 py-1 rounded-[10px] border border-[#DADADA] bg-white text-[#0A0A0A] hover:bg-[#FAFAFA]">
               Ask the data
             </button>
           )}
