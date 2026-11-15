@@ -21,7 +21,7 @@ import {
 import { getWindowDistinctUsers, type WeekActivity } from '@/lib/usecases/weeks';
 import {
   getUseCasePlatformSessions, getUseCasePlatformHours, type PlatformSessions, type PlatformHours,
-  getUseCaseProductSessions, getUseCaseProductHours, getUseCaseSessionsThisWeek, type ProductSessions, type ProductHours,
+  getUseCaseProductSessions, getUseCaseProductHours, getUseCaseSessionsThisWeek, getUseCasesWithHiddenActivity, type ProductSessions, type ProductHours,
 } from '@/lib/usecases/platform-sessions';
 import { openaiShown } from '@/lib/sources/openai-visibility';
 
@@ -49,6 +49,8 @@ export interface GovernanceBet {
     productHours: ProductHours;
     /** Sessions this week, not yet in the 13 weeks; the lifecycle counts them, so the page says so beside a 0. */
     sessionsThisWeek: number;
+    /** ChatGPT and Codex are hidden and this use case had work there, which the stage counts. */
+    hiddenActivity: boolean;
   };
   estimated: { hoursRecovered: number };
   series: Array<number | null>;
@@ -74,6 +76,8 @@ export interface GovernanceWorkflow {
   productSessions: ProductSessions;
   /** Sessions this week, not yet in the 13 weeks (see GovernanceBet). */
   sessionsThisWeek: number;
+  /** Work in hidden ChatGPT or Codex (see GovernanceBet). */
+  hiddenActivity: boolean;
 }
 
 export interface GovernanceRollup {
@@ -219,12 +223,13 @@ export async function buildGovernanceRollup(
   // Per-vendor split (Claude / OpenAI), same window and session rules as the
   // register column and the use case page's Workflow Impact panel.
   const shown = opts.openaiShown ?? await openaiShown();
-  const [platformSessions, platformHours, productSessions, productHours, thisWeek] = await Promise.all([
+  const [platformSessions, platformHours, productSessions, productHours, thisWeek, hidden] = await Promise.all([
     getUseCasePlatformSessions(nowS, { openaiShown: shown }),
     getUseCasePlatformHours(nowS, { openaiShown: shown }),
     getUseCaseProductSessions(nowS, { openaiShown: shown }),
     getUseCaseProductHours(nowS, { openaiShown: shown }),
     getUseCaseSessionsThisWeek(nowS, { openaiShown: shown }),
+    shown ? Promise.resolve(new Set<string>()) : getUseCasesWithHiddenActivity(nowS),
   ]);
   const productSessionsFor = (id: string): ProductSessions =>
     productSessions.get(id) ?? { cowork: 0, code: 0, chatgpt: shown ? 0 : null, codex: shown ? 0 : null };
@@ -259,6 +264,7 @@ export async function buildGovernanceRollup(
         distinctUsers, sessions, hours, platformSessions: sessionsFor(uc.id), platformHours: hoursFor(uc.id),
         productSessions: productSessionsFor(uc.id), productHours: productHoursFor(uc.id),
         sessionsThisWeek: thisWeek.get(uc.id) ?? 0,
+        hiddenActivity: hidden.has(uc.id),
       },
       estimated: { hoursRecovered },
       series,
@@ -277,6 +283,7 @@ export async function buildGovernanceRollup(
       platformSessions: sessionsFor(uc.id),
       productSessions: productSessionsFor(uc.id),
       sessionsThisWeek: thisWeek.get(uc.id) ?? 0,
+      hiddenActivity: hidden.has(uc.id),
     };
   }));
 

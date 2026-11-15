@@ -40,7 +40,6 @@ import { REPEAT_MIN_PROMPTS } from '@/lib/pulse/cowork/coaching-figures';
 import { MECHANISM_TASK_TYPES } from '@/lib/finance/model-efficiency';
 import { kindLabel } from '@/lib/pulse/cowork/coaching-words';
 import { soleWorkByPerson } from '@/lib/pulse/sole-work';
-import { chatgptSpend } from '@/lib/openai/spend';
 
 export const dynamic = 'force-dynamic';
 
@@ -336,7 +335,6 @@ export async function GET(
   // Document-upload sessions for dept members (30 days), Claude Cowork and ChatGPT alike.
   const docSessions = await getDocSessions({ since: thirtyDaysAgo, memberIds, vendor });
 
-  const sevenDaysAgoOtel = now - 7 * 24 * 3600;
   const openaiPresent = await visibleOpenAi(hasOpenAiData());
 
   // ── Delegation view ───────────────────────────────────────────────────────
@@ -467,7 +465,6 @@ export async function GET(
     };
   }).sort((a, b) => (b.share ?? -1) - (a.share ?? -1) || b.deep - a.deep);
 
-  const deptChatgpt = vendor === 'claude' || !openaiPresent ? undefined : await chatgptSpend({ since: sevenDaysAgoOtel, userIds: memberIds });
   // This month's spend for the department, from the same figures FinOps uses.
   let spendThisMonth = null;
   try {
@@ -496,7 +493,6 @@ export async function GET(
     frontier,
     frontierAccess: { canReview: session.role === 'admin', canOpenUseCases: canAccessPulseAdmin(session.role) },
     deptBriefing: deptBriefing ?? null,
-    chatgptUnpricedModels: deptChatgpt?.unpricedModels ?? [],
     vendor,
     openaiPresent,
     docSessions,

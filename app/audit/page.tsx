@@ -23,6 +23,7 @@ import { productLabel, productOf } from '@/lib/dashboard/vendor';
 import { useConnectedProducts } from '@/components/shared/VendorSwitch';
 import { isOpenAiOnly, openAiConnected } from '@/lib/sources/connected-shared';
 import { STRIPPED_MARKER, shownContent } from '@/lib/retention/marker';
+import { formatDuration } from '@/components/pulse/code/CodeStatStrip';
 
 interface AuditEvent {
   id: string;
@@ -71,7 +72,6 @@ const EVENT_TYPE_LABELS: Record<string, string> = {
   cowork_skill_event: 'Skill invoked',
   cowork_mcp_event: 'Connector used',
   chat_prompt: 'User prompt',
-  chat_completion: 'User prompt',
 };
 
 const RETENTION_MARKER = STRIPPED_MARKER;
@@ -880,7 +880,7 @@ export default function AuditPage() {
                 if (cost != null) facts.push(<span key="cost" className="font-semibold text-[#0A0A0A]">{costIsEstimate ? 'Estimated cost' : 'Cost'}: ${cost.toFixed(4)}</span>);
                 if (totalTokens > 0) facts.push(<span key="tok">{(totalTokens / 1000).toFixed(1)}k tokens</span>);
                 if (en.tool_call_count != null && en.tool_call_count > 0) facts.push(<span key="tools">{en.tool_call_count} tool call{en.tool_call_count !== 1 ? 's' : ''}</span>);
-                if (en.duration_secs != null && en.duration_secs > 0) facts.push(<span key="dur">{en.duration_secs}s duration</span>);
+                if (en.duration_secs != null && en.duration_secs > 0) facts.push(<span key="dur">{formatDuration(en.duration_secs)} duration</span>);
                 if (en.total_commits != null && en.total_commits > 0) facts.push(<span key="commits" className="text-[#1A7F37] font-medium">{en.total_commits} commit{en.total_commits !== 1 ? 's' : ''}</span>);
                 if (en.total_errors != null && en.total_errors > 0) facts.push(<span key="err" className="text-[#B42318]">{en.total_errors} error{en.total_errors !== 1 ? 's' : ''}</span>);
                 return (

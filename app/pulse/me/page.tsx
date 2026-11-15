@@ -19,6 +19,7 @@ import { WorkPanel, TaskList, DeeperPanel, ByHandPanel, ProducedPanel, Colleague
 import { PageBody, Toolbar, Notice, Dot, B, C } from '@/components/precision/ui';
 import { useVendor, useOpenAiOnly, VendorSwitch } from '@/components/shared/VendorSwitch';
 import { WORK_PULSE_VENDOR_LABELS } from '@/lib/dashboard/vendor';
+import { UNLINKED_TITLE } from '@/lib/pulse/unlinked';
 
 interface PersonalPulseData {
   humanTime?: ByHand | null;
@@ -53,7 +54,6 @@ interface PersonalPulseData {
     pending: Array<{ id: number; title: string; body: string | null; tier: number | null; detected_at: number }>;
   } | null;
   teamMetrics: { ors: number | null } | null;
-  chatgptUnpricedModels?: string[];
   coworkFrictionIndex?: number | null;
   otiUnderReview?: boolean;
   openaiPresent?: boolean;
@@ -194,7 +194,10 @@ export default function PersonalPulsePage() {
             {data.spendThisMonth && <SpendPanel s={data.spendThisMonth} product={product} who={who} reviewHref={reviewHref} />}
           </>
         ) : (
-          <Notice tone="info" title="No work yet.">Nothing has been recorded for {who.you ? 'you' : 'this person'} yet.</Notice>
+          // Not matched to anyone's activity yet: say how it gets linked. Matched, but no work: say so.
+          !data.userId && who.you
+            ? <Notice tone="info" title={UNLINKED_TITLE} />
+            : <Notice tone="info" title="No work yet.">Nothing has been recorded for {who.you ? 'you' : 'this person'} yet.</Notice>
         )}
 
         {/* 6. The week, in a paragraph */}
@@ -214,7 +217,8 @@ export default function PersonalPulsePage() {
               {data.weeklyPulse.suggestion && <p className="m-0"><b className="font-semibold">Suggestion for next week:</b> {data.weeklyPulse.suggestion}</p>}
             </div>
           ) : (
-            <p className="m-0 mt-2 text-[13px] text-[#8F8F8F]">No paragraph yet. It is written each Sunday, or use Generate now.</p>
+            // "Generate now" is mentioned only when its button is shown: the sign-in is matched to a person.
+            <p className="m-0 mt-2 text-[13px] text-[#8F8F8F]">No paragraph yet. It is written each Sunday{data.userId ? ', or use Generate now' : ''}.</p>
           )}
         </Frame>
 

@@ -53,7 +53,6 @@ interface DeptData {
   concentrationDetail: Array<{ user_id: string; display_name: string | null; task_types: string[] }>;
   skillConcentration?: Array<{ user_id: string; display_name: string | null; skills: string[] }>;
   deptBriefing: { body: string; suggestion: string | null; generated_at: number } | null;
-  chatgptUnpricedModels?: string[];
   coworkFrictionIndex?: number | null;
   openaiPresent?: boolean;
   docSessions?: { sessions_with_uploads: number; total_uploads: number };

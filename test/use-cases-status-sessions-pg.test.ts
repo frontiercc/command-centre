@@ -89,6 +89,31 @@ describe('GET /api/use-cases: lifecycle and sessions agree', () => {
     expect(r.sessionsThisWeek).toBe(1);
   });
 
+  it('with ChatGPT and Codex hidden, a use case used only there says so instead of a bare 0', async () => {
+    // Adopted on ChatGPT work only, in a completed week of the 13.
+    await useCase('uc-chatgpt-only', 'confirmed', 'adopted');
+    const wk = weekStart(NOW) - 14 * 86400;
+    await sql.run(`INSERT INTO chatgpt_session_time (session_id, user_id, source, first_at, last_at, active_secs, computed_at)
+      VALUES ('chatgpt:c1', 'u1', 'chatgpt_chat', ?, ?, 300, ?)`, [wk + 60, wk + 360, wk + 360]);
+    await sql.run(`INSERT INTO use_case_week_matches (use_case_id, week_start, user_id, session_id) VALUES ('uc-chatgpt-only', ?, 'u1', 'chatgpt:c1')`, [wk]);
+    const { saveConfig } = await import('@/lib/config');
+    try {
+      await saveConfig({ openaiShown: 'false' });
+      const hidden = (await list() as Array<Row & { hiddenActivity?: boolean }>).find(x => x.id === 'uc-chatgpt-only')!;
+      expect(shown(hidden)).toBe(0);
+      expect(hidden.hiddenActivity).toBe(true);
+      // A Claude use case is never flagged.
+      expect((await list() as Array<Row & { hiddenActivity?: boolean }>).find(x => x.id === 'uc-this-week')!.hiddenActivity).toBe(false);
+
+      await saveConfig({ openaiShown: 'true' });
+      const visible = (await list() as Array<Row & { hiddenActivity?: boolean }>).find(x => x.id === 'uc-chatgpt-only')!;
+      expect(visible.productSessions.chatgpt).toBe(1);
+      expect(visible.hiddenActivity).toBe(false);
+    } finally {
+      await saveConfig({ openaiShown: 'true' });
+    }
+  });
+
   it('the detail route gives an archived use case no stage either', async () => {
     const { GET } = await import('../app/api/use-cases/[id]/route');
     const res = await GET(new NextRequest('http://localhost/api/use-cases/uc-archived'), { params: Promise.resolve({ id: 'uc-archived' }) });

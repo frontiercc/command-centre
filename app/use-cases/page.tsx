@@ -34,6 +34,8 @@ interface UseCase {
   productSessions?: ProductSessions;
   /** Sessions this week, by the same rules: not yet in the 13 weeks, but the lifecycle counts them. */
   sessionsThisWeek?: number;
+  /** ChatGPT and Codex are hidden and this use case had work there, which the stage counts. */
+  hiddenActivity?: boolean;
 }
 
 interface ProductSessions { cowork: number; code: number; chatgpt: number | null; codex: number | null }
@@ -101,7 +103,7 @@ const LIFECYCLE_FACETS: Array<NonNullable<UseCase['lifecycle']>> = ['adopted', '
  * this week, which the lifecycle counts, says so, so "Piloting" never sits
  * beside a bare 0.
  */
-function PlatformCell({ p, showOpenAi, thisWeek }: { p?: ProductSessions; showOpenAi: boolean; thisWeek?: number }) {
+function PlatformCell({ p, showOpenAi, thisWeek, hidden }: { p?: ProductSessions; showOpenAi: boolean; thisWeek?: number; hidden?: boolean }) {
   if (!p) return <span className="text-[#8F8F8F]">not measured</span>;
   const all: Array<[string, number | null]> = [
     ['Claude Cowork', p.cowork],
@@ -112,6 +114,7 @@ function PlatformCell({ p, showOpenAi, thisWeek }: { p?: ProductSessions; showOp
   const parts = all.filter((x): x is [string, number] => x[1] !== null && x[1] > 0).map(([label, n]) => `${label} ${n}`);
   if (parts.length === 0) {
     if (thisWeek && thisWeek > 0) return <span className="whitespace-nowrap text-[#333333]">0 · {thisWeek} this week</span>;
+    if (hidden) return <span className="whitespace-nowrap text-[#333333]">0 · used in hidden products</span>;
     return <span className="text-[#8F8F8F]">0</span>;
   }
   // One product per line, so the column stays narrow however many products did the work.
@@ -365,7 +368,8 @@ export default function UseCasesRegisterPage() {
                       : 'bg-white text-[#4D4D4D] border-[#EAEAEA] hover:border-[#DADADA]',
                   )}
                 >
-                  {c.label} {c.count}
+                  {/* "All" is the total of the filters after it, so it carries no count of its own. */}
+                  {c.key === ALL ? c.label : `${c.label} ${c.count}`}
                 </button>
               ))}
             </div>
@@ -513,7 +517,7 @@ export default function UseCasesRegisterPage() {
                             <p className="m-0 mt-0.5 text-[#666666] truncate" title={uc.description}>{uc.description}</p>
                           )}
                         </td>
-                        <td className={cx(T.td, 'text-[13px] tabular-nums')}><PlatformCell p={uc.productSessions} showOpenAi={!!connected?.openai} thisWeek={uc.sessionsThisWeek} /></td>
+                        <td className={cx(T.td, 'text-[13px] tabular-nums')}><PlatformCell p={uc.productSessions} showOpenAi={!!connected?.openai} thisWeek={uc.sessionsThisWeek} hidden={uc.hiddenActivity} /></td>
                         <td className={T.td}>
                           {pill ? <Pill tone={pill.tone}>{pill.label}</Pill>
                             : uc.status === 'archived' ? <span className="text-[13px] text-[#8F8F8F]" title="Archived use cases are no longer tracked">Not tracked</span>

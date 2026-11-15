@@ -31,12 +31,13 @@ async function setUp() {
   })));
   let n = 0;
   let hour = SEPT + 2 * DAY;
-  async function coworkSession(userId: string, taskType: string, cost: number) {
+  // cost null: a session whose request reported no cost, so it has nothing to score.
+  async function coworkSession(userId: string, taskType: string, cost: number | null) {
     const sid = `cw-${++n}`;
     const t = (hour += HOUR);
     await db.insert(schema.coworkMessages).values([
       { id: `${sid}-p`, session_id: sid, user_id: userId, message_type: 'cowork_user_message', content_full: `prompt ${n}`, occurred_at: t, surface: 'cowork' },
-      { id: `${sid}-a`, session_id: sid, user_id: userId, message_type: 'cowork_api_request', model: 'claude-sonnet-4-6', cost_usd: String(cost), occurred_at: t + 60, surface: 'cowork' },
+      { id: `${sid}-a`, session_id: sid, user_id: userId, message_type: 'cowork_api_request', model: 'claude-sonnet-4-6', cost_usd: cost === null ? null : String(cost), occurred_at: t + 60, surface: 'cowork' },
     ]);
     await db.insert(schema.pulseClassifications).values({
       cowork_message_id: `${sid}-p`, user_id: userId, tier: 3, task_type: taskType,
@@ -70,6 +71,24 @@ describe('spend review efficiency score (postgres)', () => {
 
       // Everyone had ten comparable sessions; only Mia cost less than colleagues (each colleague's median ratio is 1).
       expect(index.summary.efficiencyReach?.claude).toEqual({ compared: 4, mostSessions: 10, enough: 4, cheaper: 1, minSessions: EFFICIENCY_MIN_SESSIONS });
+    } finally {
+      await cleanup();
+    }
+  });
+
+  it('counts only priced sessions towards the minimum', async () => {
+    const { cleanup, coworkSession } = await setUp();
+    try {
+      for (const p of ['u-p1', 'u-p2', 'u-p3']) for (const k of KINDS) for (let i = 0; i < 2; i++) await coworkSession(p, k, 4);
+      // Mia: ten sessions, but one reported no cost. Nine can be scored, under the minimum of ten.
+      for (const k of KINDS) for (let i = 0; i < 2; i++) await coworkSession('u-mia', k, k === 'writing' && i === 1 ? null : 2);
+
+      const { buildSpendReviewIndex, EFFICIENCY_MIN_SESSIONS } = await import('@/lib/finance/spend-review');
+      const index = await buildSpendReviewIndex(PERIOD, NOW);
+
+      expect(index.efficiency.map(e => e.userId)).not.toContain('u-mia');
+      expect(index.summary.efficiencyReach?.claude?.mostSessions).toBe(EFFICIENCY_MIN_SESSIONS);
+      expect(index.summary.efficiencyReach?.claude?.enough).toBe(3);
     } finally {
       await cleanup();
     }

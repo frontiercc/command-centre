@@ -28,7 +28,6 @@ import type { DeptProcessBox } from '@/lib/usecases/suggestion-store';
 import { type Vendor } from '@/lib/dashboard/vendor';
 import { hasOpenAiData } from '@/lib/dashboard/queries';
 import { messageVendor } from '@/lib/pulse/vendor-filter';
-import { chatgptSpend } from '@/lib/openai/spend';
 
 export const dynamic = 'force-dynamic';
 
@@ -232,9 +231,7 @@ export async function GET(request: NextRequest) {
     r.user_id && promptVisible.has(r.user_id) ? r : { ...r, body: null, content_preview: null });
   if (promptVisible.size > 0) await logPromptRead(request, session, 'pulse/cio/capability-log');
 
-  // ChatGPT models with no price yet, for the unpriced-models notice.
   const wm = metricsFor(vendor);
-  const orgChatgpt = vendor === 'claude' || !openaiPresent ? undefined : await chatgptSpend({ since: sevenDaysAgo });
 
   // ── Delegation depth over time ────────────────────────────────────────────
   // Weekly 'function'-scope rows per department; current week excluded.
@@ -366,7 +363,6 @@ export async function GET(request: NextRequest) {
     signalCards,
     briefing: briefing ?? null,
     capabilityLog,
-    chatgptUnpricedModels: orgChatgpt?.unpricedModels ?? [],
     delegation: {
       window: delegationWindow,
       org: {

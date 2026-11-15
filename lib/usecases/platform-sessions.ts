@@ -106,6 +106,20 @@ export async function getUseCaseSessionsThisWeek(
   return out;
 }
 
+/**
+ * Use cases with ChatGPT or Codex sessions in the 13 completed weeks or this week. Only asked for
+ * while those products are hidden: the stage (lib/usecases/lifecycle.ts) still counts their
+ * sessions, so a page that shows 0 beside a stage says the work was in hidden products.
+ */
+export async function getUseCasesWithHiddenActivity(nowS: number): Promise<Set<string>> {
+  const out = new Set<string>();
+  const weeks = [...weekStarts(nowS - WEEK, WINDOW_WEEKS), weekStart(nowS)];
+  for (const [id, p] of await productSessionsInWeeks(weeks, { openaiShown: true })) {
+    if ((p.chatgpt ?? 0) + (p.codex ?? 0) > 0) out.add(id);
+  }
+  return out;
+}
+
 async function productSessionsInWeeks(
   windowStarts: number[],
   opts: { openaiShown: boolean },

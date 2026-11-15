@@ -26,7 +26,6 @@ import { readHumanTime } from '@/lib/pulse/human-time-summary';
 import { getAllConfig } from '@/lib/config';
 import { canViewSpendReview } from '@/lib/finance/spend-review-access';
 import { isWorkPulseSurface, classifiableSource, classifyChatgptOn } from '@/lib/pulse/work-surfaces';
-import { chatgptSpend } from '@/lib/openai/spend';
 import { buildMyPeriod, type MyPeriod, type PulsePeriod } from '@/lib/pulse/my-period';
 import { humanTimeOn } from '@/lib/pulse/human-time-flags';
 import { monthSpend } from '@/lib/finance/month-spend';
@@ -308,7 +307,6 @@ export async function GET(request: NextRequest) {
   // OTel cowork enrichments — 7-day window
   const sevenDaysAgoOtel = now - 7 * 24 * 3600;
   const openaiPresent = await visibleOpenAi(hasOpenAiData());
-  const chatgpt = vendor === 'claude' || !openaiPresent ? undefined : await chatgptSpend({ since: sevenDaysAgoOtel, userIds: [userId] });
   const coworkFrictionIndex = await getCoworkFrictionIndex(userId, sevenDaysAgoOtel, now);
 
   // Frontier boxes: best recent work, step-ups, capabilities.
@@ -371,7 +369,6 @@ export async function GET(request: NextRequest) {
     capabilitiesDetail,
     teamId,
     teamMetrics: { ors: teamOrs },
-    chatgptUnpricedModels: chatgpt?.unpricedModels ?? [],
     coworkFrictionIndex: vendor === 'openai' ? undefined : coworkFrictionIndex,
     otiUnderReview,
     vendor,

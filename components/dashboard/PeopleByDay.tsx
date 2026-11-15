@@ -40,12 +40,12 @@ export default function PeopleByDay({ days, products, activeThisWeek, activeLast
   const y = (v: number) => (1 - v / tickTop) * 100;
   const ticks = [0, Math.round(tickTop / 2), tickTop].filter((t, i, a) => a.indexOf(t) === i);
   const yIdx = n >= 2 ? n - 2 : n - 1;
-  const lead = shown.length > 0 ? [...shown].sort((a, b) => days[yIdx].products[b.id] - days[yIdx].products[a.id])[0] : null;
+  const top = shown.length > 0 ? [...shown].sort((a, b) => days[yIdx].products[b.id] - days[yIdx].products[a.id])[0] : null;
+  // Named only when someone used it yesterday: "the most people: 0" says nothing.
+  const lead = top && days[yIdx].products[top.id] > 0 ? top : null;
   const diff = activeThisWeek - activeLastWeek;
   const change = diff === 0 ? 'the same as' : diff > 0 ? `${diff} more than` : `${-diff} fewer than`;
-  const weekday = (d: string) => new Date(`${d}T00:00:00Z`).getUTCDay();
   const label = (d: string) => { const dt = new Date(`${d}T00:00:00Z`); return `${dt.getUTCDate()} ${dt.toLocaleString('en-GB', { month: 'short', timeZone: 'UTC' })}`; };
-  const half = n > 1 ? 50 / (n - 1) : 50;
   // Date labels counting back from today: every other day over a fortnight, weekly over longer.
   const labelStep = n > 14 ? 7 : 2;
 
@@ -77,9 +77,6 @@ export default function PeopleByDay({ days, products, activeThisWeek, activeLast
             </div>
             <div className="relative flex-1">
               <svg viewBox="0 0 100 100" preserveAspectRatio="none" className="absolute inset-0 w-full h-full" role="img" aria-label={`People a day by product, last ${n} days`}>
-                {days.map((d, i) => (weekday(d.date) === 0 || weekday(d.date) === 6)
-                  ? <rect key={`w${i}`} x={Math.max(0, x(i) - half)} y={0} width={half * 2} height={100} fill="#F2F2F4" />
-                  : null)}
                 {ticks.map(t => (
                   <line key={t} x1={0} x2={100} y1={y(t)} y2={y(t)} stroke="#EDEDED" strokeWidth={1} vectorEffect="non-scaling-stroke" />
                 ))}
@@ -97,7 +94,8 @@ export default function PeopleByDay({ days, products, activeThisWeek, activeLast
           </div>
           <div className="relative h-4 mt-1 ml-7">
             {days.map((d, i) => (n - 1 - i) % labelStep === 0 ? (
-              <span key={`l${i}`} className="absolute -translate-x-1/2 text-[11px] leading-4 text-[#8F8F8F] whitespace-nowrap" style={{ left: `${x(i)}%` }}>
+              // The end labels sit inside the chart: the first starts at its point, the last ("Today") ends at it.
+              <span key={`l${i}`} className={`absolute ${i === n - 1 ? '-translate-x-full' : i === 0 ? '' : '-translate-x-1/2'} text-[11px] leading-4 text-[#8F8F8F] whitespace-nowrap`} style={{ left: `${x(i)}%` }}>
                 {i === n - 1 ? 'Today' : label(d.date)}
               </span>
             ) : null)}
@@ -108,7 +106,6 @@ export default function PeopleByDay({ days, products, activeThisWeek, activeLast
         {shown.map(p => (
           <span key={p.id} className="inline-flex items-center gap-1.5"><span className="w-2.5 h-2.5 rounded-[2px]" style={{ background: PRODUCT_COLOR[p.id] }} />{p.label}</span>
         ))}
-        <span className="inline-flex items-center gap-1.5"><span className="w-2.5 h-2.5 rounded-[2px] bg-[#F2F2F4] border border-[#E4E4E7]" />Weekend</span>
       </div>
       <p className="m-0 mt-3 pt-2.5 border-t border-dashed border-[#EAEAEA] text-[12px] text-[#8F8F8F]">
         Every line counts people, never prompts, so the products can be compared. A person counts once a day for each product they used. Today is still in progress, so its line is dashed.

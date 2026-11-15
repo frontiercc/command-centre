@@ -297,7 +297,7 @@ export default function UsersPickerPage() {
                     {d.weeklyPulse.suggestion && <p className="m-0"><b className="font-semibold">Suggestion for next week:</b> {d.weeklyPulse.suggestion}</p>}
                   </div>
                 ) : (
-                  <p className="m-0 mt-2 text-[13px] text-[#8F8F8F]">No paragraph yet. It is written each Sunday, or use Generate now.</p>
+                  <p className="m-0 mt-2 text-[13px] text-[#8F8F8F]">No paragraph yet. It is written each Sunday{d.userId ? ', or use Generate now' : ''}.</p>
                 )}
               </Frame>
 

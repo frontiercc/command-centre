@@ -64,7 +64,8 @@ export default function StickinessCard({ vendor = 'all', openaiPresent = false, 
               const daily = Math.min(total, Math.round(r.s.avgDau / per));
               return (
                 <div key={r.id} className="grid grid-cols-[minmax(0,140px)_minmax(0,1fr)_64px] gap-3 items-center text-[13px]">
-                  <span className="truncate text-[#333333]">{r.label}</span>
+                  {/* Wraps rather than cuts off: "Claude Cowork and apps" is wider than the column. */}
+                  <span className="leading-4 text-[#333333]">{r.label}</span>
                   <span className="flex flex-wrap gap-[3px]" aria-label={`${Math.round(r.s.avgDau)} of ${r.s.mau} on a typical day`}>
                     {Array.from({ length: total }, (_, i) => (
                       <span key={i} className="w-[9px] h-[9px] rounded-full" style={{ background: i < daily ? PRODUCT_COLOR[r.id] : '#E4E4E7' }} />

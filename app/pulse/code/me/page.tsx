@@ -23,6 +23,7 @@ import PriorPeriodBadge, { priorPeriodChange } from '@/components/pulse/code/Pri
 import { PageBody, Toolbar, Panel, Tag, Empty, Muted, B } from '@/components/precision/ui';
 import { useVendor, useOpenAiOnly, VendorSwitch } from '@/components/shared/VendorSwitch';
 import { DEVELOPER_PULSE_VENDOR_LABELS, type Vendor } from '@/lib/dashboard/vendor';
+import { UNLINKED_TITLE } from '@/lib/pulse/unlinked';
 
 interface SessionRow {
   session_id: string;
@@ -185,15 +186,7 @@ function MyCodePulseContent() {
       />
       <PageBody className="dash-compact">
         {!data?.userId ? (
-          openaiOnly ? (
-            <Empty title="No Codex activity linked to your account yet">
-              Codex activity is matched to your sign-in by email. It arrives from OpenAI&apos;s Compliance API a few hours after you use Codex.
-            </Empty>
-          ) : (
-            <Empty title="No Claude Code activity linked to your account yet">
-              Ask an admin to link your sign-in to your Claude identity on the Access & Keys page, or start a Claude Code session with telemetry on.
-            </Empty>
-          )
+          <Empty title={UNLINKED_TITLE} />
         ) : (
           <>
             {(data.canSeeSpendReview || data.codexPresent) && (

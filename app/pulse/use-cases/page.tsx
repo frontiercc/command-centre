@@ -25,6 +25,7 @@ interface GovernanceBet {
     productSessions?: ProductSessions;
     productHours?: ProductHours;
     sessionsThisWeek?: number;
+    hiddenActivity?: boolean;
   };
   estimated: { hoursRecovered: number };
   series: Array<number | null>;
@@ -48,6 +49,7 @@ interface GovernanceWorkflow {
   platformSessions?: PlatformSessions;
   productSessions?: ProductSessions;
   sessionsThisWeek?: number;
+  hiddenActivity?: boolean;
 }
 
 interface GovernanceRollup {
@@ -192,7 +194,8 @@ function BetsPanel({ bets, minutesPerSession }: { bets: GovernanceBet[]; minutes
                     <td className={cx(T.tdRight, 'text-[#1F6F8B] whitespace-nowrap')}>
                       {bet.measured.sessions} {bet.measured.sessions === 1 ? 'session' : 'sessions'}
                       {/* "Piloting" never sits beside a bare 0: the lifecycle counts this week's sessions. */}
-                      {bet.measured.sessions === 0 && (bet.measured.sessionsThisWeek ?? 0) > 0 ? ` · ${bet.measured.sessionsThisWeek} this week` : ''}
+                      {bet.measured.sessions === 0 && (bet.measured.sessionsThisWeek ?? 0) > 0 ? ` · ${bet.measured.sessionsThisWeek} this week`
+                        : bet.measured.sessions === 0 && bet.measured.hiddenActivity ? ' · used in hidden products' : ''}
                       {' · '}{bet.measured.distinctUsers} {bet.measured.distinctUsers === 1 ? 'user' : 'users'}
                       {split(bet) && (
                         <div className="text-[13px] tabular-nums mt-0.5">{sessionsSplit(bet.measured.productSessions)}</div>
@@ -262,7 +265,9 @@ function WorkflowsByLifecycle({ workflows, total }: { workflows: GovernanceWorkf
                   <td className={cx(T.td, 'text-[13px] tabular-nums whitespace-nowrap')}>
                     {sessionsSplit(wf.productSessions) ?? ((wf.sessionsThisWeek ?? 0) > 0
                       ? <span className="text-[#333333]">0 · {wf.sessionsThisWeek} this week</span>
-                      : <span className="text-[#8F8F8F]">0</span>)}
+                      : wf.hiddenActivity
+                        ? <span className="text-[#333333]">0 · used in hidden products</span>
+                        : <span className="text-[#8F8F8F]">0</span>)}
                   </td>
                   <td className={cx(T.tdRight, 'whitespace-nowrap')}>
                     {wf.measuredHours != null ? (

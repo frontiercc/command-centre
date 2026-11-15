@@ -300,33 +300,27 @@ function LanguageMixCard({ items }: { items: Array<{ language: string; edits: nu
 }
 
 /**
- * `claude` is Claude Code's own row: pull requests, engaged time, lines and
- * edit decisions come only from Claude Code's telemetry, so those ratios use
- * its spend and tokens, never a total that includes Codex. Null in the Codex view.
+ * `claude` is Claude Code's own row: engaged time, lines and edit decisions come
+ * only from Claude Code's telemetry, so these ratios use its figures, never a total
+ * that includes Codex. Null in the Codex view. Cost per commit and per pull request
+ * live on Value's Unit economics, not here.
  */
 function EfficiencyCard({ metrics, claude }: { metrics: CodeMetricsRow | null; claude: CodeMetricsRow | null }) {
-  const m = metrics;
-  if (!m) return null;
-  const commits = m.commit_count ?? 0;
-  const costPerCommit = m.spend_usd != null && commits > 0 ? m.spend_usd / commits : null;
+  if (!metrics) return null;
   const c = claude;
   const engagedHours = c ? ((c.active_time_user_s ?? 0) + (c.active_time_cli_s ?? 0)) / 3600 : 0;
-  const prs = c?.pr_count ?? 0;
   const accepts = c?.edit_accept_count ?? 0;
-  const costPerPr = c && c.spend_usd != null && prs > 0 ? c.spend_usd / prs : null;
   const linesPerHour = c && engagedHours > 0 ? Math.round((c.lines_added ?? 0) / engagedHours) : null;
   const tokensPerAccept = c && accepts > 0 ? (c.input_tokens + c.output_tokens) / accepts : null;
   // Nothing to show until the productivity metrics arrive.
-  if (costPerCommit == null && costPerPr == null && linesPerHour == null && tokensPerAccept == null) return null;
+  if (linesPerHour == null && tokensPerAccept == null) return null;
   const cells = [
-    { label: 'Cost per commit', value: costPerCommit == null ? 'Not measured' : formatCurrency(costPerCommit) },
-    { label: 'Cost per PR', value: costPerPr == null ? 'Not measured' : formatCurrency(costPerPr) },
     { label: 'Lines per engaged hour', value: linesPerHour == null ? 'Not measured' : linesPerHour.toLocaleString() },
     { label: 'Tokens per accepted edit', value: tokensPerAccept == null ? 'Not measured' : formatTokens(Math.round(tokensPerAccept)) },
   ];
   return (
     <Panel title="Efficiency" subtitle="30 days" flush>
-      <FigureGrid cols={4}>
+      <FigureGrid cols={2}>
         {cells.map(c => <Figure key={c.label} label={c.label} value={c.value} />)}
       </FigureGrid>
     </Panel>

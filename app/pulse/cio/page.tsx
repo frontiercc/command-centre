@@ -59,7 +59,6 @@ interface CioData {
   coworkCostUsd?: number;
   /** ChatGPT spend from OpenAI's cost records; null until one arrives. */
   chatgptCostUsd?: number | null;
-  chatgptUnpricedModels?: string[];
   fileCategoryMix?: Array<{ category: string; count: number; share: number }>;
   weeklyVolume?: {
     series: Array<{ weekStart: number; eventCount: number; tier3Count: number; partial: boolean }>;
