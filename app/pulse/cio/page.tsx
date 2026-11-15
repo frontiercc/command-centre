@@ -12,7 +12,6 @@ import LoadingSpinner from '@/components/shared/LoadingSpinner';
 import Link from 'next/link';
 import CapabilityLog from '@/components/pulse/CapabilityLog';
 import GenerateBriefingButton from '@/components/pulse/GenerateBriefingButton';
-import type { FunnelMonth } from '@/components/pulse/AdoptionFunnel';
 import type { BandSegment, PersonDelegation } from '@/components/pulse/DelegationBands';
 import type { ActNextItem, DeptProcessBoxItem } from '@/components/pulse/ActNextPanel';
 import { PageBody, Toolbar, Panel, Tag, Muted, Notice, B } from '@/components/precision/ui';
@@ -42,7 +41,6 @@ interface HeroFigures {
 interface CioData {
   vendor: Vendor;
   openaiPresent: boolean;
-  adoptionFunnel: FunnelMonth[];
   adoptionHero: HeroFigures & { concentrationPct: number };
   /** The All view's headline figures, split into Claude and OpenAI. */
   heroSplit: { claude: HeroFigures; openai: HeroFigures } | null;

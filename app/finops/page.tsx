@@ -331,20 +331,31 @@ export default function CostChargebackPage() {
   // Only OpenAI connected: no Claude tiles, columns or notes.
   const openaiOnly = useOpenAiOnly();
 
+  // FinOps is for admins and managers. Wait for the role before asking for any figures, so
+  // other roles see why rather than a page of refused requests. If the check itself fails,
+  // ask anyway and let the server decide.
+  const [allowed, setAllowed] = useState<boolean | null>(null);
   useEffect(() => {
     fetch('/api/admin/session').then(r => r.json())
-      .then(d => { if (d.authenticated && d.user?.role === 'admin') setIsAdmin(true); })
-      .catch(() => {});
+      .then(d => {
+        const role = d.authenticated ? d.user?.role : undefined;
+        if (role === 'admin') setIsAdmin(true);
+        setAllowed(role === 'admin' || role === 'manager');
+      })
+      .catch(() => setAllowed(true));
   }, []);
 
   useEffect(() => {
+    if (allowed !== true) return;
     fetch('/api/finance/trend?months=12')
       .then(r => (r.ok ? r.json() : null))
       .then(setTrend)
       .catch(() => {});
-  }, []);
+  }, [allowed]);
 
   useEffect(() => {
+    if (allowed === null) return;
+    if (!allowed) { setError(FORBIDDEN); setLoading(false); return; }
     setLoading(true);
     setError(null);
     setNotEnabled(false);
@@ -358,11 +369,12 @@ export default function CostChargebackPage() {
       .then(setReport)
       .catch(e => { if (e.message !== 'not enabled') setError(e.message); })
       .finally(() => setLoading(false));
-  }, [period, refreshKey]);
+  }, [period, refreshKey, allowed]);
 
   // Where to save: Spend Review's count for the same month. Any failure (off,
   // not allowed for this role, not built) hides the panel.
   useEffect(() => {
+    if (allowed !== true) return;
     let cancelled = false;
     setPeopleWithRoutes(null);
     fetch(`/api/finance/spend-review?period=${encodeURIComponent(period)}`)
@@ -374,7 +386,7 @@ export default function CostChargebackPage() {
       })
       .catch(() => {});
     return () => { cancelled = true; };
-  }, [period]);
+  }, [period, allowed]);
 
   const handleClose = async () => {
     if (!window.confirm(`Close ${period}? This freezes an immutable snapshot for billing. It cannot be reopened.`)) return;

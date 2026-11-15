@@ -8,6 +8,7 @@ import { Panel, Strip, Figure, Muted, Notice, Tag, Pill, B, T, cx } from '@/comp
 import { PRODUCTS } from '@/lib/dashboard/vendor';
 import { SaveMsg } from '@/components/admin/precision-admin';
 import { shownContent } from '@/lib/retention/marker';
+import { tierNamesOr, type TierNames } from '@/lib/pulse/tier-names';
 
 interface TierDay { day: string; tier: number; cnt: number }
 interface ConfBucket { bucket: number; cnt: number }
@@ -25,6 +26,8 @@ interface ProductRow { product: string; classified: number; waiting: number; fai
 interface HealthData {
   byProduct?: ProductRow[];
   classifyChatgpt?: boolean;
+  /** What this customer calls each tier (Admin → Work Pulse → Tiers). */
+  tierNames?: TierNames;
   queueDepth: number;
   tierDist: TierDay[];
   confidenceHist: ConfBucket[];
@@ -214,9 +217,10 @@ export default function HealthTab() {
               {[1, 2, 3].map(tier => {
                 const cnt = tierTotals[tier] ?? 0;
                 const pct = Math.round((cnt / totalClassified) * 100);
-                // AI-judged: sky blue steps, light to dark from Tier 1 to Tier 3.
+                // AI-judged: petrol shades, light to dark from Tier 1 to Tier 3.
                 const colours: Record<number, string> = { 1: '#CCD1DB', 2: '#6BA3B8', 3: '#1F6F8B' };
-                const labels: Record<number, string> = { 1: 'Tier 1: Administrative', 2: 'Tier 2: Meaningful', 3: 'Tier 3: Frontier' };
+                const names = tierNamesOr(data.tierNames);
+                const labels: Record<number, string> = { 1: `Tier 1: ${names.t1}`, 2: `Tier 2: ${names.t2}`, 3: `Tier 3: ${names.t3}` };
                 return (
                   <div key={tier} className="flex flex-col gap-1">
                     <div className="flex items-baseline justify-between gap-2">
