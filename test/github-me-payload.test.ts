@@ -30,6 +30,8 @@ const dateStr = (secondsAgo: number) => new Date((NOW - secondsAgo) * 1000).toIS
 const TODAY = dateStr(0);
 const THREE_DAYS_AGO = dateStr(3 * 24 * 3600);
 const TWENTY_DAYS_AGO = dateStr(20 * 24 * 3600);
+// Inside the 35-day pre-check window, outside the 30-day counting window.
+const THIRTY_THREE_DAYS_AGO = dateStr(33 * 24 * 3600);
 
 beforeAll(async () => {
   const testDb = await createTestDatabase();
@@ -53,13 +55,14 @@ beforeEach(async () => {
   await sql.run(
     `INSERT INTO users (id, email, display_name) VALUES ('u3', 'u3@test.com', 'Kim')`
   );
-  // Three currently-mapped repos, shared across the fixture users.
+  // Four currently-mapped repos, shared across the fixture users.
   const insertMap = (...params: unknown[]) => sql.run(
     `INSERT INTO github_repo_map (repo, github_repo, created_at) VALUES (?, ?, ?)`, params
   );
   await insertMap('org/a', 'org/a', NOW);
   await insertMap('org/b', 'org/b', NOW);
   await insertMap('org/c', 'org/c', NOW);
+  await insertMap('org/d', 'org/d', NOW);
 });
 
 function makeRequest(url: string): NextRequest {
@@ -67,16 +70,17 @@ function makeRequest(url: string): NextRequest {
 }
 
 describe('GET /api/pulse/code/me — githubRepos', () => {
-  it('returns count7d + sorted names7d for repos active in the last 7 days, excluding an unmapped repo and a 20-day-old-only repo', async () => {
+  it('returns count30d + sorted names30d for repos active in the last 30 days, counting a 20-day-old repo and excluding an unmapped repo and a 33-day-old-only repo', async () => {
     const insertStats = (...params: unknown[]) => sql.run(
       `INSERT INTO github_user_repo_stats (user_id, repo, date, commit_count, synced_at) VALUES (?, ?, ?, ?, ?)`, params
     );
-    // Two repos active within the last 7 days.
+    // Three repos active within the last 30 days, one of them 20 days ago.
     await insertStats('u1', 'org/b', TODAY, 3, NOW);
     await insertStats('u1', 'org/a', THREE_DAYS_AGO, 2, NOW);
-    // A third mapped repo, but only active 20 days ago — inside the 35d
-    // window, outside the 7d window, so must NOT appear in names7d/count7d.
     await insertStats('u1', 'org/c', TWENTY_DAYS_AGO, 1, NOW);
+    // A fourth mapped repo, but only active 33 days ago: inside the 35d
+    // pre-check window, outside the 30d window, so must NOT appear in names30d/count30d.
+    await insertStats('u1', 'org/d', THIRTY_THREE_DAYS_AGO, 1, NOW);
     // An UNMAPPED repo active today — must be excluded entirely.
     await insertStats('u1', 'org/z', TODAY, 5, NOW);
 
@@ -84,7 +88,7 @@ describe('GET /api/pulse/code/me — githubRepos', () => {
     const res = await route.GET(makeRequest('/api/pulse/code/me?userId=u1'));
     expect(res.status).toBe(200);
     const data = await res.json();
-    expect(data.githubRepos).toEqual({ count7d: 2, names7d: ['org/a', 'org/b'], basis: 'all' });
+    expect(data.githubRepos).toEqual({ count30d: 3, names30d: ['org/a', 'org/b', 'org/c'], basis: 'all' });
   });
 
   it('returns null when the resolved user has no github_user_repo_stats rows', async () => {
@@ -95,16 +99,16 @@ describe('GET /api/pulse/code/me — githubRepos', () => {
     expect(data.githubRepos).toBeNull();
   });
 
-  it('returns count7d: 0 and names7d: [] when window rows exist but none within the last 7 days', async () => {
+  it('returns count30d: 0 and names30d: [] (not null) when pre-check window rows exist but none within the last 30 days', async () => {
     await sql.run(
-      `INSERT INTO github_user_repo_stats (user_id, repo, date, commit_count, synced_at) VALUES (?, ?, ?, ?, ?)`, ['u3', 'org/a', TWENTY_DAYS_AGO, 4, NOW]
+      `INSERT INTO github_user_repo_stats (user_id, repo, date, commit_count, synced_at) VALUES (?, ?, ?, ?, ?)`, ['u3', 'org/a', THIRTY_THREE_DAYS_AGO, 4, NOW]
     );
 
     const route = await import('../app/api/pulse/code/me/route');
     const res = await route.GET(makeRequest('/api/pulse/code/me?userId=u3'));
     expect(res.status).toBe(200);
     const data = await res.json();
-    expect(data.githubRepos).toEqual({ count7d: 0, names7d: [], basis: 'all' });
+    expect(data.githubRepos).toEqual({ count30d: 0, names30d: [], basis: 'all' });
   });
 
   it('on the Claude and Codex tabs counts only repos with commits matched to that tool; All counts every repo', async () => {
@@ -123,9 +127,9 @@ describe('GET /api/pulse/code/me — githubRepos', () => {
     try {
       const route = await import('../app/api/pulse/code/me/route');
       const read = async (vendor: string) => (await (await route.GET(makeRequest(`/api/pulse/code/me?userId=u1&vendor=${vendor}`))).json()).githubRepos;
-      expect(await read('claude')).toEqual({ count7d: 1, names7d: ['org/a'], basis: 'claude' });
-      expect(await read('openai')).toEqual({ count7d: 1, names7d: ['org/b'], basis: 'openai' });
-      expect(await read('all')).toEqual({ count7d: 3, names7d: ['org/a', 'org/b', 'org/c'], basis: 'all' });
+      expect(await read('claude')).toEqual({ count30d: 1, names30d: ['org/a'], basis: 'claude' });
+      expect(await read('openai')).toEqual({ count30d: 1, names30d: ['org/b'], basis: 'openai' });
+      expect(await read('all')).toEqual({ count30d: 3, names30d: ['org/a', 'org/b', 'org/c'], basis: 'all' });
     } finally {
       await sql.exec(`DELETE FROM cowork_messages WHERE id = 'codex:gh-me-1'`);
     }
@@ -142,34 +146,34 @@ describe('GET /api/pulse/code/me — githubRepos', () => {
     try {
       const route = await import('../app/api/pulse/code/me/route');
       const read = async (vendor: string) => (await (await route.GET(makeRequest(`/api/pulse/code/me?userId=u1&vendor=${vendor}`))).json()).githubRepos;
-      // No row in the last 7 days carries a tool count: not measured, not 0.
+      // No row in the last 30 days carries a tool count: not measured, not 0.
       expect(await read('claude')).toBeNull();
       expect(await read('openai')).toBeNull();
-      expect(await read('all')).toEqual({ count7d: 1, names7d: ['org/a'], basis: 'all' });
+      expect(await read('all')).toEqual({ count30d: 1, names30d: ['org/a'], basis: 'all' });
     } finally {
       await sql.exec(`DELETE FROM cowork_messages WHERE id = 'codex:gh-me-2'`);
     }
   });
 
-  it('on the tool tabs, a matched row older than 7 days does not make pre-split recent rows read as 0', async () => {
+  it('on the tool tabs, a matched row older than 30 days does not make pre-split recent rows read as 0', async () => {
     await sql.run(
       `INSERT INTO cowork_messages (id, session_id, user_id, message_type, surface, source, occurred_at)
        VALUES ('codex:gh-me-3', 'codex:s3', 'u1', 'code_user_message', 'code', 'codex', ?) ON CONFLICT DO NOTHING`, [NOW]
     );
-    // Recent day synced before the split; an older day (inside 35, outside 7) with the split.
+    // Recent day synced before the split; an older day (inside 35, outside 30) with the split.
     await sql.run(
       `INSERT INTO github_user_repo_stats (user_id, repo, date, commit_count, synced_at) VALUES (?, ?, ?, ?, ?)`, ['u1', 'org/a', TODAY, 4, NOW]
     );
     await sql.run(
       `INSERT INTO github_user_repo_stats (user_id, repo, date, commit_count, synced_at, claude_commit_count, codex_commit_count, no_tool_commit_count)
-       VALUES (?, ?, ?, ?, ?, ?, ?, ?)`, ['u1', 'org/b', TWENTY_DAYS_AGO, 2, NOW, 1, 1, 0]
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?)`, ['u1', 'org/b', THIRTY_THREE_DAYS_AGO, 2, NOW, 1, 1, 0]
     );
     try {
       const route = await import('../app/api/pulse/code/me/route');
       const read = async (vendor: string) => (await (await route.GET(makeRequest(`/api/pulse/code/me?userId=u1&vendor=${vendor}`))).json()).githubRepos;
       expect(await read('claude')).toBeNull();
       expect(await read('openai')).toBeNull();
-      expect(await read('all')).toEqual({ count7d: 1, names7d: ['org/a'], basis: 'all' });
+      expect(await read('all')).toEqual({ count30d: 1, names30d: ['org/a'], basis: 'all' });
     } finally {
       await sql.exec(`DELETE FROM cowork_messages WHERE id = 'codex:gh-me-3'`);
     }
@@ -187,9 +191,9 @@ describe('GET /api/pulse/code/me — githubRepos', () => {
     try {
       const route = await import('../app/api/pulse/code/me/route');
       const read = async (vendor: string) => (await (await route.GET(makeRequest(`/api/pulse/code/me?userId=u1&vendor=${vendor}`))).json()).githubRepos;
-      expect(await read('claude')).toEqual({ count7d: 0, names7d: [], basis: 'claude' });
-      expect(await read('openai')).toEqual({ count7d: 0, names7d: [], basis: 'openai' });
-      expect(await read('all')).toEqual({ count7d: 1, names7d: ['org/a'], basis: 'all' });
+      expect(await read('claude')).toEqual({ count30d: 0, names30d: [], basis: 'claude' });
+      expect(await read('openai')).toEqual({ count30d: 0, names30d: [], basis: 'openai' });
+      expect(await read('all')).toEqual({ count30d: 1, names30d: ['org/a'], basis: 'all' });
     } finally {
       await sql.exec(`DELETE FROM cowork_messages WHERE id = 'codex:gh-me-4'`);
     }

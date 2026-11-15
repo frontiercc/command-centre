@@ -11,37 +11,37 @@ import type { TestSql } from './helpers/sql';
 // On 2026-11-15 the owner chose to make Developer Pulse's month-end projection match FinOps's,
 // so the two pages never project differently: month-to-date priced spend divided by the exact
 // share of the month gone by (buildFinopsProjection). The earlier tests here pinned the trailing
-// 7-day run rate as deliberate; that rule is retired. projectMonthEndSpend now only supplies the
+// 7-day run rate as deliberate; that rule is retired. monthDayCount now supplies the
 // day count FinOps shows, so its day count is what is pinned below.
 
-import { projectMonthEndSpend } from '@/lib/pulse/code/projection';
+import { monthDayCount } from '@/lib/pulse/code/projection';
 import { buildFinopsProjection } from '@/lib/finance/finops-projection';
 
 function utcEpoch(y: number, m: number, d: number, h = 12): number {
   return Math.floor(Date.UTC(y, m - 1, d, h) / 1000);
 }
 
-describe('projectMonthEndSpend day count', () => {
+describe('monthDayCount', () => {
   it('mid-month: day 15 of 30', () => {
-    const result = projectMonthEndSpend(100, 0, utcEpoch(2026, 6, 15));
+    const result = monthDayCount(utcEpoch(2026, 6, 15));
     expect(result.daysElapsed).toBe(15);
     expect(result.daysInMonth).toBe(30);
   });
 
   it('last day of month: day 30 of 30', () => {
-    const result = projectMonthEndSpend(200, 0, utcEpoch(2026, 6, 30));
+    const result = monthDayCount(utcEpoch(2026, 6, 30));
     expect(result.daysElapsed).toBe(30);
     expect(result.daysInMonth).toBe(30);
   });
 
   it('handles leap February day count (2028 is a leap year)', () => {
-    const result = projectMonthEndSpend(50, 0, utcEpoch(2028, 2, 10));
+    const result = monthDayCount(utcEpoch(2028, 2, 10));
     expect(result.daysInMonth).toBe(29);
     expect(result.daysElapsed).toBe(10);
   });
 
   it('handles non-leap February day count (2027 is not a leap year)', () => {
-    expect(projectMonthEndSpend(50, 0, utcEpoch(2027, 2, 10)).daysInMonth).toBe(28);
+    expect(monthDayCount(utcEpoch(2027, 2, 10)).daysInMonth).toBe(28);
   });
 });
 
@@ -142,6 +142,16 @@ describe('GET /api/pulse/code/org-summary — spendProjection', () => {
     at(SECOND_OF_JUNE);
     const data = await (await route.GET(makeRequest())).json();
     expect(data.spendProjection).toBeNull();
+  });
+
+  it('returns null before day 7 of the month, as FinOps does, even with spend this month', async () => {
+    const sixthOfJune = utcEpoch(2026, 6, 6);
+    await seedMeta('m-early', { model: 'claude-sonnet-4-6', occurredAt: sixthOfJune - 2 * DAY });
+    at(sixthOfJune);
+    expect((await (await route.GET(makeRequest())).json()).spendProjection).toBeNull();
+    // From day 7 it is shown.
+    at(utcEpoch(2026, 6, 7));
+    expect((await (await route.GET(makeRequest())).json()).spendProjection).not.toBeNull();
   });
 
   it('returns null when there is no priced spend at all', async () => {

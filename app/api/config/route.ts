@@ -140,8 +140,6 @@ export async function POST(request: NextRequest) {
     'codeValueAnnualSpend',
     'timeSavedMinPerPr',
     'timeSavedMinPerCommit',
-    'timeSavedMinPerCoworkSession',
-    'timeSavedMinPerChatConversation',
     'riskSeverityLowDesc',
     'riskSeverityMediumDesc',
     'riskSeverityHighDesc',
@@ -260,7 +258,7 @@ export async function POST(request: NextRequest) {
       'riskSeverityLowDesc', 'riskSeverityMediumDesc', 'riskSeverityHighDesc', 'riskSeverityCriticalDesc',
       'codeValueTeamSize', 'codeValueAnnualSpend',
       'codeValueLiftPct', 'codeValueLoadedComp', 'codeValueCodingHrs',
-      'timeSavedMinPerPr', 'timeSavedMinPerCommit', 'timeSavedMinPerCoworkSession', 'timeSavedMinPerChatConversation',
+      'timeSavedMinPerPr', 'timeSavedMinPerCommit',
       'digestRecipients', 'digestHubUrl',
       // Blank = personal briefings follow the Core AI model again.
       'pulseUserBriefingModel',

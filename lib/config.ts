@@ -204,8 +204,6 @@ export interface AppConfig {
   // Developer Pulse Time Saved (bottom-up estimate) — minutes-per-task assumptions
   timeSavedMinPerPr: string;
   timeSavedMinPerCommit: string;
-  timeSavedMinPerCoworkSession: string;
-  timeSavedMinPerChatConversation: string;
   // GitHub overlay (repo/org level only — standing decision)
   githubToken: string;
   githubSyncLastRun: string;
@@ -496,8 +494,6 @@ export const CONFIG_KEYS: Record<keyof AppConfig, string> = {
   codeValueAnnualSpend: 'code_value_annual_spend',
   timeSavedMinPerPr: 'time_saved_min_per_pr',
   timeSavedMinPerCommit: 'time_saved_min_per_commit',
-  timeSavedMinPerCoworkSession: 'time_saved_min_per_cowork_session',
-  timeSavedMinPerChatConversation: 'time_saved_min_per_chat_conversation',
   githubToken: 'github_token',
   githubSyncLastRun: 'github_sync_last_run',
   codeBriefingLastRun: 'code_briefing_last_run',
@@ -906,8 +902,6 @@ export async function getAllConfig(): Promise<AppConfig> {
     codeValueAnnualSpend: resolve('codeValueAnnualSpend', ''),
     timeSavedMinPerPr: resolve('timeSavedMinPerPr', ''),
     timeSavedMinPerCommit: resolve('timeSavedMinPerCommit', ''),
-    timeSavedMinPerCoworkSession: resolve('timeSavedMinPerCoworkSession', ''),
-    timeSavedMinPerChatConversation: resolve('timeSavedMinPerChatConversation', ''),
     githubToken: resolve('githubToken'),
     githubSyncLastRun: resolve('githubSyncLastRun'),
     codeBriefingLastRun: resolve('codeBriefingLastRun'),

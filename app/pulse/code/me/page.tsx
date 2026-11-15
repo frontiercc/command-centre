@@ -70,7 +70,7 @@ interface MeData {
   sessions: SessionRow[];
   modelMix: ModelMixItem[];
   journeyGrid: Array<{ week: number; tier: number; count: number; provisionalCount?: number }>;
-  githubRepos: { count7d: number; names7d: string[] } | null;
+  githubRepos: { count30d: number; names30d: string[] } | null;
 }
 
 /** `change`: the last 30 days on the 30 days before, as a fraction (null: nothing to compare with). */

@@ -108,7 +108,7 @@ export function formatDuration(seconds: number): string {
 export default function CodeStatStrip({ metrics, githubRepos, view = 'claude', split }: {
   metrics: CodeMetricsRow | null;
   /** basis: which commits were counted (Claude and Codex tabs: commits matched to that tool). */
-  githubRepos?: { count7d: number; names7d: string[]; basis?: 'all' | 'claude' | 'openai' } | null;
+  githubRepos?: { count30d: number; names30d: string[]; basis?: 'all' | 'claude' | 'openai' } | null;
   /** Developer Pulse's switch, 'claude' until Codex data exists. */
   view?: 'all' | 'claude' | 'openai';
   /** All view: Claude Code's and Codex's own figures, for the line under each value. */
@@ -158,12 +158,12 @@ export default function CodeStatStrip({ metrics, githubRepos, view = 'claude', s
     // exists — deliberate; no current instance has both data sources at once.
     githubRepos != null
       ? {
-          label: 'Repos active · 7 days (GitHub)',
-          value: String(githubRepos.count7d),
-          sublabel: githubRepos.names7d.length > 0
-            ? (githubRepos.count7d > githubRepos.names7d.length
-                ? `${githubRepos.names7d.join(' · ')} · +${githubRepos.count7d - githubRepos.names7d.length} more`
-                : githubRepos.names7d.join(' · '))
+          label: 'Repos active · 30 days (GitHub)',
+          value: String(githubRepos.count30d),
+          sublabel: githubRepos.names30d.length > 0
+            ? (githubRepos.count30d > githubRepos.names30d.length
+                ? `${githubRepos.names30d.join(' · ')} · +${githubRepos.count30d - githubRepos.names30d.length} more`
+                : githubRepos.names30d.join(' · '))
             : githubRepos.basis === 'claude' ? 'Repos with GitHub commits made with Claude Code'
               : githubRepos.basis === 'openai' ? 'Repos with GitHub commits made with Codex'
                 : 'Repos with your GitHub commits',
@@ -172,7 +172,7 @@ export default function CodeStatStrip({ metrics, githubRepos, view = 'claude', s
             : githubRepos.basis === 'openai'
               ? 'Counts GitHub commits matched to Codex by author and time'
               : 'Counts all GitHub commits, from commit-author matching')
-            + (githubRepos.count7d === 0 ? '; a zero can also mean unmapped commits' : ''),
+            + (githubRepos.count30d === 0 ? '; a zero can also mean unmapped commits' : ''),
         }
       : metrics !== null && metrics.repo_count === 0
         ? {

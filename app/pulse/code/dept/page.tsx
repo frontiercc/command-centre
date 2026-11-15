@@ -35,7 +35,7 @@ interface DeptDetail {
   metrics: CodeMetricsRow | null;
   members: CodeUserRow[];
   journeyGrid: Array<{ week: number; tier: number; count: number; provisionalCount?: number }>;
-  githubRepos: { count7d: number; names7d: string[]; basis?: 'all' | 'claude' | 'openai' } | null;
+  githubRepos: { count30d: number; names30d: string[]; basis?: 'all' | 'claude' | 'openai' } | null;
 }
 
 function DeptContent() {

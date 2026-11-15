@@ -52,7 +52,7 @@ interface UserData {
   sessions: SessionRow[];
   modelMix: ModelMixItem[];
   journeyGrid: Array<{ week: number; tier: number; count: number }>;
-  githubRepos: { count7d: number; names7d: string[] } | null;
+  githubRepos: { count30d: number; names30d: string[] } | null;
   humanTime?: ByHand | null;
 }
 

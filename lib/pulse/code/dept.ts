@@ -29,7 +29,7 @@ export interface CodeDeptMember {
   output_tokens: number;
   // Populated by the dept route (app/api/pulse/code/dept/[dept]/route.ts),
   // not by the query in this file. Repos with this person's GitHub commits in
-  // the last 7 days: on the Claude and Codex tabs only commits matched to that
+  // the last 30 days: on the Claude and Codex tabs only commits matched to that
   // tool (the route's githubRepos.basis), on the All tab every commit.
   github_repo_count?: number;
 }

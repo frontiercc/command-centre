@@ -228,7 +228,10 @@ async function runSpec(): Promise<void> {
     // the month before; the newest one being month-to-date is enough to project from.
     const nowDate = new Date(NOW * 1000);
     const monthStart = Date.UTC(nowDate.getUTCFullYear(), nowDate.getUTCMonth(), 1) / 1000;
-    if (NOW - 1 * DAY >= monthStart) {
+    // Before day 7 nothing is projected, as on FinOps (MIN_PROJECTION_DAYS).
+    if (nowDate.getUTCDate() < 7) {
+      expect(org.spendProjection).toBeNull();
+    } else if (NOW - 1 * DAY >= monthStart) {
       expect(org.spendProjection).not.toBeNull();
       expect(org.spendProjection.projected).toBeGreaterThan(0);
     }

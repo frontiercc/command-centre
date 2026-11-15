@@ -164,7 +164,7 @@ function ModelSelect({
 
 const VALUE_DEFAULTS: Record<string, string> = {
   codeValueLiftPct: '30', codeValueLoadedComp: '300000', codeValueCodingHrs: '15',
-  timeSavedMinPerPr: '150', timeSavedMinPerCommit: '20', timeSavedMinPerCoworkSession: '10', timeSavedMinPerChatConversation: '4',
+  timeSavedMinPerPr: '150', timeSavedMinPerCommit: '20',
 };
 const normDefault = (key: string, val: unknown) => {
   const s = val == null ? '' : String(val);
@@ -181,8 +181,6 @@ function ValueCalibrationsPanel() {
     codeValueAnnualSpend: '',
     timeSavedMinPerPr: '',
     timeSavedMinPerCommit: '',
-    timeSavedMinPerCoworkSession: '',
-    timeSavedMinPerChatConversation: '',
   });
   const [saving, setSaving] = useState(false);
   const { showToast } = useToast();
@@ -200,8 +198,6 @@ function ValueCalibrationsPanel() {
         codeValueAnnualSpend: c.codeValueAnnualSpend ?? '',
         timeSavedMinPerPr: normDefault('timeSavedMinPerPr', c.timeSavedMinPerPr),
         timeSavedMinPerCommit: normDefault('timeSavedMinPerCommit', c.timeSavedMinPerCommit),
-        timeSavedMinPerCoworkSession: normDefault('timeSavedMinPerCoworkSession', c.timeSavedMinPerCoworkSession),
-        timeSavedMinPerChatConversation: normDefault('timeSavedMinPerChatConversation', c.timeSavedMinPerChatConversation),
       })))
       .catch(() => {});
   }, []);
@@ -234,8 +230,6 @@ function ValueCalibrationsPanel() {
   const timeSavedFields: Array<{ key: keyof typeof form; label: string; placeholder: string }> = [
     { key: 'timeSavedMinPerPr', label: 'Minutes per PR', placeholder: '150' },
     { key: 'timeSavedMinPerCommit', label: 'Minutes per AI-assisted commit', placeholder: '20' },
-    { key: 'timeSavedMinPerCoworkSession', label: 'Minutes per Cowork session', placeholder: '10' },
-    { key: 'timeSavedMinPerChatConversation', label: 'Minutes per Chat conversation', placeholder: '4' },
   ];
 
   return (

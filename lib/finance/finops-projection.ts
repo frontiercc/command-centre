@@ -5,9 +5,9 @@
  * FinOps month-end spend projection — an honest month-to-date run rate:
  * `projected = mtd / (share of the month gone by)`, the share measured to the
  * second (Spend Review's pace), so today is not counted as a full day.
- * `projectMonthEndSpend` (Developer Pulse) supplies the day count shown.
+ * Developer Pulse projects the same way, through this function.
  */
-import { projectMonthEndSpend, type SpendProjection } from '@/lib/pulse/code/projection';
+import { monthDayCount, type SpendProjection } from '@/lib/pulse/code/projection';
 
 /**
  * Days of the month that must have passed before a projection is shown. Earlier, a run rate
@@ -29,7 +29,7 @@ export function buildFinopsProjection(
 ): SpendProjection | null {
   if (!monthToDate) return null;
   // The day count ("Day N of M", and the seven-day floor) is the calendar day.
-  const { daysElapsed, daysInMonth } = projectMonthEndSpend(mtdSpend, 0, nowEpochS);
+  const { daysElapsed, daysInMonth } = monthDayCount(nowEpochS);
   // The run rate uses the exact share of the month gone by, as Spend Review
   // does, so today counts as the part of a day that has passed, not a full day.
   const now = new Date(nowEpochS * 1000);

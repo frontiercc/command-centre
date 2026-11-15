@@ -116,8 +116,6 @@ describe('GET /api/pulse/code/value — timeSaved', () => {
     await seedCoworkMessage('sess-a', NOW - DAY);
     await seedCoworkMessage('sess-b', NOW - 2 * DAY);
     await seedChatMessage('conv-a', NOW - DAY);
-    await setConfigValue('timeSavedMinPerCoworkSession', '600');
-    await setConfigValue('timeSavedMinPerChatConversation', '600');
 
     const data = await (await route.GET(makeRequest())).json();
     const labels = data.timeSaved.rows.map((r: { label: string }) => r.label).sort();

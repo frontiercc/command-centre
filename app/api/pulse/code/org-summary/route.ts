@@ -22,7 +22,7 @@ import { ORG_SCOPE_ID } from '@/lib/pulse/code/aggregator';
 import { computeSpendConcentration } from '@/lib/pulse/code/concentration';
 import { getWeeklySeries, getWeeklyDelta } from '@/lib/pulse/trends';
 import { type SpendProjection } from '@/lib/pulse/code/projection';
-import { buildFinopsProjection } from '@/lib/finance/finops-projection';
+import { buildFinopsProjection, MIN_PROJECTION_DAYS } from '@/lib/finance/finops-projection';
 import { buildDailyWindow, buildShippingSeries, buildRepoCards, countReposActive7d, countReposActive30d, hasToolSplit, buildCodexRepoReach, type GhDailyRow, type ShippingDay, type RepoShippingCard, type CodexRepoReach } from '@/lib/pulse/code/shipping-alignment';
 import { readHumanTime } from '@/lib/pulse/human-time-summary';
 import { hasCodexData, readCodeMetrics, trendVendor, codeSessionVendor } from '@/lib/pulse/code/vendor-view';
@@ -371,10 +371,10 @@ export async function GET(request: NextRequest) {
 
   const codexPriced = async (since: number) => withCodex ? ((await codexSpend({ since }, rates)).usd ?? 0) : 0;
   const mtdSpend = (withClaude ? await sumPricedSpend(monthStart) : 0) + await codexPriced(monthStart);
-  // No priced spend yet this month: nothing to project from, so null rather than $0.
-  const spendProjection: SpendProjection | null = mtdSpend > 0
-    ? buildFinopsProjection(mtdSpend, true, now)
-    : null;
+  // No priced spend yet this month: nothing to project from, so null rather than $0. Before day 7
+  // the projection is mostly noise, so, as FinOps does, none is shown (MIN_PROJECTION_DAYS).
+  const projected = mtdSpend > 0 ? buildFinopsProjection(mtdSpend, true, now) : null;
+  const spendProjection: SpendProjection | null = projected && projected.daysElapsed >= MIN_PROJECTION_DAYS ? projected : null;
 
   // Language Mix: edit-decision counts by language (from the OTel metrics stream).
   // The repo-free "what are people working on" axis.

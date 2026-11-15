@@ -104,8 +104,6 @@ describe('Time Saved config plumbing', () => {
     const c = (await cfg.getAllConfig());
     expect(c.timeSavedMinPerPr).toBe('');
     expect(c.timeSavedMinPerCommit).toBe('');
-    expect(c.timeSavedMinPerCoworkSession).toBe('');
-    expect(c.timeSavedMinPerChatConversation).toBe('');
   });
 
   it('persists an override via setConfigValue', async () => {
