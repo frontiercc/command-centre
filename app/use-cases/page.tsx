@@ -24,13 +24,16 @@ interface UseCase {
   surfaces: string[];
   origin: 'planned' | 'emergent' | 'ideated';
   status: 'candidate' | 'confirmed' | 'archived';
-  lifecycle: 'not_seen' | 'piloting' | 'adopted' | 'at_risk';
+  /** Null for an archived use case: it is no longer tracked. */
+  lifecycle: 'not_seen' | 'piloting' | 'adopted' | 'at_risk' | null;
   lastActivatedAt: number | null;
   strategic: number;
   /** Sessions per vendor, last 13 completed weeks; openai null when ChatGPT and Codex are hidden. */
   platformSessions?: { claude: number; openai: number | null };
   /** The same sessions per product, which the register column shows. */
   productSessions?: ProductSessions;
+  /** Sessions this week, by the same rules: not yet in the 13 weeks, but the lifecycle counts them. */
+  sessionsThisWeek?: number;
 }
 
 interface ProductSessions { cowork: number; code: number; chatgpt: number | null; codex: number | null }
@@ -88,15 +91,17 @@ const LIFECYCLE_DOT: Record<LifecycleTone, string> = {
   good: '#1A7F37', info: '#1F6F8B', warn: '#DC8A00', neutral: '#A3A3A3',
 };
 
-const LIFECYCLE_FACETS: Array<UseCase['lifecycle']> = ['adopted', 'piloting', 'at_risk', 'not_seen'];
+const LIFECYCLE_FACETS: Array<NonNullable<UseCase['lifecycle']>> = ['adopted', 'piloting', 'at_risk', 'not_seen'];
 
 /**
  * "Claude Cowork 40", "Claude Code 21", "Codex 13", one per line: a use
  * case's matched sessions in the last 13 weeks, by product, listing only products with
  * sessions. ChatGPT and Codex count only once OpenAI is connected and shown;
- * a use case with no sessions reads 0.
+ * a use case with no sessions reads 0. One with none in the 13 weeks but some
+ * this week, which the lifecycle counts, says so, so "Piloting" never sits
+ * beside a bare 0.
  */
-function PlatformCell({ p, showOpenAi }: { p?: ProductSessions; showOpenAi: boolean }) {
+function PlatformCell({ p, showOpenAi, thisWeek }: { p?: ProductSessions; showOpenAi: boolean; thisWeek?: number }) {
   if (!p) return <span className="text-[#8F8F8F]">—</span>;
   const all: Array<[string, number | null]> = [
     ['Claude Cowork', p.cowork],
@@ -105,7 +110,10 @@ function PlatformCell({ p, showOpenAi }: { p?: ProductSessions; showOpenAi: bool
     ['Codex', showOpenAi ? p.codex : null],
   ];
   const parts = all.filter((x): x is [string, number] => x[1] !== null && x[1] > 0).map(([label, n]) => `${label} ${n}`);
-  if (parts.length === 0) return <span className="text-[#8F8F8F]">0</span>;
+  if (parts.length === 0) {
+    if (thisWeek && thisWeek > 0) return <span className="whitespace-nowrap text-[#333333]">0 · {thisWeek} this week</span>;
+    return <span className="text-[#8F8F8F]">0</span>;
+  }
   // One product per line, so the column stays narrow however many products did the work.
   return <span className="flex flex-col text-[#333333]">{parts.map(t => <span key={t} className="whitespace-nowrap">{t}</span>)}</span>;
 }
@@ -287,7 +295,7 @@ export default function UseCasesRegisterPage() {
   const filtered = useMemo(() => {
     let rows = useCases ?? [];
     if (!showArchived) rows = rows.filter(uc => uc.status !== 'archived');
-    if (lifecycleFilter.size > 0) rows = rows.filter(uc => lifecycleFilter.has(uc.lifecycle));
+    if (lifecycleFilter.size > 0) rows = rows.filter(uc => uc.lifecycle !== null && lifecycleFilter.has(uc.lifecycle));
     if (mineOnly) rows = rows.filter(uc => linkedUserId != null && uc.ownerUserId === linkedUserId);
     return rows;
   }, [useCases, showArchived, lifecycleFilter, mineOnly, linkedUserId]);
@@ -480,7 +488,7 @@ export default function UseCasesRegisterPage() {
                 </thead>
                 <tbody>
                   {group.items.map(uc => {
-                    const pill = LIFECYCLE_PILL[uc.lifecycle];
+                    const pill = uc.lifecycle ? LIFECYCLE_PILL[uc.lifecycle] : undefined;
                     const href = `/use-cases/${encodeURIComponent(uc.id)}`;
                     return (
                       <tr
@@ -505,8 +513,12 @@ export default function UseCasesRegisterPage() {
                             <p className="m-0 mt-0.5 text-[#666666] truncate" title={uc.description}>{uc.description}</p>
                           )}
                         </td>
-                        <td className={cx(T.td, 'text-[13px] tabular-nums')}><PlatformCell p={uc.productSessions} showOpenAi={!!connected?.openai} /></td>
-                        <td className={T.td}>{pill ? <Pill tone={pill.tone}>{pill.label}</Pill> : <span className="text-[#8F8F8F]">—</span>}</td>
+                        <td className={cx(T.td, 'text-[13px] tabular-nums')}><PlatformCell p={uc.productSessions} showOpenAi={!!connected?.openai} thisWeek={uc.sessionsThisWeek} /></td>
+                        <td className={T.td}>
+                          {pill ? <Pill tone={pill.tone}>{pill.label}</Pill>
+                            : uc.status === 'archived' ? <span className="text-[13px] text-[#8F8F8F]" title="Archived use cases are no longer tracked">Not tracked</span>
+                            : <span className="text-[#8F8F8F]">—</span>}
+                        </td>
                         <td className={cx(T.tdMute, 'text-[13px] truncate')} title={uc.departments.join(', ')}>
                           {uc.departments.length > 0 ? uc.departments.join(', ') : '—'}
                         </td>

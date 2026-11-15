@@ -134,13 +134,13 @@ export function CodeWorkPanel({ w, who, period, onPeriod, product }: {
   );
 }
 
-/* ── 2: Best work this week ────────────────────────────────────── */
+/* ── 2: Best work in the last 7 days ──────────────────────────── */
 
 export function CodeBestWork({ s, who, names }: { s: BestSession | null; who: Who; names?: TierNames }) {
   const tiers = tierList(names);
   if (!s) {
     return (
-      <Frame title="Best work this week" judged period="Last 7 days" answer={<>No classified sessions in the last 7 days.</>} />
+      <Frame title="Best work in the last 7 days" judged period="Last 7 days" answer={<>No classified sessions in the last 7 days.</>} />
     );
   }
   const facts = [
@@ -152,11 +152,11 @@ export function CodeBestWork({ s, who, names }: { s: BestSession | null; who: Wh
   ].filter(Boolean) as string[];
   return (
     <Frame
-      title="Best work this week"
+      title="Best work in the last 7 days"
       judged
       period="Deepest session in the last 7 days"
       answer={<><b>{s.label}</b>{s.repo ? <> in {s.repo}{s.branch ? ` · ${s.branch}` : ''}</> : null}, judged {(tiers[s.tier - 1] ?? `tier ${s.tier}`).toLowerCase()}.</>}
-      note={`${who.you ? 'Your' : 'Their'} deepest session of the week, by the tier the classifier gave it and then by time at the keyboard.`}
+      note={`${who.you ? 'Your' : 'Their'} deepest session in the last 7 days, by the tier the classifier gave it and then by time at the keyboard.`}
     >
       <p className="m-0 text-[13px] text-[#666666]">{facts.join(' · ')}</p>
     </Frame>

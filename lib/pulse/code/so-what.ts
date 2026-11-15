@@ -305,7 +305,7 @@ export function followUpSentence(then: CardFigures, now: CardFigures): string {
   return parts.join(' ');
 }
 
-/** A card about the whole of engineering rather than one team. */
+/** A card about everyone who does coding work, in any department, rather than one team. */
 export const EVERYONE = 'Everyone';
 
 /** The one figure a found card is judged on later, so its decision gets a follow-up too. */
@@ -371,7 +371,7 @@ export function standardJobCard(j: StandardJob, decision: DecisionRecord | undef
     EVERYONE,
     `Make ${j.label.toLowerCase()} a standard skill.`,
     [
-      `${j.people} engineers do this work. The ${j.deepPeople} who do it as multi-step work spend ${Math.round(j.deepMinutes)} minutes on it. The other ${j.shallowPeople} spend ${minutesWord(j.shallowMinutes)}.`,
+      `${people(j.people)} ${j.people === 1 ? 'does' : 'do'} this work. The ${j.deepPeople} who do it as multi-step work spend ${Math.round(j.deepMinutes)} minutes on it. The other ${j.shallowPeople} spend ${minutesWord(j.shallowMinutes)}.`,
       `Moving them across frees about ${Math.round(j.hoursAMonth)} hours a month.`,
     ],
     `Measured active time on both sides, over the last ${WINDOW_DAYS} days. Not an estimate of how long the work would take by hand.`,
@@ -412,7 +412,7 @@ export function expandCard(waves: Wave[], decision: DecisionRecord | undefined, 
     'expand',
     'expand',
     EVERYONE,
-    (last.weeksToHalf ?? 0) <= 12 ? 'Give AI coding to the next wave of engineers.' : 'Hold the next wave until this one lands.',
+    (last.weeksToHalf ?? 0) <= 12 ? 'Give AI coding to the next wave of people.' : 'Hold the next wave until this one lands.',
     body,
     'A wave is everyone whose first session was in the same month. Measured to their first multi-step session.',
     { label: 'Weeks for half a wave to get there', value: last.weeksToHalf ?? 0, unit: ' weeks', lowerIsBetter: true },

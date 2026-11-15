@@ -223,9 +223,15 @@ async function runSpec(): Promise<void> {
     // Spend concentration hidden below MIN_SPENDERS_FOR_CONCENTRATION (only 1 spender).
     expect(org.spendConcentration).toBeNull();
 
-    // Spend projection — priced spend exists in the last 7 days (a1+a2, both within 3 days).
-    expect(org.spendProjection).not.toBeNull();
-    expect(org.spendProjection.projected).toBeGreaterThan(0);
+    // Spend projection: FinOps's month-to-date method (the owner's rule, 2026-11-15). The
+    // priced rows are 1 to 3 days old, so early on the 1st or 2nd of a month some may fall in
+    // the month before; the newest one being month-to-date is enough to project from.
+    const nowDate = new Date(NOW * 1000);
+    const monthStart = Date.UTC(nowDate.getUTCFullYear(), nowDate.getUTCMonth(), 1) / 1000;
+    if (NOW - 1 * DAY >= monthStart) {
+      expect(org.spendProjection).not.toBeNull();
+      expect(org.spendProjection.projected).toBeGreaterThan(0);
+    }
 
     // Language Mix — SUM(doublePrecision), ordered desc.
     expect(org.languageMix).toEqual([

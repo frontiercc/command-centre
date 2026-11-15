@@ -130,21 +130,39 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
 
   const isActive = (href: string) =>
     pathname === href || pathname.startsWith(href + '/');
+  const visibleNav = navItems.filter(item => user.role === 'admin' || item.href === '/admin/pulse');
 
   return (
-    <div className="flex min-h-screen">
+    <div className="flex flex-col md:flex-row min-h-screen">
+      {/* Phones: the admin sections as a drop-down, so the menu doesn't take half the screen. */}
+      <div className="md:hidden px-4 pt-3 pb-1 bg-white border-b border-[#EAEAEA]">
+        <label className="flex items-center gap-2 text-[13px] text-[#666666]">
+          <span>Admin</span>
+          <select
+            className="flex-1 min-w-0 text-[14px] px-2 py-1.5 rounded-[10px] border border-[#DADADA] bg-white text-[#0A0A0A]"
+            value={visibleNav.find(i => isActive(i.href))?.href ?? ''}
+            onChange={e => { if (e.target.value) router.push(e.target.value); }}
+            aria-label="Admin section"
+          >
+            {!visibleNav.some(i => isActive(i.href)) && <option value="">Choose a section</option>}
+            {visibleNav.map(item => (
+              <option key={item.href} value={item.href}>
+                {item.label}{item.href === '/admin/pulse' && pulsePendingCount > 0 ? ` (${pulsePendingCount})` : ''}
+              </option>
+            ))}
+          </select>
+        </label>
+      </div>
       {/* Admin sub-navigation sidebar: a light settings panel, deliberately
           distinct from the dark main sidebar so the two do not read as one
           over-wide block. */}
-      <aside className="w-[196px] bg-white border-r border-[#EAEAEA] flex flex-col flex-shrink-0" aria-label="Admin">
+      <aside className="hidden md:flex w-[196px] bg-white border-r border-[#EAEAEA] flex-col flex-shrink-0" aria-label="Admin">
         <div className="px-4 pt-4 pb-2">
           <h2 className="m-0 text-[12px] font-medium text-[#8F8F8F]">Admin</h2>
         </div>
 
         <nav className="flex-1 px-2 pb-4 flex flex-col gap-px">
-          {navItems
-            .filter(item => user.role === 'admin' || item.href === '/admin/pulse')
-            .map(item => (
+          {visibleNav.map(item => (
             <Link
               key={item.href}
               href={item.href}
@@ -166,7 +184,7 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
       </aside>
 
       {/* Main content */}
-      <main className="flex-1 overflow-auto">
+      <main className="flex-1 min-w-0 overflow-auto">
         {children}
       </main>
     </div>

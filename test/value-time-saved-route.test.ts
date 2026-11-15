@@ -48,9 +48,8 @@ beforeEach(async () => {
   await setConfigValue('codeValueEnabled', 'true');
 });
 
-// The org code_metrics row is a *rolling* window that is typically much shorter than the fixed
-// 30d window used for cowork/chat counts (see d30 in the route) — 7d here, deliberately distinct
-// from 30d, so tests can assert the per-row window is NOT a blanket 30-day claim.
+// The org code_metrics row is a *rolling* window: 7d here, deliberately distinct from the page's
+// 30 days, so tests can assert the per-row window is read from the row, NOT a blanket 30-day claim.
 const METRICS_WINDOW_DAYS = 7;
 
 async function seedOrgMetrics(opts: { commitCount?: number; prCount?: number } = {}) {
@@ -85,14 +84,8 @@ describe('GET /api/pulse/code/value — timeSaved', () => {
     expect(data.timeSaved).toBeNull();
   });
 
-  it('computes totalHours and rows from measured PR/commit counts plus cowork/chat 30d counts, at defaults', async () => {
+  it('computes totalHours and rows from measured PR/commit counts, at defaults', async () => {
     await seedOrgMetrics({ commitCount: 10, prCount: 2 });
-    await seedCoworkMessage('sess-a', NOW - DAY);
-    await seedCoworkMessage('sess-b', NOW - 2 * DAY);
-    await seedChatMessage('conv-a', NOW - DAY);
-    // A second prompt in the same conversation: still one conversation, and
-    // Chat prompts never count as Cowork sessions.
-    await seedChatMessage('conv-a', NOW - DAY + 60);
 
     const res = await route.GET(makeRequest());
     expect(res.status).toBe(200);
@@ -106,19 +99,38 @@ describe('GET /api/pulse/code/value — timeSaved', () => {
     );
     expect(rowsByLabel['pull requests opened'].count).toBe(2);
     expect(rowsByLabel['AI-assisted commits'].count).toBe(10);
-    expect(rowsByLabel['Cowork sessions'].count).toBe(2);
-    expect(rowsByLabel['Chat conversations'].count).toBe(1);
 
-    // PR/commit rows are drawn from the rolling code_metrics window (7d fixture), NOT the fixed 30d
-    // window used for cowork/chat — asserting this catches any regression back to a blanket 30d claim.
+    // PR/commit rows are drawn from the rolling code_metrics window (7d fixture), NOT a blanket 30d.
     expect(rowsByLabel['pull requests opened'].windowDays).toBe(METRICS_WINDOW_DAYS);
     expect(rowsByLabel['AI-assisted commits'].windowDays).toBe(METRICS_WINDOW_DAYS);
-    expect(rowsByLabel['Cowork sessions'].windowDays).toBe(30);
-    expect(rowsByLabel['Chat conversations'].windowDays).toBe(30);
 
-    // Defaults: minPerPr=150, minPerCommit=20, minPerCoworkSession=10, minPerChatConversation=4
-    const expectedTotalMinutes = 2 * 150 + 10 * 20 + 2 * 10 + 1 * 4;
+    // Defaults: minPerPr=150, minPerCommit=20
+    const expectedTotalMinutes = 2 * 150 + 10 * 20;
     expect(data.timeSaved.totalHours).toBe(Math.round(expectedTotalMinutes / 60));
+  });
+
+  // The owner's rule, 2026-11-15: the Value page's Time saved counts coding work only (Claude
+  // Code and Codex). Claude Cowork and Claude Chat time saved belongs on Work Pulse.
+  it('leaves Claude Cowork sessions and Claude Chat conversations out of Time saved', async () => {
+    await seedOrgMetrics({ commitCount: 10, prCount: 2 });
+    await seedCoworkMessage('sess-a', NOW - DAY);
+    await seedCoworkMessage('sess-b', NOW - 2 * DAY);
+    await seedChatMessage('conv-a', NOW - DAY);
+    await setConfigValue('timeSavedMinPerCoworkSession', '600');
+    await setConfigValue('timeSavedMinPerChatConversation', '600');
+
+    const data = await (await route.GET(makeRequest())).json();
+    const labels = data.timeSaved.rows.map((r: { label: string }) => r.label).sort();
+    expect(labels).toEqual(['AI-assisted commits', 'pull requests opened']);
+    expect(data.timeSaved.totalHours).toBe(Math.round((2 * 150 + 10 * 20) / 60));
+  });
+
+  it('is null with Cowork and Chat activity but no coding output', async () => {
+    await seedOrgMetrics({ commitCount: 0, prCount: 0 });
+    await seedCoworkMessage('sess-a', NOW - DAY);
+    await seedChatMessage('conv-a', NOW - DAY);
+    const data = await (await route.GET(makeRequest())).json();
+    expect(data.timeSaved).toBeNull();
   });
 
   it('respects a config override for minutes-per-PR', async () => {

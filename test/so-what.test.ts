@@ -217,12 +217,15 @@ describe('the cards the page finds on its own', () => {
     expect(c.body.join(' ')).toContain('The 12 who do it as multi-step work spend 40 minutes on it');
     expect(c.body.join(' ')).toContain('The other 28 spend 3 hours');
     expect(c.body.join(' ')).toContain('frees about 467 hours a month');
+    // Everyone doing this coding work, in any department: people, not engineers.
+    expect(c.body.join(' ')).toContain('40 people do this work.');
+    expect(c.body.join(' ')).not.toContain('engineer');
     expect(c.caption).toContain('Not an estimate');
     expect(c.buttons).toEqual({ go: "We'll do this", hold: 'Not now' });
   });
 
   it('says expand when the last wave got there quickly, and hold when it did not', () => {
-    expect(expandCard([wave], undefined, NOW)!.headline).toContain('Give AI coding to the next wave');
+    expect(expandCard([wave], undefined, NOW)!.headline).toBe('Give AI coding to the next wave of people.');
     expect(expandCard([{ ...wave, weeksToHalf: 20 }], undefined, NOW)!.headline).toContain('Hold the next wave');
   });
 

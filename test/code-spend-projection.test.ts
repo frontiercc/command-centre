@@ -1,52 +1,57 @@
 // Copyright 2026 Lee James
 // SPDX-License-Identifier: Apache-2.0
 
-import { describe, it, expect, vi, beforeAll, beforeEach, afterAll } from 'vitest';
+import { describe, it, expect, vi, beforeAll, beforeEach, afterAll, afterEach } from 'vitest';
 import { NextRequest } from 'next/server';
 import { createTestDatabase } from './helpers/db';
 import type { TestSql } from './helpers/sql';
 
 // ─── Pure-function tests (no DB) ────────────────────────────────────────────
+//
+// On 2026-11-15 the owner chose to make Developer Pulse's month-end projection match FinOps's,
+// so the two pages never project differently: month-to-date priced spend divided by the exact
+// share of the month gone by (buildFinopsProjection). The earlier tests here pinned the trailing
+// 7-day run rate as deliberate; that rule is retired. projectMonthEndSpend now only supplies the
+// day count FinOps shows, so its day count is what is pinned below.
 
 import { projectMonthEndSpend } from '@/lib/pulse/code/projection';
+import { buildFinopsProjection } from '@/lib/finance/finops-projection';
 
 function utcEpoch(y: number, m: number, d: number, h = 12): number {
   return Math.floor(Date.UTC(y, m - 1, d, h) / 1000);
 }
 
-describe('projectMonthEndSpend', () => {
-  it('mid-month projection arithmetic', () => {
-    // 2026-06-15 12:00 UTC — June has 30 days, day 15 elapsed, 15 remaining.
-    const now = utcEpoch(2026, 6, 15);
-    const result = projectMonthEndSpend(100, 35, now);
-    // projected = mtd + (last7d / 7) * daysRemaining = 100 + (35/7) * 15 = 100 + 75 = 175
-    expect(result.projected).toBeCloseTo(175, 6);
+describe('projectMonthEndSpend day count', () => {
+  it('mid-month: day 15 of 30', () => {
+    const result = projectMonthEndSpend(100, 0, utcEpoch(2026, 6, 15));
     expect(result.daysElapsed).toBe(15);
     expect(result.daysInMonth).toBe(30);
   });
 
-  it('last day of month projects to exactly mtdSpend (no days remaining)', () => {
-    // 2026-06-30 — day 30 elapsed of 30, 0 remaining.
-    const now = utcEpoch(2026, 6, 30);
-    const result = projectMonthEndSpend(200, 49, now);
-    expect(result.projected).toBeCloseTo(200, 6);
+  it('last day of month: day 30 of 30', () => {
+    const result = projectMonthEndSpend(200, 0, utcEpoch(2026, 6, 30));
     expect(result.daysElapsed).toBe(30);
     expect(result.daysInMonth).toBe(30);
   });
 
   it('handles leap February day count (2028 is a leap year)', () => {
-    const now = utcEpoch(2028, 2, 10);
-    const result = projectMonthEndSpend(50, 14, now);
+    const result = projectMonthEndSpend(50, 0, utcEpoch(2028, 2, 10));
     expect(result.daysInMonth).toBe(29);
     expect(result.daysElapsed).toBe(10);
-    // daysRemaining = 19; projected = 50 + (14/7)*19 = 50 + 38 = 88
-    expect(result.projected).toBeCloseTo(88, 6);
   });
 
   it('handles non-leap February day count (2027 is not a leap year)', () => {
-    const now = utcEpoch(2027, 2, 10);
-    const result = projectMonthEndSpend(50, 14, now);
-    expect(result.daysInMonth).toBe(28);
+    expect(projectMonthEndSpend(50, 0, utcEpoch(2027, 2, 10)).daysInMonth).toBe(28);
+  });
+});
+
+describe("Developer Pulse's projection rule (FinOps's method)", () => {
+  it('divides month-to-date spend by the exact share of the month gone by', () => {
+    // 2026-06-15 12:00 UTC: 14.5 of June's 30 days have passed.
+    const p = buildFinopsProjection(100, true, utcEpoch(2026, 6, 15))!;
+    expect(p.projected).toBeCloseTo(100 / (14.5 / 30), 6);
+    expect(p.daysElapsed).toBe(15);
+    expect(p.daysInMonth).toBe(30);
   });
 });
 
@@ -62,8 +67,10 @@ let sql: TestSql;
 let cleanup: () => Promise<void>;
 let route: typeof import('../app/api/pulse/code/org-summary/route');
 
-const NOW = Math.floor(Date.now() / 1000);
 const DAY = 24 * 60 * 60;
+// A fixed "now", so the month-to-date rule never depends on the day the tests run.
+const MID_JUNE = utcEpoch(2026, 6, 15);
+const SECOND_OF_JUNE = utcEpoch(2026, 6, 2);
 
 beforeAll(async () => {
   const testDb = await createTestDatabase();
@@ -82,10 +89,25 @@ beforeEach(async () => {
            DELETE FROM config WHERE key = 'code_model_rates';`);
 });
 
-async function seedMeta(id: string, opts: { model: string; occurredAt: number; inputTokens?: number; outputTokens?: number }) {
+afterEach(() => { vi.useRealTimers(); });
+
+/** Fake only Date, so the database driver's own timers keep running. */
+function at(epochS: number) {
+  vi.useFakeTimers({ toFake: ['Date'] });
+  vi.setSystemTime(new Date(epochS * 1000));
+}
+
+const TOKENS = { inputTokens: 100000, outputTokens: 50000 };
+
+async function seedMeta(id: string, opts: { model: string; occurredAt: number }) {
   await sql.run(`INSERT INTO code_assistant_meta
        (id, user_id, session_id, model, input_tokens, output_tokens, occurred_at, ingested_at)
-     VALUES (?, 'user-1', 'sess-1', ?, ?, ?, ?, ?)`, [id, opts.model, opts.inputTokens ?? 100000, opts.outputTokens ?? 50000, opts.occurredAt, NOW]);
+     VALUES (?, 'user-1', 'sess-1', ?, ?, ?, ?, ?)`, [id, opts.model, TOKENS.inputTokens, TOKENS.outputTokens, opts.occurredAt, opts.occurredAt]);
+}
+
+async function priced(model: string): Promise<number> {
+  const { getCodeModelRates, priceTokens } = await import('@/lib/pulse/code/rates');
+  return priceTokens(model, { ...TOKENS, cacheCreationTokens: 0, cacheReadTokens: 0 }, await getCodeModelRates())!;
 }
 
 function makeRequest(): NextRequest {
@@ -93,37 +115,45 @@ function makeRequest(): NextRequest {
 }
 
 describe('GET /api/pulse/code/org-summary — spendProjection', () => {
-  it('returns a positive projected spend when there is priced spend in the last 7 days, across two priced models', async () => {
-    // Two default-rate models (see lib/pulse/code/rates.ts DEFAULT_RATES).
-    await seedMeta('m1', { model: 'claude-sonnet-4-6', occurredAt: NOW - 2 * DAY });
-    await seedMeta('m2', { model: 'claude-haiku-4-5', occurredAt: NOW - 3 * DAY });
-    // Older month-to-date spend outside the 7-day window but inside the month.
-    await seedMeta('m3', { model: 'claude-sonnet-4-6', occurredAt: NOW - 10 * DAY });
+  it('projects month-to-date priced spend over the share of the month gone by, as FinOps does', async () => {
+    // Two default-rate models (see lib/pulse/code/rates.ts DEFAULT_RATES), all inside June.
+    await seedMeta('m1', { model: 'claude-sonnet-4-6', occurredAt: MID_JUNE - 2 * DAY });
+    await seedMeta('m2', { model: 'claude-haiku-4-5', occurredAt: MID_JUNE - 3 * DAY });
+    // Inside the month, outside the last 7 days: counts, as month-to-date spend.
+    await seedMeta('m3', { model: 'claude-sonnet-4-6', occurredAt: MID_JUNE - 10 * DAY });
+    // May: not month-to-date, so left out.
+    await seedMeta('m4', { model: 'claude-sonnet-4-6', occurredAt: MID_JUNE - 20 * DAY });
+    const mtd = 2 * (await priced('claude-sonnet-4-6')) + (await priced('claude-haiku-4-5'));
 
+    at(MID_JUNE);
     const res = await route.GET(makeRequest());
     expect(res.status).toBe(200);
     const data = await res.json();
 
-    expect(data.spendProjection).not.toBeNull();
-    expect(data.spendProjection.projected).toBeGreaterThan(0);
-    expect(typeof data.spendProjection.daysElapsed).toBe('number');
-    expect(typeof data.spendProjection.daysInMonth).toBe('number');
+    expect(data.spendProjection.projected).toBeCloseTo(buildFinopsProjection(mtd, true, MID_JUNE)!.projected, 6);
+    expect(data.spendProjection.projected).toBeCloseTo(mtd / (14.5 / 30), 6);
+    expect(data.spendProjection.daysElapsed).toBe(15);
+    expect(data.spendProjection.daysInMonth).toBe(30);
   });
 
-  it('returns null when there is no priced spend in the last 7 days', async () => {
-    // No code_assistant_meta rows seeded at all.
-    const res = await route.GET(makeRequest());
-    expect(res.status).toBe(200);
-    const data = await res.json();
+  it('returns null with spend in the last 7 days but none yet this month', async () => {
+    // The retired 7-day run rate projected from this; month-to-date has nothing to go on.
+    await seedMeta('m-may', { model: 'claude-sonnet-4-6', occurredAt: SECOND_OF_JUNE - 3 * DAY });
+    at(SECOND_OF_JUNE);
+    const data = await (await route.GET(makeRequest())).json();
     expect(data.spendProjection).toBeNull();
   });
 
-  it('returns null when the only recent activity is on an unpriced model', async () => {
-    await seedMeta('m-unpriced', { model: 'made-up-model-unpriced', occurredAt: NOW - 1 * DAY });
+  it('returns null when there is no priced spend at all', async () => {
+    at(MID_JUNE);
+    const data = await (await route.GET(makeRequest())).json();
+    expect(data.spendProjection).toBeNull();
+  });
 
-    const res = await route.GET(makeRequest());
-    expect(res.status).toBe(200);
-    const data = await res.json();
+  it('returns null when the only activity this month is on an unpriced model', async () => {
+    await seedMeta('m-unpriced', { model: 'made-up-model-unpriced', occurredAt: MID_JUNE - 1 * DAY });
+    at(MID_JUNE);
+    const data = await (await route.GET(makeRequest())).json();
     expect(data.spendProjection).toBeNull();
   });
 });

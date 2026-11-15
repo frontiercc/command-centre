@@ -17,7 +17,7 @@ import { useOpenAiOnly, useConnectedProducts } from '@/components/shared/VendorS
 import { formatModelLabel } from '@/lib/pulse/code/model-label';
 import { useAskPageNote } from '@/components/ask/useAskAvailable';
 import { prettyModel } from '@/components/finance/ModelEfficiencySection';
-import type { SpendReviewTopRoute } from '@/lib/finance/spend-review';
+import type { SpendReviewTopRoute, EfficiencyReach } from '@/lib/finance/spend-review';
 
 type Surface = SpendReviewSurface;
 interface LimitRow { period: string; limit: number | null; spend: number; currency: string; source: string; shareUsed: number | null }
@@ -53,11 +53,25 @@ interface Summary {
   topWork: { label: string; surface: Surface; share: number }[];
   peopleWithRoutes: number;
   orgRereadShare: number | null;
+  /** How far people got towards each board this month; absent from older cached indexes. */
+  efficiencyReach?: { claude: EfficiencyReach; openai: EfficiencyReach | null };
 }
 interface EfficiencyEntry { userId: string; displayName: string; department: string | null; vsColleagues: number; sessions: number; deepRate: number | null; peerDeepRate: number | null }
 type BoardVendor = 'claude' | 'openai';
-interface Board { vendor: BoardVendor; rows: EfficiencyEntry[]; boardPeriod: string }
+interface Board { vendor: BoardVendor; rows: EfficiencyEntry[]; boardPeriod: string; reach: EfficiencyReach | null }
 const BOARD_VENDOR_LABEL: Record<BoardVendor, string> = { claude: 'Claude', openai: 'ChatGPT and Codex' };
+
+const peopleCount = (n: number) => `${n} ${n === 1 ? 'person' : 'people'}`;
+
+/** Why a board has no one on it, in one sentence, from the figures the index counted. */
+function emptyBoardReason(vendor: BoardVendor, r: EfficiencyReach | null): string {
+  const work = `${BOARD_VENDOR_LABEL[vendor]} work`;
+  if (!r) return `Nobody ranked on ${work} yet: it needs at least 10 sessions with colleagues doing the same kinds of work.`;
+  if (r.compared === 0) return `Nobody ranked on ${work}: no one had sessions of a kind of work that enough colleagues also do.`;
+  if (r.enough === 0) return `Nobody ranked on ${work}: ${peopleCount(r.compared)} had sessions to compare with colleagues, but the most anyone had was ${r.mostSessions} and the board needs ${r.minSessions}.`;
+  if (r.cheaper === 0) return `Nobody ranked on ${work}: ${peopleCount(r.enough)} had ${r.minSessions} or more sessions to compare, but none cost less than colleagues.`;
+  return `Nobody ranked on ${work}: ${peopleCount(r.cheaper)} cost less than colleagues, but none had a Tier 3 share measured within 10 points of theirs.`;
+}
 
 const MONTH_LONG = ['January', 'February', 'March', 'April', 'May', 'June', 'July', 'August', 'September', 'October', 'November', 'December'];
 function monthLabel(p: string): string {
@@ -72,7 +86,7 @@ function monthLabel(p: string): string {
  */
 function EfficiencyBoard({ boards, period }: { boards: Board[]; period: string }) {
   const [picked, setPicked] = useState<BoardVendor | null>(null);
-  if (boards.every(b => b.rows.length === 0)) return null;
+  if (boards.length === 0) return null;
   const tabs = boards.length > 1;
   // Open on the first board with anyone on it, unless a tab was picked.
   const board = boards.find(b => b.vendor === picked) ?? boards.find(b => b.rows.length > 0) ?? boards[0];
@@ -101,7 +115,7 @@ function EfficiencyBoard({ boards, period }: { boards: Board[]; period: string }
         </div>
       )}
       {rows.length === 0 ? (
-        <div className="p-6 text-center"><Muted>Nobody ranked on {BOARD_VENDOR_LABEL[board.vendor]} work yet: it needs at least 10 sessions with colleagues doing the same kinds of work.</Muted></div>
+        <div className="p-6 text-center"><Muted>{emptyBoardReason(board.vendor, board.reach)}</Muted></div>
       ) : (
         <div className="overflow-x-auto">
           <table className={cx(T.table, earlier && 'mt-2')}>
@@ -139,7 +153,7 @@ function EfficiencyBoard({ boards, period }: { boards: Board[]; period: string }
         </div>
       )}
       <PanelFoot>
-        Each person&apos;s typical session cost against colleagues doing the same kinds of work, weighted by where their money goes. Only people whose share of Tier 3 work is no more than 10 points below colleagues&apos; are ranked, so cheaper-because-shallower work doesn&apos;t count as efficient.
+        Each of a person&apos;s sessions is set against colleagues&apos; typical session cost for the same kind of work, and the middle of those comparisons is their figure. Only people whose share of Tier 3 work is no more than 10 points below colleagues&apos; are ranked, so cheaper-because-shallower work doesn&apos;t count as efficient.
         {tabs && ' Claude work and ChatGPT and Codex work are ranked on separate boards: each board scores people on that work only (Claude Code and Cowork, or ChatGPT and Codex).'}
       </PanelFoot>
     </Panel>
@@ -434,11 +448,12 @@ function SpendReviewIndex() {
   const over = limitsOn ? (data?.people ?? []).filter(p => (p.anthropic?.shareUsed ?? 0) >= 1).length : 0;
   const s = data?.summary;
   // Claude's board unless only OpenAI is connected; OpenAI's when it is connected and shown.
+  // An empty board is always this month's (the route only swaps in last month's when it has people), so this month's reach explains it.
+  const reach = data?.summary.efficiencyReach;
   const boards: Board[] = data ? [
-    ...(!openaiOnly ? [{ vendor: 'claude' as const, rows: data.efficiency ?? [], boardPeriod: data.efficiencyPeriod ?? period }] : []),
-    ...(openaiOnly || openaiConnected || data.openai ? [{ vendor: 'openai' as const, rows: data.efficiencyOpenai ?? [], boardPeriod: data.efficiencyOpenaiPeriod ?? period }] : []),
+    ...(!openaiOnly ? [{ vendor: 'claude' as const, rows: data.efficiency ?? [], boardPeriod: data.efficiencyPeriod ?? period, reach: reach?.claude ?? null }] : []),
+    ...(openaiOnly || openaiConnected || data.openai ? [{ vendor: 'openai' as const, rows: data.efficiencyOpenai ?? [], boardPeriod: data.efficiencyOpenaiPeriod ?? period, reach: reach?.openai ?? null }] : []),
   ] : [];
-  const anyBoard = boards.some(b => b.rows.length > 0);
   // Spend so far split by vendor only with both vendors' spend this month, and Claude shown.
   const vendorSplit = data?.openai && !openaiOnly && s?.vendors && s.vendors.claudeUsd > 0 && s.vendors.openaiUsd > 0 ? s.vendors : null;
   const requestsPanel = pending.length > 0 ? (
@@ -638,7 +653,8 @@ function SpendReviewIndex() {
                   title={s.topWork.map(w => `${w.label} (${surfaceName(w.surface, !!data.openai)}) ${pct(w.share)}`).join(' · ') || undefined}
                   value={s.topWork.length === 0
                     ? <span className="text-[14px] font-normal text-[#8F8F8F] tracking-normal">Not classified yet</span>
-                    : <span className="block truncate">{s.topWork[0].label}</span>}
+                    // A label, not a number: one step down from the figure size and free to wrap, so it never cuts off.
+                    : <span className="block text-[14px] leading-5 tracking-normal [overflow-wrap:anywhere]">{s.topWork[0].label}</span>}
                   sub={s.topWork.length > 0 ? `${pct(s.topWork[0].share)} · ${surfaceName(s.topWork[0].surface, !!data.openai)}` : undefined}
                 />
                 <Figure
@@ -664,7 +680,8 @@ function SpendReviewIndex() {
             {requestsPanel}
             {rereadNotice}
 
-            {anyBoard && (
+            {/* Shown even with every board empty, so the board can say why. */}
+            {boards.length > 0 && data.people.length > 0 && (
               <Fold title="Most efficient" sub="Lower cost than colleagues for the same kinds of work, with work as deep as theirs">
                 <EfficiencyBoard boards={boards} period={period} />
               </Fold>

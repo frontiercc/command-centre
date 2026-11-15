@@ -150,12 +150,22 @@ export function buildRepoCards(days: string[], ghRows: GhDailyRow[]): RepoShippi
   return cards.sort((a, b) => b.commits30d - a.commits30d);
 }
 
-/** Distinct tracked repos with >=1 commit in the window's last 7 days. */
-export function countReposActive7d(days: string[], ghRows: GhDailyRow[]): number {
-  const last7 = new Set(days.slice(-7));
+/** Distinct tracked repos with >=1 commit on any of the given days. */
+function countReposActiveOn(days: string[], ghRows: GhDailyRow[]): number {
+  const inWindow = new Set(days);
   const active = new Set<string>();
   for (const r of ghRows) {
-    if (last7.has(r.date) && r.commit_count > 0) active.add(r.repo);
+    if (inWindow.has(r.date) && r.commit_count > 0) active.add(r.repo);
   }
   return active.size;
+}
+
+/** Distinct tracked repos with >=1 commit in the window's last 7 days. */
+export function countReposActive7d(days: string[], ghRows: GhDailyRow[]): number {
+  return countReposActiveOn(days.slice(-7), ghRows);
+}
+
+/** Distinct tracked repos with >=1 commit in the window's last 30 days: the page's own window. */
+export function countReposActive30d(days: string[], ghRows: GhDailyRow[]): number {
+  return countReposActiveOn(days.slice(-30), ghRows);
 }

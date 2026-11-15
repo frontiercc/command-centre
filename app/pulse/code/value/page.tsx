@@ -89,7 +89,7 @@ export default function CodeValuePage() {
         )}
         {codexPresent && vendor !== 'all' && !openaiOnly && (
           <p className="m-0 -mt-2 text-[13px] text-[#8F8F8F]">
-            Showing {vendor === 'openai' ? 'Codex only. Codex sends no pull requests or engaged time, so those, and the costs per pull request and per engaged hour, are not measured here' : 'Claude only: Claude Code, with the Claude Cowork and Claude Chat counts in Time saved'}.
+            Showing {vendor === 'openai' ? 'Codex only. Codex sends no pull requests or engaged time, so those, and the costs per pull request and per engaged hour, are not measured here' : 'Claude Code only'}.
           </p>
         )}
         {error ? (
@@ -137,7 +137,7 @@ export default function CodeValuePage() {
                   <span className="text-[24px] leading-7 font-semibold tracking-[-0.02em] tabular-nums text-[#1F6F8B]">
                     ~{data.timeSaved.totalHours.toLocaleString()} hours
                   </span>
-                  <span className="text-[13px] text-[#8F8F8F]">from measured output over the windows shown</span>
+                  <span className="text-[13px] text-[#8F8F8F]">from measured coding work over the windows shown</span>
                 </div>
                 <ul className="m-0 p-0 list-none">
                   {/* Largest share first; each bar is the row's share of the total hours. */}
@@ -152,7 +152,7 @@ export default function CodeValuePage() {
                   ))}
                 </ul>
                 <PanelFoot>
-                  Measured output counts × your minutes-per-task assumptions. Assumptions are editable in Admin → Developer Pulse → Value.
+                  Coding work only: pull requests and commits{data.split ? ' from Claude Code and Codex' : ''} × your minutes-per-task assumptions. Claude Cowork and Claude Chat work is on Work Pulse. Assumptions are editable in Admin → Developer Pulse → Value.
                 </PanelFoot>
               </Panel>
             )}

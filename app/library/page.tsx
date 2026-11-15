@@ -11,6 +11,7 @@ import TopBar from '@/components/layout/TopBar';
 import { useConnectedProducts } from '@/components/shared/VendorSwitch';
 import LoadingSpinner from '@/components/shared/LoadingSpinner';
 import ToolRiskPanels from '@/components/library/ToolRiskPanels';
+import { anthropicUsesLine } from '@/components/library/anthropic-uses';
 import {
   PageBody, Toolbar, Panel, PanelFoot, Strip, Figure, Bar, T, Tag, B, Chip, Notice, Muted, cx,
 } from '@/components/precision/ui';
@@ -860,6 +861,7 @@ function AnthropicCatalog({ entries, onVote }: { entries: LibraryEntry[]; onVote
               <Tag>Anthropic</Tag>
             </span>
             {e.description && <span className="text-[14px] leading-5 text-[#4D4D4D] line-clamp-2">{e.description}</span>}
+            <span className={cx('text-[13px] tabular-nums', e.invocation_count > 0 ? 'text-[#666666]' : 'text-[#8F8F8F]')}>{anthropicUsesLine(e)}</span>
             <span className="flex items-center gap-1.5 mt-auto">
               <span className="relative">
                 <InstallButton

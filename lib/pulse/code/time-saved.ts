@@ -5,32 +5,29 @@
  * Developer Pulse "Time saved (bottom-up estimate)" — pure, deterministic, unit-tested.
  *
  * Unlike the top-down Value estimate (team × lift% × loaded comp, a benchmark
- * projection), this is a bottom-up rollup: measured output counts (PRs,
- * AI-assisted commits, Cowork sessions, Chat conversations) each multiplied
+ * projection), this is a bottom-up rollup: measured coding output counts (pull
+ * requests and AI-assisted commits, from Claude Code and Codex) each multiplied
  * by an admin-editable minutes-per-task assumption. Both are estimates and
  * both are shown — this one grounds the story in per-artifact counts rather
  * than a headcount/lift formula.
+ *
+ * Coding work only: Claude Cowork and Claude Chat time saved belongs on Work
+ * Pulse, which has its own human-time figures (the owner's rule, 2026-11-15).
  */
 
 export interface TimeSavedAssumptions {
   minPerPr: number;
   minPerCommit: number;
-  minPerCoworkSession: number;
-  minPerChatConversation: number;
 }
 
 export const TIME_SAVED_DEFAULTS: TimeSavedAssumptions = {
   minPerPr: 150,
   minPerCommit: 20,
-  minPerCoworkSession: 10,
-  minPerChatConversation: 4,
 };
 
 export interface TimeSavedCounts {
   prCount: number;
   commitCount: number;
-  coworkSessions: number;
-  chatConversations: number;
 }
 
 export interface TimeSavedRow {
@@ -43,8 +40,6 @@ export interface TimeSavedRow {
 interface RawTimeSavedConfig {
   timeSavedMinPerPr: string;
   timeSavedMinPerCommit: string;
-  timeSavedMinPerCoworkSession: string;
-  timeSavedMinPerChatConversation: string;
 }
 
 function resolveField(override: string, fallback: number): number {
@@ -61,8 +56,6 @@ export function resolveTimeSavedAssumptions(config: RawTimeSavedConfig): TimeSav
   return {
     minPerPr: resolveField(config.timeSavedMinPerPr, TIME_SAVED_DEFAULTS.minPerPr),
     minPerCommit: resolveField(config.timeSavedMinPerCommit, TIME_SAVED_DEFAULTS.minPerCommit),
-    minPerCoworkSession: resolveField(config.timeSavedMinPerCoworkSession, TIME_SAVED_DEFAULTS.minPerCoworkSession),
-    minPerChatConversation: resolveField(config.timeSavedMinPerChatConversation, TIME_SAVED_DEFAULTS.minPerChatConversation),
   };
 }
 
@@ -70,8 +63,6 @@ export function computeTimeSaved(counts: TimeSavedCounts, a: TimeSavedAssumption
   const specs: Array<{ label: string; count: number; minutesEach: number }> = [
     { label: 'pull requests opened', count: counts.prCount, minutesEach: a.minPerPr },
     { label: 'AI-assisted commits', count: counts.commitCount, minutesEach: a.minPerCommit },
-    { label: 'Cowork sessions', count: counts.coworkSessions, minutesEach: a.minPerCoworkSession },
-    { label: 'Chat conversations', count: counts.chatConversations, minutesEach: a.minPerChatConversation },
   ];
 
   const rows: TimeSavedRow[] = specs

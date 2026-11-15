@@ -254,7 +254,7 @@ function VerdictPanel({ v }: { v: Verdict }) {
         {v.split && <p className="m-0 -mt-1 text-[13px] text-[#8F8F8F] tabular-nums">{v.split}</p>}
         {(v.projection || v.estimateBadge) && (
           <div className="flex flex-col gap-0.5 text-[13px] text-[#1F6F8B]">
-            {v.projection && <span title="Last-7-day run rate extended to month end">{v.projection}</span>}
+            {v.projection && <span title="Spend so far this month at the same pace to month end, as FinOps projects it">{v.projection}</span>}
             {v.estimateBadge && <span>{v.estimateBadge}</span>}
           </div>
         )}
@@ -608,7 +608,7 @@ export default function CodePulseOverviewPage() {
             <SpendConcentrationCard data={data?.spendConcentration ?? null} />
 
             {(data?.highFrictionSessions?.length ?? 0) > 0 && (
-              <Panel title="High-friction sessions" subtitle="7 days" flush>
+              <Panel title="High-friction sessions" subtitle="Last 7 days" flush>
                 <div className="px-4 pt-3 pb-2">
                   <Muted>Sessions where over a quarter of tool actions failed: a coaching signal, not a fault list.</Muted>
                 </div>

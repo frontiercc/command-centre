@@ -1531,7 +1531,7 @@ export interface EfficiencyEntry {
   userId: string;
   displayName: string;
   department: string | null;
-  /** Spend-weighted ratio of the person's typical session cost to colleagues' for the same kinds of work (0.62 = 38% below). */
+  /** Median, across their comparable sessions, of each session's cost over colleagues' typical session for that kind of work (0.62 = 38% below). */
   vsColleagues: number;
   /** Comparable sessions behind it. */
   sessions: number;
@@ -1556,7 +1556,8 @@ export function keepsDepth(deepRate: number | null, peerDeepRate: number | null)
 export const EFFICIENCY_TOP = 10;
 
 interface Comparison {
-  comparable: Array<{ spend: number; personMedian: number | null; peerMedian: number | null }>;
+  /** Per kind of work with colleagues to compare against: the person's priced session spends, and colleagues' median session spend. */
+  kinds: Array<{ spends: number[]; peerMedian: number | null }>;
   sessions: number;
   tiered: number;
   deep: number;
@@ -1564,14 +1565,14 @@ interface Comparison {
   peerDeep: number;
 }
 function newComparison(): Comparison {
-  return { comparable: [], sessions: 0, tiered: 0, deep: 0, peerTiered: 0, peerDeep: 0 };
+  return { kinds: [], sessions: 0, tiered: 0, deep: 0, peerTiered: 0, peerDeep: 0 };
 }
 
 /** A person's figures for one vendor's board; null below EFFICIENCY_MIN_SESSIONS comparable sessions. */
 function efficiencyFigures(c: Comparison): EfficiencyFigures | null {
   if (c.sessions < EFFICIENCY_MIN_SESSIONS) return null;
   return {
-    vsColleagues: efficiencyRatio(c.comparable),
+    vsColleagues: efficiencyRatio(c.kinds),
     sessions: c.sessions,
     deepRate: c.tiered >= MIN_OUTCOME_SESSIONS ? c.deep / c.tiered : null,
     peerDeepRate: c.peerTiered >= MIN_OUTCOME_SESSIONS ? c.peerDeep / c.peerTiered : null,
@@ -1579,20 +1580,57 @@ function efficiencyFigures(c: Comparison): EfficiencyFigures | null {
 }
 
 /**
- * Spend-weighted ratio of a person's typical session cost to colleagues' for
- * the same kinds of work. Comparing like with like: a person doing bigger
- * kinds of work is compared with colleagues doing those kinds, not with
- * everyone. Null with nothing comparable.
+ * How a person's session cost compares with colleagues', session by session.
+ *
+ * Every comparable session (a priced session of a classified kind of work that
+ * enough colleagues also do: MIN_PEER_USERS people and MIN_PEER_SESSIONS
+ * sessions) gives one ratio: that session's spend over colleagues' median
+ * session spend for the same kind of work. The score is the median of those
+ * ratios, across all the person's kinds of work on one vendor:
+ *
+ *   vsColleagues = median over sessions s of ( spend(s) / peerMedian(kind of s) )
+ *
+ * Comparing like with like: a person doing bigger kinds of work is compared
+ * with colleagues doing those kinds, not with everyone. Pooling sessions keeps
+ * people whose work is spread over many kinds, each with only a session or
+ * two, and the median keeps one unusually dear or cheap session from moving
+ * the score. Kinds whose colleagues' median is missing or zero are skipped.
+ * Null with nothing comparable.
  */
-export function efficiencyRatio(kinds: Array<{ spend: number; personMedian: number | null; peerMedian: number | null }>): number | null {
-  let weight = 0;
-  let sum = 0;
+export function efficiencyRatio(kinds: Array<{ spends: number[]; peerMedian: number | null }>): number | null {
+  const ratios: number[] = [];
   for (const k of kinds) {
-    if (k.personMedian === null || k.peerMedian === null || k.peerMedian <= 0 || k.spend <= 0) continue;
-    weight += k.spend;
-    sum += k.spend * (k.personMedian / k.peerMedian);
+    if (k.peerMedian === null || k.peerMedian <= 0) continue;
+    for (const spend of k.spends) ratios.push(spend / k.peerMedian);
   }
-  return weight > 0 ? sum / weight : null;
+  return median(ratios);
+}
+
+/** How far people got towards one vendor's board, so an empty board can say why. */
+export interface EfficiencyReach {
+  /** People with at least one comparable session on this vendor's work. */
+  compared: number;
+  /** The most comparable sessions any one person had. */
+  mostSessions: number;
+  /** People with at least `minSessions` comparable sessions... */
+  enough: number;
+  /** ...and of those, people whose sessions cost less than colleagues' (before the depth rule). */
+  cheaper: number;
+  /** EFFICIENCY_MIN_SESSIONS. */
+  minSessions: number;
+}
+
+function newReach(): EfficiencyReach {
+  return { compared: 0, mostSessions: 0, enough: 0, cheaper: 0, minSessions: EFFICIENCY_MIN_SESSIONS };
+}
+
+function addReach(r: EfficiencyReach, c: Comparison, f: EfficiencyFigures | null): void {
+  if (c.sessions === 0) return;
+  r.compared += 1;
+  r.mostSessions = Math.max(r.mostSessions, c.sessions);
+  if (!f) return;
+  r.enough += 1;
+  if (f.vsColleagues !== null && f.vsColleagues < 1) r.cheaper += 1;
 }
 
 export interface SpendReviewIndex {
@@ -1626,6 +1664,12 @@ export interface SpendReviewIndex {
     peopleWithRoutes: number;
     /** Share of the month's list-price cost that is Claude re-reading earlier conversation, across everyone (Claude only). */
     orgRereadShare: number | null;
+    /**
+     * How far people got towards each efficiency board this month, so an empty
+     * board can say why. OpenAI's is null while ChatGPT and Codex are hidden.
+     * Absent from indexes cached before it existed.
+     */
+    efficiencyReach?: { claude: EfficiencyReach; openai: EfficiencyReach | null };
   };
 }
 
@@ -1739,6 +1783,7 @@ export async function buildSpendReviewIndex(period: string, nowS: number = Math.
     accsByUser.set(a.userId, list);
   }
 
+  const reach = { claude: newReach(), openai: newReach() };
   const people: SpendReviewPerson[] = users.map(u => {
     const info = peopleInfo.get(u.userId);
     const department = info?.department ?? null;
@@ -1759,10 +1804,11 @@ export async function buildSpendReviewIndex(period: string, nowS: number = Math.
       const p = peersExcluding(pop, u.userId);
       if (p.users.size < MIN_PEER_USERS || p.sessionSpends.length < MIN_PEER_SESSIONS) continue;
       const mine = [...k.byModel.values()];
+      // Each priced session's spend, scored one by one against colleagues' median (efficiencyRatio).
       const mySpends = mine.flatMap(t => t.spends);
       if (mySpends.length) {
         const c = comp[efficiencyVendorOf(k.surface)];
-        c.comparable.push({ spend: k.spend, personMedian: median(mySpends), peerMedian: median(p.sessionSpends) });
+        c.kinds.push({ spends: mySpends, peerMedian: median(p.sessionSpends) });
         c.sessions += mine.reduce((a, t) => a + t.sessions, 0);
         c.tiered += mine.reduce((a, t) => a + t.tiered, 0);
         c.deep += mine.reduce((a, t) => a + t.deep, 0);
@@ -1786,6 +1832,9 @@ export async function buildSpendReviewIndex(period: string, nowS: number = Math.
         workLabel: t.name, surface: t.surface, workShare: personTotal > 0 ? t.spendUsd / personTotal : 0, estSavingUsd: null,
       });
     }
+    const figs = { claude: efficiencyFigures(comp.claude), openai: efficiencyFigures(comp.openai) };
+    addReach(reach.claude, comp.claude, figs.claude);
+    addReach(reach.openai, comp.openai, figs.openai);
     return {
       userId: u.userId,
       displayName: info?.displayName ?? u.displayName,
@@ -1800,16 +1849,14 @@ export async function buildSpendReviewIndex(period: string, nowS: number = Math.
       mainWork,
       routeCount: suggestions.size,
       topRoute: pickTopRoute(candidates),
-      _efficiency: {
-        claude: efficiencyFigures(comp.claude),
-        openai: efficiencyFigures(comp.openai),
-      },
+      _efficiency: figs,
     };
   });
   people.sort((a, b) => b.totalUsd - a.totalUsd);
   const efficiency = rankEfficiency(people, 'claude');
   // ChatGPT and Codex hidden (the OpenAI panel): no OpenAI board, as every other OpenAI figure.
-  const efficiencyOpenai = (await openaiShown()) ? rankEfficiency(people, 'openai') : [];
+  const openaiOn = await openaiShown();
+  const efficiencyOpenai = openaiOn ? rankEfficiency(people, 'openai') : [];
   for (const p of people) delete p._efficiency;
 
   const topWork = [...orgKindSpend.entries()]
@@ -1842,6 +1889,7 @@ export async function buildSpendReviewIndex(period: string, nowS: number = Math.
       topWork,
       peopleWithRoutes: people.filter(p => p.routeCount > 0).length,
       orgRereadShare: rereadShare(orgUsage, rates),
+      efficiencyReach: { claude: reach.claude, openai: openaiOn ? reach.openai : null },
     },
   };
 }

@@ -22,7 +22,7 @@ interface BandData {
   priorMetrics: { spend_usd: number | null; autonomy_ratio: number | null; session_count: number } | null;
   trends?: { spend: { series: WeeklyPoint[] }; autonomy: { series: WeeklyPoint[] }; commits: { series: WeeklyPoint[] } };
   spendProjection: { projected: number } | null;
-  githubOverlay: { totalCommits7d: number; totalPrs7d?: number; reposActive7d?: number; trackedRepoCount?: number } | null;
+  githubOverlay: { totalCommits7d: number; totalPrs7d?: number; reposActive7d?: number; reposActive30d?: number; trackedRepoCount?: number } | null;
 }
 
 /** `vendor` is the dashboard's switch: Developer Pulse's figures follow it (Codex in the OpenAI view). */
@@ -53,7 +53,8 @@ export default function CodePulseBand({ vendor = 'all' }: { vendor?: 'all' | 'cl
   const prs = m?.pr_count ?? null;
   const autonomy = m?.autonomy_ratio ?? null;
   const priorAutonomy = data.priorMetrics?.autonomy_ratio ?? null;
-  const ghRepos = data.githubOverlay?.reposActive7d;
+  // GitHub's count over the same 30 days as the rest of the band.
+  const ghRepos = data.githubOverlay?.reposActive30d;
   const repos = (m?.repo_count ?? 0) > 0 ? m!.repo_count : ghRepos !== undefined ? ghRepos : null;
 
   const spendChange = spend !== null && priorSpend !== null && priorSpend > 0

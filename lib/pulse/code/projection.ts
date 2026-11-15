@@ -2,14 +2,13 @@
 // SPDX-License-Identifier: Apache-2.0
 
 /**
- * Developer Pulse — month-end spend projection.
+ * Month-end spend projection: the shared shape, and the UTC day count.
  *
- * Pure math, no DB: extends the last-7-day priced spend run rate out to the
- * end of the current UTC calendar month, added to month-to-date priced
- * spend already incurred. This is a projection ON TOP OF the existing
- * measured/estimated spend numbers — it inherits their caveats (unpriced
- * models contribute nothing; the `spendIsPartlyEstimated` badge already
- * covers Bedrock/Vertex list-rate estimates) rather than adding new ones.
+ * Developer Pulse no longer projects with this function. On 2026-11-15 the owner chose to match
+ * FinOps, so /api/pulse/code/org-summary calls `buildFinopsProjection`
+ * (lib/finance/finops-projection.ts): month-to-date priced spend divided by the exact share of
+ * the month gone by. This function stays because `buildFinopsProjection` reads its day count
+ * (`daysElapsed`, `daysInMonth`) from here; its own `projected` figure is not shown anywhere.
  */
 
 export interface SpendProjection {
@@ -20,7 +19,7 @@ export interface SpendProjection {
 
 /**
  * @param mtdSpend Priced spend so far this UTC calendar month.
- * @param last7dSpend Priced spend in the trailing 7 days (used as the run rate).
+ * @param last7dSpend Priced spend in the trailing 7 days. Retired as a run rate; FinOps passes 0 and reads only the day count.
  * @param nowEpochS Current time, unix seconds — the "now" the month is measured against.
  */
 export function projectMonthEndSpend(

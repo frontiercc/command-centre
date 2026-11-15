@@ -17,7 +17,6 @@ import { ORG_SCOPE_ID } from '@/lib/pulse/code/aggregator';
 import { resolveCalibrations, calibrationValues, computeValueEstimate } from '@/lib/pulse/code/value';
 import { computeObservedLift } from '@/lib/pulse/code/lift';
 import { hasCodexData, readCodeMetrics } from '@/lib/pulse/code/vendor-view';
-import { vendorClause } from '@/lib/dashboard/product-sql';
 import { resolveTimeSavedAssumptions, computeTimeSaved } from '@/lib/pulse/code/time-saved';
 import { codexSpend } from '@/lib/openai/spend';
 import { visibleOpenAi, visibleVendor } from '@/lib/sources/openai-visibility';
@@ -34,16 +33,14 @@ export async function GET(request: NextRequest) {
 
   const client = await getTypedClient();
   const cam = schema.codeAssistantMeta;
-  const cwMsg = schema.coworkMessages;
 
   const now = Math.floor(Date.now() / 1000);
   const d30 = now - 30 * 24 * 3600;
   const rates = await getCodeModelRates();
 
   // The All / Claude / Codex switch: Claude's view leaves Codex out, Codex's leaves Claude Code
-  // (and the Claude Cowork and Claude Chat counts in Time saved) out. Codex sends no pull
-  // requests or engaged time, so those, and the unit economics built on them, are not measured
-  // on its view rather than 0.
+  // out. Codex sends no pull requests or engaged time, so those, and the unit economics built
+  // on them, are not measured on its view rather than 0.
   const vendor = await visibleVendor(request.nextUrl.searchParams.get('vendor'));
   const withClaude = vendor !== 'openai';
 
@@ -154,42 +151,20 @@ export async function GET(request: NextRequest) {
   // commits, and Codex reports no engaged time to compare against.
   const observedLift = withClaude ? await computeObservedLift(codexPresent, false) : null;
 
-  // Bottom-up Time Saved: measured 30d output counts × admin-editable minutes-per-task assumptions.
-  // Claude Cowork sessions and Claude Chat conversations are Claude's, so the Codex view leaves them out.
-  const coworkSessionRows = !withClaude ? [] : await client
-    .select({ c: sql<number | string>`COUNT(DISTINCT ${cwMsg.session_id})` })
-    .from(cwMsg)
-    .where(and(
-      sql`(${cwMsg.surface} = 'cowork' OR ${cwMsg.surface} IS NULL)`,
-      // Claude Cowork only: ChatGPT prompts are stored as surface 'cowork' too.
-      sql.raw(vendorClause('claude', 'cowork_messages.')),
-      ne(cwMsg.session_id, ''), gte(cwMsg.occurred_at, d30),
-    ));
-  const coworkSessions = Number(coworkSessionRows[0]?.c ?? 0);
-
-  const chatConversationRows = !withClaude ? [] : await client
-    .select({ c: sql<number | string>`COUNT(DISTINCT ${cwMsg.session_id})` })
-    .from(cwMsg)
-    .where(and(eq(cwMsg.surface, 'chat'), sql.raw(vendorClause('claude', 'cowork_messages.')), ne(cwMsg.session_id, ''), gte(cwMsg.occurred_at, d30)));
-  const chatConversations = Number(chatConversationRows[0]?.c ?? 0);
-
+  // Bottom-up Time Saved: measured coding output counts × admin-editable minutes-per-task assumptions.
+  // Coding work only (Claude Code and Codex): Claude Cowork and Claude Chat time saved belongs on
+  // Work Pulse, which has its own human-time figures (the owner's rule, 2026-11-15).
   const timeSavedAssumptions = resolveTimeSavedAssumptions({
     timeSavedMinPerPr: await getConfigValue('timeSavedMinPerPr'),
     timeSavedMinPerCommit: await getConfigValue('timeSavedMinPerCommit'),
-    timeSavedMinPerCoworkSession: await getConfigValue('timeSavedMinPerCoworkSession'),
-    timeSavedMinPerChatConversation: await getConfigValue('timeSavedMinPerChatConversation'),
   });
   const allCommitCount = commitCount + (codexCommitCount ?? 0);
-  const timeSavedResult = computeTimeSaved({ prCount: prCount ?? 0, commitCount: allCommitCount, coworkSessions, chatConversations }, timeSavedAssumptions);
-  // Each row carries its own measurement window: PR/commit counts come from the rolling
-  // code_metrics row (metricsWindowDays, 30 days), while cowork/chat counts are queried over a fixed
-  // 30d window (see d30 above). The window is attached per row, read from the row itself, so a
-  // label can never claim a window its count was not drawn from.
+  const timeSavedResult = computeTimeSaved({ prCount: prCount ?? 0, commitCount: allCommitCount }, timeSavedAssumptions);
+  // Each row carries its own measurement window, read from the rolling code_metrics row the
+  // PR and commit counts come from, so a label can never claim a window its count was not drawn from.
   const ROW_WINDOW_DAYS: Record<string, number | null> = {
     'pull requests opened': metricsWindowDays,
     'AI-assisted commits': metricsWindowDays,
-    'Cowork sessions': 30,
-    'Chat conversations': 30,
   };
   const timeSaved = timeSavedResult.rows.length > 0
     ? {

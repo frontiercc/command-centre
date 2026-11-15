@@ -178,7 +178,7 @@ function SoWhatBody() {
               </select>
             </label>
             <label className={cx('flex-col gap-1.5', ask === 'hire' ? 'flex' : 'hidden')}>
-              <span className="text-[13px] text-[#666666]">Engineers they have asked for</span>
+              <span className="text-[13px] text-[#666666]">People they have asked for</span>
               <input
                 type="number"
                 min={1}

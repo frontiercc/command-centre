@@ -13,7 +13,7 @@
  */
 import { sql } from 'drizzle-orm';
 import { getTypedClient } from '@/lib/db/client';
-import { weekStarts } from '@/lib/pulse/period';
+import { weekStart, weekStarts } from '@/lib/pulse/period';
 
 const WEEK = 7 * 86400;
 const WINDOW_WEEKS = 13;
@@ -85,7 +85,31 @@ export async function getUseCaseProductSessions(
   nowS: number,
   opts: { openaiShown: boolean },
 ): Promise<Map<string, ProductSessions>> {
-  const windowStarts = weekStarts(nowS - WEEK, WINDOW_WEEKS);
+  return productSessionsInWeeks(weekStarts(nowS - WEEK, WINDOW_WEEKS), opts);
+}
+
+/**
+ * Sessions this week (not yet in the 13 completed weeks), by the same rules,
+ * summed over the products shown. A use case is Piloting on this week's
+ * activity too (lib/usecases/lifecycle.ts), so the register shows these beside
+ * a 13-week count of 0, labelled as this week's.
+ */
+export async function getUseCaseSessionsThisWeek(
+  nowS: number,
+  opts: { openaiShown: boolean },
+): Promise<Map<string, number>> {
+  const out = new Map<string, number>();
+  for (const [id, p] of await productSessionsInWeeks([weekStart(nowS)], opts)) {
+    const n = p.cowork + p.code + (p.chatgpt ?? 0) + (p.codex ?? 0);
+    if (n > 0) out.set(id, n);
+  }
+  return out;
+}
+
+async function productSessionsInWeeks(
+  windowStarts: number[],
+  opts: { openaiShown: boolean },
+): Promise<Map<string, ProductSessions>> {
   const client = await getTypedClient();
   const res = await (client as unknown as { execute: (q: unknown) => Promise<{ rows: ProductRow[] }> }).execute(sql`
     WITH s AS (

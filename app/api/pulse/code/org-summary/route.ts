@@ -21,8 +21,9 @@ import { getCodeModelRates, priceTokens, spendIsPartlyEstimated, isEstimatedPric
 import { ORG_SCOPE_ID } from '@/lib/pulse/code/aggregator';
 import { computeSpendConcentration } from '@/lib/pulse/code/concentration';
 import { getWeeklySeries, getWeeklyDelta } from '@/lib/pulse/trends';
-import { projectMonthEndSpend, type SpendProjection } from '@/lib/pulse/code/projection';
-import { buildDailyWindow, buildShippingSeries, buildRepoCards, countReposActive7d, hasToolSplit, buildCodexRepoReach, type GhDailyRow, type ShippingDay, type RepoShippingCard, type CodexRepoReach } from '@/lib/pulse/code/shipping-alignment';
+import { type SpendProjection } from '@/lib/pulse/code/projection';
+import { buildFinopsProjection } from '@/lib/finance/finops-projection';
+import { buildDailyWindow, buildShippingSeries, buildRepoCards, countReposActive7d, countReposActive30d, hasToolSplit, buildCodexRepoReach, type GhDailyRow, type ShippingDay, type RepoShippingCard, type CodexRepoReach } from '@/lib/pulse/code/shipping-alignment';
 import { readHumanTime } from '@/lib/pulse/human-time-summary';
 import { hasCodexData, readCodeMetrics, trendVendor, codeSessionVendor } from '@/lib/pulse/code/vendor-view';
 import { codexSpend } from '@/lib/openai/spend';
@@ -335,11 +336,11 @@ export async function GET(request: NextRequest) {
   }
   const spendConcentration = computeSpendConcentration([...spendByUser.values()]);
 
-  // Month-end spend projection: month-to-date priced spend (UTC calendar
-  // month) plus the last-7-day priced run rate extended to month end. Same
-  // pricing path as everything else — unpriced models contribute nothing to
-  // either sum (null-never-zero), never presented as measured (see the
-  // violet estimate badge on the UI side).
+  // Month-end spend projection: FinOps's method, reused so the two pages never project
+  // differently (the owner chose this on 2026-11-15, replacing the trailing 7-day run rate):
+  // month-to-date priced spend (UTC calendar month) divided by the exact share of the month
+  // gone by. Same pricing path as everything else — unpriced models contribute nothing
+  // (null-never-zero), never presented as measured (see the estimate styling on the UI side).
   const monthStart = Math.floor(Date.UTC(
     new Date(now * 1000).getUTCFullYear(),
     new Date(now * 1000).getUTCMonth(),
@@ -370,9 +371,9 @@ export async function GET(request: NextRequest) {
 
   const codexPriced = async (since: number) => withCodex ? ((await codexSpend({ since }, rates)).usd ?? 0) : 0;
   const mtdSpend = (withClaude ? await sumPricedSpend(monthStart) : 0) + await codexPriced(monthStart);
-  const last7dSpend = (withClaude ? await sumPricedSpend(sevenDaysAgo) : 0) + await codexPriced(sevenDaysAgo);
-  const spendProjection: SpendProjection | null = last7dSpend > 0
-    ? projectMonthEndSpend(mtdSpend, last7dSpend, now)
+  // No priced spend yet this month: nothing to project from, so null rather than $0.
+  const spendProjection: SpendProjection | null = mtdSpend > 0
+    ? buildFinopsProjection(mtdSpend, true, now)
     : null;
 
   // Language Mix: edit-decision counts by language (from the OTel metrics stream).
@@ -403,6 +404,8 @@ export async function GET(request: NextRequest) {
     totalPrs7d: number;
     totalCommits30dByRepo: Record<string, number>;
     reposActive7d: number;
+    /** Tracked repos with a GitHub commit in the last 30 days: the page's window. All commits, like reposActive7d. */
+    reposActive30d: number;
     shippingSeries: ShippingDay[];
     repoCards: RepoShippingCard[];
     /** A sync has written the tool split (made with Claude Code / Codex / no AI tool recorded). */
@@ -489,6 +492,7 @@ export async function GET(request: NextRequest) {
         totalPrs7d: Number(vol7?.prs ?? 0),
         totalCommits30dByRepo: Object.fromEntries(perRepo30Rows.map(r => [r.repo, Number(r.c)])),
         reposActive7d: countReposActive7d(windowDays, ghDailyRows),
+        reposActive30d: countReposActive30d(windowDays, ghDailyRows),
         shippingSeries: buildShippingSeries(windowDays, aiByDay, ghDailyRows),
         repoCards: buildRepoCards(windowDays, ghDailyRows),
         toolSplit: hasToolSplit(ghDailyRows),

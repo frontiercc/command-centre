@@ -7,6 +7,7 @@ import {
   buildShippingSeries,
   buildRepoCards,
   countReposActive7d,
+  countReposActive30d,
   hasToolSplit,
   buildCodexRepoReach,
   type GhDailyRow,
@@ -109,6 +110,20 @@ describe('countReposActive7d', () => {
       gh('a/w', '2026-08-01', 0),   // zero-commit row is NOT active
     ];
     expect(countReposActive7d(days, rows)).toBe(2);
+  });
+});
+
+describe('countReposActive30d', () => {
+  const days = buildDailyWindow('2026-08-03', 30);
+
+  it('counts distinct repos with >=1 commit anywhere in the 30-day window', () => {
+    const rows: GhDailyRow[] = [
+      gh('a/x', '2026-08-02', 3),   // last 7 days
+      gh('a/z', '2026-07-10', 9),   // in the 30 days (07-05..08-03), outside the last 7
+      gh('a/old', '2026-06-20', 4), // before the window
+      gh('a/w', '2026-08-01', 0),   // zero-commit row is NOT active
+    ];
+    expect(countReposActive30d(days, rows)).toBe(2);
   });
 });
 

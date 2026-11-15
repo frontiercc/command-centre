@@ -38,6 +38,16 @@ export async function getLifecycleConfig(): Promise<LifecycleConfig> {
   };
 }
 
+/**
+ * The stage a page shows. An archived use case is no longer judged or tracked
+ * (the tracker and the session judge both skip it), so its stored stage is the
+ * one it had when archived while its sessions keep changing: it reads null,
+ * "Not tracked", rather than, say, "Piloting" beside no sessions.
+ */
+export function shownLifecycle(uc: { status: string; lifecycle: UseCaseLifecycle }): UseCaseLifecycle | null {
+  return uc.status === 'archived' ? null : uc.lifecycle;
+}
+
 const isActive = (w: WeekActivity): boolean => w.matchedMessages > 0 || w.sessionCount > 0;
 
 export function deriveLifecycle(

@@ -6,7 +6,7 @@
  * what it gets, and the proof, read from figures this product already holds.
  *
  *  - A recurring job where the people who hand it over whole finish it far quicker than the rest.
- *  - How long each wave of new engineers took to start handing whole work over.
+ *  - How long each wave of new people took to start handing whole work over.
  *  - People who were given it and have hardly touched it since.
  *  - Teams where one or two people hold all the handed-over work.
  *
