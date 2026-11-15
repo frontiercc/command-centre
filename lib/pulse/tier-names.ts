@@ -16,6 +16,29 @@ export function tierNamesOr(names: TierNames | null | undefined): TierNames {
   return names ?? DEFAULT_TIER_NAMES;
 }
 
+/**
+ * Stored text that names a tier by number ("Tier 3 session flagged as …"), shown with the
+ * customer's name for that tier instead, so a renamed tier reads correctly on old rows too.
+ */
+export function withTierNames(text: string, names: TierNames | null | undefined): string {
+  const t = tierNamesOr(names);
+  const list = [t.t1, t.t2, t.t3];
+  return text.replace(/\bTier ([123])\b/g, (_, n: string) => list[Number(n) - 1]);
+}
+
+/**
+ * The top tier where a figure mixes Work Pulse and Developer Pulse sessions (Spend Review's
+ * efficiency boards). The shipped names are "Frontier" and "Frontier delegation": when one name
+ * begins with the other, the shorter one covers both. Names renamed apart are both given.
+ */
+export function topTierName(work: TierNames | null | undefined, code: TierNames | null | undefined): string {
+  const w = tierNamesOr(work).t3, c = tierNamesOr(code).t3;
+  const lw = w.toLowerCase(), lc = c.toLowerCase();
+  if (lc.startsWith(lw)) return w;
+  if (lw.startsWith(lc)) return c;
+  return `${w} or ${c}`;
+}
+
 /** The top two tiers, as the customer names them: "meaningful or frontier". */
 export function deepWords(names: TierNames | null | undefined): string {
   const t = tierNamesOr(names);

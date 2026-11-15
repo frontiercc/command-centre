@@ -192,10 +192,11 @@ export function BarRow({ label, value, pct, tone = 'measured', title, rank, colo
 }) {
   return (
     <div className="px-3 py-2 border-t border-[#F2F2F2] first:border-t-0 flex flex-col gap-1" title={title}>
-      <div className="flex items-baseline gap-2 min-w-0">
+      <div className="flex flex-wrap items-baseline gap-x-2 min-w-0">
         {rank !== undefined && <span className="text-[12px] text-[#B3B3B3] w-4 shrink-0 tabular-nums">{rank}</span>}
         <span className="text-[14px] text-[#0A0A0A] truncate">{label}</span>
-        <span className="ml-auto text-[13px] text-[#666666] tabular-nums whitespace-nowrap">{value}</span>
+        {/* Wraps under the label on a phone rather than pushing the page wider. */}
+        <span className="ml-auto max-w-full text-right text-[13px] text-[#666666] tabular-nums sm:whitespace-nowrap">{value}</span>
       </div>
       <Bar pct={pct} tone={tone} color={color} />
     </div>
@@ -392,7 +393,7 @@ export function Spark({ data, tone = 'measured', width = 72, height = 20, fixedM
   fixedMin?: number; fixedMax?: number;
 }) {
   const vals = data.filter((v): v is number => v !== null && Number.isFinite(v));
-  if (vals.length < 2) return <span className="text-[12px] text-[#B3B3B3]">—</span>;
+  if (vals.length < 2) return <span className="text-[12px] text-[#B3B3B3]">not enough data</span>;
   const max = fixedMax ?? Math.max(...vals), min = fixedMin ?? Math.min(...vals), span = max - min || 1;
   const step = data.length > 1 ? width / (data.length - 1) : width;
   const stroke = tone === 'judged' ? '#6BA3B8' : tone === 'neutral' ? '#8F8F8F' : '#1F6F8B';

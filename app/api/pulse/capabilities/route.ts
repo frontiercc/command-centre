@@ -14,6 +14,7 @@ import { getConfigValue } from '@/lib/config';
 import { randomUUID } from 'crypto';
 import { visibleVendor } from '@/lib/sources/openai-visibility';
 import { vendorClause } from '@/lib/dashboard/product-sql';
+import { getTierNames } from '@/lib/pulse/tier-config';
 
 export const dynamic = 'force-dynamic';
 
@@ -67,7 +68,7 @@ export async function GET(request: NextRequest) {
     .orderBy(desc(pe.detected_at))
     .limit(100);
 
-  return NextResponse.json({ candidates, pendingCount: candidates.length });
+  return NextResponse.json({ candidates, pendingCount: candidates.length, tierNames: await getTierNames() });
 }
 
 // PATCH — confirm, dismiss, or restore a capability event

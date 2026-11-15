@@ -62,7 +62,7 @@ function healthTone(value: string): 'good' | 'warn' | 'neutral' {
 }
 
 function formatDate(epochS: number | null): string {
-  return epochS ? new Date(epochS * 1000).toLocaleDateString('en-GB') : '—';
+  return epochS ? new Date(epochS * 1000).toLocaleDateString('en-GB') : 'never';
 }
 
 export default function UsersPage() {
@@ -184,7 +184,7 @@ export default function UsersPage() {
             </Empty>
           ) : (
             <Panel title="Active users" subtitle={`${users.length} ${users.length === 1 ? 'person' : 'people'}`} flush>
-              <div className="overflow-x-auto">
+              <div className="relative overflow-x-auto">
                 <table className={T.table}>
                   <thead>
                     <tr className={T.headRow}>
@@ -271,7 +271,7 @@ export default function UsersPage() {
             </Empty>
           ) : (
             <Panel title="Deactivated users" subtitle={`${deactivated.length} ${deactivated.length === 1 ? 'person' : 'people'}`} flush>
-              <div className="overflow-x-auto">
+              <div className="relative overflow-x-auto">
                 <table className={T.table}>
                   <thead>
                     <tr className={T.headRow}>
@@ -303,7 +303,7 @@ export default function UsersPage() {
                             ? 'Auto (30d inactive)'
                             : user.deactivation_reason === 'manual_admin'
                             ? 'Manual'
-                            : (user.deactivation_reason ?? '—')}
+                            : (user.deactivation_reason ?? 'Not recorded')}
                         </td>
                         <td className={T.tdRight}>
                           <div className="flex items-center justify-end gap-1">

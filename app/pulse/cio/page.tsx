@@ -245,7 +245,7 @@ export default function CioPulsePage() {
         {/* Every confirmed new way of working, one click away */}
         <details id="capability-log" className="group">
           <summary className="cursor-pointer list-none text-[13px] font-medium text-[#1F6F8B] hover:underline">All confirmed new ways of working</summary>
-          <div className="mt-3"><CapabilityLog events={data.capabilityLog} /></div>
+          <div className="mt-3"><CapabilityLog events={data.capabilityLog} names={orgFull?.tierNames} /></div>
         </details>
       </PageBody>
     </>

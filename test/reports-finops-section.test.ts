@@ -86,7 +86,7 @@ describe('renderFinopsSection', () => {
 
   it('renders a dormant surface as not captured, never as $0', () => {
     const md = render();
-    expect(md).toContain('| Chat | not captured on this deployment | — |');
+    expect(md).toContain('| Chat | not captured on this deployment | not captured |');
     expect(md).not.toContain('| Chat | $0.00');
   });
 

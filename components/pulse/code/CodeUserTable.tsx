@@ -108,19 +108,19 @@ export default function CodeUserTable({ users, showDepartment = true, githubBasi
                   {u.display_name || u.email || u.user_id}
                 </Link>
               </td>
-              {showDepartment && <td className={T.tdMute}>{u.department ?? '—'}</td>}
+              {showDepartment && <td className={T.tdMute}>{u.department ?? 'No department'}</td>}
               <td className={cx(T.tdRight, 'font-medium')}>
-                {u.spend_usd === null ? '—' : formatCurrency(u.spend_usd)}
+                {u.spend_usd === null ? (u.input_tokens + u.output_tokens === 0 ? 'not measured' : 'not priced') : formatCurrency(u.spend_usd)}
               </td>
               <td className={T.tdRight}>
-                {u.autonomy_ratio === null ? '—' : `${u.autonomy_ratio.toFixed(1)}×`}
+                {u.autonomy_ratio === null ? 'not measured' : `${u.autonomy_ratio.toFixed(1)}×`}
               </td>
               <td className={T.tdRight}>{u.session_count}</td>
               <td className={T.tdRight}>{u.commit_count ?? 0}</td>
               {showRepos && <td className={T.tdRight}>{u.repo_count}</td>}
               {showGithubRepos && <td className={T.tdRight}>{u.github_repo_count ?? 0}</td>}
               <td className={T.tdRight}>
-                {u.cache_hit_ratio === null ? '—' : `${Math.round(u.cache_hit_ratio * 100)}%`}
+                {u.cache_hit_ratio === null ? 'not measured' : `${Math.round(u.cache_hit_ratio * 100)}%`}
               </td>
               <td className={cx(T.tdRight, 'text-[#8F8F8F]')}>{formatTokens(u.input_tokens + u.output_tokens)}</td>
             </tr>

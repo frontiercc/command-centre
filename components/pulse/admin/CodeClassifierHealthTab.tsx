@@ -325,8 +325,8 @@ export default function CodeClassifierHealthTab() {
                 {data.currentFailures.map(f => (
                   <tr key={f.session_id} className={T.row}>
                     <td className={cx(T.tdMute, 'font-mono text-[13px] max-w-[10rem] truncate')} title={f.session_id}>{f.session_id}</td>
-                    <td className={T.tdMute}>{f.user_id ?? '—'}</td>
-                    <td className={T.tdMute}>{f.classifier_model ?? '—'}</td>
+                    <td className={T.tdMute}>{f.user_id ?? 'not set'}</td>
+                    <td className={T.tdMute}>{f.classifier_model ?? 'none'}</td>
                     <td className={cx(T.td, 'text-[#B42318] max-w-xs')}>{(f.error ?? '').slice(0, 80)}</td>
                     <td className={cx(T.tdMute, 'whitespace-nowrap')}>{timeAgo(f.classified_at)}</td>
                   </tr>

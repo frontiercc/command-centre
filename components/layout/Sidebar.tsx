@@ -80,7 +80,9 @@ export default function Sidebar({ theme = 'default' }: { theme?: Theme }) {
     } catch { /* storage unavailable: fall back to the fetches */ }
   }, []);
 
+  // The open-alert count, only for roles that can see Alerts: anyone else would be refused.
   useEffect(() => {
+    if (!isCorePlatformRole(userRole)) return;
     const refreshAlertCount = () => {
       fetch('/api/alerts/count')
         .then(r => r.ok ? r.json() : Promise.reject())
@@ -94,7 +96,13 @@ export default function Sidebar({ theme = 'default' }: { theme?: Theme }) {
     window.addEventListener('alertsChanged', refreshAlertCount);
     // Poll every 60 s so AI-generated alerts surface without a page reload
     const pollTimer = setInterval(refreshAlertCount, 60_000);
+    return () => {
+      window.removeEventListener('alertsChanged', refreshAlertCount);
+      clearInterval(pollTimer);
+    };
+  }, [userRole]);
 
+  useEffect(() => {
     fetchConfigOnce()
       .then(raw => {
         if (!raw) return;
@@ -128,11 +136,6 @@ export default function Sidebar({ theme = 'default' }: { theme?: Theme }) {
         }
       })
       .catch(() => {});
-
-    return () => {
-      window.removeEventListener('alertsChanged', refreshAlertCount);
-      clearInterval(pollTimer);
-    };
   }, []);
 
   // Fetch capability queue count once we know the user is admin

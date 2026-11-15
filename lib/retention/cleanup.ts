@@ -12,6 +12,7 @@ import { getTypedClient } from '@/lib/db/client';
 import { schema } from '@/lib/db/schema';
 import { withTx } from '@/lib/db/with-tx';
 import { getConfigValue, setConfigValue } from '@/lib/config';
+import { STRIPPED_MARKER } from '@/lib/retention/marker';
 
 // Postgres caps one statement at 65,535 bind parameters, so an id list handed
 // to inArray() must be split. In strip mode cowork_messages rows are never
@@ -53,7 +54,8 @@ export interface CleanupResult {
   archive_error?: string;
 }
 
-export const STRIPPED_MARKER = '[Content removed — retention policy]';
+// The stored marker lives in a client-safe file so pages can recognise it too.
+export { STRIPPED_MARKER };
 
 /**
  * Affected-row count for UPDATE/DELETE (node-postgres resolves to

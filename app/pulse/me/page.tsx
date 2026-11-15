@@ -10,7 +10,7 @@ import TopBar from '@/components/layout/TopBar';
 import LoadingSpinner from '@/components/shared/LoadingSpinner';
 import type { FrontierView } from '@/lib/pulse/frontier-view';
 import type { MyPeriod, PulsePeriod } from '@/lib/pulse/period-shape';
-import type { TierNames } from '@/lib/pulse/tier-names';
+import { withTierNames, type TierNames } from '@/lib/pulse/tier-names';
 import FrontierHero from '@/components/pulse/FrontierHero';
 import GenerateBriefingButton from '@/components/pulse/GenerateBriefingButton';
 import { cleanTitle } from '@/components/pulse/CapabilityLog';
@@ -226,7 +226,7 @@ export default function PersonalPulsePage() {
               <div key={c.id} className="flex items-start gap-3 py-2 border-b border-[#F2F2F2] last:border-b-0">
                 <div className="flex-1 min-w-0">
                   <p className="m-0 text-[13px] font-medium text-[#0A0A0A]">{cleanTitle(c.title)}</p>
-                  {c.body && <p className="m-0 mt-0.5 text-[12px] text-[#8F8F8F] line-clamp-1">{c.body}</p>}
+                  {c.body && <p className="m-0 mt-0.5 text-[12px] text-[#8F8F8F] line-clamp-1">{withTierNames(c.body, data.tierNames)}</p>}
                 </div>
                 <div className="flex gap-1.5 shrink-0">
                   <button type="button" onClick={() => handleCapabilityAction(c.id, 'confirm')} className={`${B.secondary} !py-0.5 !px-2 !text-[12px]`}>Confirm</button>

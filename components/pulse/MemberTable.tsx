@@ -21,12 +21,12 @@ interface MemberTableProps {
 }
 
 function fmt(val: number | null, decimals = 2): string {
-  if (val === null) return '—';
+  if (val === null) return 'not judged';
   return val.toFixed(decimals);
 }
 
 function timeAgo(ts: number | null): string {
-  if (!ts) return '—';
+  if (!ts) return 'never';
   const secs = Math.floor(Date.now() / 1000) - ts;
   if (secs < 3600) return 'just now';
   const hours = Math.floor(secs / 3600);
@@ -82,7 +82,7 @@ export default function MemberTable({ members }: MemberTableProps) {
                 </td>
                 <td className={T.tdRight}>{fmt(m.dds)}</td>
                 <td className={T.tdRight}>
-                  {m.oti !== null ? `${fmt(m.oti)}×` : '—'}
+                  {m.oti !== null ? `${fmt(m.oti)}×` : 'not measured'}
                 </td>
                 <td className={`${T.tdRight} text-[13px] text-[#8F8F8F]`}>{timeAgo(m.last_active)}</td>
                 {isAdmin && (

@@ -29,7 +29,7 @@ describe('buildCrosswalk', () => {
     expect(spend.fit).toBe('ai_specific');
   });
 
-  it('renders null signals as "—" and never as 0', () => {
+  it('renders null signals as null or "not measured" and never as 0', () => {
     const empty: CodeSignals = {
       spendUsd: null, autonomyRatio: null, commitCount: null, prCount: null,
       linesAdded: null, linesRemoved: null, editAcceptCount: null, editRejectCount: null,
@@ -38,7 +38,7 @@ describe('buildCrosswalk', () => {
     const boxes = buildCrosswalk(empty);
     const allCells = boxes.flatMap(b => b.cells);
     for (const c of allCells) {
-      expect(c.value === null || c.value === '—').toBe(true);
+      expect(c.value === null || c.value === 'not measured').toBe(true);
       expect(c.value).not.toBe('0');
       expect(c.value).not.toBe('$0');
     }
@@ -87,11 +87,11 @@ describe('buildCrosswalk', () => {
     }
   });
 
-  it('partial-null lines: renders em-dash for unmeasured side, never 0', () => {
+  it('partial-null lines: says "not measured" for the unmeasured side, never 0', () => {
     const partialLines = { ...full, linesRemoved: null };
     const speed = buildCrosswalk(partialLines).find(b => b.dimension === 'speed')!;
     const codeOutput = speed.cells.find(c => c.label.includes('Code output'))!;
-    expect(codeOutput.value).toContain('—');
+    expect(codeOutput.value).toContain('removed not measured');
     expect(codeOutput.value).not.toMatch(/−0\b/);
   });
 

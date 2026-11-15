@@ -991,7 +991,7 @@ export default function SecurityPage() {
                             </div>
                           </td>
                           <td className={T.tdMute}>
-                            {user.displayName || <span className="text-[#B3B3B3]">—</span>}
+                            {user.displayName || <span className="text-[#B3B3B3]">not set</span>}
                           </td>
                           <td className={T.td}>
                             <RolePill role={user.role} />
@@ -999,7 +999,7 @@ export default function SecurityPage() {
                           <td className={cx(T.tdMute, 'text-[13px]')}>
                             {user.role !== 'admin'
                               ? (user.department || <span className="text-[#B3B3B3]">All</span>)
-                              : <span className="text-[#B3B3B3]">—</span>}
+                              : <span className="text-[#B3B3B3]">not applicable</span>}
                           </td>
                           <td className={T.td}>
                             <select
@@ -1148,7 +1148,7 @@ export default function SecurityPage() {
                       <td className={cx(T.tdMute, 'text-[13px] whitespace-nowrap tabular-nums')}>
                         {new Date(s.expiresAt * 1000).toLocaleString(undefined, { dateStyle: 'short', timeStyle: 'short' })}
                       </td>
-                      <td className={cx(T.tdMute, 'text-[13px] font-mono')}>{s.ipAddress || '—'}</td>
+                      <td className={cx(T.tdMute, 'text-[13px] font-mono')}>{s.ipAddress || 'not recorded'}</td>
                       <td className={T.tdRight}>
                         {s.isCurrent ? (
                           <span className="text-[13px] text-[#8F8F8F]">Current</span>

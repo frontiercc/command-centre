@@ -21,7 +21,7 @@ import {
 import { getWindowDistinctUsers, type WeekActivity } from '@/lib/usecases/weeks';
 import {
   getUseCasePlatformSessions, getUseCasePlatformHours, type PlatformSessions, type PlatformHours,
-  getUseCaseProductSessions, getUseCaseProductHours, type ProductSessions, type ProductHours,
+  getUseCaseProductSessions, getUseCaseProductHours, getUseCaseSessionsThisWeek, type ProductSessions, type ProductHours,
 } from '@/lib/usecases/platform-sessions';
 import { openaiShown } from '@/lib/sources/openai-visibility';
 
@@ -47,6 +47,8 @@ export interface GovernanceBet {
     /** The same sessions and hours per product (Claude Cowork, Claude Code, ChatGPT, Codex), which the page shows. */
     productSessions: ProductSessions;
     productHours: ProductHours;
+    /** Sessions this week, not yet in the 13 weeks; the lifecycle counts them, so the page says so beside a 0. */
+    sessionsThisWeek: number;
   };
   estimated: { hoursRecovered: number };
   series: Array<number | null>;
@@ -70,6 +72,8 @@ export interface GovernanceWorkflow {
   platformSessions: PlatformSessions;
   /** The same sessions per product, which the page shows. */
   productSessions: ProductSessions;
+  /** Sessions this week, not yet in the 13 weeks (see GovernanceBet). */
+  sessionsThisWeek: number;
 }
 
 export interface GovernanceRollup {
@@ -215,11 +219,12 @@ export async function buildGovernanceRollup(
   // Per-vendor split (Claude / OpenAI), same window and session rules as the
   // register column and the use case page's Workflow Impact panel.
   const shown = opts.openaiShown ?? await openaiShown();
-  const [platformSessions, platformHours, productSessions, productHours] = await Promise.all([
+  const [platformSessions, platformHours, productSessions, productHours, thisWeek] = await Promise.all([
     getUseCasePlatformSessions(nowS, { openaiShown: shown }),
     getUseCasePlatformHours(nowS, { openaiShown: shown }),
     getUseCaseProductSessions(nowS, { openaiShown: shown }),
     getUseCaseProductHours(nowS, { openaiShown: shown }),
+    getUseCaseSessionsThisWeek(nowS, { openaiShown: shown }),
   ]);
   const productSessionsFor = (id: string): ProductSessions =>
     productSessions.get(id) ?? { cowork: 0, code: 0, chatgpt: shown ? 0 : null, codex: shown ? 0 : null };
@@ -253,6 +258,7 @@ export async function buildGovernanceRollup(
       measured: {
         distinctUsers, sessions, hours, platformSessions: sessionsFor(uc.id), platformHours: hoursFor(uc.id),
         productSessions: productSessionsFor(uc.id), productHours: productHoursFor(uc.id),
+        sessionsThisWeek: thisWeek.get(uc.id) ?? 0,
       },
       estimated: { hoursRecovered },
       series,
@@ -270,6 +276,7 @@ export async function buildGovernanceRollup(
       id: uc.id, title: uc.title, lifecycle: uc.lifecycle, series, measuredHours, distinctUsers,
       platformSessions: sessionsFor(uc.id),
       productSessions: productSessionsFor(uc.id),
+      sessionsThisWeek: thisWeek.get(uc.id) ?? 0,
     };
   }));
 

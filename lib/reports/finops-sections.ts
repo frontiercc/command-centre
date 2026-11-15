@@ -51,7 +51,7 @@ function tokens(n: number): string {
 function surfaceLine(label: string, s: SurfaceSpend): string {
   const total = s.tokens.input + s.tokens.output + s.tokens.cacheWrite + s.tokens.cacheRead;
   if (s.basis === 'dormant') {
-    return `| ${label} | not captured on this deployment | — |`;
+    return `| ${label} | not captured on this deployment | not captured |`;
   }
   const spend = s.usd === null ? 'not measured' : usd(s.usd);
   const suffix = s.basis === 'estimate' ? ' (estimated)' : s.basis === 'openai_rates' ? " (at OpenAI's USD token rates)" : '';
@@ -64,14 +64,14 @@ function costCentreTable(report: ChargebackReport): string {
   }
   if (report.vendors) {
     const rows = report.costCentres
-      .map(c => `| ${c.name} | ${c.code ?? '—'} | ${usd(c.totalUsd)} | ${usd(c.codeUsd)} | ${usd(c.coworkUsd)} | ${usd(c.chatgptUsd ?? 0)} | ${usd(c.codexUsd ?? 0)} |`)
+      .map(c => `| ${c.name} | ${c.code ?? 'none'} | ${usd(c.totalUsd)} | ${usd(c.codeUsd)} | ${usd(c.coworkUsd)} | ${usd(c.chatgptUsd ?? 0)} | ${usd(c.codexUsd ?? 0)} |`)
       .join('\n');
     return `| Cost centre | GL code | Total | Claude Code | Claude Cowork | ChatGPT | Codex |
 |---|---|---|---|---|---|---|
 ${rows}`;
   }
   const rows = report.costCentres
-    .map(c => `| ${c.name} | ${c.code ?? '—'} | ${usd(c.totalUsd)} | ${usd(c.codeUsd)} | ${usd(c.coworkUsd)} |`)
+    .map(c => `| ${c.name} | ${c.code ?? 'none'} | ${usd(c.totalUsd)} | ${usd(c.codeUsd)} | ${usd(c.coworkUsd)} |`)
     .join('\n');
   return `| Cost centre | GL code | Total | Code | Cowork |
 |---|---|---|---|---|

@@ -15,6 +15,7 @@ import { and, eq, inArray } from 'drizzle-orm';
 import { getTypedClient } from '@/lib/db/client';
 import { schema } from '@/lib/db/schema';
 import { withTx } from '@/lib/db/with-tx';
+import { capabilityTitle } from '@/lib/pulse/capability-title';
 
 type TxClient = Awaited<ReturnType<typeof getTypedClient>>;
 
@@ -158,7 +159,7 @@ export async function detectCapabilityCreation(classificationIds: number[]): Pro
         user_id: row.user_id,
         event_type: 'capability_creation',
         status: 'candidate',
-        title: `New capability — ${readableType}`,
+        title: capabilityTitle(readableType),
         body,
         cowork_message_id: row.cowork_message_id,
         tier: row.tier,

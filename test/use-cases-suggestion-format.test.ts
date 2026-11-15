@@ -18,15 +18,15 @@ describe('formatSuggestionEvidenceLine', () => {
       matchingRule: { skills: ['seed-library'], connectors: [], taskTypes: [], departments: [] },
       evidence: { distinctUsers: 1, sessionCount: 1, departments: [] },
     });
-    expect(line).toBe('1 person · — · seed-library');
+    expect(line).toBe('1 person · no department · seed-library');
   });
 
-  it('falls back to an em dash when no departments are present', () => {
+  it('says "no department" when no departments are present', () => {
     const line = formatSuggestionEvidenceLine({
       matchingRule: { skills: [], connectors: ['slack'], taskTypes: [], departments: [] },
       evidence: { distinctUsers: 3, sessionCount: 5, departments: [] },
     });
-    expect(line).toBe('3 people · — · slack');
+    expect(line).toBe('3 people · no department · slack');
   });
 
   it('joins multiple departments with a comma', () => {
@@ -42,7 +42,7 @@ describe('formatSuggestionEvidenceLine', () => {
       matchingRule: { skills: ['a'], connectors: ['b'], taskTypes: ['c'], departments: [] },
       evidence: { distinctUsers: 2, sessionCount: 2, departments: [] },
     });
-    expect(line).toBe('2 people · — · a + b + C');
+    expect(line).toBe('2 people · no department · a + b + C');
   });
 
   it('leaves off the tools segment when a suggestion has none', () => {

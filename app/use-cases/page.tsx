@@ -102,7 +102,7 @@ const LIFECYCLE_FACETS: Array<NonNullable<UseCase['lifecycle']>> = ['adopted', '
  * beside a bare 0.
  */
 function PlatformCell({ p, showOpenAi, thisWeek }: { p?: ProductSessions; showOpenAi: boolean; thisWeek?: number }) {
-  if (!p) return <span className="text-[#8F8F8F]">—</span>;
+  if (!p) return <span className="text-[#8F8F8F]">not measured</span>;
   const all: Array<[string, number | null]> = [
     ['Claude Cowork', p.cowork],
     ['Claude Code', p.code],
@@ -517,10 +517,10 @@ export default function UseCasesRegisterPage() {
                         <td className={T.td}>
                           {pill ? <Pill tone={pill.tone}>{pill.label}</Pill>
                             : uc.status === 'archived' ? <span className="text-[13px] text-[#8F8F8F]" title="Archived use cases are no longer tracked">Not tracked</span>
-                            : <span className="text-[#8F8F8F]">—</span>}
+                            : <span className="text-[#8F8F8F]">Not set</span>}
                         </td>
                         <td className={cx(T.tdMute, 'text-[13px] truncate')} title={uc.departments.join(', ')}>
-                          {uc.departments.length > 0 ? uc.departments.join(', ') : '—'}
+                          {uc.departments.length > 0 ? uc.departments.join(', ') : 'none'}
                         </td>
                       </tr>
                     );

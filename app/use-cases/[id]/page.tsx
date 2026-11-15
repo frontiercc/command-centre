@@ -690,7 +690,7 @@ function RuleRow({ label, values }: { label: string; values: string[] }) {
     return (
       <div className="flex items-center gap-2">
         <span className="text-[13px] text-[#8F8F8F] w-20 shrink-0">{label}</span>
-        <span className="text-[13px] text-[#B3B3B3]">—</span>
+        <span className="text-[13px] text-[#B3B3B3]">none</span>
       </div>
     );
   }

@@ -18,6 +18,7 @@ import { formatModelLabel } from '@/lib/pulse/code/model-label';
 import { useAskPageNote } from '@/components/ask/useAskAvailable';
 import { prettyModel } from '@/components/finance/ModelEfficiencySection';
 import type { SpendReviewTopRoute, EfficiencyReach } from '@/lib/finance/spend-review';
+import { topTierName } from '@/lib/pulse/tier-names';
 
 type Surface = SpendReviewSurface;
 interface LimitRow { period: string; limit: number | null; spend: number; currency: string; source: string; shareUsed: number | null }
@@ -64,13 +65,13 @@ const BOARD_VENDOR_LABEL: Record<BoardVendor, string> = { claude: 'Claude', open
 const peopleCount = (n: number) => `${n} ${n === 1 ? 'person' : 'people'}`;
 
 /** Why a board has no one on it, in one sentence, from the figures the index counted. */
-function emptyBoardReason(vendor: BoardVendor, r: EfficiencyReach | null): string {
+function emptyBoardReason(vendor: BoardVendor, r: EfficiencyReach | null, top: string): string {
   const work = `${BOARD_VENDOR_LABEL[vendor]} work`;
   if (!r) return `Nobody ranked on ${work} yet: it needs at least 10 sessions with colleagues doing the same kinds of work.`;
   if (r.compared === 0) return `Nobody ranked on ${work}: no one had sessions of a kind of work that enough colleagues also do.`;
   if (r.enough === 0) return `Nobody ranked on ${work}: ${peopleCount(r.compared)} had sessions to compare with colleagues, but the most anyone had was ${r.mostSessions} and the board needs ${r.minSessions}.`;
   if (r.cheaper === 0) return `Nobody ranked on ${work}: ${peopleCount(r.enough)} had ${r.minSessions} or more sessions to compare, but none cost less than colleagues.`;
-  return `Nobody ranked on ${work}: ${peopleCount(r.cheaper)} cost less than colleagues, but none had a Tier 3 share measured within 10 points of theirs.`;
+  return `Nobody ranked on ${work}: ${peopleCount(r.cheaper)} cost less than colleagues, but none had a ${top} share measured within 10 points of theirs.`;
 }
 
 const MONTH_LONG = ['January', 'February', 'March', 'April', 'May', 'June', 'July', 'August', 'September', 'October', 'November', 'December'];
@@ -84,7 +85,7 @@ function monthLabel(p: string): string {
  * Cowork) and OpenAI's (ChatGPT and Codex) are scored apart, never mixed. Two
  * boards show as tabs; one shows on its own.
  */
-function EfficiencyBoard({ boards, period }: { boards: Board[]; period: string }) {
+function EfficiencyBoard({ boards, period, top }: { boards: Board[]; period: string; top: string }) {
   const [picked, setPicked] = useState<BoardVendor | null>(null);
   if (boards.length === 0) return null;
   const tabs = boards.length > 1;
@@ -115,7 +116,7 @@ function EfficiencyBoard({ boards, period }: { boards: Board[]; period: string }
         </div>
       )}
       {rows.length === 0 ? (
-        <div className="p-6 text-center"><Muted>{emptyBoardReason(board.vendor, board.reach)}</Muted></div>
+        <div className="p-6 text-center"><Muted>{emptyBoardReason(board.vendor, board.reach, top)}</Muted></div>
       ) : (
         <div className="overflow-x-auto">
           <table className={cx(T.table, earlier && 'mt-2')}>
@@ -125,7 +126,7 @@ function EfficiencyBoard({ boards, period }: { boards: Board[]; period: string }
                 <th scope="col" className={T.th}>Person</th>
                 <th scope="col" className={T.thRight}>Sessions</th>
                 <th scope="col" className={T.thRight}>vs colleagues</th>
-                <th scope="col" className={T.thRight}>Tier 3 share</th>
+                <th scope="col" className={T.thRight}>{top} share</th>
               </tr>
             </thead>
             <tbody>
@@ -153,7 +154,7 @@ function EfficiencyBoard({ boards, period }: { boards: Board[]; period: string }
         </div>
       )}
       <PanelFoot>
-        Each of a person&apos;s sessions is set against colleagues&apos; typical session cost for the same kind of work, and the middle of those comparisons is their figure. Only people whose share of Tier 3 work is no more than 10 points below colleagues&apos; are ranked, so cheaper-because-shallower work doesn&apos;t count as efficient.
+        Each of a person&apos;s sessions is set against colleagues&apos; typical session cost for the same kind of work, and the middle of those comparisons is their figure. Only people whose share of {top} work is no more than 10 points below colleagues&apos; are ranked, so cheaper-because-shallower work doesn&apos;t count as efficient.
         {tabs && ' Claude work and ChatGPT and Codex work are ranked on separate boards: each board scores people on that work only (Claude Code and Cowork, or ChatGPT and Codex).'}
       </PanelFoot>
     </Panel>
@@ -178,6 +179,8 @@ interface IndexData {
   unpricedModels: string[];
   limits: { status: LimitsStatus; fetchedAt: number | null; pendingCount: number };
   nearLimitShare: number;
+  /** What this customer calls the top tier, for the efficiency board. */
+  topTier?: string;
 }
 
 /** Below this much spend last month, the change reads New rather than a percentage. */
@@ -199,7 +202,7 @@ function monthElapsed(period: string): number {
 function Change({ now, prior, pace }: { now: number; prior: number | null; pace: number }) {
   if (prior !== null) prior = prior * pace;
   // Under $1 last month a percentage means nothing (cents to dollars reads as +50,000%).
-  if (prior === null || prior < MIN_PRIOR_FOR_CHANGE) return now > 0 ? <span className="text-[13px] text-[#666666]">New</span> : <span className="text-[13px] text-[#B3B3B3]">—</span>;
+  if (prior === null || prior < MIN_PRIOR_FOR_CHANGE) return now > 0 ? <span className="text-[13px] text-[#666666]">New</span> : <span className="text-[13px] text-[#B3B3B3]">Not measured</span>;
   const delta = (now - prior) / prior;
   if (now / prior >= 3) return <span className="text-[13px] tabular-nums text-[#0A0A0A] font-medium">▲ ×{(now / prior).toFixed(now / prior >= 10 ? 0 : 1)}</span>;
   if (Math.abs(delta) < 0.005) return <span className="text-[13px] text-[#666666]">Flat</span>;
@@ -549,7 +552,7 @@ function SpendReviewIndex() {
                           <span className="block text-[#0A0A0A]">{p.mainWork.label}</span>
                           <span className="block text-[13px] text-[#8F8F8F] tabular-nums">{pct(p.mainWork.share)} of their spend · {surfaceName(p.mainWork.surface, !!data.openai)}</span>
                         </>
-                      ) : <span className="text-[13px] text-[#8F8F8F]">{p.totalUsd > 0 ? 'Not classified yet' : '—'}</span>}
+                      ) : <span className="text-[13px] text-[#8F8F8F]">{p.totalUsd > 0 ? 'Not classified yet' : 'Not measured'}</span>}
                     </td>
                     <td className={T.tdRight}>
                       {p.unpricedOnly
@@ -560,7 +563,7 @@ function SpendReviewIndex() {
                     <td className={T.td}>
                       {p.routeCount > 0
                         ? <Tag tone="measured">{p.routeCount} route{p.routeCount === 1 ? '' : 's'}</Tag>
-                        : <span className="text-[13px] text-[#B3B3B3]">—</span>}
+                        : <span className="text-[13px] text-[#B3B3B3]">None</span>}
                     </td>
                     {limitsOn && (
                       <td className={T.td}>
@@ -683,7 +686,7 @@ function SpendReviewIndex() {
             {/* Shown even with every board empty, so the board can say why. */}
             {boards.length > 0 && data.people.length > 0 && (
               <Fold title="Most efficient" sub="Lower cost than colleagues for the same kinds of work, with work as deep as theirs">
-                <EfficiencyBoard boards={boards} period={period} />
+                <EfficiencyBoard boards={boards} period={period} top={data.topTier ?? topTierName(null, null)} />
               </Fold>
             )}
 

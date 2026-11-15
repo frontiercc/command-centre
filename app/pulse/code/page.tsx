@@ -151,7 +151,7 @@ function buildVerdicts(d: OrgSummary, vendor: Vendor): Verdict[] {
   const verdicts: Verdict[] = [
     {
       question: `What is ${w.tool} costing us?`,
-      value: m?.spend_usd == null ? '—' : formatCurrency(m.spend_usd),
+      value: m?.spend_usd == null ? ((m?.input_tokens ?? 0) + (m?.output_tokens ?? 0) > 0 ? 'Not priced' : 'Not measured') : formatCurrency(m.spend_usd),
       status: 'neutral',
       plain: m?.spend_usd == null
         ? 'No priced activity in the window yet.'
@@ -171,7 +171,7 @@ function buildVerdicts(d: OrgSummary, vendor: Vendor): Verdict[] {
     },
     {
       question: 'Are developers delegating, or just typing faster?',
-      value: autonomy == null ? '—' : `${autonomy.toFixed(1)}× `,
+      value: autonomy == null ? 'Not measured' : `${autonomy.toFixed(1)}× `,
       status: autonomy == null ? 'neutral' : autonomy >= 3 ? 'good' : autonomy >= 1 ? 'building' : 'attention',
       plain: (autonomy == null
         ? 'No activity to judge yet.'
@@ -319,10 +319,10 @@ function EfficiencyCard({ metrics, claude }: { metrics: CodeMetricsRow | null; c
   // Nothing to show until the productivity metrics arrive.
   if (costPerCommit == null && costPerPr == null && linesPerHour == null && tokensPerAccept == null) return null;
   const cells = [
-    { label: 'Cost per commit', value: costPerCommit == null ? '—' : formatCurrency(costPerCommit) },
-    { label: 'Cost per PR', value: costPerPr == null ? '—' : formatCurrency(costPerPr) },
-    { label: 'Lines per engaged hour', value: linesPerHour == null ? '—' : linesPerHour.toLocaleString() },
-    { label: 'Tokens per accepted edit', value: tokensPerAccept == null ? '—' : formatTokens(Math.round(tokensPerAccept)) },
+    { label: 'Cost per commit', value: costPerCommit == null ? 'Not measured' : formatCurrency(costPerCommit) },
+    { label: 'Cost per PR', value: costPerPr == null ? 'Not measured' : formatCurrency(costPerPr) },
+    { label: 'Lines per engaged hour', value: linesPerHour == null ? 'Not measured' : linesPerHour.toLocaleString() },
+    { label: 'Tokens per accepted edit', value: tokensPerAccept == null ? 'Not measured' : formatTokens(Math.round(tokensPerAccept)) },
   ];
   return (
     <Panel title="Efficiency" subtitle="30 days" flush>

@@ -45,8 +45,8 @@ const fmtTokensCompact = (n: number) =>
 const tokensTotal = (t: Tokens) => t.inputTokens + t.outputTokens + t.cacheReadTokens + t.cacheCreationTokens;
 
 function Spend({ usd, calls }: { usd: number | null; calls: number }) {
-  if (calls === 0) return <span className="text-[#8F8F8F]" title="No activity">—</span>;
-  if (usd === null) return <span className="text-[#8F8F8F]" title="No rate for this model in Admin → Developer Pulse">—</span>;
+  if (calls === 0) return <span className="text-[#8F8F8F]" title="No activity">no activity</span>;
+  if (usd === null) return <span className="text-[#8F8F8F]" title="No rate for this model in Admin → Developer Pulse">not priced</span>;
   return <>≈{fmtUsd(usd)}</>;
 }
 

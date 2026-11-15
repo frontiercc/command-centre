@@ -126,7 +126,7 @@ export default function FrameworkPage() {
               <Figure label="Quality" value={data.dx.data.dxCore4.quality} />
               <Figure label="Effectiveness" value={data.dx.data.dxCore4.effectiveness} />
               <Figure label="Impact" value={data.dx.data.dxCore4.impact} />
-              <Figure label="DXI" value={data.dx.data.dxi ?? '—'} />
+              <Figure label="DXI" value={data.dx.data.dxi ?? 'Not measured'} />
             </FigureGrid>
           </Panel>
         )}

@@ -75,7 +75,8 @@ describe('renderDigestHtml', () => {
     });
     const html = renderDigestHtml(data, HUB_URL);
 
-    expect(html).toContain('—');
+    expect(html).toContain('not priced');
+    expect(html).toContain('not measured');
     expect(html).not.toContain('$0.00');
     expect(html).not.toContain('$0');
     // unpriced caveat
@@ -273,7 +274,8 @@ describe('renderDigestSlack', () => {
     });
     const payload = renderDigestSlack(data, HUB_URL);
     const serialized = JSON.stringify(payload);
-    expect(serialized).toContain('—');
+    expect(serialized).toContain('not priced');
+    expect(serialized).toContain('not measured');
     expect(serialized).not.toContain('$0.00');
   });
 

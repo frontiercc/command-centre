@@ -164,7 +164,7 @@ function CodeUsersContent() {
                   aria-label="User"
                   value={selectedUserId}
                   onChange={e => handleSelect(e.target.value)}
-                  className={cx(B.select, 'min-w-[240px] text-[14px]')}
+                  className={cx(B.select, 'w-full max-w-full sm:w-auto sm:min-w-[240px] text-[14px]')}
                 >
                   {users.length === 0 && !notInView && <option value="">No users with {viewLabel} activity</option>}
                   {notInView && <option value={selectedUserId}>{data?.displayName ?? 'This person'} · no {viewLabel} activity</option>}
@@ -256,7 +256,7 @@ function CodeUsersContent() {
                           </div>
                           <div className="shrink-0 text-right flex flex-col items-end gap-0.5">
                             <span className="text-[14px] font-medium text-[#0A0A0A] tabular-nums">
-                              {s.spend_usd === null ? '—' : formatCurrency(s.spend_usd)}
+                              {s.spend_usd === null ? (s.input_tokens + s.output_tokens === 0 ? 'not measured' : 'not priced') : formatCurrency(s.spend_usd)}
                             </span>
                             <span className="text-[13px] text-[#8F8F8F] tabular-nums">{formatTokens(s.input_tokens + s.output_tokens)} tokens</span>
                             <Tag>{s.source === 'codex' ? 'Codex' : s.source === 'otel' ? 'OTel' : 'Agent'}</Tag>

@@ -281,7 +281,7 @@ function ModelTable({ rows, name, surface }: { rows: ModelFitRow[]; name: string
   if (rows.length === 0) return null;
   const withColleagues = rows.some(r => r.colleagues);
   const showProduced = withColleagues && rows.some(r => r.colleagues?.producedRate != null);
-  const rate = (v: number | null | undefined) => (v === null || v === undefined ? '—' : pct(v));
+  const rate = (v: number | null | undefined) => (v === null || v === undefined ? 'not measured' : pct(v));
   const th = 'font-medium px-3 py-1.5 whitespace-nowrap';
   const td = 'px-3 py-1.5 tabular-nums';
   return (
@@ -304,9 +304,9 @@ function ModelTable({ rows, name, surface }: { rows: ModelFitRow[]; name: string
             {rows.map(r => (
               <tr key={r.model} className="border-t border-[#F2F2F2]">
                 <td className="px-3 py-1.5 text-[#0A0A0A]">{prettyModel(r.model)}</td>
-                <td className={cx(td, 'text-right')}>{r.spendUsd === null ? <span className="text-[#B54708]">Not priced</span> : r.spendUsd > 0 ? <>{money(r.spendUsd)} <span className="text-[#8F8F8F]">{pct(r.spendShare)}</span></> : '—'}</td>
+                <td className={cx(td, 'text-right')}>{r.spendUsd === null ? <span className="text-[#B54708]">Not priced</span> : r.spendUsd > 0 ? <>{money(r.spendUsd)} <span className="text-[#8F8F8F]">{pct(r.spendShare)}</span></> : 'not measured'}</td>
                 <td className={cx(td, 'text-right')}>{r.you?.sessions ?? 0}</td>
-                <td className={cx(td, 'text-right')}>{r.you ? money(r.you.typicalSessionUsd) : '—'}</td>
+                <td className={cx(td, 'text-right')}>{r.you ? money(r.you.typicalSessionUsd) : 'not measured'}</td>
                 {withColleagues && (
                   <td className={cx(td, 'text-right border-l border-[#EAEAEA]')}>
                     {r.colleagues ? <>{money(r.colleagues.typicalSessionUsd)} <span className="text-[#8F8F8F]">({r.colleagues.people} people, {r.colleagues.sessions} sessions)</span></> : <span className="text-[#B3B3B3]">too few</span>}
@@ -752,7 +752,7 @@ function SessionRow({ s, userId, canSeePrompts }: { s: Session; userId: string; 
             <span className="text-[14px] text-[#4D4D4D] truncate">{s.scheduledTask ? `Scheduled task: ${s.scheduledTask} · ` : ''}{s.workLabel}{tierName ? ` · ${tierName}` : ''}</span>
           </span>
           <span className="text-[13px] text-[#8F8F8F] tabular-nums">
-            {duration(s.activeSecs)} active · {s.prompts ?? '—'} prompt{s.prompts === 1 ? '' : 's'} · {s.actions ?? '—'} action{s.actions === 1 ? '' : 's'}
+            {duration(s.activeSecs)} active · {s.prompts === null ? 'prompts not measured' : `${s.prompts} prompt${s.prompts === 1 ? '' : 's'}`} · {s.actions === null ? 'actions not measured' : `${s.actions} action${s.actions === 1 ? '' : 's'}`}
           </span>
         </span>
         <span className="text-right shrink-0">

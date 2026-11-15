@@ -58,7 +58,7 @@ function SparkBlock({ label, children }: { label: string; children: ReactNode })
 }
 
 function fig(label: string, value: string, sub?: string, tone: Tone = 'neutral') {
-  return <Figure label={label} value={value} sub={sub} tone={value === '—' ? 'neutral' : tone} />;
+  return <Figure label={label} value={value} sub={sub} tone={value === 'Not measured' || value === 'Not priced' ? 'neutral' : tone} />;
 }
 
 export default function Person360Page() {
@@ -142,8 +142,8 @@ export default function Person360Page() {
         {/* Combined AI Spend — measured, blue */}
         <Panel title="Combined AI spend" subtitle="7 days" right={<Tag tone="measured">Measured</Tag>} flush>
           <FigureGrid cols={combinedSpend.chatgptUsd != null ? 4 : 3}>
-            {fig('Total', combinedSpend.totalUsd === null ? '—' : formatCurrency(combinedSpend.totalUsd), undefined, 'measured')}
-            {fig(combinedSpend.codeIncludesCodex ? 'Claude Code and Codex' : 'Code', combinedSpend.codeUsd === null ? '—' : formatCurrency(combinedSpend.codeUsd))}
+            {fig('Total', combinedSpend.totalUsd === null ? 'Not measured' : formatCurrency(combinedSpend.totalUsd), undefined, 'measured')}
+            {fig(combinedSpend.codeIncludesCodex ? 'Claude Code and Codex' : 'Code', combinedSpend.codeUsd === null ? (code ? 'Not priced' : 'Not measured') : formatCurrency(combinedSpend.codeUsd))}
             {fig('Claude Cowork', formatCurrency(combinedSpend.coworkUsd))}
             {combinedSpend.chatgptUsd != null && fig('ChatGPT', formatCurrency(combinedSpend.chatgptUsd))}
           </FigureGrid>
@@ -170,7 +170,7 @@ export default function Person360Page() {
                 </FigureGrid>
                 <div className="px-4 py-3 border-t border-[#EAEAEA]">
                   <SubHead>Tier mix</SubHead>
-                  <div className="flex gap-5 text-[14px] tabular-nums">
+                  <div className="flex flex-wrap gap-x-5 gap-y-1 text-[14px] tabular-nums">
                     {[cowork.tierCounts.t1, cowork.tierCounts.t2, cowork.tierCounts.t3].map((n, i) => (
                       <span key={i} className="flex items-center gap-1.5">
                         <span className={`w-2.5 h-2 rounded-full inline-block ${TIER_SWATCH[i]}`} />
@@ -198,13 +198,13 @@ export default function Person360Page() {
             ) : (
               <>
                 <FigureGrid cols={2}>
-                  {fig('Spend, 7 days', code.spendUsd === null ? '—' : formatCurrency(code.spendUsd), code.spendUsd === null ? 'Unpriced model' : undefined, 'measured')}
+                  {fig('Spend, 7 days', code.spendUsd === null ? 'Not priced' : formatCurrency(code.spendUsd), code.spendUsd === null ? 'Unpriced model' : undefined, 'measured')}
                   {fig('Sessions', String(code.sessions), `${code.commits} AI-assisted commits`)}
                 </FigureGrid>
                 <div className="border-t border-[#EAEAEA]">
                   <FigureGrid cols={2}>
-                    {fig('Autonomy', code.autonomy == null ? '—' : `${code.autonomy.toFixed(1)}×`, 'Actions per instruction')}
-                    {fig('Engaged time', code.engagedHours == null ? '—' : formatDuration(Math.round(code.engagedHours * 3600)), `${formatTokens(code.linesAdded)} lines added`)}
+                    {fig('Autonomy', code.autonomy == null ? 'Not measured' : `${code.autonomy.toFixed(1)}×`, 'Actions per instruction')}
+                    {fig('Engaged time', code.engagedHours == null ? 'Not measured' : formatDuration(Math.round(code.engagedHours * 3600)), `${formatTokens(code.linesAdded)} lines added`)}
                   </FigureGrid>
                 </div>
                 {code.editAcceptRate !== null && (

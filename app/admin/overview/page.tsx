@@ -178,14 +178,14 @@ export default function AdminOverviewPage() {
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
 
             {/* 1. Users */}
-            <Tile href="/admin/users" title="User Insights" icon={<IconUsers />} value={userCount != null ? userCount.toLocaleString('en-GB') : '—'} caption="total users" />
+            <Tile href="/admin/users" title="User Insights" icon={<IconUsers />} value={userCount != null ? userCount.toLocaleString('en-GB') : 'Not available'} caption="total users" />
 
             {/* 2. Database */}
             <Tile
               href="/admin/system"
               title="Database"
               icon={<IconDatabase />}
-              value={dbStats ? formatBytes(dbStats.fileSizeBytes) : '—'}
+              value={dbStats ? formatBytes(dbStats.fileSizeBytes) : 'Not available'}
               caption="database size"
             />
 
@@ -194,20 +194,20 @@ export default function AdminOverviewPage() {
               href="/alerts"
               title="Open alerts"
               icon={<IconBell />}
-              value={alertCount ?? '—'}
+              value={alertCount ?? 'Not available'}
               valueClassName={alertCount != null && alertCount > 0 ? 'text-[#B42318]' : undefined}
               caption={alertCount === 1 ? 'open alert' : 'open alerts'}
             />
 
             {/* 4. Events (last 24h) */}
-            <Tile href="/audit" title="Events" icon={<IconActivity />} value={eventsLast24h != null ? Number(eventsLast24h).toLocaleString('en-GB') : '—'} caption="in last 24 hours" />
+            <Tile href="/audit" title="Events" icon={<IconActivity />} value={eventsLast24h != null ? Number(eventsLast24h).toLocaleString('en-GB') : 'Not available'} caption="in last 24 hours" />
 
             {/* 5. Archive */}
             <Tile
               href="/admin/data"
               title="Archive"
               icon={<IconCloud />}
-              value={archiveEnabled === true ? 'Enabled' : archiveEnabled === false ? 'Disabled' : '—'}
+              value={archiveEnabled === true ? 'Enabled' : archiveEnabled === false ? 'Disabled' : 'Not available'}
               valueClassName={archiveEnabled === true ? 'text-[#1A7F37]' : archiveEnabled === false ? 'text-[#8F8F8F]' : undefined}
               caption="archive status"
             />
@@ -217,7 +217,7 @@ export default function AdminOverviewPage() {
               href="/admin/compliance"
               title="Compliance"
               icon={<IconShield />}
-              value={complianceScore !== null ? `${complianceScore}/7` : '—'}
+              value={complianceScore !== null ? `${complianceScore}/7` : 'Not available'}
               valueClassName={
                 complianceScore === null
                   ? undefined

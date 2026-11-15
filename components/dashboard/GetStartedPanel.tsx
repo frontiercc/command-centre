@@ -60,8 +60,11 @@ export default function GetStartedPanel() {
 
   useEffect(() => {
     let live = true;
-    fetch('/api/get-started')
+    // Setup steps are for admins; anyone else would be refused, so don't ask.
+    fetch('/api/admin/session')
       .then((r) => (r.ok ? r.json() : null))
+      .then((sess) => (sess?.user?.role === 'admin' ? fetch('/api/get-started') : null))
+      .then((r) => (r && r.ok ? r.json() : null))
       .then((d) => { if (live) setS(d); })
       .catch(() => {});
     return () => { live = false; };

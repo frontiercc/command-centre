@@ -139,7 +139,7 @@ export function SpendTrendCard({ trend, openaiOnly }: { trend: SpendTrend | null
     <Panel
       title="Spend trend"
       subtitle={`${periodLabel(first.period)} to ${periodLabel(latest.period)}`}
-      right={<span className="text-[13px] text-[#666666] tabular-nums">{latest.usd != null ? fmtUsd(latest.usd) : '—'} <span className="text-[#8F8F8F]">this month</span></span>}
+      right={<span className="text-[13px] text-[#666666] tabular-nums">{latest.usd != null ? fmtUsd(latest.usd) : 'not measured'} <span className="text-[#8F8F8F]">this month</span></span>}
     >
       <div className="flex flex-col gap-3">
         <MonthBars series={trend.series} products={products} />

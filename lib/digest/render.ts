@@ -46,7 +46,7 @@ export function escapeMrkdwn(input: string): string {
 }
 
 function formatUsd(value: number | null): string {
-  if (value === null) return '—';
+  if (value === null) return 'not priced';
   return `$${value.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
 }
 
@@ -103,7 +103,7 @@ function renderCodeRowHtml(code: DigestData['code']): string {
   if (!code) return '';
 
   const spendLine = `${formatUsd(code.spendUsd)}${formatDeltaPhrase(code.spendDeltaPct)}`;
-  const engagedHoursText = code.engagedHours === null ? '—' : `${code.engagedHours.toLocaleString('en-US')} hrs`;
+  const engagedHoursText = code.engagedHours === null ? 'not measured' : `${code.engagedHours.toLocaleString('en-US')} hrs`;
   const split = spendSplitText(code);
   const splitHtml = split ? `
         <p style="margin:0 0 4px 0;font-size:13px;color:${COLOR_MUTED};">${escapeHtml(split)}</p>` : '';
@@ -278,7 +278,7 @@ function slackCodeFields(code: DigestData['code']): SlackBlock[] {
 
   const split = spendSplitText(code);
   const spendLine = `*Spend:*\n${escapeMrkdwn(formatUsd(code.spendUsd))}${escapeMrkdwn(formatDeltaPhrase(code.spendDeltaPct))}${split ? `\n${escapeMrkdwn(split)}` : ''}`;
-  const engagedHoursText = code.engagedHours === null ? '—' : `${code.engagedHours.toLocaleString('en-US')} hrs`;
+  const engagedHoursText = code.engagedHours === null ? 'not measured' : `${code.engagedHours.toLocaleString('en-US')} hrs`;
 
   return [
     { type: 'section', text: { type: 'mrkdwn', text: '*Developer Pulse*' } },

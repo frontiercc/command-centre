@@ -72,10 +72,10 @@ export default function CodeValuePage() {
   const notMeasured = 'Not measured';
 
   const heroCells = [
-    { label: 'Value (annual)', value: e ? formatCurrency(e.valueAnnual) : '—' },
-    { label: 'Return', value: e?.returnMultiple != null ? `${e.returnMultiple.toFixed(0)}×` : '—' },
-    { label: 'Net value', value: e ? formatCurrency(e.netValue) : '—' },
-    { label: 'Time recovered', value: e ? fmtHours(e.timeRecoveredHours) : '—' },
+    { label: 'Value (annual)', value: e ? formatCurrency(e.valueAnnual) : 'Not estimated' },
+    { label: 'Return', value: e?.returnMultiple != null ? `${e.returnMultiple.toFixed(0)}×` : 'Not estimated' },
+    { label: 'Net value', value: e ? formatCurrency(e.netValue) : 'Not estimated' },
+    { label: 'Time recovered', value: e ? fmtHours(e.timeRecoveredHours) : 'Not estimated' },
   ];
 
   return (
@@ -214,10 +214,10 @@ export default function CodeValuePage() {
               </div>
               <FigureGrid cols={4}>
                 {[
-                  { label: 'Cost per commit', value: me!.costPerCommit == null ? (codexView ? notMeasured : '—') : formatCurrency(me!.costPerCommit) },
-                  { label: 'Cost per PR', value: me!.costPerPr == null ? (codexView ? notMeasured : '—') : formatCurrency(me!.costPerPr) },
-                  { label: 'Spend per engaged hour', value: me!.costPerEngagedHour == null ? (codexView ? notMeasured : '—') : formatCurrency(me!.costPerEngagedHour) },
-                  { label: 'Cost per session', value: me!.costPerSession == null ? (codexView ? notMeasured : '—') : formatCurrency(me!.costPerSession) },
+                  { label: 'Cost per commit', value: me!.costPerCommit == null ? notMeasured : formatCurrency(me!.costPerCommit) },
+                  { label: 'Cost per PR', value: me!.costPerPr == null ? notMeasured : formatCurrency(me!.costPerPr) },
+                  { label: 'Spend per engaged hour', value: me!.costPerEngagedHour == null ? notMeasured : formatCurrency(me!.costPerEngagedHour) },
+                  { label: 'Cost per session', value: me!.costPerSession == null ? notMeasured : formatCurrency(me!.costPerSession) },
                 ].map(c => <Figure key={c.label} label={c.label} value={c.value} tone="measured" />)}
               </FigureGrid>
             </Panel>

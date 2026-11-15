@@ -4,6 +4,9 @@
 'use client';
 
 import { Panel, T, Muted } from '@/components/precision/ui';
+import { withTierNames, tierNamesOr, type TierNames } from '@/lib/pulse/tier-names';
+import { STRIPPED_MARKER, REMOVED_TEXT } from '@/lib/retention/marker';
+import { cleanTitle } from '@/lib/pulse/capability-title';
 
 interface CapabilityEvent {
   id: number;
@@ -20,37 +23,23 @@ interface CapabilityEvent {
   content_preview?: string | null;
 }
 
-/**
- * Strip legacy slug from old-format titles like
- * "Capability creation candidate (capability_creation)" → "Capability Creation"
- * New-format titles "New capability — Engineering · Architecture" pass through unchanged.
- */
-export function cleanTitle(title: string): string {
-  // Legacy format: "Capability creation candidate (some_slug)"
-  const legacyMatch = title.match(/^Capability creation candidate \((.+)\)$/i);
-  if (legacyMatch) {
-    return legacyMatch[1]
-      .replace(/:/g, ' · ')
-      .replace(/_/g, ' ')
-      .replace(/-/g, ' ')
-      .replace(/\b\w/g, c => c.toUpperCase());
-  }
-  // New format: strip "New capability — " prefix for display
-  return title.replace(/^New capability\s*[—–-]\s*/i, '');
-}
+// Shared with the capability ledger export (lib/pulse/capability-title.ts).
+export { cleanTitle };
 
 interface CapabilityLogProps {
   events: CapabilityEvent[];
+  /** What this customer calls each tier, for stored text that names a tier by number. */
+  names?: TierNames | null;
 }
 
 function formatDate(ts: number | null): string {
-  if (!ts) return '—';
+  if (!ts) return 'not recorded';
   return new Date(ts * 1000).toLocaleDateString('en-GB', {
     day: 'numeric', month: 'short', year: 'numeric',
   });
 }
 
-export default function CapabilityLog({ events }: CapabilityLogProps) {
+export default function CapabilityLog({ events, names }: CapabilityLogProps) {
   return (
     <Panel
       title="Capability creation log"
@@ -82,25 +71,25 @@ export default function CapabilityLog({ events }: CapabilityLogProps) {
                     <p className="m-0 font-medium text-[#0A0A0A]">{cleanTitle(ev.title)}</p>
                     {ev.content_preview && (
                       <p className="m-0 mt-0.5 text-[13px] text-[#666666] line-clamp-2">
-                        &ldquo;{ev.content_preview.slice(0, 180)}&rdquo;
+                        {ev.content_preview === STRIPPED_MARKER ? REMOVED_TEXT : <>&ldquo;{ev.content_preview.slice(0, 180)}&rdquo;</>}
                       </p>
                     )}
                     {!ev.content_preview && ev.body && (
-                      <p className="m-0 mt-0.5 text-[13px] text-[#8F8F8F] line-clamp-2">{ev.body}</p>
+                      <p className="m-0 mt-0.5 text-[13px] text-[#8F8F8F] line-clamp-2">{withTierNames(ev.body, names)}</p>
                     )}
                   </td>
                   <td className={`${T.td} whitespace-nowrap`}>{ev.display_name ?? ev.email}</td>
-                  <td className={`${T.tdMute} whitespace-nowrap`}>{ev.department ?? ev.team_id ?? '—'}</td>
+                  <td className={`${T.tdMute} whitespace-nowrap`}>{ev.department ?? ev.team_id ?? 'No department'}</td>
                   <td className={`${T.td} text-right`}>
                     {ev.tier ? (
-                      <span className={`font-mono text-[12px] px-1.5 py-0.5 rounded-[6px] ${
+                      <span className={`text-[12px] px-1.5 py-0.5 rounded-[6px] whitespace-nowrap ${
                         ev.tier === 3 ? 'bg-[#1F6F8B] text-white' :
                         ev.tier === 2 ? 'bg-[#6BA3B8] text-[#1F6F8B]' :
                         'bg-[#CCD1DB] text-[#1F6F8B]'
                       }`} title="Tier is AI-judged">
-                        T{ev.tier}
+                        {[tierNamesOr(names).t1, tierNamesOr(names).t2, tierNamesOr(names).t3][ev.tier - 1] ?? `Tier ${ev.tier}`}
                       </span>
-                    ) : '—'}
+                    ) : 'not judged'}
                   </td>
                 </tr>
               ))}

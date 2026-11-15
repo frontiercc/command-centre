@@ -46,7 +46,7 @@ export function MonthPicker({ value, onChange }: { value: string; onChange: (v: 
 }
 
 export function money(n: number | null | undefined, currency = 'USD'): string {
-  if (n === null || n === undefined) return '—';
+  if (n === null || n === undefined) return 'not measured';
   const digits = Math.abs(n) >= 100 ? 0 : 2;
   // "$28.89" as everywhere else in CCC; other currencies keep their own symbol.
   const locale = currency === 'USD' ? 'en-US' : 'en-GB';
@@ -58,7 +58,7 @@ export function money(n: number | null | undefined, currency = 'USD'): string {
 }
 
 export function pct(share: number | null | undefined): string {
-  if (share === null || share === undefined) return '—';
+  if (share === null || share === undefined) return 'not measured';
   return `${Math.round(share * 100)}%`;
 }
 

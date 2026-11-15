@@ -22,6 +22,7 @@ import { isOpenAiSource, OPENAI_SOURCE_LABELS } from '@/lib/openai/sources';
 import { productLabel, productOf } from '@/lib/dashboard/vendor';
 import { useConnectedProducts } from '@/components/shared/VendorSwitch';
 import { isOpenAiOnly, openAiConnected } from '@/lib/sources/connected-shared';
+import { STRIPPED_MARKER, shownContent } from '@/lib/retention/marker';
 
 interface AuditEvent {
   id: string;
@@ -73,10 +74,10 @@ const EVENT_TYPE_LABELS: Record<string, string> = {
   chat_completion: 'User prompt',
 };
 
-const RETENTION_MARKER = '[Content removed — retention policy]';
+const RETENTION_MARKER = STRIPPED_MARKER;
 
 function cleanUserName(userId: string | null | undefined): string {
-  if (!userId) return '—';
+  if (!userId) return 'not set';
   if (userId.includes('@')) return userId.split('@')[0].replace(/([a-z])([A-Z])/g, '$1 $2');
   return userId;
 }
@@ -282,7 +283,7 @@ function CoworkThread({ messages }: { messages: CoworkMessage[] }) {
             if (isToolActivity) {
               return (
                 <MetaRow key={msg.id} time={msg.occurred_at} icon="⚙">
-                  <span className="font-mono">{msg.content_preview || 'Tool activity'}</span>
+                  <span className="font-mono">{shownContent(msg.content_preview) || 'Tool activity'}</span>
                 </MetaRow>
               );
             }
@@ -762,7 +763,7 @@ export default function AuditPage() {
                               {cleanUserName(event.user_id)}
                             </button>
                           </td>
-                          <td className={`${T.tdMute} hidden md:table-cell`}>{event.department ?? '—'}</td>
+                          <td className={`${T.tdMute} hidden md:table-cell`}>{event.department ?? 'No department'}</td>
                           <td className={`${T.td} whitespace-nowrap`}>
                             {/* An Office or Google prompt shows its app (Excel, Google Sheets...), not Cowork */}
                             <Tag>{event.product && event.product in PRODUCT_LABEL ? productFullName(event.product as WorkProduct) : productLabel(productOf(event.surface, event._source))}</Tag>
@@ -778,7 +779,7 @@ export default function AuditPage() {
                             {event.content_preview === RETENTION_MARKER ? (
                               <span className="text-[#8F8F8F]">Content removed under the retention policy</span>
                             ) : (
-                              event.content_preview || '—'
+                              event.content_preview || 'none'
                             )}
                           </td>
                           <td className={`${T.tdRight} whitespace-nowrap`}>
@@ -965,7 +966,7 @@ export default function AuditPage() {
                     header={<>User · <span className="tabular-nums">{timeOf(selectedEvent.occurred_at)}</span>{selectedEvent.flagged ? <FlaggedMark /> : null}</>}
                   >
                     <div className="text-[14px] leading-[1.5] text-[#0A0A0A] whitespace-pre-wrap break-words">
-                      {selectedEvent.content_preview || 'No content captured'}
+                      {shownContent(selectedEvent.content_preview) || 'No content captured'}
                     </div>
                   </Bubble>
 
@@ -1015,7 +1016,7 @@ export default function AuditPage() {
                     header={<>{formatEventType(selectedEvent.event_type)} ·<span className="tabular-nums">{timeOf(selectedEvent.occurred_at)}</span>{selectedEvent.flagged ? <FlaggedMark /> : null}</>}
                   >
                     <div className="text-[14px] leading-[1.5] text-[#0A0A0A] whitespace-pre-wrap break-words">
-                      {selectedEvent.content_preview || 'No content captured'}
+                      {shownContent(selectedEvent.content_preview) || 'No content captured'}
                     </div>
                   </Bubble>
 
@@ -1056,7 +1057,7 @@ export default function AuditPage() {
                 return (
                   <div className="border border-[#EAEAEA] rounded-[10px] px-3 py-2.5 flex flex-col gap-1.5">
                     <span className="text-[13px] font-semibold text-[#0A0A0A]">Skill invoked</span>
-                    <span className="font-mono text-[14px] text-[#0A0A0A] break-all">{meta.skill_name || selectedEvent.content_preview || '—'}</span>
+                    <span className="font-mono text-[14px] text-[#0A0A0A] break-all">{meta.skill_name || selectedEvent.content_preview || 'not recorded'}</span>
                     {meta.invocation_type && (
                       <span>
                         <Tag tone={meta.invocation_type === 'agent_chained' ? 'neutral' : 'measured'}>
@@ -1076,7 +1077,7 @@ export default function AuditPage() {
                   <div className="border border-[#EAEAEA] rounded-[10px] px-3 py-2.5 flex flex-col gap-1.5">
                     <span className="text-[13px] font-semibold text-[#0A0A0A]">Connector used</span>
                     <div className="flex items-center gap-2 flex-wrap">
-                      <span className="font-mono text-[14px] text-[#0A0A0A]">{meta.mcp_server || '—'}</span>
+                      <span className="font-mono text-[14px] text-[#0A0A0A]">{meta.mcp_server || 'not recorded'}</span>
                       {meta.mcp_tool && (
                         <>
                           <span className="text-[#B3B3B3]" aria-hidden="true">→</span>
@@ -1134,7 +1135,7 @@ export default function AuditPage() {
                     <div className="flex flex-col gap-1">
                       <SectionHead title="Content preview" />
                       <div className="border border-[#EAEAEA] bg-[#FAFAFA] rounded-[10px] p-3 text-[14px] text-[#333333] whitespace-pre-wrap break-words">
-                        {selectedEvent.content_preview}
+                        {shownContent(selectedEvent.content_preview)}
                       </div>
                     </div>
                   )}

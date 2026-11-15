@@ -18,11 +18,11 @@ function taskTypeLabel(slug: string): string {
   return words.charAt(0).toUpperCase() + words.slice(1);
 }
 
-/** `{distinctUsers} people · {departments joined or —} · {[...skills,...connectors,...taskTypes].join(' + ')}` */
+/** `{distinctUsers} people · {departments joined or "no department"} · {[...skills,...connectors,...taskTypes].join(' + ')}` */
 export function formatSuggestionEvidenceLine(draft: SuggestionDraftEvidenceLine): string {
   const userCount = draft.evidence.distinctUsers;
   const userLabel = `${userCount} ${userCount === 1 ? 'person' : 'people'}`;
-  const deptLabel = draft.evidence.departments.length > 0 ? draft.evidence.departments.join(', ') : '—';
+  const deptLabel = draft.evidence.departments.length > 0 ? draft.evidence.departments.join(', ') : 'no department';
   const signals = [
     ...draft.matchingRule.skills,
     ...draft.matchingRule.connectors,

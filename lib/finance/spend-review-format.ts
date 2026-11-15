@@ -24,9 +24,9 @@ export function surfaceName(surface: SpendReviewSurface, openai: boolean): strin
 
 /** "1 Oct": day and short month, as the Spend Review pages show dates. */
 export function ukDate(value: string | number | null | undefined): string {
-  if (value === null || value === undefined || value === '') return '—';
+  if (value === null || value === undefined || value === '') return 'not recorded';
   const d = typeof value === 'number' ? new Date(value * 1000) : new Date(value);
-  if (Number.isNaN(d.getTime())) return '—';
+  if (Number.isNaN(d.getTime())) return 'not recorded';
   return d.toLocaleDateString('en-GB', { day: 'numeric', month: 'short' });
 }
 

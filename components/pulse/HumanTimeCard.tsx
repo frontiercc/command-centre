@@ -108,7 +108,7 @@ export default function HumanTimeCard({ summary, surface, scope, className = '',
             <p className="m-0 text-[14px] text-[#333333]">About {summary.ratio < 10 ? summary.ratio.toFixed(1) : Math.round(summary.ratio)}× faster</p>
           )}
           <p className="m-0 text-[13px] text-[#8F8F8F] leading-5">
-            {summary.sessions.toLocaleString()} Tier 2 and 3 sessions over the last {summary.windowDays} days. The by-hand figure is an AI estimate per session
+            {summary.sessions.toLocaleString()} sessions in the top two tiers over the last {summary.windowDays} days. The by-hand figure is an AI estimate per session
             (range {hours(low)}–{hours(high)} hours); {name} time is measured active time{surface === 'cowork' && name !== 'Claude' ? ', for ChatGPT from the times of its prompts and replies' : ''}.{' '}
             {summary.check
               ? <>Spot-check: {summary.check.aboutRight} of {summary.check.reviewed} estimates judged about right in {monthName(summary.check.period)}.</>

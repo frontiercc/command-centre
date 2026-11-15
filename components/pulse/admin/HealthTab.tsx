@@ -7,6 +7,7 @@ import { useEffect, useState } from 'react';
 import { Panel, Strip, Figure, Muted, Notice, Tag, Pill, B, T, cx } from '@/components/precision/ui';
 import { PRODUCTS } from '@/lib/dashboard/vendor';
 import { SaveMsg } from '@/components/admin/precision-admin';
+import { shownContent } from '@/lib/retention/marker';
 
 interface TierDay { day: string; tier: number; cnt: number }
 interface ConfBucket { bucket: number; cnt: number }
@@ -285,7 +286,7 @@ export default function HealthTab() {
                     <td className={cx(T.tdMute, 'whitespace-nowrap tabular-nums')}>{timeAgo(f.classified_at)}</td>
                     <td className={T.td}>{f.display_name ?? f.email}</td>
                     <td className={cx(T.tdMute, 'max-w-xs')}>
-                      {(f.content_preview ?? '').slice(0, 60)}{(f.content_preview ?? '').length > 60 ? '…' : ''}
+                      {shownContent(f.content_preview ?? '').slice(0, 60)}{shownContent(f.content_preview ?? '').length > 60 ? '…' : ''}
                     </td>
                     <td className={cx(T.td, 'max-w-xs text-[#B42318]')}>
                       {(f.classifier_error ?? '').slice(0, 80)}

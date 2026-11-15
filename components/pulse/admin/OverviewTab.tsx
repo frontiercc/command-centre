@@ -39,6 +39,8 @@ interface OverviewTabProps {
   onSave: () => void;
   onConfigChange: (patch: Partial<ModuleConfig>) => void;
   onPendingCountChange: (n: number) => void;
+  /** Only admins get the model list and process baselines; a manager would be refused. */
+  isAdmin?: boolean;
 }
 
 const FAMILIES = ['haiku', 'sonnet', 'opus'] as const;
@@ -106,7 +108,7 @@ function ModelSelect({
 }
 
 export default function OverviewTab({
-  config, stats, saving, saveMsg, onSave, onConfigChange, onPendingCountChange,
+  config, stats, saving, saveMsg, onSave, onConfigChange, onPendingCountChange, isAdmin = true,
 }: OverviewTabProps) {
   const [models, setModels] = useState<{ id: string; display_name: string }[]>([]);
   const [modelsLoading, setModelsLoading] = useState(true);
@@ -119,12 +121,13 @@ export default function OverviewTab({
   const coreAiLabel = coreAiName ? `Follow Core AI model (${coreAiName})` : 'Follow Core AI model';
 
   useEffect(() => {
+    if (!isAdmin) { setModelsLoading(false); return; }
     fetch('/api/anthropic/models')
       .then(r => r.json())
       .then(d => setModels(d.models ?? []))
       .catch(() => setModels([]))
       .finally(() => setModelsLoading(false));
-  }, []);
+  }, [isAdmin]);
 
   return (
     <div className="flex flex-col gap-4">
@@ -157,7 +160,7 @@ export default function OverviewTab({
         />
         <ToggleRow
           label="Human time vs AI time"
-          hint={<>For each Tier 2 and 3 Claude Cowork session and ChatGPT conversation, an AI estimate of how long the same result would take by hand, shown beside the measured time with AI on Work Pulse. A ChatGPT conversation&apos;s time is measured from the times of its prompts and replies. The weekly digest, Highlights, Reports and the Metrics Connector carry the Claude Cowork figures, and the ChatGPT figures while ChatGPT is shown. Code has its own switch on Admin → Developer Pulse. Admins and managers see everyone&apos;s; each person sees their own. Off stops new estimates and hides the figures.</>}
+          hint={<>For each Claude Cowork session and ChatGPT conversation in the top two tiers, an AI estimate of how long the same result would take by hand, shown beside the measured time with AI on Work Pulse. A ChatGPT conversation&apos;s time is measured from the times of its prompts and replies. The weekly digest, Highlights, Reports and the Metrics Connector carry the Claude Cowork figures, and the ChatGPT figures while ChatGPT is shown. Code has its own switch on Admin → Developer Pulse. Admins and managers see everyone&apos;s; each person sees their own. Off stops new estimates and hides the figures.</>}
           checked={config.humanTimeEnabled === 'true'}
           onChange={on => onConfigChange({ humanTimeEnabled: on ? 'true' : 'false' })}
         />
@@ -241,7 +244,7 @@ export default function OverviewTab({
       <CapabilityQueue onCountChange={onPendingCountChange} />
 
       {/* PSR baselines */}
-      <PsrBaselines />
+      <PsrBaselines isAdmin={isAdmin} />
     </div>
   );
 }

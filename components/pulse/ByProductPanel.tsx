@@ -45,7 +45,7 @@ function money(v: number): string {
 }
 
 function NotMeasured() {
-  return <span className="text-[#8F8F8F]" title="Not measured">—</span>;
+  return <span className="text-[#8F8F8F]" title="Not measured">not measured</span>;
 }
 
 export interface ByProductData {

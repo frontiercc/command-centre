@@ -101,6 +101,9 @@ interface ChargebackReport {
   office?: OfficeSpendData | null;
 }
 
+/** Shown when the server refuses the role, which is not a load failure. */
+const FORBIDDEN = 'FinOps is for admins and managers.';
+
 const fmtUsd = (n: number) =>
   n.toLocaleString('en-US', { style: 'currency', currency: 'USD' });
 
@@ -231,7 +234,7 @@ function UserTable({ users, openai, openaiOnly }: { users: ChargebackUser[]; ope
                 className="px-2 py-2 text-right text-[#8F8F8F] tabular-nums"
                 title={u.tokens ? tokensBreakdown(u.tokens) : undefined}
               >
-                {u.tokens && tokensTotal(u.tokens) > 0 ? fmtTokensCompact(tokensTotal(u.tokens)) : '—'}
+                {u.tokens && tokensTotal(u.tokens) > 0 ? fmtTokensCompact(tokensTotal(u.tokens)) : 'not measured'}
               </td>
             )}
             {claude && <td className={cell}>{fmtUsd(u.codeUsd)}</td>}
@@ -348,6 +351,7 @@ export default function CostChargebackPage() {
     fetch(`/api/finance/chargeback?period=${period}`)
       .then(r => {
         if (r.status === 404) { setNotEnabled(true); throw new Error('not enabled'); }
+        if (r.status === 403) throw new Error(FORBIDDEN);
         if (!r.ok) throw new Error("Couldn't load this page. Try again.");
         return r.json();
       })
@@ -413,7 +417,9 @@ export default function CostChargebackPage() {
     <>
       <TopBar title="FinOps" subtitle="AI spend by cost centre, per month" />
       <PageBody>
-        <Notice tone="error" title="Failed to load.">{error}</Notice>
+        {error === FORBIDDEN
+          ? <Notice tone="info" title="Not available">{error}</Notice>
+          : <Notice tone="error" title="Failed to load.">{error}</Notice>}
       </PageBody>
     </>
   );

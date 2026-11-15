@@ -9,6 +9,7 @@ import { deepShareOf } from '@/lib/pulse/tier-names';
 import GenerateBriefingButton from '@/components/pulse/GenerateBriefingButton';
 import { Panel, PanelFoot, SubHead, Toolbar, Muted, Notice, Tag, Bar, B, T, cx } from '@/components/precision/ui';
 import { SaveMsg } from '@/components/admin/precision-admin';
+import { shownContent } from '@/lib/retention/marker';
 
 function timeAgo(ts: number): string {
   const s = Math.floor(Date.now() / 1000) - ts;
@@ -198,8 +199,8 @@ export default function UserDrillDown({ userId }: { userId: string }) {
                 <tr key={c.id} className={T.row}>
                   <td className={cx(T.tdMute, 'whitespace-nowrap tabular-nums')}>{timeAgo(c.classified_at)}</td>
                   <td className={cx(T.tdMute, 'max-w-xs')}>
-                    <span title={c.content_preview ?? ''}>
-                      {(c.content_preview ?? '').slice(0, 80)}{(c.content_preview ?? '').length > 80 ? '…' : ''}
+                    <span title={shownContent(c.content_preview ?? '')}>
+                      {shownContent(c.content_preview ?? '').slice(0, 80)}{shownContent(c.content_preview ?? '').length > 80 ? '…' : ''}
                     </span>
                   </td>
                   <td className={T.td}>

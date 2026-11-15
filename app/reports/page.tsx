@@ -302,7 +302,7 @@ export default function ReportsPage() {
                       </td>
                       <td className={`${T.tdMute} hidden md:table-cell`}>{report.generated_by || 'system'}</td>
                       <td className={`${T.tdMute} hidden md:table-cell max-w-sm truncate`}>
-                        {report.content_summary || '—'}
+                        {report.content_summary || 'none'}
                       </td>
                     </tr>
                   ))}

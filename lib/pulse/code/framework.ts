@@ -111,7 +111,7 @@ export function buildCrosswalk(s: CodeSignals): FrameworkBox[] {
         codexGap({ label: 'Pull requests opened (30d)', value: num(s.prCount), fit: 'proxy', space: 'activity' }),
         codexGap({ label: 'Code output (lines ±)', value:
             s.linesAdded === null && s.linesRemoved === null ? null
-              : `+${num(s.linesAdded) ?? '—'} / −${num(s.linesRemoved) ?? '—'}`,
+              : `${s.linesAdded === null ? 'added not measured' : `+${num(s.linesAdded)}`} / ${s.linesRemoved === null ? 'removed not measured' : `−${num(s.linesRemoved)}`}`,
           fit: 'proxy', space: 'activity', note: 'Volume, not a productivity verdict.' }),
       ],
     },

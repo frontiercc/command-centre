@@ -210,7 +210,7 @@ export default function AdminFilesPage() {
                             <td className={T.td}>
                               <span className="inline-flex items-center gap-1.5">
                                 <span className="text-[16px] leading-none" aria-hidden="true">{fileIcon(ext)}</span>
-                                {ext ? <Tag>{ext}</Tag> : <span className="text-[#B3B3B3]">—</span>}
+                                {ext ? <Tag>{ext}</Tag> : <span className="text-[#B3B3B3]">none</span>}
                               </span>
                             </td>
                             <td className={T.td}>
@@ -221,10 +221,10 @@ export default function AdminFilesPage() {
                               {row.display_name ?? row.email ?? row.user_id}
                             </td>
                             <td className={T.tdMute}>
-                              {row.department ?? <span className="text-[#B3B3B3]">—</span>}
+                              {row.department ?? <span className="text-[#B3B3B3]">No department</span>}
                             </td>
                             <td className={cx(T.tdMute, 'text-[13px] max-w-[160px] truncate')}>
-                              {row.project_name ?? <span className="text-[#B3B3B3]">—</span>}
+                              {row.project_name ?? <span className="text-[#B3B3B3]">none</span>}
                             </td>
                             <td className={cx(T.tdMute, 'text-[13px] whitespace-nowrap tabular-nums')}>
                               {formatDate(row.started_at)}

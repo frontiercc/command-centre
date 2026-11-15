@@ -15,7 +15,7 @@ import { linkCls } from '@/components/pulse/WorkPulseOverview';
 import type { Card, Choice, SoWhat } from '@/lib/pulse/code/so-what';
 
 const day = (s: number) => new Date(s * 1000).toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric' });
-const one = (v: number | null) => (v === null ? '—' : String(Math.round(v * 10) / 10));
+const one = (v: number | null) => (v === null ? 'too few to tell' : String(Math.round(v * 10) / 10));
 
 const PETROL = '#1F6F8B';
 const PALE = '#C9DEE6';
@@ -45,7 +45,7 @@ function Dots({ card }: { card: Card }) {
       <span className="h-2 rounded-full bg-[#F2F2F2] overflow-hidden">
         <span className="block h-full rounded-full" style={{ width: `${((perPerson ?? 0) / widest) * 100}%`, background: ink }} />
       </span>
-      <span className="text-right tabular-nums text-[13px]">{perPerson === null ? '—' : one(perPerson)}</span>
+      <span className="text-right tabular-nums text-[13px]">{perPerson === null ? 'too few to tell' : one(perPerson)}</span>
     </div>
   );
   return (

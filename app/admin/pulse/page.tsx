@@ -81,8 +81,9 @@ export default function AdminPulsePage() {
   useEffect(() => {
     fetch('/api/admin/session')
       .then(r => r.json())
-      .then(data => { if (data.authenticated) setUserRole(data.user?.role ?? ''); })
-      .catch(() => {});
+      // A failed check still ends the wait, with the non-admin view.
+      .then(data => setUserRole(data.authenticated ? (data.user?.role || 'unknown') : 'unknown'))
+      .catch(() => setUserRole('unknown'));
   }, []);
 
   useEffect(() => {
@@ -152,7 +153,8 @@ export default function AdminPulsePage() {
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [userRole, activeTab]);
 
-  if (loading) return (
+  // Wait for the role too: the Overview tab loads admin-only parts only for an admin.
+  if (loading || !userRole) return (
     <>
       <TopBar title="Work Pulse admin" subtitle="Configuration, drill-downs, tier settings, and classifier health" />
       <LoadingSpinner />
@@ -182,6 +184,7 @@ export default function AdminPulsePage() {
             onSave={saveConfig}
             onConfigChange={patch => setConfig(c => ({ ...c, ...patch }))}
             onPendingCountChange={setPendingCount}
+            isAdmin={userRole === 'admin'}
           />
         )}
 

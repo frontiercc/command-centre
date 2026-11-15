@@ -22,7 +22,7 @@ import type { TierNames } from '@/lib/pulse/tier-names';
 import { PageBody, Toolbar, Notice, B, cx } from '@/components/precision/ui';
 import { useVendor, useOpenAiOnly, VendorSwitch } from '@/components/shared/VendorSwitch';
 import { WORK_PULSE_VENDOR_LABELS } from '@/lib/dashboard/vendor';
-import { deepShareOf, deepWords } from '@/lib/pulse/tier-names';
+import { deepShareOf, deepWords, withTierNames } from '@/lib/pulse/tier-names';
 
 interface PersonalPulseData {
   humanTime?: ByHand | null;
@@ -186,7 +186,7 @@ export default function UsersPickerPage() {
                   aria-label="Person"
                   value={selectedUserId}
                   onChange={e => handleSelect(e.target.value)}
-                  className={cx(B.select, 'min-w-[240px] text-[14px]')}
+                  className={cx(B.select, 'w-full max-w-full sm:w-auto sm:min-w-[240px] text-[14px]')}
                 >
                   {users.length === 0 && (
                     <option value="">No users with Pulse data</option>
@@ -308,7 +308,7 @@ export default function UsersPickerPage() {
                   {pending.map(c => (
                     <div key={c.id} className="py-2 border-b border-[#F2F2F2] last:border-b-0">
                       <p className="m-0 text-[13px] font-medium text-[#0A0A0A]">{cleanTitle(c.title)}</p>
-                      {c.body && <p className="m-0 mt-0.5 text-[12px] text-[#8F8F8F] line-clamp-1">{c.body}</p>}
+                      {c.body && <p className="m-0 mt-0.5 text-[12px] text-[#8F8F8F] line-clamp-1">{withTierNames(c.body, d.tierNames)}</p>}
                     </div>
                   ))}
                 </Frame>

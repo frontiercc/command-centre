@@ -314,7 +314,7 @@ export async function buildIso27001Section(periodStart: string, periodEnd: strin
 
   const rows = [
     ['✔', 'ISMS owner', ownerStatus, 'A.5.1'],
-    ['✔', 'Certification status', certDisplayStatus, '—'],
+    ['✔', 'Certification status', certDisplayStatus, 'none'],
     ['✔', 'Security incidents', incidentStatus, 'A.5.24–A.5.28'],
     ['✔', 'Access control', accessControlStatus, 'A.8.2–A.8.5'],
     ['✔', 'Audit logging', auditStatus, 'A.8.15'],
@@ -408,7 +408,7 @@ export async function buildIso42001Section(periodStart: string, periodEnd: strin
 
   const rows = [
     ['✔', 'AIMS owner', ownerStatus, '6.1.2'],
-    ['✔', 'Assessment status', assessmentDisplayStatus, '—'],
+    ['✔', 'Assessment status', assessmentDisplayStatus, 'none'],
     ['✔', 'AI objectives (acceptable use policy)', policyStatus, '6.2'],
     ['✔', 'AI system inventory', inventoryStatus, 'A.4.3'],
     ['✔', 'Data quality controls', dataQualityStatus, 'A.7.4'],
@@ -542,7 +542,7 @@ export async function buildComplianceGaps(): Promise<string> {
   if (certStatus === 'not-started') {
     gaps.push({
       framework: 'ISO 27001',
-      reference: '—',
+      reference: 'none',
       gap: 'Certification process not started',
     });
   }
@@ -561,7 +561,7 @@ export async function buildComplianceGaps(): Promise<string> {
   if (aimsStatus === 'not-started') {
     gaps.push({
       framework: 'ISO 42001',
-      reference: '—',
+      reference: 'none',
       gap: 'Assessment process not started',
     });
   }

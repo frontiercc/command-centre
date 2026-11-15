@@ -593,7 +593,7 @@ export default function SystemPage() {
   };
 
   const statusBadge = (status: CheckStatus) => {
-    if (status === 'idle') return <span className="text-[#B3B3B3] text-[13px]">—</span>;
+    if (status === 'idle') return <span className="text-[#B3B3B3] text-[13px]">not run</span>;
     if (status === 'running') return <span className="text-[#1F6F8B] text-[13px] animate-pulse">Running…</span>;
     if (status === 'pass') return <Pill tone="good">Pass</Pill>;
     if (status === 'info') return <Pill tone="neutral">Info</Pill>;
@@ -852,7 +852,7 @@ export default function SystemPage() {
 
           <div className="px-4 py-3 border-t border-[#F2F2F2] flex flex-wrap gap-x-6 gap-y-1 text-[13px] text-[#666666]">
             <span>Last sent: <span className="text-[#0A0A0A]">{digestLastSentWeek ? new Date(Number(digestLastSentWeek) * 1000).toLocaleDateString() : 'Never'}</span></span>
-            <span>Status: <span className="text-[#0A0A0A]">{digestNextSendPreview || '—'}</span></span>
+            <span>Status: <span className="text-[#0A0A0A]">{digestNextSendPreview || 'not available'}</span></span>
           </div>
 
           {digestTestResult && (
@@ -1139,9 +1139,9 @@ export default function SystemPage() {
                     <td className={cx(T.td, 'font-medium text-[#0A0A0A]')}>{check.name}</td>
                     <td className={T.td}>{statusBadge(check.status)}</td>
                     <td className={cx(T.tdRight, 'text-[#666666]')}>
-                      {check.ms !== null ? `${check.ms}ms` : '—'}
+                      {check.ms !== null ? `${check.ms}ms` : 'not run'}
                     </td>
-                    <td className={cx(T.td, 'text-[13px] text-[#8F8F8F]')}>{check.detail || '—'}</td>
+                    <td className={cx(T.td, 'text-[13px] text-[#8F8F8F]')}>{check.detail || 'none'}</td>
                   </tr>
                 ))}
               </tbody>

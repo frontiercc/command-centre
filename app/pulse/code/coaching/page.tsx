@@ -20,7 +20,7 @@ import type { CoachingPlan, PlanAction } from '@/lib/pulse/code/team-coaching';
 
 interface Data { teams: string[]; department: string | null; plan: CoachingPlan | null; checkAfterDays: number }
 
-const pct = (v: number | null) => (v === null ? '—' : `${Math.round(v * 100)}%`);
+const pct = (v: number | null) => (v === null ? 'not measured' : `${Math.round(v * 100)}%`);
 
 export default function TeamCoachingPage() {
   // useSearchParams needs a Suspense boundary above it in an app-router page.

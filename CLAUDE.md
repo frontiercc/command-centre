@@ -48,7 +48,7 @@ When someone asks you to install or set up Command Centre, follow the Quick star
 
 These protect the product's credibility. A change that breaks one will be rejected.
 
-1. **Keep measured and judged apart.** Figures from telemetry are measured, shown in dark blue. Figures from a model or an assumption are judged or estimated, shown in sky blue. Never add them together.
+1. **Keep measured and judged apart.** Figures from telemetry are measured. Figures from a model or an assumption are judged or estimated: they carry a grey "AI-judged" or "Estimate" tag and say so in words, and their bars use the lighter petrol shade. Colour alone never tells them apart. Never add them together.
 2. **Not measured is null, never zero.** Return `null` and show "not measured". An unpriced model has no cost, not $0.
 3. **A model never writes a number that is stored or shown.** Compute figures in code and pass them in. Model-written text is checked against them.
 4. **No person-level data in the metrics connector** (`lib/connector/`, `/api/export/`, `/api/mcp`). Organisation-wide figures only.

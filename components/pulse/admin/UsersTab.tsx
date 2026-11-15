@@ -33,7 +33,7 @@ interface UserRow {
 type SortKey = 'name' | 'dept' | 'deep' | 'last_active';
 
 function timeAgo(ts: number | null): string {
-  if (!ts) return '—';
+  if (!ts) return 'never';
   const s = Math.floor(Date.now() / 1000) - ts;
   if (s < 3600) return `${Math.floor(s / 60)}m ago`;
   if (s < 86400) return `${Math.floor(s / 3600)}h ago`;
@@ -42,7 +42,7 @@ function timeAgo(ts: number | null): string {
 
 function TierBar({ t1, t2, t3 }: { t1: number; t2: number; t3: number }) {
   const total = t1 + t2 + t3;
-  if (total === 0) return <span className="text-[13px] text-[#B3B3B3]">—</span>;
+  if (total === 0) return <span className="text-[13px] text-[#B3B3B3]">not judged</span>;
   // Tiers are AI-judged: sky blue steps, light to dark from Tier 1 to Tier 3.
   return (
     <div className="flex h-2 w-20 rounded-full overflow-hidden gap-px bg-[#F2F2F2]" title={`T1:${t1} T2:${t2} T3:${t3}`}>
@@ -177,7 +177,7 @@ export default function UsersTab() {
                     )}
                   </div>
                 </td>
-                <td className={T.tdMute}>{u.department ?? '—'}</td>
+                <td className={T.tdMute}>{u.department ?? 'No department'}</td>
                 <td className={cx(T.tdRight, 'font-medium tabular-nums')}>
                   {(() => {
                     const share = deepShareOf(u.tier_1_count, u.tier_2_count, u.tier_3_count);

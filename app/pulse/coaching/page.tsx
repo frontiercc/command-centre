@@ -32,7 +32,7 @@ interface Data {
   openaiPresent: boolean;
 }
 
-const pct = (v: number | null) => (v === null ? '—' : `${Math.round(v * 100)}%`);
+const pct = (v: number | null) => (v === null ? 'not measured' : `${Math.round(v * 100)}%`);
 
 /** At most this many produced sessions show before "Show all". */
 const PRODUCED_SHOWN = 10;

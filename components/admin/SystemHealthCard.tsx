@@ -64,10 +64,10 @@ function SilenceSettings({ initial }: { initial: SilenceForm }) {
 }
 
 const fmt = (s: number | null) =>
-  s ? new Date(s * 1000).toLocaleString('en-GB', { day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit' }) : '—';
+  s ? new Date(s * 1000).toLocaleString('en-GB', { day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit' }) : 'never';
 
 function ago(s: number | null, now: number): string {
-  if (!s) return '—';
+  if (!s) return 'time not recorded';
   const d = Math.max(0, now - s);
   if (d < 60) return 'just now';
   if (d < 3600) return `${Math.floor(d / 60)} min ago`;

@@ -179,7 +179,7 @@ function ActivityTableRow({
           {fmtUsd(activity.totalSpendUsd)}
         </td>
         <td className={cx(T.tdRight, 'text-[#666666]')}>
-          {activity.friction === null ? '—' : fmtPct(activity.friction)}
+          {activity.friction === null ? 'not measured' : fmtPct(activity.friction)}
         </td>
         <td className={T.tdRight}>
           <Pill tone={chip.tone}>{chip.label}</Pill>
@@ -262,7 +262,7 @@ function SpendByModelCard({ report }: { report: CostDriverFigures }) {
   return (
     <DriverColumn title="Spend by model" first>
       {report.spendByModel.length === 0 ? (
-        <Muted>—</Muted>
+        <Muted>Not measured</Muted>
       ) : (
         <ul className="m-0 p-0 list-none flex flex-col gap-2">
           {rows.map((m) => {
@@ -274,7 +274,7 @@ function SpendByModelCard({ report }: { report: CostDriverFigures }) {
                   <span className="flex items-center gap-2 shrink-0 tabular-nums">
                     <span className="font-medium text-[#1F6F8B]">{fmtUsd(m.spendUsd)}</span>
                     {/* Spend with no token detail is not zero tokens. */}
-                    <span className="text-[#8F8F8F]">{m.tokens === 0 && m.spendUsd > 0 ? '—' : `${fmtTokensCompact(m.tokens)} tok`}</span>
+                    <span className="text-[#8F8F8F]">{m.tokens === 0 && m.spendUsd > 0 ? 'tokens not measured' : `${fmtTokensCompact(m.tokens)} tok`}</span>
                   </span>
                 </div>
                 <ShareBar pct={share} color={shadeForModel(m.model, report.modelOrder)} />
@@ -303,7 +303,7 @@ function CostByTypeCard({ report, noCacheWrite = false }: { report: CostDriverFi
   return (
     <DriverColumn title="Cost by type">
       {total <= 0 ? (
-        <Muted>—</Muted>
+        <Muted>Not measured</Muted>
       ) : (
         <ul className="m-0 p-0 list-none flex flex-col gap-2">
           {rows.map((row) => {
@@ -334,7 +334,7 @@ function CacheEfficiencyCard({ report }: { report: CostDriverFigures }) {
   return (
     <DriverColumn title="Cache efficiency">
       <p className="m-0 text-[24px] leading-7 font-semibold tracking-[-0.02em] tabular-nums text-[#1F6F8B]">
-        {report.cacheEfficiency.ratio === null ? '—' : `${Math.round(report.cacheEfficiency.ratio * 100)}%`}
+        {report.cacheEfficiency.ratio === null ? 'Not measured' : `${Math.round(report.cacheEfficiency.ratio * 100)}%`}
       </p>
       <p className="m-0 mt-1 text-[13px] text-[#8F8F8F] leading-5">
         Share of input tokens served from cache

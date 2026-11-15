@@ -125,7 +125,7 @@ function RecentSessions({ sessions }: { sessions: SessionRow[] }) {
               </div>
               <div className="shrink-0 text-right flex flex-col items-end gap-0.5">
                 <span className="text-[14px] font-medium text-[#0A0A0A] tabular-nums">
-                  {s.spend_usd === null ? '—' : formatCurrency(s.spend_usd)}
+                  {s.spend_usd === null ? (s.input_tokens + s.output_tokens === 0 ? 'not measured' : 'not priced') : formatCurrency(s.spend_usd)}
                 </span>
                 <span className="text-[13px] text-[#8F8F8F] tabular-nums">
                   {s.spend_usd === null && s.input_tokens + s.output_tokens === 0
