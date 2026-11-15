@@ -114,8 +114,8 @@ describe('the hiring card', () => {
 
   it('always says what it cannot see', () => {
     const c = hireCard(team({ hardly: 2, unmatched: 1 }), 3, undefined, NOW);
-    expect(c.cannotSee).toContain('We cannot see work done without Claude');
-    expect(c.cannotSee).toContain('1 person in this team are left out');
+    expect(c.cannotSee).toContain('We cannot see work done without AI');
+    expect(c.cannotSee).toContain('1 person in this team is left out');
     expect(c.cannotSee).toContain('2 people hardly used it');
   });
 });
@@ -243,7 +243,7 @@ describe('the cards the page finds on its own', () => {
     const without = rarelyUsedCard({ people: 150, costAMonth: null, days: 90 }, undefined, NOW);
     expect(without.body.join(' ')).toContain('no seat price is set');
     const withPrice = rarelyUsedCard({ people: 150, costAMonth: 6000, days: 90 }, undefined, NOW);
-    expect(withPrice.body.join(' ')).toContain('about 6,000 a month');
+    expect(withPrice.body.join(' ')).toContain('an estimated $6,000 a month');
     // Seats are held for the whole organisation, and the card has to say so.
     expect(withPrice.body.join(' ')).toContain('counts people, not seats');
     expect(withPrice.caption).toContain("No card here recommends anything about a person's job");
@@ -277,6 +277,86 @@ describe('the cards the page finds on its own', () => {
   });
 });
 
+describe('a decided found card keeps its follow-up', () => {
+  const job = {
+    workType: 'feature', label: 'New functionality', people: 40, deepPeople: 12, deepMinutes: 40,
+    shallowPeople: 28, shallowSessions: 200, shallowMinutes: 180, hoursAMonth: 466.7,
+  };
+  const decided = (card: string, department = 'Everyone'): DecisionRecord => ({
+    card, department, recommended: 'go', chosen: 'go', headline: 'x',
+    figures: { measure: { label: 'The time the slower side spends on it', value: 200, unit: ' minutes', lowerIsBetter: true } } as unknown as Record<string, unknown>,
+    note: null, decidedBy: 'lead@example.test', decidedAt: NOW - 40 * DAY, lookAgainAt: NOW - 10 * DAY,
+  });
+
+  it('never drops a decided card to keep to five', () => {
+    const jobs = ['a', 'b', 'c', 'd', 'e', 'f'].map(w => ({ ...job, workType: w, label: w }));
+    const page = buildSoWhat({
+      groups: [team()],
+      decisions: [decided('standard_job:f')],
+      asked: null,
+      finds: { jobs, waves: [], rarelyUsed: null, keyPeople: [] },
+      nowS: NOW,
+    });
+    // Five undecided cards, plus the decided one that came sixth, back at the top for its follow-up.
+    expect(page.cards.length).toBe(6);
+    expect(page.cards[0].cardId).toBe('standard_job:f');
+    expect(page.cards[0].decided?.followUp?.sentence).toContain('Since then');
+  });
+
+  it('still reads a decided job and team after they stop meeting the rule', async () => {
+    const { standardJobs, keyPeople } = await import('@/lib/pulse/code/so-what-finds');
+    // Too few sessions on each side to be a find on its own.
+    const rows = [
+      { user_id: 'a', department: 'Eng', work_type: 'feature', tier: 3, active_secs: 600, last_at: NOW },
+      { user_id: 'b', department: 'Eng', work_type: 'feature', tier: 1, active_secs: 1800, last_at: NOW },
+    ];
+    const deep = new Set(['a']);
+    expect(standardJobs(rows, deep, new Map())).toHaveLength(0);
+    const kept = standardJobs(rows, deep, new Map(), card => card === 'standard_job:feature');
+    expect(kept.map(j => j.workType)).toEqual(['feature']);
+    // A team whose top-tier work is spread out is not a key-person find, unless it was decided.
+    const teamRows = ['a', 'b', 'c', 'd', 'e'].map(u => ({ user_id: u, department: 'Eng', work_type: 'feature', tier: 3, active_secs: 60, last_at: NOW }));
+    expect(keyPeople(teamRows)).toHaveLength(0);
+    expect(keyPeople(teamRows, (card, d) => card === 'key_people' && d === 'Eng')[0]).toMatchObject({ department: 'Eng', holders: 2 });
+  });
+});
+
+describe('the wave card names the right wave', () => {
+  it('says "latest wave to get there" when the newest wave is not halfway yet', () => {
+    const c = expandCard([
+      { month: '2026-10', people: 8, reached: 2, weeksToHalf: null },
+      { month: '2026-09', people: 20, reached: 15, weeksToHalf: 3 },
+    ], undefined, NOW)!;
+    expect(c.body[0]).toBe('Your latest wave to get there, of 20, took 3 weeks for half of them to start doing multi-step work.');
+  });
+
+  it('never calls two waves that both took under a week longer', () => {
+    const c = expandCard([
+      { month: '2026-10', people: 8, reached: 6, weeksToHalf: 0.6 },
+      { month: '2026-09', people: 20, reached: 15, weeksToHalf: 0.3 },
+    ], undefined, NOW)!;
+    expect(c.body.join(' ')).toContain('holding or improving');
+  });
+
+  it('says "All 15" when the whole wave got there', () => {
+    const c = expandCard([{ month: '2026-10', people: 15, reached: 15, weeksToHalf: 0.5 }], undefined, NOW)!;
+    expect(c.body[1]).toBe('All 15 have got there so far.');
+  });
+
+  it('agrees its verb with one person in the follow-up', () => {
+    const f = { deepPeople: 4, shallowPeople: 6, deepPerPerson: 20, shallowPerPerson: 10, peopleWorth: 3, commits: 140 };
+    expect(followUpSentence(f, { ...f, deepPeople: 1, shallowPeople: 9 })).toContain('Since then, 1 of 10 does mostly multi-step work.');
+  });
+});
+
+describe('the follow-up on the wave card', () => {
+  it('words weeks plainly and uses the current label, whatever label was saved', () => {
+    const then = { label: 'Weeks for half a wave to get there', value: 6.8, unit: ' weeks', lowerIsBetter: true };
+    const now = { ...then, label: 'The time for half a wave to get there', value: 0.4 };
+    expect(measureSentence(then, now)).toBe('Since then, the time for half a wave to get there has gone from 6.8 weeks to under a week, which is the way this card aimed for.');
+  });
+});
+
 describe('the follow-up on a found card', () => {
   const measure = { label: 'The time the slower side spends on it', value: 180, unit: ' minutes', lowerIsBetter: true };
 
@@ -284,12 +364,12 @@ describe('the follow-up on a found card', () => {
     const s = measureSentence(measure, { ...measure, value: 120 });
     expect(s).toContain('Since then');
     expect(s).toContain('from 180 minutes to 120 minutes');
-    expect(s).toContain('the way you wanted');
+    expect(s).toContain('the way this card aimed for');
     expect(s).not.toContain('because');
   });
 
   it('calls a rise the wrong way where lower is better', () => {
-    expect(measureSentence(measure, { ...measure, value: 240 })).toContain('the wrong way');
+    expect(measureSentence(measure, { ...measure, value: 240 })).toContain('the opposite of what this card aimed for');
   });
 
   it('says plainly when nothing moved', () => {

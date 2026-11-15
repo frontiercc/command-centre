@@ -33,6 +33,7 @@ import { and, desc, eq, gte, inArray, isNull, or, sql, type SQL } from 'drizzle-
 import { canAccessOrgOverview, getAdminSession } from '@/lib/auth/admin-auth';
 import { getTypedClient } from '@/lib/db/client';
 import { schema } from '@/lib/db/schema';
+import { alias } from 'drizzle-orm/pg-core';
 import { getConnectorReadWriteCounts } from '@/lib/pulse/mcp-classify';
 import { notBoardHiddenConnector, entryNotBoardHidden } from '@/lib/library/built-in-connectors';
 
@@ -129,9 +130,12 @@ export async function GET(req: NextRequest) {
 
   // ChatGPT and Codex hidden (the OpenAI panel): the Board counts Claude's uses only.
   const uses = await boardUses();
+  // Entries used only in ChatGPT or Codex, left out of the listing and every
+  // count below while those are hidden, so the counts always match the list.
+  const openAiScope = uses.shown ? undefined : hideOpenAiOnlyEntries();
   const conditions: SQL[] = [];
-  if (!uses.shown) conditions.push(hideOpenAiOnlyEntries());
-  // Claude's own connectors are never listed or counted (lib/library/built-in-connectors.ts).
+  if (openAiScope) conditions.push(openAiScope);
+  // Claude's own connectors and skills are never listed or counted (lib/library/built-in-connectors.ts).
   conditions.push(entryNotBoardHidden(sql.raw('e.type'), sql.raw('e.name')));
   if (type) conditions.push(sql`e.type = ${type}`);
   if (surface && surface !== 'both') conditions.push(sql`(e.surface = ${surface} OR e.surface = 'both')`);
@@ -244,20 +248,24 @@ export async function GET(req: NextRequest) {
   `);
   const total = Number(countRows[0]?.total ?? 0);
 
-  const e = schema.skillLibraryEntries;
+  // Aliased `e`, so the raw hideOpenAiOnlyEntries() condition (written against
+  // `e`) applies to these query-builder reads too.
+  const e = alias(schema.skillLibraryEntries, 'e');
   const csi = schema.coworkSkillInvocations;
   const cmi = schema.coworkMcpInvocations;
+  const notHidden = entryNotBoardHidden(sql`${e.type}`, sql`${e.name}`);
 
   const unclaimedRows = await client
     .select({ cnt: sql<number | string>`COUNT(*)` })
     .from(e)
-    .where(and(eq(e.is_published, 0), eq(e.source, 'org'), entryNotBoardHidden(sql`${e.type}`, sql`${e.name}`)));
+    .where(and(eq(e.is_published, 0), eq(e.source, 'org'), notHidden, openAiScope));
   const unclaimedCount = Number(unclaimedRows[0]?.cnt ?? 0);
 
   // The banner's count: unclaimed entries someone has actually used.
   const unclaimedInUseRows = await rawAll<{ cnt: number | string }>(client, sql`
     SELECT COUNT(*) AS cnt FROM skill_library_entries e
     WHERE e.is_published = 0 AND e.source = 'org' AND ${entryNotBoardHidden(sql.raw('e.type'), sql.raw('e.name'))}
+    ${openAiScope ? sql`AND ${openAiScope}` : sql``}
     AND EXISTS (SELECT 1 FROM ${allUses} WHERE board_uses.name = e.name AND board_uses.kind = ${entryKind})
   `);
   const unclaimedInUseCount = Number(unclaimedInUseRows[0]?.cnt ?? 0);
@@ -278,7 +286,7 @@ export async function GET(req: NextRequest) {
       connector_count: sql<number | string | null>`SUM(CASE WHEN ${e.type} = 'connector' THEN 1 ELSE 0 END)`,
     })
     .from(e)
-    .where(visibilityWhere ? and(eq(e.source, 'org'), entryNotBoardHidden(sql`${e.type}`, sql`${e.name}`), visibilityWhere) : and(eq(e.source, 'org'), entryNotBoardHidden(sql`${e.type}`, sql`${e.name}`)));
+    .where(and(eq(e.source, 'org'), notHidden, openAiScope, visibilityWhere));
   const skillCount = Number(statsRows[0]?.skill_count ?? 0);
   const connectorCount = Number(statsRows[0]?.connector_count ?? 0);
 
@@ -288,7 +296,7 @@ export async function GET(req: NextRequest) {
       total: sql<number | string>`COUNT(*)`,
     })
     .from(e)
-    .where(visibilityWhere ? and(eq(e.source, 'org'), entryNotBoardHidden(sql`${e.type}`, sql`${e.name}`), visibilityWhere) : and(eq(e.source, 'org'), entryNotBoardHidden(sql`${e.type}`, sql`${e.name}`)));
+    .where(and(eq(e.source, 'org'), notHidden, openAiScope, visibilityWhere));
   const capabilityClaimed = Number(capabilityRows[0]?.claimed ?? 0);
   const capabilityTotal = Number(capabilityRows[0]?.total ?? 0);
 
@@ -301,11 +309,7 @@ export async function GET(req: NextRequest) {
   const newThisWeekRows = await client
     .select({ cnt: sql<number | string>`COUNT(*)` })
     .from(e)
-    .where(
-      visibilityWhere
-        ? and(gte(e.created_at, weekAgo), eq(e.source, 'org'), visibilityWhere)
-        : and(gte(e.created_at, weekAgo), eq(e.source, 'org')),
-    );
+    .where(and(gte(e.created_at, weekAgo), eq(e.source, 'org'), notHidden, openAiScope, visibilityWhere));
   const newThisWeekCount = Number(newThisWeekRows[0]?.cnt ?? 0);
 
   const leaderboardRaw = await rawAll<{
@@ -417,6 +421,7 @@ export async function GET(req: NextRequest) {
       GROUP BY skill_name
     ) inv ON inv.skill_name = e.name
     WHERE e.is_published = 1 AND e.source = 'org'
+    AND ${entryNotBoardHidden(sql.raw('e.type'), sql.raw('e.name'))}
     AND (e.department IS NULL OR ${deptOr})
     AND e.name NOT IN (
       SELECT DISTINCT skill_name FROM ${uses.skills} WHERE user_id = ${personId}
@@ -441,6 +446,7 @@ export async function GET(req: NextRequest) {
     JOIN cowork_skill_invocations csi ON csi.skill_name = e.name
     JOIN users u ON u.id = csi.user_id
     WHERE e.is_published = 1 AND u.department = ${userDept} AND (e.department IS NULL OR e.department = ${userDept})
+    AND ${entryNotBoardHidden(sql.raw('e.type'), sql.raw('e.name'))}
     GROUP BY e.id, e.name, e.type, e.description, e.install_guide
     ORDER BY invocation_count DESC
     LIMIT 6
@@ -456,6 +462,7 @@ export async function GET(req: NextRequest) {
     FROM skill_library_entries e
     LEFT JOIN users u ON u.id = e.author_user_id
     WHERE e.is_published = 1 AND e.source = 'org' AND e.updated_at >= ${weekAgo}
+    AND ${entryNotBoardHidden(sql.raw('e.type'), sql.raw('e.name'))}
     ORDER BY e.updated_at DESC
     LIMIT 6
   `);

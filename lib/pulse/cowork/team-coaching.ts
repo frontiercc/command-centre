@@ -126,7 +126,9 @@ export function teamParts(t: CoworkTeamFigures, f: CoworkCoachingFigures): { whe
   }
 
   const regular = t.people - t.hardlyUsed;
-  let people = `Of ${plural(t.people, 'person', 'people')}, ${regular === 0 ? 'none' : regular} ${regular === 1 ? 'uses' : 'use'} it regularly`;
+  let people = t.hardlyUsed === 0 && t.people > 0
+    ? (t.people === 1 ? 'The one person uses it regularly' : `All ${t.people} people use it regularly`)
+    : `Of ${plural(t.people, 'person', 'people')}, ${regular === 0 ? 'none' : regular} ${regular === 1 ? 'uses' : 'use'} it regularly`;
   if (t.hardlyUsed > 0) people += ` and ${plural(t.hardlyUsed, 'has', 'have')} hardly used it`;
   where.push(`${people}.`);
   if (t.hardlyUsedShare !== null && t.hardlyUsedShare > 0.5) {
@@ -169,7 +171,7 @@ export function teamParts(t: CoworkTeamFigures, f: CoworkCoachingFigures): { whe
   }
 
   const top = t.work[0];
-  if (top) workOn.push(`Most of the work was ${kindLabel(top.taskType)}: ${pct(top.share)} of it.`);
+  if (top) workOn.push(`The commonest kind of work was ${kindLabel(top.taskType)}: ${pct(top.share)} of it.`);
 
   // Sessions that ended with nothing saved, sent or published.
   if (t.producedNothing && t.producedNothing.share >= PRODUCED_NOTHING_SHARE) {
@@ -205,14 +207,16 @@ export function teamParts(t: CoworkTeamFigures, f: CoworkCoachingFigures): { whe
   }
 
   if (t.capabilities > 0) {
-    workOn.push(`${plural(t.capabilities, 'new way of working', 'new ways of working')} came up in the team this month.`);
+    workOn.push(`${plural(t.capabilities, 'new way of working', 'new ways of working')} came up in the team in the last 30 days.`);
   }
 
   if (t.champions.length > 0) {
     actions.push({
       key: 'learn_from',
       text: `Ask ${list(t.champions.map(c => c.name))} to show the team how they work.`,
-      because: `They get the most out of it: ${pct(t.champions[0].deepShare)} of their work is ${MEANINGFUL_WORK} or better.`,
+      because: t.champions.length === 1
+        ? `They get the most out of it: ${pct(t.champions[0].deepShare)} of their work is ${MEANINGFUL_WORK} or better.`
+        : `They get the most out of it: ${t.champions[0].name} leads, with ${pct(t.champions[0].deepShare)} of their work ${MEANINGFUL_WORK} or better.`,
       metric: 'deep_share',
     });
   }

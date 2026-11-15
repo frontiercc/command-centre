@@ -652,7 +652,7 @@ export default function SystemPage() {
                 placeholder="e.g. 150"
               />
             </Field>
-            <Field label="Department adoption target (%)" hint="The share of each department active in a week. On the dashboard, departments below it are marked. Blank for 50; 0 for no target.">
+            <Field label="Department adoption target (%)" hint="The share of each department active in the last 30 days. On the dashboard, departments below it are marked. Blank for 50; 0 for no target.">
               <input
                 type="number"
                 value={targetDeptAdoptionPct}
@@ -663,7 +663,7 @@ export default function SystemPage() {
                 placeholder="50"
               />
             </Field>
-            <Field label="Department depth floor (%)" hint="On Work Pulse, departments where fewer tasks than this reach the top two tiers (meaningful or frontier, as named on Admin → Work Pulse → Tiers) are marked. Blank for 33; 0 for no floor.">
+            <Field label="Department depth floor (%)" hint="On Work Pulse, departments where fewer tasks than this reach the top two tiers (meaningful or frontier, as named on Admin → Work Pulse → Tier config) are marked. Blank for 33; 0 for no floor.">
               <input
                 type="number"
                 value={targetDeptRealWorkPct}
@@ -730,7 +730,7 @@ export default function SystemPage() {
             disabled={financeSaving}
           />
           <div className="px-4 py-3 border-t border-[#F2F2F2]">
-            <Field label="Claude seat price (USD/month)" hint="With Claude licensed seats under General, used only for the unused Claude seats estimate on FinOps." className="max-w-xs">
+            <Field label="Claude seat price (USD/month)" hint="With Claude licensed seats under General, used for the unused Claude seats estimate on FinOps, and for the monthly cost estimate of people who rarely use Claude on Work Pulse and Developer Pulse So What." className="max-w-xs">
               <input
                 type="number"
                 min={0}

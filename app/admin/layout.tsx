@@ -81,7 +81,7 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
           } else {
             setAccessDenied(true);
             setLoading(false);
-            setTimeout(() => router.replace('/pulse/me'), 2500);
+            setTimeout(() => router.replace(role === 'code' ? '/pulse/code/me' : '/pulse/me'), 2500);
           }
         } else {
           setUser({ username: data.user.email, role: data.user.role });

@@ -23,7 +23,8 @@ export interface CodePeriodWork {
   prs: { now: number; before: number };
   engagedSecs: { now: number; before: number };
   linesAdded: { now: number; before: number };
-  spendUsd: { now: number; before: number };
+  /** Null when the viewer may not see this person's spend (a colleague). */
+  spendUsd: { now: number; before: number } | null;
   trend: { sessions: number[]; commits: number[]; engagedSecs: number[]; spendUsd: number[] };
   automation: number | null;
   cacheHit: number | null;
@@ -122,13 +123,17 @@ export function CodeWorkPanel({ w, who, period, onPeriod, product }: {
           trend={w.trend.engagedSecs}
           notMeasured={w.engagedSecs.now === 0 ? 'Not measured in this period' : undefined}
         />
-        <QuestionCard
-          question="Spend"
-          value={usd(w.spendUsd.now)}
-          change={change(w.spendUsd.now, w.spendUsd.before, w.prior, usd)}
-          trend={w.trend.spendUsd}
-          notMeasured={w.spendUsd.now === 0 && w.spendUsd.before === 0 ? 'Nothing priced in this period' : undefined}
-        />
+        {w.spendUsd === null ? (
+          <QuestionCard question="Spend" hidden="Shown only to the person, admins and managers." />
+        ) : (
+          <QuestionCard
+            question="Spend"
+            value={usd(w.spendUsd.now)}
+            change={change(w.spendUsd.now, w.spendUsd.before, w.prior, usd)}
+            trend={w.trend.spendUsd}
+            notMeasured={w.spendUsd.now === 0 && w.spendUsd.before === 0 ? 'Nothing priced in this period' : undefined}
+          />
+        )}
       </div>
     </Frame>
   );
@@ -177,7 +182,8 @@ export function CodeWorkMix({ rows, who, names }: { rows: CodeWorkMixRow[]; who:
       title={`${who.you ? 'Your' : 'Their'} work mix`}
       judged
       period="Last 30 days"
-      answer={<>Most of {poss(who)} coding work is <b>{top.label.toLowerCase()}</b>: {shareWords(top.sessions / total)} of {plural(total, 'session', 'sessions')}.</>}
+      // "Most of" only when it is over half; otherwise it is just the commonest kind.
+      answer={<>{top.sessions / total > 0.5 ? 'Most of' : 'The commonest kind of'} {poss(who)} coding work is <b>{top.label.toLowerCase()}</b>: {shareWords(top.sessions / total)} of {plural(total, 'session', 'sessions')}.</>}
       note={<>Claude judges each session once it ends. &ldquo;Deeper&rdquo; means {deepWords(names)}, the top two tiers.</>}
     >
       {rows.slice(0, 6).map(r => (

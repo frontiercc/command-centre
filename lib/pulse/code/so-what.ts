@@ -12,7 +12,8 @@
  * then and now, said as "since then", never "because of".
  *
  * Nothing here is an AI estimate and nothing is a benchmark from outside the customer. The whole
- * case is that some of their own engineers already work this way.
+ * case is that some of their own engineers already work this way. The one estimate, the monthly
+ * cost of people who hardly use it (seat price times people), is tagged as one on the page.
  */
 import type { OutputGroups } from '@/lib/pulse/code/output-groups';
 import { MIN_GROUP, WINDOW_DAYS } from '@/lib/pulse/code/output-groups';
@@ -134,14 +135,14 @@ export function refusalFor(g: OutputGroups): string | null {
 
 /** What the page cannot see, said on every card. */
 function cannotSeeLine(g: OutputGroups): string {
-  const parts = ['We cannot see work done without Claude beyond the commits on this chart'];
-  if (g.unmatched > 0) parts.push(`${people(g.unmatched)} in this team are left out because no commits can be attributed to them`);
-  if (g.hardly > 0) parts.push(`${people(g.hardly)} hardly used it and are in neither group`);
+  const parts = ['We cannot see work done without AI beyond the commits on this chart'];
+  if (g.unmatched > 0) parts.push(`${people(g.unmatched)} in this team ${g.unmatched === 1 ? 'is' : 'are'} left out because no commits can be attributed to them`);
+  if (g.hardly > 0) parts.push(`${people(g.hardly)} hardly used it and ${g.hardly === 1 ? 'is' : 'are'} in neither group`);
   return `${parts.join('. ')}.`;
 }
 
 const capt = (g: OutputGroups) =>
-  `A dot per person, and commits per person over the last ${WINDOW_DAYS} days, from GitHub. Measured. Commits made with Claude Code, with Codex and with no tool are all counted. ${g.deep.people + g.shallow.people} of ${g.people} people in the team are on the chart.`;
+  `A dot per person, and commits per person over the last ${WINDOW_DAYS} days, from GitHub. The commits are measured; which group a person is in comes from the AI-judged tiers. Commits made with Claude Code, with Codex and with no tool are all counted. ${g.deep.people + g.shallow.people} of ${g.people} people in the team are on the chart.`;
 
 /**
  * Should this team hire? Hold when the people who do not hand work over, working like the ones who
@@ -287,8 +288,8 @@ export function followUpSentence(then: CardFigures, now: CardFigures): string {
 
   if (thenTotal > 0 && nowTotal > 0) {
     parts.push(moved === 0
-      ? `${now.deepPeople} of ${nowTotal} do mostly multi-step work, the same as then.`
-      : `Since then, ${now.deepPeople} of ${nowTotal} do mostly multi-step work. It was ${then.deepPeople} of ${thenTotal} when you decided.`);
+      ? `${now.deepPeople} of ${nowTotal} ${now.deepPeople === 1 ? 'does' : 'do'} mostly multi-step work, the same as then.`
+      : `Since then, ${now.deepPeople} of ${nowTotal} ${now.deepPeople === 1 ? 'does' : 'do'} mostly multi-step work. It was ${then.deepPeople} of ${thenTotal} when you decided.`);
   }
   if (then.commits > 0) {
     const change = now.commits - then.commits;
@@ -356,12 +357,14 @@ function foundCard(
 /** What the card's own figure did since the decision. Never says the decision caused it. */
 export function measureSentence(then: Measure, now: Measure): string {
   const same = Math.abs(now.value - then.value) < 0.05 * Math.max(Math.abs(then.value), 1);
-  if (same) return `${then.label} is about where it was: ${fig(then)} then, ${fig(now)} now.`;
+  // Worded from the card's current label, so decisions saved under an older label read correctly too.
+  if (same) return `${now.label} is about where it was: ${fig(then)} then, ${fig(now)} now.`;
   const better = now.lowerIsBetter ? now.value < then.value : now.value > then.value;
-  return `Since then, ${then.label.toLowerCase()} has gone from ${fig(then)} to ${fig(now)}, which is ${better ? 'the way you wanted' : 'the wrong way'}.`;
+  // Said against the card's aim, not the leader's: they may have chosen "Not now".
+  return `Since then, ${now.label.toLowerCase()} has gone from ${fig(then)} to ${fig(now)}, which is ${better ? 'the way this card aimed for' : 'the opposite of what this card aimed for'}.`;
 }
 
-const fig = (m: Measure) => `${Math.round(m.value * 10) / 10}${m.unit}`;
+const fig = (m: Measure) => (m.unit === ' weeks' ? weeksWord(m.value) : `${Math.round(m.value * 10) / 10}${m.unit}`);
 
 /** Make a recurring job the standard way: the people who hand it over whole finish it far quicker. */
 export function standardJobCard(j: StandardJob, decision: DecisionRecord | undefined, nowS: number): Card {
@@ -371,8 +374,10 @@ export function standardJobCard(j: StandardJob, decision: DecisionRecord | undef
     EVERYONE,
     `Make ${j.label.toLowerCase()} a standard skill.`,
     [
-      `${people(j.people)} ${j.people === 1 ? 'does' : 'do'} this work. The ${j.deepPeople} who do it as multi-step work spend ${Math.round(j.deepMinutes)} minutes on it. The other ${j.shallowPeople} spend ${minutesWord(j.shallowMinutes)}.`,
-      `Moving them across frees about ${Math.round(j.hoursAMonth)} hours a month.`,
+      `${people(j.people)} ${j.people === 1 ? 'does' : 'do'} this work. The ${j.deepPeople} who do it as multi-step work spend ${minutesWord(j.deepMinutes)} on it. The other ${j.shallowPeople} spend ${minutesWord(j.shallowMinutes)}.`,
+      j.hoursAMonth < 1
+        ? 'Moving them across frees under an hour a month.'
+        : `Moving them across frees about ${Math.round(j.hoursAMonth)} ${Math.round(j.hoursAMonth) === 1 ? 'hour' : 'hours'} a month.`,
     ],
     `Measured active time on both sides, over the last ${WINDOW_DAYS} days. Not an estimate of how long the work would take by hand.`,
     { label: 'The time the slower side spends on it', value: j.shallowMinutes, unit: ' minutes', lowerIsBetter: true },
@@ -400,13 +405,16 @@ export function expandCard(waves: Wave[], decision: DecisionRecord | undefined, 
   const measured = waves.filter(w => w.weeksToHalf !== null);
   const last = measured[0];
   if (!last) return null;
+  // The newest wave may not be halfway yet; then the card is about the latest one that is.
+  const newest = waves[0] === last;
   const body = [
-    `Your last wave of ${last.people} took ${weeksWord(last.weeksToHalf!)} for half of them to start doing multi-step work.`,
-    `${last.reached} of the ${last.people} have got there so far.`,
+    `${newest ? 'Your last wave' : 'Your latest wave to get there'}, of ${last.people}, took ${weeksWord(last.weeksToHalf!)} for half of them to start doing multi-step work.`,
+    `${last.reached === last.people ? (last.people === 1 ? 'They have' : `All ${last.people} have`) : `${last.reached} of the ${last.people} have`} got there so far.`,
   ];
   if (measured.length > 1) {
     const before = measured[1];
-    body.push(`The wave before took ${weeksWord(before.weeksToHalf!)}, so the time to get there is ${(last.weeksToHalf ?? 0) <= (before.weeksToHalf ?? 0) ? 'holding or improving' : 'getting longer'}.`);
+    // Compared in the words shown, so "under a week" against "under a week" never reads as longer.
+    body.push(`The wave before took ${weeksWord(before.weeksToHalf!)}, so the time to get there is ${weeksWord(last.weeksToHalf ?? 0) === weeksWord(before.weeksToHalf!) || (last.weeksToHalf ?? 0) <= (before.weeksToHalf ?? 0) ? 'holding or improving' : 'getting longer'}.`);
   }
   return foundCard(
     'expand',
@@ -415,7 +423,7 @@ export function expandCard(waves: Wave[], decision: DecisionRecord | undefined, 
     (last.weeksToHalf ?? 0) <= 12 ? 'Give AI coding to the next wave of people.' : 'Hold the next wave until this one lands.',
     body,
     'A wave is everyone whose first session was in the same month. Measured to their first multi-step session.',
-    { label: 'Weeks for half a wave to get there', value: last.weeksToHalf ?? 0, unit: ' weeks', lowerIsBetter: true },
+    { label: 'The time for half a wave to get there', value: last.weeksToHalf ?? 0, unit: ' weeks', lowerIsBetter: true },
     decision,
     nowS,
   );
@@ -428,16 +436,16 @@ export function rarelyUsedCard(r: RarelyUsed, decision: DecisionRecord | undefin
   ];
   body.push(r.costAMonth === null
     ? 'What that costs is not shown because no seat price is set on Admin → System.'
-    : `At the seat price an admin has set, that is about ${Math.round(r.costAMonth).toLocaleString('en-GB')} a month.`);
+    : `At the Claude seat price an admin has set, that is an estimated $${Math.round(r.costAMonth).toLocaleString('en-GB')} a month (an estimate: the seat price times these people).`);
   body.push('This counts people, not seats. Seats are held for the whole organisation, so the page cannot say how many a team holds.');
   return foundCard(
     'rarely_used',
     'rarely_used',
     EVERYONE,
-    `Decide what to do about ${r.people} ${r.people === 1 ? 'person' : 'people'} who have hardly used it.`,
+    `Decide what to do about ${r.people} ${r.people === 1 ? 'person who has' : 'people who have'} hardly used it.`,
     body,
     'Counted from sessions, over the last 90 days. No card here recommends anything about a person\'s job.',
-    { label: 'People who have hardly used it', value: r.people, unit: '', lowerIsBetter: true },
+    { label: 'The number of people who have hardly used it', value: r.people, unit: '', lowerIsBetter: true },
     decision,
     nowS,
   );
@@ -455,7 +463,7 @@ export function keyPeopleCard(k: KeyPeople, decision: DecisionRecord | undefined
       'If they leave, the team loses it.',
     ],
     `Counted from sessions over the last ${WINDOW_DAYS} days. The people are named on the team's own coaching plan, not here.`,
-    { label: 'Share held by those people', value: k.share * 100, unit: '%', lowerIsBetter: true },
+    { label: 'The share held by those people', value: k.share * 100, unit: '%', lowerIsBetter: true },
     decision,
     nowS,
   );
@@ -492,12 +500,17 @@ export function buildSoWhat({ groups, decisions, asked, finds, nowS }: BuildInpu
     if (expand) found.push(expand);
     if (finds.rarelyUsed) found.push(rarelyUsedCard(finds.rarelyUsed, byKey.get(`rarely_used:${EVERYONE}`), nowS));
     for (const k of finds.keyPeople) found.push(keyPeopleCard(k, byKey.get(`key_people:${k.department}`), nowS));
+    // At most MAX_FOUND undecided cards; a decided card is never dropped by the limit, so its
+    // follow-up still comes back (as on Work Pulse).
     const seen = new Set<string>();
+    let shown = 0;
     for (const c of found) {
       if (seen.has(c.key)) continue;
       seen.add(c.key);
-      cards.push(c);
-      if (cards.length >= MAX_FOUND + (asked ? 1 : 0)) break;
+      if (shown < MAX_FOUND || c.decided) {
+        cards.push(c);
+        if (!c.decided) shown++;
+      }
     }
   }
 

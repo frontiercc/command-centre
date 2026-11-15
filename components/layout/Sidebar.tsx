@@ -207,6 +207,8 @@ export default function Sidebar({ theme = 'default' }: { theme?: Theme }) {
     code: userRole === 'admin' || userRole === 'manager' || userRole === 'viewer' || userRole === 'code' || userRole === 'pulse',
     codeOverview: canSeeCodeOverview(userRole),
     codeTeam: userRole === 'admin' || userRole === 'manager' || userRole === 'viewer' || userRole === 'code' || userRole === 'pulse',
+    // Mirrors coworkUsers: a viewer cannot open another person's Developer Pulse.
+    codeUsers: userRole === 'admin' || userRole === 'manager' || userRole === 'code' || userRole === 'pulse',
     codeCoaching: userRole === 'admin' || userRole === 'manager',
     codeOrg: (userRole === 'admin' || userRole === 'manager' || userRole === 'viewer') && !openaiOnly,
     useCases: useCasesEnabled && (userRole === 'admin' || userRole === 'manager' || userRole === 'viewer'),

@@ -8,6 +8,7 @@ New here? Start with the [README](../README.md): try Frontier Command Centre wit
 |---|---|
 | See what to look at first | [Your first ten minutes](first-ten-minutes.md) |
 | Understand everything it does | [Product overview](product-overview.md) |
+| Ask questions about the data in my own words | [Ask the data (preview)](configure-command-centre.md#ask-the-data-preview) |
 | Know what is measured and what is AI-judged | [Measured and AI-judged](ai-data-flow.md#measured-and-ai-judged) |
 | Fix a problem | [Troubleshooting and FAQ](troubleshooting.md) |
 

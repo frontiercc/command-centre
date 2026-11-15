@@ -165,7 +165,7 @@ function buildVerdicts(d: OrgSummary, vendor: Vendor): Verdict[] {
         ? 'Includes provider-routed usage estimated at list pricing'
         : undefined,
       projection: d.spendProjection != null
-        ? `≈ ${formatCurrency(d.spendProjection.projected)} projected month-end`
+        ? `≈ ${formatCurrency(d.spendProjection.projected)} projected month-end (estimate)`
         : undefined,
       split: part(r => r.spend_usd, formatCurrency),
     },
@@ -253,8 +253,8 @@ function VerdictPanel({ v }: { v: Verdict }) {
         </div>
         {v.split && <p className="m-0 -mt-1 text-[13px] text-[#8F8F8F] tabular-nums">{v.split}</p>}
         {(v.projection || v.estimateBadge) && (
-          <div className="flex flex-col gap-0.5 text-[13px] text-[#1F6F8B]">
-            {v.projection && <span title="Spend so far this month at the same pace to month end, as FinOps projects it">{v.projection}</span>}
+          <div className="flex flex-col gap-0.5 text-[13px] text-[#666666]">
+            {v.projection && <span className="inline-flex items-center gap-1.5" title="Spend so far this month at the same pace to month end, as FinOps projects it">{v.projection} <Tag tone="judged">Estimate</Tag></span>}
             {v.estimateBadge && <span>{v.estimateBadge}</span>}
           </div>
         )}
@@ -466,7 +466,7 @@ export default function CodePulseOverviewPage() {
                 title={`${data.unpricedModels.length} model${data.unpricedModels.length === 1 ? ' has' : 's have'} no price set`}
               >
                 ({data.unpricedModels.join(', ')}), so their tokens are counted but excluded from spend.
-                Admins can set rates via the Developer Pulse rates API.
+                An admin can set their rates under Admin → Developer Pulse → Rates.
               </Notice>
             )}
 

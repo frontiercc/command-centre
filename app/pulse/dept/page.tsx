@@ -221,7 +221,7 @@ export default function DeptPickerPage() {
                   )}
 
                   {/* 2. Best work this week */}
-                  <FrontierHero view={d.frontier} canOpenUseCases={d.frontierAccess?.canOpenUseCases ?? false} />
+                  <FrontierHero view={d.frontier} canOpenUseCases={d.frontierAccess?.canOpenUseCases ?? false} names={names} />
 
                   {/* 3. Is the department's work getting deeper? */}
                   <DeeperPanel q={q} who={who} names={names} />
@@ -284,7 +284,7 @@ export default function DeptPickerPage() {
                     {d.deptBriefing.suggestion && <p className="m-0"><b className="font-semibold">Recommendation:</b> {d.deptBriefing.suggestion}</p>}
                   </div>
                 ) : (
-                  <p className="m-0 mt-2 text-[13px] text-[#8F8F8F]">No paragraph yet. Use Generate now, or wait for the scheduled run.</p>
+                  <p className="m-0 mt-2 text-[13px] text-[#8F8F8F]">No paragraph yet. Use Generate now to write one.</p>
                 )}
               </Frame>
             </>

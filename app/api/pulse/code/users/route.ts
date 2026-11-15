@@ -13,7 +13,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { visibleVendor, visibleOpenAi } from '@/lib/sources/openai-visibility';
 import { sql } from 'drizzle-orm';
-import { getAdminSession, canAccessCodePulse, isDeptScoped } from '@/lib/auth/admin-auth';
+import { getAdminSession, canAccessCodePulse, isDeptScoped, canAccessPulseAdmin } from '@/lib/auth/admin-auth';
 import { getTypedClient } from '@/lib/db/client';
 import { hasCodexData, pickCodeMetricsSource, latestRunStart } from '@/lib/pulse/code/vendor-view';
 
@@ -123,5 +123,20 @@ export async function GET(request: NextRequest) {
     products: productsByUser.get(r.user_id) ?? [],
   }));
 
+  // Each person's spend: admins and managers see everyone's. Anyone else gets only their own, with
+  // the list in name order, so neither a figure nor the order says what a colleague spent.
+  if (!canAccessPulseAdmin(session.role)) {
+    const mine = await rawAll<{ id: string }>(client, sql`
+      SELECT COALESCE(
+        (SELECT linked_cowork_user_id FROM admin_users WHERE id = ${session.userId ?? ''} LIMIT 1),
+        (SELECT id FROM users WHERE email = ${session.email ?? ''} LIMIT 1)
+      ) AS id
+    `);
+    const me = mine[0]?.id ?? null;
+    const hidden = rows
+      .map(r => (r.user_id === me ? r : { ...r, spend_usd: null, spend_hidden: true }))
+      .sort((a, b) => (a.display_name ?? a.email ?? '').localeCompare(b.display_name ?? b.email ?? ''));
+    return NextResponse.json({ users: hidden, vendor, codexPresent });
+  }
   return NextResponse.json({ users: rows, vendor, codexPresent });
 }

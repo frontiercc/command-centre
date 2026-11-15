@@ -259,7 +259,7 @@ export default function UsersPickerPage() {
                   )}
 
                   {/* 2. Best work this week */}
-                  <FrontierHero view={d.frontier} canOpenUseCases={d.frontierAccess?.canOpenUseCases ?? false} />
+                  <FrontierHero view={d.frontier} canOpenUseCases={d.frontierAccess?.canOpenUseCases ?? false} names={d.tierNames ?? undefined} />
 
                   {/* 3. Is their work getting deeper? */}
                   <DeeperPanel q={q} who={who} names={d.tierNames ?? undefined} />

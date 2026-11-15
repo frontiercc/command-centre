@@ -173,7 +173,7 @@ function TeamCoaching() {
                 <b>{plan.prompts.toLocaleString('en-GB')} {plan.prompts === 1 ? 'piece of work' : 'pieces of work'}</b> from {plan.people} {plan.people === 1 ? 'person' : 'people'} in the last 30 days.
               </>}
               note={tiers
-                ? `${MEANINGFUL_WORK.charAt(0).toUpperCase()}${MEANINGFUL_WORK.slice(1)} means the classifier judged it "${tiers.t2}" or "${tiers.t3}": a whole piece of work handed over, rather than a question answered. Work it judged "${tiers.t1}" does not count. Those names are set on Admin → Work Pulse → Tiers, and the floor on Admin → System.`
+                ? `${MEANINGFUL_WORK.charAt(0).toUpperCase()}${MEANINGFUL_WORK.slice(1)} means the classifier judged it "${tiers.t2}" or "${tiers.t3}": a whole piece of work handed over, rather than a question answered. Work it judged "${tiers.t1}" does not count. Those names are set on Admin → Work Pulse → Tier config, and the floor on Admin → System.`
                 : undefined}
             >
               {plan.where.map((t, i) => <p key={i} className="m-0 py-0.5 text-[13px] leading-5 text-[#333333]">{t}</p>)}

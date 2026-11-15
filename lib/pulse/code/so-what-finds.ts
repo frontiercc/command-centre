@@ -100,8 +100,17 @@ export function monthOf(epochS: number): string {
   return new Date(epochS * 1000).toISOString().slice(0, 7);
 }
 
+/**
+ * A card a leader has decided on, as its card id and team. A find that has since stopped meeting its
+ * rule is still read for these, so the decision can come back with what happened since (as on Work Pulse).
+ */
+export type Kept = (cardId: string, department: string) => boolean;
+const keepNone: Kept = () => false;
+/** The team the organisation-wide cards are filed under (EVERYONE in lib/pulse/code/so-what.ts). */
+const EVERYONE = 'Everyone';
+
 /** Jobs where the people who hand them over whole finish far quicker, worth making the standard way. */
-export function standardJobs(rows: SessionRow[], deepPeople: Set<string>, labels: Map<string, string | undefined>): StandardJob[] {
+export function standardJobs(rows: SessionRow[], deepPeople: Set<string>, labels: Map<string, string | undefined>, kept: Kept = keepNone): StandardJob[] {
   const by = new Map<string, { deep: number[]; shallow: number[]; deepWho: Set<string>; shallowWho: Set<string> }>();
   for (const r of rows) {
     const mins = n(r.active_secs) / 60;
@@ -113,10 +122,12 @@ export function standardJobs(rows: SessionRow[], deepPeople: Set<string>, labels
   }
   const mean = (xs: number[]) => xs.reduce((a, b) => a + b, 0) / xs.length;
   return [...by.entries()]
-    .filter(([, v]) =>
-      v.deep.length >= JOB_MIN_SESSIONS && v.shallow.length >= JOB_MIN_SESSIONS &&
-      v.deepWho.size >= MIN_GROUP && v.shallowWho.size >= MIN_GROUP &&
-      mean(v.deep) < mean(v.shallow) * (1 - JOB_MIN_SAVING))
+    .filter(([workType, v]) =>
+      (v.deep.length >= JOB_MIN_SESSIONS && v.shallow.length >= JOB_MIN_SESSIONS &&
+        v.deepWho.size >= MIN_GROUP && v.shallowWho.size >= MIN_GROUP &&
+        mean(v.deep) < mean(v.shallow) * (1 - JOB_MIN_SAVING))
+      // A decided job is still read while both sides have sessions to time.
+      || (kept(`standard_job:${workType}`, EVERYONE) && v.deep.length > 0 && v.shallow.length > 0))
     .map(([workType, v]) => {
       const deepMinutes = mean(v.deep);
       const shallowMinutes = mean(v.shallow);
@@ -129,14 +140,14 @@ export function standardJobs(rows: SessionRow[], deepPeople: Set<string>, labels
         shallowPeople: v.shallowWho.size,
         shallowSessions: v.shallow.length,
         shallowMinutes,
-        hoursAMonth: (v.shallow.length * (shallowMinutes - deepMinutes)) / 60,
+        hoursAMonth: Math.max(0, (v.shallow.length * (shallowMinutes - deepMinutes)) / 60),
       };
     })
     .sort((a, b) => b.hoursAMonth - a.hoursAMonth);
 }
 
 /** Teams where one or two people hold most of the handed-over work. */
-export function keyPeople(rows: SessionRow[]): KeyPeople[] {
+export function keyPeople(rows: SessionRow[], kept: Kept = keepNone): KeyPeople[] {
   const byTeam = new Map<string, Map<string, number>>();
   const teamPeople = new Map<string, Set<string>>();
   for (const r of rows) {
@@ -155,19 +166,25 @@ export function keyPeople(rows: SessionRow[]): KeyPeople[] {
     const total = [...counts.values()].reduce((a, b) => a + b, 0);
     if (total === 0) continue;
     const top = [...counts.values()].sort((a, b) => b - a);
+    let found = false;
     for (const holders of [1, 2]) {
       const share = top.slice(0, holders).reduce((a, b) => a + b, 0) / total;
       if (share >= KEY_PERSON_SHARE) {
         out.push({ department, people, holders, share });
+        found = true;
         break;
       }
+    }
+    // A decided team is still read, by the top two, so its follow-up has a figure to compare.
+    if (!found && kept('key_people', department)) {
+      out.push({ department, people, holders: 2, share: top.slice(0, 2).reduce((a, b) => a + b, 0) / total });
     }
   }
   return out.sort((a, b) => b.share - a.share);
 }
 
 /** Everything the page finds on its own. */
-export async function getFinds(vendor: Vendor, nowS = Math.floor(Date.now() / 1000)): Promise<Finds> {
+export async function getFinds(vendor: Vendor, kept: Kept = keepNone, nowS = Math.floor(Date.now() / 1000)): Promise<Finds> {
   const since = nowS - WINDOW_DAYS * DAY;
   const client = await getTypedClient();
   const run = async (q: SQL) =>
@@ -260,10 +277,11 @@ export async function getFinds(vendor: Vendor, nowS = Math.floor(Date.now() / 10
 
   const labels = await getCodeWorkTypeDefinitions();
   return {
-    // Capped at two so recurring jobs cannot fill the page and hide the other kinds of find.
-    jobs: standardJobs(rows, deepPeople, labels).slice(0, 2),
+    // Capped at two so recurring jobs cannot fill the page and hide the other kinds of find; a
+    // decided one is kept past the cap so its follow-up still appears.
+    jobs: standardJobs(rows, deepPeople, labels, kept).filter((j, i) => i < 2 || kept(`standard_job:${j.workType}`, EVERYONE)),
     waves,
     rarelyUsed,
-    keyPeople: keyPeople(rows).slice(0, 3),
+    keyPeople: keyPeople(rows, kept).filter((k, i) => i < 3 || kept('key_people', k.department)),
   };
 }

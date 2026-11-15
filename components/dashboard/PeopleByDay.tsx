@@ -5,7 +5,7 @@
 
 /**
  * Dashboard "Who is using it each day?" One line per product over the last 30 days, every line
- * counting people a day, never prompts, so the lines can be compared. Weekends are shaded; today,
+ * counting people a day, never prompts, so the lines can be compared. Today,
  * still in progress, is drawn dashed. The sentence above it gives the Active users card's figures
  * (the last 7 days against the 7 before), so it keeps that window.
  *

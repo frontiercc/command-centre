@@ -26,7 +26,7 @@ interface ProductRow { product: string; classified: number; waiting: number; fai
 interface HealthData {
   byProduct?: ProductRow[];
   classifyChatgpt?: boolean;
-  /** What this customer calls each tier (Admin → Work Pulse → Tiers). */
+  /** What this customer calls each tier (Admin → Work Pulse → Tier config). */
   tierNames?: TierNames;
   queueDepth: number;
   tierDist: TierDay[];

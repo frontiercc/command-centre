@@ -64,6 +64,11 @@ describe('what the plan says', () => {
     expect(p.actions.some(a => a.key === 'learn_from')).toBe(true);
   });
 
+  it('says "All N people" when everyone uses it regularly', () => {
+    const all = team({ hardlyUsed: 0, hardlyUsedShare: 0 });
+    expect(teamParts(all, figures(all)).where.join(' ')).toMatch(/All [0-9]+ people use it regularly[.]/);
+  });
+
   it('says so, and suggests handing a job over, when the team is under the floor', () => {
     const t = team({ deepShare: 0.2 });
     const { where, actions } = teamParts(t, figures(t));

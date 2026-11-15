@@ -318,7 +318,7 @@ export default function UseCasesRegisterPage() {
         <TopBar title="Use Cases" subtitle="Overview of AI use cases across the org" />
         <PageBody>
           <Empty title="Use Cases is not enabled on this instance">
-            An admin can enable it under Admin → System.
+            An admin can enable it under Admin → Use Cases.
           </Empty>
         </PageBody>
       </>

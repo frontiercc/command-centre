@@ -20,6 +20,7 @@ import type { TierNames } from '@/lib/pulse/tier-names';
 import { PageBody, Toolbar, Panel, Tag, Empty, Muted, B, cx } from '@/components/precision/ui';
 import { useVendor, useOpenAiOnly, VendorSwitch } from '@/components/shared/VendorSwitch';
 import { DEVELOPER_PULSE_VENDOR_LABELS, type Vendor } from '@/lib/dashboard/vendor';
+import { useSessionRole } from '@/components/shared/useSessionRole';
 
 interface SessionRow {
   session_id: string;
@@ -37,6 +38,8 @@ interface SessionRow {
 }
 
 interface UserData {
+  /** Set when the viewer may not see this person's spend (a colleague): no spend figure is sent. */
+  spendHidden?: boolean;
   periodWork?: CodePeriodWork | null;
   tierWeeks?: Array<{ weekStart: number; t1: number; t2: number; t3: number }>;
   tierGrid?: Array<{ weekStart: number; t1: number; t2: number; t3: number }>;
@@ -90,6 +93,11 @@ function CodeUsersContent() {
   const [codexPresent, setCodexPresent] = useState(false);
   const openaiOnly = useOpenAiOnly();
   const codexView = codexPresent || openaiOnly;
+
+  // As on Work Pulse Users: a viewer cannot open another person's page (the API returns their own),
+  // so they go to their own.
+  const role = useSessionRole();
+  useEffect(() => { if (role === 'viewer') router.replace('/pulse/code/me'); }, [role, router]);
 
   const selectedUserId = searchParams.get('userId') ?? '';
   // What the switch's view covers, for the empty states.
@@ -176,7 +184,8 @@ function CodeUsersContent() {
                   ))}
                 </select>
               )}
-              {selectedUserId && (
+              {/* Person 360 is a Work Pulse page: the Developer Pulse role cannot open it. */}
+              {selectedUserId && role !== '' && role !== 'code' && (
                 <Link href={`/pulse/person/${encodeURIComponent(selectedUserId)}`} className={B.link}>
                   Person 360
                 </Link>
@@ -232,7 +241,7 @@ function CodeUsersContent() {
                 <ByHandPanel h={data.humanTime} who={who} tool={openaiOnly || vendor === 'openai' ? 'Codex' : codexPresent && vendor === 'all' ? 'AI' : 'Claude Code'} />
               </div>
 
-              <CodeStatStrip metrics={data.metrics} githubRepos={data.githubRepos} view={codexView ? vendor : 'claude'} split={data.metricsSplit} />
+              <CodeStatStrip metrics={data.metrics} githubRepos={data.githubRepos} view={codexView ? vendor : 'claude'} split={data.metricsSplit} spendHidden={data.spendHidden === true} />
 
               <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                 <ModelMixBar items={data.modelMix} title="Model mix" />
@@ -256,7 +265,7 @@ function CodeUsersContent() {
                           </div>
                           <div className="shrink-0 text-right flex flex-col items-end gap-0.5">
                             <span className="text-[14px] font-medium text-[#0A0A0A] tabular-nums">
-                              {s.spend_usd === null ? (s.input_tokens + s.output_tokens === 0 ? 'not measured' : 'not priced') : formatCurrency(s.spend_usd)}
+                              {data.spendHidden ? 'hidden' : s.spend_usd === null ? (s.input_tokens + s.output_tokens === 0 ? 'not measured' : 'not priced') : formatCurrency(s.spend_usd)}
                             </span>
                             <span className="text-[13px] text-[#8F8F8F] tabular-nums">{formatTokens(s.input_tokens + s.output_tokens)} tokens</span>
                             <Tag>{s.source === 'codex' ? 'Codex' : s.source === 'otel' ? 'OTel' : 'Agent'}</Tag>

@@ -4,7 +4,7 @@ Guidance for Claude, or any AI assistant, helping someone contribute to Frontier
 
 ## What Command Centre is
 
-A single Next.js 15 (App Router) application, backed by PostgreSQL through Drizzle, styled with Tailwind, and run in Docker. Command Centre receives OpenTelemetry from Claude Code, Claude Cowork and Claude in Office/Google (Excel, Word, PowerPoint, Outlook and Google Sheets, Docs and Slides, stored beside Cowork with `cowork_messages.product` set; `lib/otel/office-receiver.ts`), and pulls Claude Chat from Anthropic's Compliance API; pulls from the Analytics and Admin APIs are on the roadmap. It also pulls ChatGPT and Codex activity from OpenAI's Compliance API (`lib/openai/`), with a stand-in for testing in `scripts/openai-mock/`. Command Centre measures whether the work people hand to AI (Claude, ChatGPT and Codex) is becoming deeper and more valuable, and governs what it stores.
+A single Next.js 15 (App Router) application, backed by PostgreSQL through Drizzle, styled with Tailwind, and run in Docker. Command Centre receives OpenTelemetry from Claude Code, Claude Cowork and Claude in Office/Google. Office and Google work (Excel, Word, PowerPoint, Outlook and Google Sheets, Docs and Slides) is stored beside Cowork with `cowork_messages.product` set (`lib/otel/office-receiver.ts`). It pulls Claude Chat from Anthropic's Compliance API; pulls from the Analytics and Admin APIs are on the roadmap. It also pulls ChatGPT and Codex activity from OpenAI's Compliance API (`lib/openai/`), with a stand-in for testing in `scripts/openai-mock/`. Command Centre measures whether the work people hand to AI (Claude, ChatGPT and Codex) is becoming deeper and more valuable, and governs what it stores.
 
 Command Centre is a downstream observer. Activity arrives after a prompt has reached Claude, ChatGPT or Codex, so the product can flag, alert on and restrict access to what it stores, but can never block, alter or delay a prompt.
 
@@ -40,7 +40,7 @@ When someone asks you to install or set up Command Centre, follow the Quick star
 - Run `docker compose up -d --build` as a background task. Tell them it has started and takes about four minutes the first time, check on it about every 30 seconds and say what it is doing, and tell them as soon as it finishes, without waiting to be asked.
 - Then wait until http://localhost:3001 answers, find the one-time setup token in the Hub's log, as the README shows, and give it to them.
 - Load sample data only after they say their admin account exists, and only if they want it.
-- Run the sample data load as a background task, so the person is never left waiting on a silent command. Tell them it has started and takes about two minutes, check on it about every 30 seconds and say what it is doing, and report the result as soon as it finishes, without waiting to be asked.
+- Run the sample data load as a background task, so the person is never left waiting on a silent command. Tell them it has started and takes about six minutes, check on it about every 30 seconds and say what it is doing, and report the result as soon as it finishes, without waiting to be asked.
 - When you finish, tell them the folder you installed into, and that Admin → Ingestion in Command Centre shows the collector address and bearer token, with the Claude settings ready to copy.
 - If a step fails, stop and report the error exactly. Do not work around it, change ports or edit files to make it pass.
 

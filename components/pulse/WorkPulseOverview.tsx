@@ -185,8 +185,9 @@ export function Produced({ output, human }: { output: SessionOutputReport | null
   return (
     <Frame
       title="What did the work produce?"
+      tag={times ? 'Includes an estimate' : undefined}
       period="Last quarter"
-      answer={<>{output.rate === null ? 'Not measured yet.' : <><b>{cap(words(output.rate))}</b> {output.rate >= 1 ? '' : 'of '}sessions produced a file.</>}{times ? <> By hand, the same work would have taken <b>{times}</b>.</> : null}</>}
+      answer={<>{output.rate === null ? 'Not measured yet.' : <><b>{cap(words(output.rate))}</b> {output.rate >= 1 ? '' : 'of the '}sessions produced a file.</>}{times ? <> By hand, the same work would have taken <b>{times}</b>.</> : null}</>}
       note={<>A session produced a file when Claude saved, sent or published one, in Claude Chat when a reply made an artifact or a file, and in ChatGPT when a reply listed a file.{times ? ' The by-hand time is Claude’s estimate.' : ''}</>}
     >
       {ratio !== null && human && (
@@ -229,6 +230,7 @@ export function Products({ data, names }: { data: ByProductData | null | undefin
   return (
     <Frame
       title="Which products are people using?"
+      tag="Partly AI-judged"
       period="Last 30 days"
       answer={lead && lead.people > 0
         ? <>{label(lead.product)} is used by the most people: <b>{lead.people.toLocaleString('en-GB')}</b>{lead.meaningfulPct !== null ? <>, and <b>{words(lead.meaningfulPct / 100)}</b> of their tasks are {deepWords(names)}</> : null}.</>
@@ -283,8 +285,8 @@ export function NewWaysOfWorking({ confirmedTotal, confirmedRecent, vendor }: { 
       title="New ways of working"
       period="Last quarter"
       answer={list.length > 0
-        ? <><b>{list.length}</b> {list.length === 1 ? 'is' : 'are'} waiting for your review. {confirmedRecent === 0 ? 'None were' : `${confirmedRecent} ${confirmedRecent === 1 ? 'was' : 'were'}`} confirmed this quarter.</>
-        : <>Nothing is waiting for review. {confirmedRecent === 0 ? 'None were' : `${confirmedRecent} ${confirmedRecent === 1 ? 'was' : 'were'}`} confirmed this quarter.</>}
+        ? <><b>{list.length}</b> {list.length === 1 ? 'is' : 'are'} waiting for your review. {confirmedRecent === 0 ? 'None were' : `${confirmedRecent} ${confirmedRecent === 1 ? 'was' : 'were'}`} confirmed in the last quarter.</>
+        : <>Nothing is waiting for review. {confirmedRecent === 0 ? 'None were' : `${confirmedRecent} ${confirmedRecent === 1 ? 'was' : 'were'}`} confirmed in the last quarter.</>}
       note={NEW_WAYS_OF_WORKING}
     >
       {oldest.length > 0 && (

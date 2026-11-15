@@ -7,7 +7,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { visibleVendor, visibleOpenAi } from '@/lib/sources/openai-visibility';
 import { and, desc, eq, gte, inArray } from 'drizzle-orm';
-import { getAdminSession, isDeptScoped, canAccessCodePulse } from '@/lib/auth/admin-auth';
+import { getAdminSession, isDeptScoped, canAccessCodePulse, canAccessPulseAdmin } from '@/lib/auth/admin-auth';
 import { getTypedClient } from '@/lib/db/client';
 import { schema } from '@/lib/db/schema';
 import { getCodeDeptMembers } from '@/lib/pulse/code/dept';
@@ -191,5 +191,20 @@ export async function GET(
     .sort((a, b) => b.sessions - a.sessions);
 
   const humanTime = await readHumanTime('code', memberIds, vendor);
-  return NextResponse.json({ dept, vendor, codexPresent, metricsSplit, metrics, members, journeyGrid, tierWeeks, tierGrid, tierNames, periodWork, workMix, githubRepos, humanTime });
+  // Each member's spend: admins and managers see everyone's; anyone else sees only their own row's,
+  // and a colleague's reads as hidden. The department's own total above is not about one person.
+  let membersOut: Array<(typeof members)[number] & { spend_hidden?: boolean }> = members;
+  if (!canAccessPulseAdmin(session.role)) {
+    const au = schema.adminUsers;
+    const linked = session.userId
+      ? await client.select({ id: au.linked_cowork_user_id }).from(au).where(eq(au.id, session.userId)).limit(1)
+      : [];
+    const byEmail = session.email
+      ? await client.select({ id: u.id }).from(u).where(eq(u.email, session.email)).limit(1)
+      : [];
+    const me = linked[0]?.id ?? byEmail[0]?.id ?? null;
+    membersOut = members.map(m => (m.user_id === me ? m : { ...m, spend_usd: null, spend_hidden: true }));
+  }
+
+  return NextResponse.json({ dept, vendor, codexPresent, metricsSplit, metrics, members: membersOut, journeyGrid, tierWeeks, tierGrid, tierNames, periodWork, workMix, githubRepos, humanTime });
 }

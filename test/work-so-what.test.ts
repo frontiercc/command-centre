@@ -141,11 +141,16 @@ describe('the follow-up', () => {
     expect(s).toMatch(/35% of the time, against 20% then/);
     expect(s).not.toMatch(/because/i);
   });
+  it('uses the current label, so a decision saved under an older one still reads well', () => {
+    const then = { label: 'Weeks for half a wave to get there', value: 6.8, unit: ' weeks', lowerIsBetter: true };
+    const now = { ...then, label: 'The time for half a wave to get there', value: 0 };
+    expect(measureSentence(then, now)).toBe('Since then, the time for half a wave to get there has gone from 6.8 weeks to under a week, which is the way this card aimed for.');
+  });
   it('says plainly when the figure is about where it was', () => {
     const m = { label: 'People who have hardly used it', value: 5, unit: '', lowerIsBetter: true };
     expect(measureSentence(m, { ...m, value: 5.1 })).toMatch(/about where it was/);
     expect(measureSentence({ label: 'Weeks for half a wave to get there', value: 6.8, unit: ' weeks', lowerIsBetter: true },
-      { label: 'Weeks for half a wave to get there', value: 0, unit: ' weeks', lowerIsBetter: true })).toMatch(/to under a week, which is the way you wanted/);
+      { label: 'Weeks for half a wave to get there', value: 0, unit: ' weeks', lowerIsBetter: true })).toMatch(/to under a week, which is the way this card aimed for/);
   });
 });
 
@@ -279,7 +284,7 @@ describe('the page', () => {
     expect(page.cards.filter(c => !c.decided).map(c => c.touches)).toEqual([16, 15, 14, 13, 12]);
     // The decided card, due its follow-up, comes back first even though it touches the fewest.
     expect(page.cards[0].kind).toBe('rarely_used');
-    expect(page.cards[0].decided?.followUp?.sentence).toMatch(/gone from 9 to 4, which is the way you wanted/);
+    expect(page.cards[0].decided?.followUp?.sentence).toMatch(/gone from 9 to 4, which is the way this card aimed for/);
   });
 
   it('answers only the question that was asked', () => {

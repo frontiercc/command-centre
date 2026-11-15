@@ -1,6 +1,6 @@
 # Frontier Command Centre: Security and Data Protection
 
-This document explains how Command Centre protects the data it holds on infrastructure you control: who can sign in and what each person can see, how data is encrypted, what is captured and what is never stored, how long data is kept, how activity is audited, and how the product is built and maintained. Each control described has been checked against the application's source code.
+This document explains how Command Centre protects the data it holds on infrastructure you control. It covers who can sign in and what each person can see, how data is encrypted, what is captured and what is never stored, how long data is kept, how activity is audited, and how the product is built and maintained. Each control described has been checked against the application's source code.
 
 Everything here applies however Command Centre is run. AI data flows are covered in [AI Data Flow and Sub-processors](ai-data-flow.md).
 
@@ -12,7 +12,15 @@ Command Centre consists of a web application (the Hub), an OpenTelemetry Collect
 
 Command Centre is a downstream observer. Activity reaches it only after a prompt has gone to Claude, ChatGPT or Codex, so it cannot block, alter or delay anything a person sends. Command Centre can flag, alert on, restrict access to and delete what it stores. Controls that must act before content reaches Claude, ChatGPT or Codex belong in Claude's and OpenAI's own administrative settings, your identity provider and your endpoint controls.
 
-All data Command Centre stores remains on infrastructure you control. The Command Centre project operates no service in the data path and receives no telemetry from your deployment. The Hub makes outbound calls only to services you configure: the Anthropic API (AI features and the read-only Compliance, Analytics and Admin API pulls; the Analytics and Admin pulls are on the roadmap), OpenAI's API at `api.chatgpt.com` and the download links it returns, your identity provider (and Microsoft Graph, read-only, when department sync is on), your SMTP relay, Slack webhooks you supply, the GitHub API and, if you enable archiving, your own Amazon S3 bucket.
+All data Command Centre stores remains on infrastructure you control. The Command Centre project operates no service in the data path and receives no telemetry from your deployment. The Hub makes outbound calls only to services you configure:
+
+- the Anthropic API, for AI features and the read-only Compliance, Analytics and Admin API pulls (the Analytics and Admin pulls are on the roadmap);
+- OpenAI's API at `api.chatgpt.com`, and the download links it returns;
+- your identity provider, and Microsoft Graph, read-only, when department sync is on;
+- your SMTP relay;
+- Slack webhooks you supply;
+- the GitHub API;
+- your own Amazon S3 bucket, if you enable archiving.
 
 ![Trust boundaries](diagrams/Trust%20boundaries.png)
 
@@ -81,18 +89,25 @@ Every account has one of six roles. Signing in establishes identity only; each p
 
 | Role | Intended for | Can see | Cannot see |
 |---|---|---|---|
-| `admin` | Platform owners | Everything, including settings, security, the access audit log and all prompt text | Nothing withheld |
-| `manager` | Department and AI programme leads | Dashboards, alerts, reports, Work Pulse and Developer Pulse, Pulse administration, FinOps and Spend Review, Use Cases, prompt text for their own department (none until a department is set on their account) | System settings, security, the access audit log |
-| `viewer` | Executives and analysts | Dashboards, alerts, reports, Work Pulse and Developer Pulse pages (including every person's Claude Code and Codex spend, in all departments, in Developer Pulse), their own Spend Review | The Audit Log, FinOps, administration |
+| `admin` | Platform owners | Everything, including settings, security, the access audit log, all prompt text and, when it is on, Ask the data | Nothing withheld |
+| `manager` | Department and AI programme leads | Dashboards, alerts, reports, Work Pulse and Developer Pulse, So What and Team Coaching for their own department, Pulse administration, FinOps and Spend Review, Use Cases, prompt text for their own department (none until a department is set on their account) | System settings, security, the access audit log, Ask the data |
+| `viewer` | Executives and analysts | Dashboards, alerts, reports, the Work Pulse and Developer Pulse overviews and department pages, Developer Pulse Value, Use Case Governance, the Board, their own Spend Review | The Audit Log, FinOps, the Users pages, So What, Team Coaching, Ask the data, administration |
 | `pulse` | Individual contributors | Their own figures; Work Pulse and Developer Pulse for their department | Other departments, other people's prompt text, administration |
 | `cowork` | Individual contributors | As `pulse`, Work Pulse only | As `pulse` |
 | `code` | Individual contributors | As `pulse`, Developer Pulse only | As `pulse` |
 
-The contributor roles are scoped to the department on their account, which the server reads with the session on every request; a department supplied in a request cannot override it. Contributors can see per-person figures, such as delegation depth, activity and Claude Code and Codex spend, for colleagues in their own department, but not other people's prompt text. Only administrators can create accounts, change roles or departments, manage secrets, revoke sessions, issue Metrics Connector tokens or erase a person's data.
+The contributor roles are scoped to the department on their account, which the server reads with the session on every request; a department supplied in a request cannot override it. Contributors can see per-person figures, such as delegation depth and activity, for colleagues in their own department, but not other people's spend or prompt text. A person's spend is shown to them, administrators and managers only; the server does not send it to anyone else. Only administrators can create accounts, change roles or departments, manage secrets, revoke sessions, issue Metrics Connector tokens or erase a person's data.
 
 ### A role decision on every API route
 
-Because every person seen in Claude or ChatGPT activity can hold a session, a valid session is never treated as permission. Each API route handler calls an explicit role check, and a test in the build pipeline fails the build if any handler lacks one and is not on a short list of exceptions, each recorded with its reason: token-authenticated machine endpoints, the sign-in, setup and reset flows, the health check, a write-only client error report, development-only routes that are disabled in production, and a few routes that act only on the caller's own account or let any signed-in user submit or upvote a Skills and Connectors Board entry.
+Because every person seen in Claude or ChatGPT activity can hold a session, a valid session is never treated as permission. Each API route handler calls an explicit role check. A test in the build pipeline fails the build if any handler lacks one and is not on a short list of exceptions, each recorded with its reason:
+
+- token-authenticated machine endpoints;
+- the sign-in, setup and reset flows;
+- the health check;
+- a write-only client error report;
+- development-only routes, which are disabled in production;
+- a few routes that act only on the caller's own account, or let any signed-in user submit or upvote a Skills and Connectors Board entry.
 
 ### Who can read prompt text
 
@@ -148,6 +163,8 @@ Command Centre processes personal data about your employees to measure how teams
 | Activity metadata | Session timing, active time, model, tokens, cost, tool names and outcomes, connector and skill names, uploaded and produced file names | Message rows for the same period as prompts; Claude Cowork, Claude Chat and ChatGPT session summaries until erased, with the names of files attached cleared once the session is past its window | Claude Code tool detail depends on client settings |
 | Code metrics | Lines added and removed, commits, pull requests, edit decisions | 90 days; weekly aggregates 400 days | Yes, client metrics setting |
 | AI-judged results | Delegation tier and kind of work, session descriptions, use case matches, hand-work time estimates, briefings, drafted skills | Mostly for the same period as the prompts they came from; briefings, Claude Cowork session estimates, use cases and skill drafts until deleted | Yes, per AI feature |
+| So What decisions and Team Coaching actions | Per team: the card decided or action marked done, the figures as they stood that day, an optional note, and the email of the admin or manager who did it | Not time-limited | No |
+| Ask the data question log | Each question, the asking admin's email, the page it was asked from, the lookups that ran, the outcome, tokens and cost; never the answer | 90 days by default, set on Admin → Ask the data | Yes, off by default |
 | Alerts | PII, intent, cost and system alerts | Resolved and dismissed 90 days; open kept | Per alert type |
 | GitHub overlay | Daily commit and merged pull request counts per repository; daily commit counts per person | Same period as Claude Code data | Yes, no GitHub token |
 | Audit and authentication logs | Who read or changed what, sign-ins, lockouts, role changes | Kept indefinitely | No |
@@ -158,13 +175,14 @@ Command Centre processes personal data about your employees to measure how teams
 
 Everything except the collector queue and archive copies is held in the PostgreSQL database.
 
-For Claude, what Command Centre receives is decided by Claude's own telemetry settings: for Claude Code, the settings you distribute through Claude managed settings; for Claude Cowork and Claude in Office/Google, the monitoring settings in Claude's Organization settings. Claude Code sends prompt text only when prompt logging is enabled; without it the Hub receives a redaction marker, and the Audit Log, PII detection and the AI features that read prompts lose their input. With detailed tool telemetry enabled, Claude Code sends tool parameters that can include file content Claude writes and exact shell commands. Claude Cowork always includes prompt text and tool parameters in its telemetry. That data travels over TLS to your Collector, waits in its disk queue until delivered, and is read in memory by the Hub, which keeps from those logs and metrics only the tool, connector and skill names, whether each call succeeded and how long it took, whether a commit was made, and an output's file name, and discards the rest. If you prefer that Claude Code's tool parameters never leave the client, leave its detailed tool telemetry off; Command Centre then loses per-prompt commit counts and connector tool names for Claude Code. Claude in Office/Google sends traces that include each tool call's input and output, which hold document content, and the document's address: the Hub keeps the prompt, the model and tokens, the tool's name, outcome and duration, and the file name of a document Claude changed, and discards the rest.
+For Claude, what Command Centre receives is decided by Claude's own telemetry settings: for Claude Code, the settings you distribute through Claude managed settings; for Claude Cowork and Claude in Office/Google, the monitoring settings in Claude's Organization settings. Claude Code sends prompt text only when prompt logging is enabled; without it the Hub receives a redaction marker, and the Audit Log, PII detection and the AI features that read prompts lose their input. With detailed tool telemetry enabled, Claude Code sends tool parameters that can include file content Claude writes and exact shell commands. Claude Cowork always includes prompt text and tool parameters in its telemetry. That data travels over TLS to your Collector, waits in its disk queue until delivered, and is read in memory by the Hub. From those logs and metrics the Hub keeps only the tool, connector and skill names, whether each call succeeded and how long it took, whether a commit was made, and an output's file name. It discards the rest. If you prefer that Claude Code's tool parameters never leave the client, leave its detailed tool telemetry off; Command Centre then loses per-prompt commit counts and connector tool names for Claude Code. Claude in Office/Google sends traces that include each tool call's input and output, which hold document content, and the document's address. The Hub keeps the prompt, the model and tokens, the tool's name, outcome and duration, and the file name of a document Claude changed. It discards the rest.
 
 For ChatGPT and Codex, what Command Centre receives is decided by the read permissions on the OpenAI Admin API key. It reads four logs from OpenAI's Compliance API (conversation messages, Codex logs, Codex turns and costs), keeps only what the inventory above lists, and discards the rest of each file once read.
 
 ### What Command Centre never stores
 
 - The AI's replies, from any product. For Claude Chat only the model, the counts of artifacts and generated files, and their titles and file names are kept, and for ChatGPT replies only the model, the time, and how many files are listed on them and their names. Names are names only, never a folder or content, with personal data masked.
+- Ask the data's answers. The question is logged, the answer is not.
 - The commands Codex runs. They are read only to spot a `git commit`.
 - The content of tool calls: file contents, shell commands, tool inputs and outputs. The Collector supplied with Command Centre forwards traces only so that Claude in Office/Google's activity arrives; the Hub accepts traces from Claude in Office/Google alone, ignores any others, and never stores a tool's input or output or a document's address.
 - Commit identifiers, commit messages or code from GitHub.
@@ -190,13 +208,18 @@ For ChatGPT and Codex, what Command Centre receives is decided by the read permi
 
 Command Centre does not encrypt the database files or the Collector's queue itself. Use disk encryption on the host, or a managed database that encrypts at rest, and encrypt backups the same way.
 
-The application additionally encrypts two kinds of data before they reach the database, so a dump or snapshot alone does not expose them: every secret entered in the administration pages (Anthropic keys, the Compliance Access Key, the OpenAI Admin API key, GitHub token, SSO client secret, SMTP password, Slack webhooks, archive credentials), and each user's TOTP seed. Both use AES-256-GCM with a key derived from `CCC_ENCRYPTION_KEY`, and any value found unencrypted at start-up is encrypted then. Secret values are masked whenever settings are read, so a stored secret is never returned to the browser in full.
+The application also encrypts two kinds of data before they reach the database, so a dump or snapshot alone does not expose them:
 
-`CCC_ENCRYPTION_KEY` is held in `.env` with Docker Compose, or in your secret store, apart from the database, and also seals the short-lived MFA and SSO sign-in cookies. `CCC_ENCRYPTION_KEY` must not change once data is stored, because stored secrets and MFA seeds can be read only with the key they were saved under. An undecryptable secret is recorded as an error and shown on the System health page.
+- every secret entered in the administration pages: Anthropic keys, the Compliance Access Key, the OpenAI Admin API key, the GitHub token, the SSO client secret, the SMTP password, Slack webhooks and archive credentials;
+- each user's TOTP seed.
+
+Both use AES-256-GCM with a key derived from `CCC_ENCRYPTION_KEY`, and any value found unencrypted at start-up is encrypted then. Secret values are masked whenever settings are read, so a stored secret is never returned to the browser in full.
+
+`CCC_ENCRYPTION_KEY` is held apart from the database: in `.env` with Docker Compose, or in your secret store. It also seals the short-lived MFA and SSO sign-in cookies. `CCC_ENCRYPTION_KEY` must not change once data is stored, because stored secrets and MFA seeds can be read only with the key they were saved under. An undecryptable secret is recorded as an error and shown on the System health page.
 
 ### AI processing
 
-Command Centre's measured figures are computed without AI. A defined set of features sends selected data to the Anthropic API under your organisation's Claude API key, including briefings, reports, delegation classification, session descriptions, use case judging and mining, skill drafting, intent assessment and the PII confirmation check. [AI Data Flow and Sub-processors](ai-data-flow.md) lists every feature, what it sends and stores, and how to switch it off.
+Command Centre's measured figures are computed without AI. A defined set of features sends selected data to the Anthropic API under your organisation's Claude API key, including briefings, reports, delegation classification, session descriptions, use case judging and mining, skill drafting, intent assessment and the PII confirmation check. Ask the data, off by default and for admins only, sends an admin's question and the page figures needed to answer it, which can include people's names, departments and per-person figures but never prompt text. [AI Data Flow and Sub-processors](ai-data-flow.md) lists every feature, what it sends and stores, and how to switch it off.
 
 ## PII and secret detection
 
@@ -207,7 +230,7 @@ Every prompt is checked at ingest, in full before any truncation, against 20 pat
 
 The number and identifier patterns carry token boundaries so that identifiers inside longer strings (record identifiers, hashes, timestamps) do not match. Card numbers must pass the Luhn checksum and CPF numbers their check digits.
 
-A match flags the message in the Audit Log and raises an alert; on Claude Cowork, Claude in Office/Google, Claude Code, ChatGPT and Codex prompts, a repeat of the same identifier type for the same person within 24 hours is flagged without a further alert. Seven patterns identify a value by shape alone (National Insurance number, UK, US and Brazilian phone numbers, IBAN, IP address and US Social Security number); for these, on Claude Cowork, Claude in Office/Google, Claude Code, ChatGPT and Codex prompts, a Claude call first asks whether the match is genuinely that identifier in context. A dismissed match raises no alert but stays flagged, with the dismissal and a one-sentence reason recorded. Every failure of the check (no key, an error, a timeout, an unexpected answer) raises the alert as normal, so the check can reduce false alerts but never silence a real one. The other thirteen patterns are identified by a checksum, a distinctive prefix, a required label or, for email addresses, an unambiguous format.
+A match flags the message in the Audit Log and raises an alert; on Claude Cowork, Claude in Office/Google, Claude Code, ChatGPT and Codex prompts, a repeat of the same identifier type for the same person within 24 hours is flagged without a further alert. Seven patterns identify a value by shape alone: National Insurance number, UK, US and Brazilian phone numbers, IBAN, IP address and US Social Security number. For these, on Claude Cowork, Claude in Office/Google, Claude Code, ChatGPT and Codex prompts, a Claude call first asks whether the match is genuinely that identifier in context. A dismissed match raises no alert but stays flagged, with the dismissal and a one-sentence reason recorded. Every failure of the check (no key, an error, a timeout, an unexpected answer) raises the alert as normal, so the check can reduce false alerts but never silence a real one. The other thirteen patterns are identified by a checksum, a distinctive prefix, a required label or, for email addresses, an unambiguous format.
 
 Detection also covers twelve intent categories, among them data exfiltration, credential harvesting, access escalation, policy evasion and destructive actions, with an AI severity assessment that takes account of your acceptable use policy where one is configured. Like PII detection, it flags and alerts; it cannot stop a prompt.
 
@@ -232,24 +255,54 @@ A retention job runs daily in a single database transaction, so a run either com
 | Resolved and dismissed alerts | 90 days |
 | Daily analytics snapshots | 365 days |
 | Weekly metrics and use case history | 400 days |
+| Ask the data question log | 90 days, set on Admin → Ask the data; removed each time a question is asked rather than by the daily job |
 
 In **strip** mode, the default, rows keep their metadata but lose their content: prompt text is replaced with a fixed marker, and full text, tool previews, PII dismissal reasons and output file names are cleared. In **purge** mode the rows are deleted. In both modes, AI-derived records tied to expired messages (classifications, capability events, session descriptions, use case judgements) and metadata-only tables such as chat reply metadata are deleted.
 
-People and accounts, Claude Cowork, Claude Chat and ChatGPT session summaries (whose attached file names are cleared once the session is past its window, in both modes), the use case register, drafted skills, coaching acknowledgements, Skills and Connectors Board entries and both logs are not time-limited. Records tied to a person among them are removed by erasure; the register, drafted skills and Board entries are removed by an administrator or manager; the two logs are kept. The chat pull never imports messages older than the chat retention window, so content removed by retention is not re-imported. The OpenAI sync likewise never imports a record older than the Claude Cowork window (ChatGPT) or the Claude Code window (Codex).
+These are not time-limited:
+
+- people and accounts;
+- Claude Cowork, Claude Chat and ChatGPT session summaries (their attached file names are cleared once the session is past its window, in both modes);
+- the use case register and drafted skills;
+- coaching acknowledgements, So What decisions and Team Coaching actions;
+- Skills and Connectors Board entries;
+- both logs.
+
+Of these, records tied to a person are removed by erasure. The register, drafted skills and Board entries are removed by an administrator or manager. The two logs are kept. The chat pull never imports messages older than the chat retention window, so content removed by retention is not re-imported. The OpenAI sync likewise never imports a record older than the Claude Cowork window (ChatGPT) or the Claude Code window (Codex).
 
 ### Archive before purge
 
-Archiving to your Amazon S3 bucket is off by default; Azure Blob Storage and Google Cloud Storage are not yet supported. When enabled, rows due for removal from the message, raw telemetry, Compliance activity, chat and error tables, and from the ChatGPT and Codex reply, turn, action, spend and conversation-time tables, are written as compressed JSON Lines with a manifest before anything is deleted, and a failed archive stops that day's run. The archive authenticates with credentials that you create, stored encrypted. Apply your own encryption, access policy and lifecycle to the bucket.
+Archiving to your Amazon S3 bucket is off by default; Azure Blob Storage and Google Cloud Storage are not yet supported. When it is on, rows due for removal are written as compressed JSON Lines, with a manifest, before anything is deleted. That covers the message, raw telemetry, Compliance activity, chat and error tables, and the ChatGPT and Codex reply, turn, action, spend and conversation-time tables. A failed archive stops that day's run. The archive authenticates with credentials that you create, stored encrypted. Apply your own encryption, access policy and lifecycle to the bucket.
 
 ### Erasure and export of a person's data
 
-An administrator can export a monitored person's record, Claude Cowork, Claude in Office/Google and Claude Code prompts and activity messages, Claude Chat prompts and the metadata kept for Claude's replies, ChatGPT and Codex prompts with their reply records, conversation times, Codex turns and tool calls and hourly costs, telemetry events, Compliance activity, analytics snapshots and alerts as JSON, and erase that person. Erasure deletes the person's monitoring record and every record keyed to them in one transaction; if any step fails, nothing is deleted and the failure is recorded. A build-pipeline test fails when a new table carrying a person identifier is not covered. The access audit log keeps a record of the erasure (who, when, and the erased person's identifier and email) as evidence.
+An administrator can export a monitored person's data as JSON, and erase that person. The export covers:
+
+- their person record;
+- their Claude Cowork, Claude in Office/Google and Claude Code prompts and activity messages;
+- their Claude Chat prompts and the metadata kept for Claude's replies;
+- their ChatGPT and Codex prompts with their reply records, conversation times, Codex turns and tool calls, and hourly costs;
+- telemetry events, Compliance activity, analytics snapshots and alerts.
+
+Erasure deletes the person's monitoring record and every record keyed to them in one transaction; if any step fails, nothing is deleted and the failure is recorded. A build-pipeline test fails when a new table carrying a person identifier is not covered. The access audit log keeps a record of the erasure (who, when, and the erased person's identifier and email) as evidence.
 
 Erasure removes stored data; a person's Claude client continues to send telemetry until it is stopped at the client or in Claude's administrative settings. The OpenAI sync also carries on: it imports the person's new ChatGPT and Codex activity, and if the OpenAI key is removed and added again it starts again from up to 30 days back and imports their earlier activity too. To prevent both, add the person's email to the exclusion list on **Admin → Ingestion** before you erase them. A person's sign-in account is removed separately, by deleting the account in user administration.
 
 ## Audit logging
 
-The **access audit log** records reads and changes of sensitive data, allowed and refused: prompt content reads in the Audit Log and Spend Review, event and alert lists, dashboards and briefings, report generation, settings reads and writes (setting names only, never values), secret removal, user lists, erasure, FinOps and Spend Review, cost centres, Weekly Highlights, skill drafting, Board deletions and SSO sign-ins. Each entry holds the actor's identifier and email, client address, resource, action, outcome, detail and time. Database triggers reject any update or delete, so entries cannot be altered or removed through the application. Only administrators can read it, filtered by actor, resource, action and date, and export it to CSV.
+The **access audit log** records reads and changes of sensitive data, allowed and refused:
+
+- prompt content reads in the Audit Log and Spend Review;
+- event and alert lists, dashboards and briefings;
+- report generation;
+- settings reads and writes (setting names only, never values) and secret removal;
+- user lists and erasure;
+- FinOps, Spend Review and cost centres;
+- Weekly Highlights, skill drafting and Ask the data questions;
+- So What and Team Coaching;
+- Board deletions and SSO sign-ins.
+
+Each entry holds the actor's identifier and email, client address, resource, action, outcome, detail and time. Database triggers reject any update or delete, so entries cannot be altered or removed through the application. Only administrators can read it, filtered by actor, resource, action and date, and export it to CSV.
 
 The **authentication event log** records sign-ins and failures, lockouts, MFA failures and changes, password reset requests, password and role changes, SSO changes, session revocations, account deletions and ingest authentication failures. Administrators can view recent entries in the administration area.
 
@@ -257,11 +310,11 @@ The **authentication event log** records sign-ins and failures, lockouts, MFA fa
 
 The Hub and Collector write their logs to standard output and standard error; with Docker Compose, `docker compose logs` shows them. Keeping those logs, alerting on them and forwarding them to your monitoring or SIEM are yours to set up.
 
-Within the application, failures of scheduled jobs and ingest, rejected integration keys and unreadable secrets are recorded and shown on the System health page. Optional alerts cover job failures, unreadable secrets and telemetry silence (no data from Claude Cowork, Claude Code, Claude Code metrics, ChatGPT or Codex, each watched on its own, for three working hours by default; ChatGPT and Codex are not watched while the OpenAI sync is paused). Any high or critical alert can be forwarded to a Slack channel you nominate within the hour.
+Within the application, failures of scheduled jobs and ingest, rejected integration keys and unreadable secrets are recorded and shown on the System health page. Optional alerts cover job failures, unreadable secrets and telemetry silence. A silence alert means no data from Claude Cowork, Claude Code, Claude Code metrics, ChatGPT or Codex, each watched on its own, for three working hours by default. ChatGPT and Codex are not watched while the OpenAI sync is paused. Any high or critical alert can be forwarded to a Slack channel you nominate within the hour.
 
 ## Vulnerability management and secure development
 
-Every change pushed to the main branch or proposed in a pull request runs through a build pipeline that scans the repository for secrets, failing on a finding, and through CodeQL static analysis; every change to the application is also linted, tested with the full automated suite against PostgreSQL 16 and built for production. The suite includes the security tests described above: a role check on every API route, no exception text in responses, erasure coverage of every person identifier, the secrets registry, the password policy and the PII confirmation list.
+Every change pushed to the main branch or proposed in a pull request runs through a build pipeline. It scans the repository for secrets, failing on a finding, and runs CodeQL static analysis. Every change to the application is also linted, tested with the full automated suite against PostgreSQL 16 and built for production. The suite includes the security tests described above: a role check on every API route, no exception text in responses, erasure coverage of every person identifier, the secrets registry, the password policy and the PII confirmation list.
 
 Dependabot security alerts are on for this repository; dependency updates are made by hand and tested before release. Advisories that do not affect Command Centre are recorded, each with its reason, in `osv-scanner.toml`. The OpenSSF Scorecard checks the repository's practices on every change to the main branch and weekly. The licences of the libraries Command Centre uses are listed in THIRD-PARTY-NOTICES.md.
 

@@ -3,7 +3,7 @@
 
 /**
  * What this customer calls each tier. Every chart, grid and sentence on the Pulse pages reads
- * these names, so renaming a tier on Admin → Work Pulse → Tiers renames it on the pages too.
+ * these names, so renaming a tier on Admin → Work Pulse → Tier config renames it on the pages too.
  * Client-safe, no imports; the server reads the saved rubric with getTierNames() in tier-config.ts.
  */
 

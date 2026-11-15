@@ -25,6 +25,7 @@ import { getTypedClient } from '../../lib/db/client';
 import { addSessionMatch, refreshWeekFromJunction } from '../../lib/usecases/weeks';
 import { recomputeWeekImpact } from '../../lib/usecases/impact-rollup';
 import { weekStart } from '../../lib/pulse/period';
+import { writeSampleIntentAssessments } from './openai-intent-assessments';
 
 // Thirteen weeks, the same as the Claude sample, so every vendor view has the same
 // history: 90 days, the import's own window and the sample's retention period.
@@ -218,5 +219,12 @@ function tierAt(at: number, startS: number, nowS: number): number {
     await recomputeWeekImpact(id, Number(week));
   }
   console.log(`${matched} ChatGPT and Codex sessions matched to use cases, ${touched.size} use case weeks recounted.`);
+
+  // Written assessments for the intent alerts the import raised, as the Claude
+  // sample's carry (04-alerts.cjs), in place of the Hub's no-key fallback. Last,
+  // so the alerts, raised without waiting, have had time to be stored.
+  const assessed = await writeSampleIntentAssessments();
+  console.log(`${assessed.written} ChatGPT and Codex intent alerts given a written assessment, ${assessed.kept} kept as assessed.`
+    + (assessed.unfinished > 0 ? ` ${assessed.unfinished} flagged prompts were still being assessed.` : ''));
   process.exit(0);
 })().catch((e) => { console.error(e); process.exit(1); });

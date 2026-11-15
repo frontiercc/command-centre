@@ -159,7 +159,9 @@ export function teamParts(t: TeamFigures, f: CoachingFigures): { where: string[]
   }
 
   const regular = t.people - t.hardlyUsed;
-  let people = `Of ${plural(t.people, 'person', 'people')}, ${regular === 0 ? 'none' : regular} ${regular === 1 ? 'uses' : 'use'} it regularly`;
+  let people = t.hardlyUsed === 0 && t.people > 0
+    ? (t.people === 1 ? 'The one person uses it regularly' : `All ${t.people} people use it regularly`)
+    : `Of ${plural(t.people, 'person', 'people')}, ${regular === 0 ? 'none' : regular} ${regular === 1 ? 'uses' : 'use'} it regularly`;
   if (t.hardlyUsed > 0) people += ` and ${plural(t.hardlyUsed, 'has', 'have')} hardly used it`;
   where.push(`${people}.`);
   if (t.hardlyUsedShare !== null && t.hardlyUsedShare > 0.5) {
@@ -178,7 +180,9 @@ export function teamParts(t: TeamFigures, f: CoachingFigures): { where: string[]
     actions.push({
       key: 'stuck',
       text: `Sit with ${names} once and hand over one whole task together, start to finish.`,
-      because: `${t.stuck.length === 1 ? 'They have' : 'They have'} ${t.stuck[0].sessions} sessions but only ${pct(t.stuck[0].deepShare)} went beyond a single answer.`,
+      because: t.stuck.length === 1
+        ? `They have ${t.stuck[0].sessions} sessions but only ${pct(t.stuck[0].deepShare)} went beyond a single answer.`
+        : `${t.stuck[0].name}, for one, has ${t.stuck[0].sessions} sessions but only ${pct(t.stuck[0].deepShare)} went beyond a single answer.`,
       metric: 'deep_share',
     });
   }
@@ -204,8 +208,8 @@ export function teamParts(t: TeamFigures, f: CoachingFigures): { where: string[]
     // Kinds that tie for the top are named together.
     const tied = t.work.filter(w => w.sessions === top.sessions);
     workOn.push(tied.length > 1
-      ? `Most sessions went on ${list(tied.map(w => lower(w.label)))}: ${pct(top.share)} of them each.`
-      : `Most sessions went on ${lower(top.label)}: ${pct(top.share)} of them.`);
+      ? `The commonest kinds of work were ${list(tied.map(w => lower(w.label)))}: ${pct(top.share)} of sessions each.`
+      : `The commonest kind of work was ${lower(top.label)}: ${pct(top.share)} of sessions.`);
   }
   if (gaps.length > 0 && Math.abs(gaps[0].pp) >= TARGET_GAP_PP) {
     const g = gaps[0];
@@ -257,14 +261,16 @@ export function teamParts(t: TeamFigures, f: CoachingFigures): { where: string[]
 
   // The dearest habit, pointed at the page that owns money.
   if (t.costlyOnSimple) {
-    workOn.push(`Most single-answer sessions ran on ${formatModelLabel(t.costlyOnSimple.model).label}: ${plural(t.costlyOnSimple.sessions, 'session', 'sessions')}.`);
+    workOn.push(`More single-answer sessions ran on ${formatModelLabel(t.costlyOnSimple.model).label} than on any other model: ${plural(t.costlyOnSimple.sessions, 'session', 'sessions')}.`);
   }
 
   if (t.champions.length > 0) {
     actions.push({
       key: 'learn_from',
       text: `Ask ${list(t.champions.map(c => c.name))} to show the team how they work.`,
-      because: `They hand over the most: ${pct(t.champions[0].deepShare)} of their sessions.`,
+      because: t.champions.length === 1
+        ? `They hand over the most: ${pct(t.champions[0].deepShare)} of their sessions.`
+        : `They hand over the most: ${t.champions[0].name} leads, with ${pct(t.champions[0].deepShare)} of their sessions.`,
       metric: 'deep_share',
     });
   }

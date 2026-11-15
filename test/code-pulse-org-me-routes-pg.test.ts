@@ -368,10 +368,39 @@ async function runSpec(): Promise<void> {
 
       const usersScopedRes = await usersGET(makeRequest('/api/pulse/code/users'));
       expect(usersScopedRes.status).toBe(200);
-      expect((await usersScopedRes.json()).users).toHaveLength(1);
+      const scopedUsers = (await usersScopedRes.json()).users;
+      expect(scopedUsers).toHaveLength(1);
+      // A colleague's spend is never sent to someone who is not an admin or manager.
+      expect(scopedUsers[0].spend_usd).toBeNull();
+      expect(scopedUsers[0].spend_hidden).toBe(true);
+
+      // Nor on the colleague's own page, which says it is hidden...
+      const colleague = await (await meGET(makeRequest('/api/pulse/code/me?userId=u1'))).json();
+      expect(colleague.userId).toBe('u1');
+      expect(colleague.spendHidden).toBe(true);
+      expect(colleague.metrics.spend_usd).toBeNull();
+      expect(colleague.priorMetrics.spend_usd).toBeNull();
+      expect(colleague.sessions.every((s: { spend_usd: number | null }) => s.spend_usd === null)).toBe(true);
+      expect(colleague.periodWork?.spendUsd ?? null).toBeNull();
+
+      // ...nor in the department's member table.
+      const { GET: deptGET } = await import('../app/api/pulse/code/dept/[dept]/route');
+      const deptBody = await (await deptGET(makeRequest('/api/pulse/code/dept/Engineering'), { params: Promise.resolve({ dept: 'Engineering' }) })).json();
+      const row = deptBody.members.find((m: { user_id: string }) => m.user_id === 'u1');
+      expect(row.spend_usd).toBeNull();
+      expect(row.spend_hidden).toBe(true);
+
+      // The person themself still sees their own spend.
+      mockSession.email = 'u1@test.com';
+      const own = (await (await usersGET(makeRequest('/api/pulse/code/users'))).json()).users[0];
+      expect(own.spend_usd).toBeCloseTo(12.0, 6);
+      const ownPage = await (await meGET(makeRequest('/api/pulse/code/me'))).json();
+      expect(ownPage.spendHidden).toBe(false);
+      expect(ownPage.metrics.spend_usd).toBeCloseTo(12.0, 6);
     } finally {
       mockSession.role = 'admin';
       mockSession.department = undefined;
+      mockSession.email = 'admin@test.com';
     }
   } finally {
     await cleanup();

@@ -136,7 +136,7 @@ function cannotSeeLine(g: WorkGroups): string {
 }
 
 const groupsCaption = (g: WorkGroups) =>
-  `A dot per person. The bars are the share of each group's sessions over the last ${WINDOW_DAYS} days that produced something: a file saved, sent or published, an artifact or file in Claude Chat, a file listed on a ChatGPT reply. Measured, and a floor: a file was made, not that anyone used it. ${g.deep.measured + g.shallow.measured} sessions were measured.`;
+  `A dot per person. The bars are the share of each group's sessions over the last ${WINDOW_DAYS} days that produced something: a file saved, sent or published, an artifact or file in Claude Chat, a file listed on a ChatGPT reply. Measured, and a floor: a file was made, not that anyone used it. Which group a person is in comes from the AI-judged tiers. ${g.deep.measured + g.shallow.measured} sessions were measured.`;
 
 /** The gap, said with both shares. */
 function gapSentence(g: WorkGroups): string {
@@ -234,8 +234,8 @@ export function followUpSentence(then: CardFigures, now: CardFigures): string {
   const parts: string[] = [];
   if (thenTotal > 0 && nowTotal > 0) {
     parts.push(now.deepPeople === then.deepPeople
-      ? `${now.deepPeople} of ${nowTotal} do mostly ${MEANINGFUL_WORK}, the same as then.`
-      : `Since then, ${now.deepPeople} of ${nowTotal} do mostly ${MEANINGFUL_WORK}. It was ${then.deepPeople} of ${thenTotal} when you decided.`);
+      ? `${now.deepPeople} of ${nowTotal} ${now.deepPeople === 1 ? 'does' : 'do'} mostly ${MEANINGFUL_WORK}, the same as then.`
+      : `Since then, ${now.deepPeople} of ${nowTotal} ${now.deepPeople === 1 ? 'does' : 'do'} mostly ${MEANINGFUL_WORK}. It was ${then.deepPeople} of ${thenTotal} when you decided.`);
   }
   if (then.shallowShare !== null && now.shallowShare !== null) {
     const moved = Math.round((now.shallowShare - then.shallowShare) * 100);
@@ -251,9 +251,11 @@ export function followUpSentence(then: CardFigures, now: CardFigures): string {
 /** What the card's own figure did since the decision. Never says the decision caused it. */
 export function measureSentence(then: Measure, now: Measure): string {
   const same = Math.abs(now.value - then.value) < 0.05 * Math.max(Math.abs(then.value), 1);
-  if (same) return `${then.label} is about where it was: ${fig(then)} then, ${fig(now)} now.`;
+  // Worded from the card's current label, so decisions saved under an older label read correctly too.
+  if (same) return `${now.label} is about where it was: ${fig(then)} then, ${fig(now)} now.`;
   const better = now.lowerIsBetter ? now.value < then.value : now.value > then.value;
-  return `Since then, ${then.label.toLowerCase()} has gone from ${fig(then)} to ${fig(now)}, which is ${better ? 'the way you wanted' : 'the wrong way'}.`;
+  // Said against the card's aim, not the leader's: they may have chosen "Not now".
+  return `Since then, ${now.label.toLowerCase()} has gone from ${fig(then)} to ${fig(now)}, which is ${better ? 'the way this card aimed for' : 'the opposite of what this card aimed for'}.`;
 }
 
 const fig = (m: Measure) => (m.unit === ' weeks' ? weeksWord(m.value) : `${Math.round(m.value * 10) / 10}${m.unit}`);
@@ -323,7 +325,8 @@ function weeksWord(weeks: number): string {
 /** Make a kind of work several people repeat with no skill behind it the standard way. */
 export function standardJobCard(j: StandardJob, decision: DecisionRecord | undefined, nowS: number): Card {
   const body = [
-    `${j.people} people in ${j.department} did ${j.label} ${j.prompts} times in the last ${WINDOW_DAYS} days, across ${j.sessions} ${j.sessions === 1 ? 'session' : 'sessions'}. None of them used a skill.`,
+    // A decided card is still read after people start using a skill, so this follows the figure.
+    `${j.people} people in ${j.department} did ${j.label} ${j.prompts} times in the last ${WINDOW_DAYS} days, across ${j.sessions} ${j.sessions === 1 ? 'session' : 'sessions'}. ${j.skillShare === 0 ? 'None of them used a skill.' : `${pct(j.skillShare)} of those sessions used a skill.`}`,
   ];
   if (j.measuredHours !== null) body.push(`It took ${minutesWord(j.measuredHours * 60)} of measured time.`);
   if (j.deepMinutes !== null && j.otherMinutes !== null) {
@@ -347,13 +350,16 @@ export function expandCard(waves: Wave[], decision: DecisionRecord | undefined, 
   const measured = waves.filter(w => w.weeksToHalf !== null);
   const last = measured[0];
   if (!last) return null;
+  // The newest wave may not be halfway yet; then the card is about the latest one that is.
+  const newest = waves[0] === last;
   const body = [
-    `Your last wave of ${last.people} took ${weeksWord(last.weeksToHalf!)} for half of them to start doing ${MEANINGFUL_WORK}.`,
-    `${last.reached} of the ${last.people} have got there so far.`,
+    `${newest ? 'Your last wave' : 'Your latest wave to get there'}, of ${last.people}, took ${weeksWord(last.weeksToHalf!)} for half of them to start doing ${MEANINGFUL_WORK}.`,
+    `${last.reached === last.people ? (last.people === 1 ? 'They have' : `All ${last.people} have`) : `${last.reached} of the ${last.people} have`} got there so far.`,
   ];
   if (measured.length > 1) {
     const before = measured[1];
-    body.push(`The wave before took ${weeksWord(before.weeksToHalf!)}, so the time to get there is ${(last.weeksToHalf ?? 0) <= (before.weeksToHalf ?? 0) ? 'holding or improving' : 'getting longer'}.`);
+    // Compared in the words shown, so "under a week" against "under a week" never reads as longer.
+    body.push(`The wave before took ${weeksWord(before.weeksToHalf!)}, so the time to get there is ${weeksWord(last.weeksToHalf ?? 0) === weeksWord(before.weeksToHalf!) || (last.weeksToHalf ?? 0) <= (before.weeksToHalf ?? 0) ? 'holding or improving' : 'getting longer'}.`);
   }
   return foundCard({
     kind: 'expand',
@@ -363,7 +369,7 @@ export function expandCard(waves: Wave[], decision: DecisionRecord | undefined, 
     headline: (last.weeksToHalf ?? 0) <= 12 ? 'Give AI to the next wave of people.' : 'Hold the next wave until this one lands.',
     body,
     caption: `A wave is everyone whose first prompt was in the same month. Measured to their first prompt the classifier judged ${MEANINGFUL_WORK} or better.`,
-    measure: { label: 'Weeks for half a wave to get there', value: last.weeksToHalf ?? 0, unit: ' weeks', lowerIsBetter: true },
+    measure: { label: 'The time for half a wave to get there', value: last.weeksToHalf ?? 0, unit: ' weeks', lowerIsBetter: true },
     link: '/pulse/cio',
   }, decision, nowS);
 }
@@ -373,7 +379,7 @@ export function rarelyUsedCard(r: RarelyUsed, decision: DecisionRecord | undefin
   const body = [`${r.people} ${r.people === 1 ? 'person has' : 'people have'} had fewer than two sessions in ${r.days} days.`];
   body.push(r.costAMonth === null
     ? 'What that costs is not shown because no seat price is set on Admin → System.'
-    : `At the seat price an admin has set, that is about ${Math.round(r.costAMonth).toLocaleString('en-GB')} a month.`);
+    : `At the Claude seat price an admin has set, that is an estimated $${Math.round(r.costAMonth).toLocaleString('en-GB')} a month (an estimate: the seat price times these people).`);
   body.push('This counts people, not seats. Seats are held for the whole organisation, so the page cannot say how many a team holds.');
   return foundCard({
     kind: 'rarely_used',
@@ -383,7 +389,7 @@ export function rarelyUsedCard(r: RarelyUsed, decision: DecisionRecord | undefin
     headline: `Decide what to do about ${people(r.people)} who ${r.people === 1 ? 'has' : 'have'} hardly used it.`,
     body,
     caption: `Counted from sessions, over the last ${r.days} days. No card here recommends anything about a person's job.`,
-    measure: { label: 'People who have hardly used it', value: r.people, unit: '', lowerIsBetter: true },
+    measure: { label: 'The number of people who have hardly used it', value: r.people, unit: '', lowerIsBetter: true },
     link: '/pulse/coaching',
   }, decision, nowS);
 }
@@ -404,7 +410,7 @@ export function keyPeopleCard(k: KeyPeople, decision: DecisionRecord | undefined
     headline: `Spread what ${who} in ${k.department} know.`,
     body,
     caption: `Counted from prompts over the last ${WINDOW_DAYS} days. Whether a prompt was ${MEANINGFUL_WORK} is the classifier's judgement. The people are named on the team's own coaching plan, not here.`,
-    measure: { label: 'Share held by those people', value: k.share * 100, unit: '%', lowerIsBetter: true },
+    measure: { label: 'The share held by those people', value: k.share * 100, unit: '%', lowerIsBetter: true },
     link: teamLink(k.department),
   }, decision, nowS);
 }
@@ -418,11 +424,11 @@ export function rolloutCard(r: Rollout, decision: DecisionRecord | undefined, no
     touches: r.people,
     headline: `Take "${r.title.trim()}" from ${r.department} to ${r.teams} more ${r.teams === 1 ? 'team' : 'teams'}.`,
     body: [
-      `A manager confirmed it as a new way of working in ${r.department} on ${dateWord(r.confirmedAt)}.`,
+      `It was confirmed as a new way of working in ${r.department} on ${dateWord(r.confirmedAt)}.`,
       `${people(r.people)} in ${r.teams} other ${r.teams === 1 ? 'team' : 'teams'} did the same kind of work, ${r.label}, in the last ${WINDOW_DAYS} days.`,
     ],
     caption: `Confirmed on New ways of working. The kind of work is the classifier's judgement of the prompt it was found in. People are counted from prompts.`,
-    measure: { label: 'Teams with a confirmed way of working for it', value: r.teamsWithOne, unit: '', lowerIsBetter: false },
+    measure: { label: 'The number of teams with a confirmed way of working for it', value: r.teamsWithOne, unit: '', lowerIsBetter: false },
     link: '/pulse/cio',
   }, decision, nowS);
 }
@@ -441,7 +447,7 @@ export function timeFreedCard(t: TimeFreed, decision: DecisionRecord | undefined
       'Decide where it goes: work the team has not had time for, or a team that is short of time.',
     ],
     caption: `Measured time in the tool over the last ${WINDOW_DAYS} days, against the ${WINDOW_DAYS} days that ended two months ago. It shows the work got quicker, not that less of it was done, and it cannot see time spent outside the tool. The kind of work is the classifier's judgement.`,
-    measure: { label: 'Minutes a session', value: t.nowMinutes, unit: ' minutes', lowerIsBetter: true },
+    measure: { label: 'The time a session takes', value: t.nowMinutes, unit: ' minutes', lowerIsBetter: true },
     link: teamLink(t.department),
     buttons: { go: 'Plan for the time', hold: 'Not now' },
   }, decision, nowS);

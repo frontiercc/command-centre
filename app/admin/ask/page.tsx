@@ -93,7 +93,7 @@ export default function AdminAskPage() {
     <>
       <TopBar title="Ask the data" subtitle="Questions about the data, for admins, answered from the pages' own figures" />
       <PageBody>
-        {data && !data.hasKey && <Notice tone="warn" title="No AI API key.">Ask the data needs one. Add it in <Link href="/admin/system" className="text-[#1F6F8B] hover:underline">Admin, System</Link>.</Notice>}
+        {data && !data.hasKey && <Notice tone="warn" title="No AI API key.">Ask the data needs one. Add it in <Link href="/admin/security" className="text-[#1F6F8B] hover:underline">Admin → Access &amp; Keys</Link>.</Notice>}
 
         <Notice tone="info" title="Preview.">Ask the data is in preview: answers may be incomplete, and every page that shows it says so. Each question sends the figures it needs, which can include people&apos;s names and per-person figures but never prompt text, to Anthropic&apos;s API with your AI key. See the AI data flow document.</Notice>
 

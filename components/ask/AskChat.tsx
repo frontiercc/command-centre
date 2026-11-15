@@ -23,6 +23,29 @@ function withBold(text: string): React.ReactNode[] {
     : part.replace(/\*\*/g, '')));
 }
 
+/**
+ * An answer as text with bold phrases, where lines starting "- " or "• " become a proper list
+ * rather than showing the hyphens. Everything stays text (never HTML).
+ */
+function renderAnswer(text: string): React.ReactNode[] {
+  const out: React.ReactNode[] = [];
+  let items: string[] = [];
+  let para: string[] = [];
+  const flushPara = () => { if (para.length) { out.push(<span key={`p${out.length}`}>{withBold(para.join('\n'))}{'\n'}</span>); para = []; } };
+  const flushList = () => {
+    if (items.length) {
+      out.push(<ul key={`l${out.length}`} className="m-0 my-1 pl-5 list-disc whitespace-normal">{items.map((it, i) => <li key={i}>{withBold(it)}</li>)}</ul>);
+      items = [];
+    }
+  };
+  for (const line of text.split('\n')) {
+    const m = /^\s*[-•]\s+(.*)$/.exec(line);
+    if (m) { flushPara(); items.push(m[1]); } else { flushList(); para.push(line); }
+  }
+  flushList(); flushPara();
+  return out;
+}
+
 const EXAMPLES = [
   'How much have we spent on AI this month, and where could we save?',
   'Which department does the most deep work?',
@@ -107,7 +130,7 @@ export default function AskChat({ initialQuestion, page, pageNote, compact = fal
             {!t.failed && t.answer === undefined && <p className="m-0 text-[13px] text-[#8F8F8F]">Looking that up…</p>}
             {t.answer !== undefined && (
               <div className="max-w-[95%] flex flex-col gap-1.5">
-                <div className={cx('text-[14px] leading-[22px] whitespace-pre-line', t.outcome === 'answered' ? 'text-[#0A0A0A]' : 'text-[#666666]')}>{withBold(t.answer)}</div>
+                <div className={cx('text-[14px] leading-[22px] whitespace-pre-line', t.outcome === 'answered' ? 'text-[#0A0A0A]' : 'text-[#666666]')}>{renderAnswer(t.answer)}</div>
                 {t.trimmed && <p className="m-0 text-[12px] text-[#8F8F8F]">Part of this answer was removed because its figures didn&apos;t check out against the pages.</p>}
                 {!!t.sources?.length && (
                   <div className="flex flex-wrap gap-x-3 gap-y-1">

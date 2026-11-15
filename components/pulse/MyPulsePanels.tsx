@@ -23,6 +23,7 @@ import type { Vendor } from '@/lib/dashboard/vendor';
 import { deepWords, DeepWords, tierList, tierNamesOr, type TierNames } from '@/lib/pulse/tier-names';
 import { NEW_WAYS_OF_WORKING } from '@/lib/pulse/cowork/coaching-words';
 import { humanTimeKindLabel } from '@/components/pulse/HumanTimeCard';
+import { useSessionRole } from '@/components/shared/useSessionRole';
 
 const words = (v: number) => (v < 0.15 ? `${Math.round(v * 100)}%` : shareWords(v));
 const hours = (m: number) => { const h = m / 60; return h < 10 ? h.toFixed(1) : Math.round(h).toLocaleString('en-GB'); };
@@ -362,6 +363,9 @@ export function PeoplePanel({ rows, dept, names, thenVsNow }: {
   /** Each person's share then against now, from the delegation window. */
   thenVsNow?: Map<string, { then: number; now: number; arrow: 'up' | 'flat' | 'down' }>;
 }) {
+  // Users refuses viewers, so a viewer sees names without a link.
+  const role = useSessionRole();
+  const canOpen = role !== '' && role !== 'viewer';
   if (rows.length === 0) return null;
   const tiers = tierList(names);
   const top = rows[0];
@@ -382,7 +386,7 @@ export function PeoplePanel({ rows, dept, names, thenVsNow }: {
         {top.share !== null ? <><b>{top.display_name ?? top.email}</b> does the deepest work, {words(top.share)} of their tasks.</> : <>Nobody has classified work in this period.</>}
         {quiet.length > 0 ? <> {quiet.length === 1 ? `${quiet[0].display_name ?? quiet[0].email} has` : `${num(quiet.length)} people have`} handed over nothing.</> : null}
       </>}
-      note="Click a name to open that person's page. Sorted by how much of their work reached the top two tiers."
+      note={`${canOpen ? "Click a name to open that person's page. " : ''}Sorted by how much of their work reached the top two tiers.`}
     >
       {/* Scrolls sideways inside the card on a phone rather than pushing the page wider. */}
       <div className="overflow-x-auto"><div className="min-w-[440px]">
@@ -393,7 +397,9 @@ export function PeoplePanel({ rows, dept, names, thenVsNow }: {
         const t = thenVsNow?.get(r.id);
         return (
           <div key={r.id} className="grid grid-cols-[minmax(0,1fr)_86px_minmax(0,120px)_52px_92px_80px] gap-2.5 items-center py-[3px] text-[13px] border-b border-[#F7F7F7] last:border-b-0">
-            <Link href={`/pulse/users?userId=${encodeURIComponent(r.id)}`} className="truncate text-[#0A0A0A] hover:text-[#1F6F8B]">{r.display_name ?? r.email}</Link>
+            {canOpen
+              ? <Link href={`/pulse/users?userId=${encodeURIComponent(r.id)}`} className="truncate text-[#0A0A0A] hover:text-[#1F6F8B]">{r.display_name ?? r.email}</Link>
+              : <span className="truncate text-[#0A0A0A]">{r.display_name ?? r.email}</span>}
             <span className="text-right tabular-nums text-[#333333]">{r.all > 0 ? `${num(r.deep)} of ${num(r.all)}` : 'not judged'}</span>
             <span>{r.share !== null && <Track value={r.share} />}</span>
             <span className="text-right tabular-nums">{r.share !== null ? `${Math.round(r.share * 100)}%` : ''}</span>

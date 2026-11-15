@@ -61,7 +61,7 @@ export async function POST(request: NextRequest) {
     const cfg = await getAllConfig();
     if (cfg.askEnabled !== true) return NextResponse.json({ error: 'Ask the data is turned off. An admin can turn it on in Admin, Ask the data.' }, { status: 409 });
     const apiKey = await getConfigValue('anthropicAiApiKey');
-    if (!apiKey) return NextResponse.json({ error: 'No AI API key is set. Add one in Admin, System.' }, { status: 409 });
+    if (!apiKey) return NextResponse.json({ error: 'No Claude API key is set. Add one in Admin → Access & Keys.' }, { status: 409 });
 
     const nowS = Math.floor(Date.now() / 1000);
     const retentionDays = Math.max(1, Math.round(Number(cfg.askLogRetentionDays) || 90));

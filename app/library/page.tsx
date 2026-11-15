@@ -448,12 +448,15 @@ function TabbedTopList({
   connectors,
   skillTotal,
   connectorTotal,
+  connectorAnthropic,
   onVote,
 }: {
   skills: LibraryEntry[];
   connectors: LibraryEntry[];
   skillTotal: number;
   connectorTotal: number;
+  /** How many of connectorTotal are Anthropic's, which the Organisation connectors tile leaves out. */
+  connectorAnthropic: number;
   onVote: (id: number) => void;
 }) {
   const [tab, setTab] = useState<'skills' | 'connectors'>('skills');
@@ -476,7 +479,7 @@ function TabbedTopList({
         label="Skills and connectors"
         tabs={[
           { value: 'skills' as const, label: <>Skills <span className="tabular-nums text-[#8F8F8F]">{skillTotal}</span></> },
-          { value: 'connectors' as const, label: <>Connectors <span className="tabular-nums text-[#8F8F8F]">{connectorTotal}</span></> },
+          { value: 'connectors' as const, label: <>Connectors <span className="tabular-nums text-[#8F8F8F]">{connectorTotal}{connectorAnthropic > 0 ? ` (${connectorAnthropic} from Anthropic)` : ''}</span></> },
         ]}
         value={tab}
         onChange={t => { setTab(t); setOpenId(null); }}
@@ -754,7 +757,7 @@ function UnclaimedBanner({ count, onDismiss, onClaim }: { count: number; onDismi
       title={
         <>
           <LineIcon d={ICON.flag} className="inline-block align-[-2px] mr-1.5" />
-          {count === 1 ? '1 skill or connector has no owner.' : `${count} skills and connectors have no owner.`}
+          {count === 1 ? '1 skill or connector in use has no owner.' : `${count} skills and connectors in use have no owner.`}
         </>
       }
       action={
@@ -1115,6 +1118,7 @@ export default function LibraryPage() {
                   connectors={topConnectors}
                   skillTotal={allOrgSkills.length}
                   connectorTotal={topConnectors.length}
+                  connectorAnthropic={anthropicConnectors.length}
                   onVote={handleVote}
                 />
                 <DeptBreakdown rows={data.dept_breakdown} />

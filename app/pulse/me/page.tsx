@@ -176,7 +176,7 @@ export default function PersonalPulsePage() {
             )}
 
             {/* 2. Best work this week, with what it actually was */}
-            <FrontierHero view={data.frontier} canOpenUseCases={data.frontierAccess?.canOpenUseCases ?? false} />
+            <FrontierHero view={data.frontier} canOpenUseCases={data.frontierAccess?.canOpenUseCases ?? false} names={data.tierNames ?? undefined} />
 
             {/* 3. Is the work getting deeper? Six weeks as a grid, then the longer views */}
             <DeeperPanel q={q} who={who} names={data.tierNames ?? undefined} />

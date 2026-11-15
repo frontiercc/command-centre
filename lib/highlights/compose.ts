@@ -17,7 +17,7 @@
 import Anthropic from '@anthropic-ai/sdk';
 import { createAnthropicClient } from '@/lib/anthropic/client';
 import { getConfigValue } from '@/lib/config';
-import { extractText, stripCodeFences } from '@/lib/anthropic/constants';
+import { extractText, stripCodeFences, parseModelJson } from '@/lib/anthropic/constants';
 import { queueAiCall } from '@/lib/ingestion/scheduler';
 import { redactPii } from '@/lib/pii/detect';
 import { CONTENT_FULL_CHARS } from '@/lib/otel/content-limits';
@@ -39,6 +39,18 @@ Rules, all hard:
 - No internal vocabulary: no tiers, scores, signals, or jargon a reader would query.
 - Never invent work that is not in a supplied item, and never claim what the work replaced.
 - Skip items too thin or vague to describe honestly. Return ONLY the JSON object.`;
+
+/**
+ * The JSON object in the model's reply, even with a sentence or code fence around it, and with
+ * raw line breaks inside strings repaired (parseModelJson). Null when there is no object to read.
+ */
+export function readReply(text: string): unknown | null {
+  const raw = stripCodeFences(text);
+  const start = raw.indexOf('{');
+  const end = raw.lastIndexOf('}');
+  if (start < 0 || end <= start) return null;
+  return parseModelJson(raw.slice(start, end + 1));
+}
 
 export function validateComposed(parsed: unknown, workItems: HighlightsWorkItem[]): ComposedHighlights | null {
   if (typeof parsed !== 'object' || parsed === null) return null;
@@ -83,15 +95,33 @@ export async function composeHighlights(input: HighlightsInput): Promise<Compose
     .join('\n');
   const userMsg = `WORK ITEMS:\n${itemLines}`;
 
+  // Each way this can give up says why in the log (never the prompts or the model's text), so a
+  // failed draft can be traced: the page shows one message for all of them.
   let message: Anthropic.Message;
   try {
     const client = createAnthropicClient(apiKey);
     message = await queueAiCall(() => client.messages.create({
-      model, max_tokens: 1500, system: SYSTEM_PROMPT, messages: [{ role: 'user', content: userMsg }],
+      // Room for six full sentences and a subject: a reply cut off mid-JSON cannot be read.
+      model, max_tokens: 3000, system: SYSTEM_PROMPT, messages: [{ role: 'user', content: userMsg }],
     }));
-  } catch { return null; }
+  } catch (err) {
+    const status = (err as { status?: number }).status;
+    console.warn(`[Highlights] model call failed (model ${model}${status ? `, status ${status}` : ''})`);
+    return null;
+  }
 
-  let parsed: unknown;
-  try { parsed = JSON.parse(stripCodeFences(extractText(message))); } catch { return null; }
-  return validateComposed(parsed, input.workItems);
+  const parsed = readReply(extractText(message));
+  if (parsed === null) {
+    console.warn(`[Highlights] the reply was not readable JSON (stopped: ${message.stop_reason}, ${extractText(message).length} characters)`);
+    return null;
+  }
+  const composed = validateComposed(parsed, input.workItems);
+  if (!composed) {
+    const o = (typeof parsed === 'object' && parsed !== null ? parsed : {}) as Record<string, unknown>;
+    const subject = typeof o.subject === 'string' ? o.subject.trim() : '';
+    const offered = Array.isArray(o.deliverables) ? o.deliverables.length : 0;
+    const why = subject === '' ? 'no subject line' : /\d/.test(subject) ? 'the subject line contained a number' : `none of the ${offered} sentences could be kept (untraceable, empty or containing a number)`;
+    console.warn(`[Highlights] draft rejected: ${why}`);
+  }
+  return composed;
 }

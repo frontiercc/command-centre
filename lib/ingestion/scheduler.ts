@@ -10,7 +10,6 @@ import { isDepartmentSyncActive, departmentSyncDue, runDepartmentSync } from '@/
 import { deleteExpiredSessions } from '@/lib/db/admin-queries';
 import { runClassifierJob } from '@/lib/pulse/classifier';
 import { runAuditDrawJob } from '@/lib/pulse/audit/cycle';
-import { getDiscoverCache, runSkillsDiscover } from '@/lib/pulse/skills-discover';
 import { runHourlyAggregation, runDailyAggregation } from '@/lib/pulse/aggregator';
 import { runCoworkSessionAggJob } from '@/lib/pulse/cowork/session-aggregator';
 import { runCodeHourlyAggregation } from '@/lib/pulse/code/aggregator';
@@ -481,14 +480,8 @@ async function runCycle(): Promise<void> {
     await runAlertSlackSweepJob();
   });
 
-  // Skills discover — weekly refresh (any day, once the cache is 7+ days old)
-  await runJob('skills_discover', 'Skills discover', async () => {
-    const { is_stale } = await getDiscoverCache();
-    if (!is_stale) return JOB_SKIPPED;
-    if (!(await getConfigValue('anthropicAiApiKey'))) return JOB_SKIPPED;
-    console.log('[Scheduler] Running weekly skills discover refresh...');
-    await runSkillsDiscover();
-  });
+  // Skills discovery no longer runs on a schedule: no page shows its results since the Work Pulse
+  // skills page became the S&C Board, so a weekly model call would cost money for nothing.
 
   // Schedule next cycle — but only if this cycle's generation is still the
   // current one. A stop/start pair that happened while this cycle was in

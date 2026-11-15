@@ -47,7 +47,8 @@ interface EntryDetail {
     distinct_users: number;
     vote_count: number;
     user_voted: boolean;
-    agent_chained_pct: number;
+    /** Null for a connector: how it was invoked is recorded for skills only. */
+    agent_chained_pct: number | null;
   };
   daily_counts: DayCount[];
   top_users: TopUser[];
@@ -212,6 +213,7 @@ export default function LibraryDetailPage({ params }: { params: Promise<{ id: st
 
   const isTrending = entry.stats.trend_pct >= 20;
   const maxDay = Math.max(...entry.daily_counts.map(d => d.cnt), 1);
+  const agentPct = entry.stats.agent_chained_pct;
 
   // Build last-7-days labels even if no data for some days
   const last7: DayCount[] = Array.from({ length: 7 }).map((_, i) => {
@@ -527,14 +529,14 @@ export default function LibraryDetailPage({ params }: { params: Promise<{ id: st
             </Panel>
 
             {/* Invocation type */}
-            {entry.stats.total_invocations > 0 && (
+            {entry.stats.total_invocations > 0 && agentPct !== null && (
               <Panel
                 title="How it's invoked"
-                subtitle={entry.stats.agent_chained_pct > 50 ? `${triggeredBy(entry.products)} triggers this more than users do` : undefined}
+                subtitle={agentPct > 50 ? `${triggeredBy(entry.products)} triggers this more than users do` : undefined}
                 flush
               >
-                <BarRow label={<><LineIcon d={ICON.agent} className="inline-block align-[-2px] mr-1.5 text-[#8F8F8F]" />Agent-chained</>} value={`${entry.stats.agent_chained_pct}%`} pct={entry.stats.agent_chained_pct} tone="measured" />
-                <BarRow label={<><LineIcon d={ICON.user} className="inline-block align-[-2px] mr-1.5 text-[#8F8F8F]" />User-typed</>} value={`${100 - entry.stats.agent_chained_pct}%`} pct={100 - entry.stats.agent_chained_pct} tone="measured" />
+                <BarRow label={<><LineIcon d={ICON.agent} className="inline-block align-[-2px] mr-1.5 text-[#8F8F8F]" />Agent-chained</>} value={`${agentPct}%`} pct={agentPct} tone="measured" />
+                <BarRow label={<><LineIcon d={ICON.user} className="inline-block align-[-2px] mr-1.5 text-[#8F8F8F]" />User-typed</>} value={`${100 - agentPct}%`} pct={100 - agentPct} tone="measured" />
               </Panel>
             )}
           </div>

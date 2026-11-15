@@ -17,11 +17,12 @@ export const BUILT_IN_CONNECTOR_NAMES: readonly string[] = [
   'mcp-registry', 'visualize', 'terminal', 'claude browser', 'claude_browser',
 ];
 
-const BUILT_IN_SKILLS = [
+/** Claude's own skills (Claude Code's bundled skills), as telemetry names them. Also hidden from the S&C Board. */
+export const BUILT_IN_SKILL_NAMES: readonly string[] = [
   'run', 'init', 'update-config', 'keybindings-help', 'simplify', 'code-review',
   'security-review', 'fewer-permission-prompts', 'loop', 'schedule', 'claude-api',
   'artifact-design', 'artifact-capabilities', 'artifact-diagramming', 'dataviz',
-  'workflow-authoring', 'custom_skill',
+  'workflow-authoring', 'custom_skill', 'verify',
 ];
 
 /** Case, spaces and underscores ignored: telemetry spells the same server several ways. */
@@ -30,7 +31,7 @@ export function normToolName(name: string): string {
 }
 
 const CONNECTORS = new Set(BUILT_IN_CONNECTOR_NAMES.map(normToolName));
-const SKILLS = new Set(BUILT_IN_SKILLS.map(normToolName));
+const SKILLS = new Set(BUILT_IN_SKILL_NAMES.map(normToolName));
 
 export function isBuiltInTool(type: 'skill' | 'connector', name: string): boolean {
   return (type === 'skill' ? SKILLS : CONNECTORS).has(normToolName(name));

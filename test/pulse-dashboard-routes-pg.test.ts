@@ -233,6 +233,28 @@ async function runSpec(): Promise<void> {
     // Mocked OTel enrichment passthrough.
     expect(meBody.coworkFrictionIndex).toBe(0.1);
 
+    // A Pulse colleague in the same department: can open u2, who has no sign-in account (the
+    // department comes from u2's own record), but never sees u2's spend; their own page has it.
+    const { eq } = await import('drizzle-orm');
+    await client.update(schema.users).set({ department: 'Engineering' }).where(eq(schema.users.id, 'u2'));
+    Object.assign(mockSession, { role: 'pulse', department: 'Engineering' });
+    try {
+      const colleague = await meGET(makeRequest('/api/pulse/me?userId=u2'));
+      expect(colleague.status).toBe(200);
+      const colleagueBody = await colleague.json();
+      expect(colleagueBody.userId).toBe('u2');
+      expect(colleagueBody.spendThisMonth).toBeNull();
+      const own = await (await meGET(makeRequest('/api/pulse/me'))).json();
+      expect(own.userId).toBe('u1');
+      expect(own.spendThisMonth).not.toBeNull();
+      // Another department's person stays refused.
+      await client.update(schema.users).set({ department: 'Sales' }).where(eq(schema.users.id, 'u2'));
+      expect((await meGET(makeRequest('/api/pulse/me?userId=u2'))).status).toBe(403);
+    } finally {
+      Object.assign(mockSession, { role: 'admin', department: undefined });
+      await client.update(schema.users).set({ department: null }).where(eq(schema.users.id, 'u2'));
+    }
+
     // ═══════════════════════════ /api/pulse/cio ═══════════════════════════
     const { GET: cioGET } = await import('../app/api/pulse/cio/route');
     const cioRes = await cioGET(makeRequest('/api/pulse/cio'));

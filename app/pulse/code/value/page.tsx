@@ -105,7 +105,7 @@ export default function CodeValuePage() {
             {/* Estimate hero — violet */}
             <Panel title="Industry benchmark model" subtitle="Annualised" right={<Tag tone="judged">Estimate</Tag>} flush>
               <div className="px-4 pt-3">
-                <Muted>The planning estimate before your own data exists. As measured usage accrues, the blue measured numbers below progressively replace it.</Muted>
+                <Muted>The planning estimate before your own data exists. As measured usage accrues, the figures tagged Measured below progressively replace it.</Muted>
               </div>
               <FigureGrid cols={4}>
                 {heroCells.map(c => <Figure key={c.label} label={c.label} value={c.value} tone="judged" />)}

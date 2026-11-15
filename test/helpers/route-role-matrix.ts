@@ -213,8 +213,6 @@ export const ROUTE_ROLE_MATRIX: Record<string, MatrixEntry> = {
   // Role check now runs before the ?dept/?userId input check (fixed),
   // so the plain request must be refused for roles outside the set.
   'pulse/skill-exchange GET': COWORK_PULSE,
-  'pulse/skills-discover GET': COWORK_PULSE,
-  'pulse/skills-discover POST': COWORK_PULSE,
   'pulse/skills-overview GET': 'SELF_OR_DATA', // the caller's own skills
   'pulse/stickiness GET': ORG,
   'pulse/team/[teamId] GET': ADMIN,

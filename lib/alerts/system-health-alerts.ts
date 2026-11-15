@@ -95,7 +95,7 @@ export function planSystemHealthAlerts(rows: JobRunRow[], nowS: number): Planned
         subject: r.job_name,
         since: r.last_succeeded_at ?? 0,
         title: `${integration} key rejected`,
-        explanation: `${label} failed because the ${integration} rejected its credentials: ${error}. Check the key on /admin/security and use its Test button.`,
+        explanation: `${label} failed because the ${integration} rejected its credentials: ${error}. Check the key under Admin → Access & Keys and use its Test button.`,
       });
       continue;
     }

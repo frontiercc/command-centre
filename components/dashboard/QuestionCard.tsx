@@ -15,7 +15,7 @@ export const DASH = '#1F6F8B';
 /** Three shades of it, lightest first, for the depth of work. */
 export const DASH_SHADES = ['#C9DEE6', '#6BA3B8', '#1F6F8B'] as const;
 
-export function QuestionCard({ question, value, unit, change, sub, trend, trendKind = 'line', trendColour, notMeasured, todo }: {
+export function QuestionCard({ question, value, unit, change, sub, trend, trendKind = 'line', trendColour, notMeasured, hidden, todo }: {
   question: string;
   value?: ReactNode;
   unit?: ReactNode;
@@ -28,6 +28,8 @@ export function QuestionCard({ question, value, unit, change, sub, trend, trendK
   trendColour?: string;
   /** Shown in place of the figure when it isn't captured. */
   notMeasured?: ReactNode;
+  /** Shown in place of the figure when the viewer may not see it, with why. */
+  hidden?: ReactNode;
   /** What to do about it, under a rule at the foot of the card. */
   todo?: ReactNode;
 }) {
@@ -35,10 +37,10 @@ export function QuestionCard({ question, value, unit, change, sub, trend, trendK
   return (
     <div className="border border-[#EFEFEF] rounded-[10px] px-3 py-3 flex flex-col min-w-0">
       <span className="text-[12px] text-[#777777] leading-4 min-h-[32px]">{question}</span>
-      {notMeasured ? (
+      {notMeasured || hidden ? (
         <>
-          <span className="mt-1 text-[14px] font-medium text-[#8F8F8F]">Not measured</span>
-          <span className="text-[12px] text-[#666666] mt-0.5">{notMeasured}</span>
+          <span className="mt-1 text-[14px] font-medium text-[#8F8F8F]">{hidden ? 'Hidden' : 'Not measured'}</span>
+          <span className="text-[12px] text-[#666666] mt-0.5">{hidden ?? notMeasured}</span>
         </>
       ) : (
         <>

@@ -105,8 +105,10 @@ export function formatDuration(seconds: number): string {
   return `${m}m`;
 }
 
-export default function CodeStatStrip({ metrics, githubRepos, view = 'claude', split }: {
+export default function CodeStatStrip({ metrics, githubRepos, view = 'claude', split, spendHidden = false }: {
   metrics: CodeMetricsRow | null;
+  /** A colleague's page: their spend is not sent, so the figure reads Hidden, not Unpriced. */
+  spendHidden?: boolean;
   /** basis: which commits were counted (Claude and Codex tabs: commits matched to that tool). */
   githubRepos?: { count30d: number; names30d: string[]; basis?: 'all' | 'claude' | 'openai' } | null;
   /** Developer Pulse's switch, 'claude' until Codex data exists. */
@@ -143,10 +145,12 @@ export default function CodeStatStrip({ metrics, githubRepos, view = 'claude', s
         ? null
         : formatCurrency(metrics.spend_usd),
       sublabel: part(r => r.spend_usd, formatCurrency) ?? spendCaption(),
-      hint: metrics?.spend_usd === null && (metrics.input_tokens + metrics.output_tokens) > 0
-        ? 'Models seen have no price set, see rates config'
-        : `${formatTokens(metrics?.input_tokens ?? 0)} in · ${formatTokens(metrics?.output_tokens ?? 0)} out`,
-      pending: metrics && metrics.spend_usd === null ? 'Unpriced' : undefined,
+      hint: spendHidden
+        ? 'Shown only to the person, admins and managers'
+        : metrics?.spend_usd === null && (metrics.input_tokens + metrics.output_tokens) > 0
+          ? 'Models seen have no price set, see rates config'
+          : `${formatTokens(metrics?.input_tokens ?? 0)} in · ${formatTokens(metrics?.output_tokens ?? 0)} out`,
+      pending: spendHidden ? 'Hidden' : metrics && metrics.spend_usd === null ? 'Unpriced' : undefined,
     },
     {
       label: 'Automation',

@@ -13,8 +13,6 @@ Works with Claude, ChatGPT and Codex.
 
 </div>
 
-https://github.com/user-attachments/assets/2dfb1fe4-3fdd-45ce-aad9-a94536c582ad
-
 Command Centre shows whether AI is making your teams more productive, and what that is worth. It covers Claude and ChatGPT for everyday work and Claude Code and Codex for coding, showing the results for each person, each department and the organisation as a whole.
 
 It shows how far people have moved from quick questions to handing over substantial work and whole processes. It finds the recurring work teams have already given to AI, helps turn that work into skills others can use, and shows where coaching or further investment would help most.
@@ -51,28 +49,33 @@ ChatGPT and Codex support is in preview, and we are looking for organisations on
 
 **Get started:** [1. Try it with sample data](#1-quick-start-try-it-with-sample-data) · [2. Connect Claude for Teams](#2-connect-claude-for-teams) · [3. Connect Claude for Enterprise](#3-connect-claude-for-enterprise) · [4. Connect ChatGPT and Codex](#4-connect-chatgpt-and-codex)
 
-**Explore:** [What it does](#what-it-does) · [How it works](#how-it-works) · [Your first ten minutes](docs/first-ten-minutes.md) · [Walkthrough video](https://vimeo.com/1238818389) · [ChatGPT walkthrough video](https://vimeo.com/1245175471) · [FAQ](#questions-people-ask-first) · [Documentation](#documentation)
+**Explore:** [What it does](#what-it-does) · [How it works](#how-it-works) · [Your first ten minutes](docs/first-ten-minutes.md) · [Walkthrough video](https://vimeo.com/1247091267) · [FAQ](#questions-people-ask-first) · [Documentation](#documentation)
 
 ## What it does
 
 | Page | What it does | Read more |
 |---|---|---|
-| **Dashboard** | Brings together the week's AI activity, productivity, spending and governance risks into an executive briefing, with an organisation-wide risk score and recommendations on where to focus attention. | [Product overview](docs/product-overview.md#the-dashboard) |
-| **Alerts** | Identifies personal data, exposed secrets and potentially risky intent in prompts, with supporting evidence to help security teams investigate and prioritise concerns. | [Product overview](docs/product-overview.md#alerts) · [Detection](docs/security-and-data-protection.md#pii-and-secret-detection) |
+| **Dashboard** | The week in one place: a briefing written by Claude, a risk score, recommendations, and who uses each product, how deep the work is, what coding shipped and cost. The briefing needs the Claude API key. | [Product overview](docs/product-overview.md#the-dashboard) |
+| **Alerts** | Flags personal data, secrets and risky requests in prompts, with the evidence for each. | [Product overview](docs/product-overview.md#alerts) · [Detection](docs/security-and-data-protection.md#pii-and-secret-detection) |
+| **Ask the data** (preview) | Answers an admin's questions in their own words from the pages' own figures, with links to those pages. Off until an admin turns it on. It sends each question and the page figures it needs to Anthropic's Claude API, and does not store the answer. | [AI data flow](docs/ai-data-flow.md#ask-the-data) · [Configure](docs/configure-command-centre.md#ask-the-data-preview) |
 | ***Productivity*** | | |
-| **Work Pulse** | Measures how deeply employees delegate everyday work to Claude and ChatGPT, across Claude Chat, Claude Cowork, Claude in Office and Google apps, and ChatGPT Chat and Work, from individual tasks to substantial processes. Compares adoption and delegation patterns across people and departments to identify progress and coaching opportunities. | [Product overview](docs/product-overview.md#work-pulse) · [Measured and AI-judged](docs/ai-data-flow.md#measured-and-ai-judged) |
-| **Developer Pulse** | Shows how engineers use Claude Code and Codex, the work being produced and its associated costs, helping engineering leaders understand delivery activity, productivity and where AI is contributing to development. | [Product overview](docs/product-overview.md#developer-pulse) |
-| **Use Cases** | Discovers recurring business processes emerging from everyday AI activity, identifies opportunities to share successful approaches and helps turn repeated work into reusable skills that can be adopted across teams. | [Product overview](docs/product-overview.md#use-cases) |
-| **S&C Board** | Provides an organisation-wide view of the skills and connectors employees are using, who owns them and where they are being adopted, helping teams manage and share reusable AI capabilities. | [Product overview](docs/product-overview.md#skills-and-connectors-board) |
+| **Work Pulse** | How deeply people hand everyday work to Claude and ChatGPT (Claude Chat, Claude Cowork, Claude in Office and Google apps, ChatGPT Chat and Work), from quick questions to whole processes. Overview, My Pulse, Users and Departments show the organisation, each person and each department. | [Product overview](docs/product-overview.md#work-pulse) · [Measured and AI-judged](docs/ai-data-flow.md#measured-and-ai-judged) |
+| **Work Pulse So What** | Answers a leader's question about one team, such as a request to hire or someone leaving: the gap between the team's best people and everyone else, what closing it is worth, and a decision to record. A decided card comes back after 30 days with what has happened since. For admins and managers. | [Product overview](docs/product-overview.md#so-what) |
+| **Work Pulse Team Coaching** | A coaching plan for one team: where it is, what to work on, who to learn from and what to try, and whether what the team did moved the figure. For admins and managers. | [Product overview](docs/product-overview.md#team-coaching) |
+| **Developer Pulse** | What Claude Code and Codex produce and what they cost, for the organisation, each person and each department. Value estimates what the work is worth, counting time saved from pull requests and commits only. | [Product overview](docs/product-overview.md#developer-pulse) |
+| **Developer Pulse So What** | The same questions as Work Pulse So What, answered from engineers and their coding work. For admins and managers. | [Product overview](docs/product-overview.md#developer-pulse-so-what) |
+| **Developer Pulse Team Coaching** | A coaching plan for one engineering team, and whether what they did moved the figure. For admins and managers. | [Product overview](docs/product-overview.md#developer-pulse-team-coaching) |
+| **Use Cases** | Finds the work teams repeat with AI, tracks who does each piece of work, and drafts a Claude skill from it so others can use it. Governance shows the use cases you declare and their measured outcomes. | [Product overview](docs/product-overview.md#use-cases) |
+| **S&C Board** | The skills and connectors people use, who owns each one, how widely it has spread and how to install it. | [Product overview](docs/product-overview.md#skills-and-connectors-board) |
 | ***Spend*** | | |
-| **FinOps** | Tracks AI expenditure across employees, departments, cost centres, models and vendors, giving finance and technology leaders visibility into spending patterns, allocation and the financial impact of AI adoption. | [Product overview](docs/product-overview.md#finops) |
-| **Spend Review** | Examines what each employee's AI spend is being used for, identifies expensive usage patterns and recommends opportunities to complete similar work more economically. | [Product overview](docs/product-overview.md#spend-review) |
+| **FinOps** | AI spend by person, department, cost centre, product and model, with month-end close for chargeback. For admins and managers only. | [Product overview](docs/product-overview.md#finops) |
+| **Spend Review** | What each person's spend goes on, and where colleagues do the same work for less: a skill, a connector or another model. | [Product overview](docs/product-overview.md#spend-review) |
 | ***Governance*** | | |
-| **Audit Log** | Maintains a searchable record of prompts and activity from Claude, ChatGPT and Codex, including who accessed prompt content, supporting investigations, accountability and oversight of AI usage across the organisation. | [Product overview](docs/product-overview.md#the-audit-log) · [Who can read prompts](docs/security-and-data-protection.md#who-can-read-prompt-text) · [AI data flow](docs/ai-data-flow.md) |
-| **Reports** | Produces executive briefings, weekly summaries and supporting evidence for governance and compliance activities, including GDPR, the EU AI Act and relevant ISO standards. | [Product overview](docs/product-overview.md#reporting-and-outputs) |
-| **Admin** | Manages users, permissions, organisational settings and subagent visibility, providing the administrative controls needed to operate Command Centre across teams and departments. | [Product overview](docs/product-overview.md#administration) · [Roles](docs/security-and-data-protection.md#roles) |
+| **Audit Log** | Every prompt from Claude, ChatGPT and Codex in one searchable record, with a log of who read which prompt. | [Product overview](docs/product-overview.md#the-audit-log) · [Who can read prompts](docs/security-and-data-protection.md#who-can-read-prompt-text) · [AI data flow](docs/ai-data-flow.md) |
+| **Reports** | Briefings, the weekly digest, and reports with evidence for GDPR, the EU AI Act, ISO 27001 and ISO 42001. | [Product overview](docs/product-overview.md#reporting-and-outputs) |
+| **Admin** | Users and roles, keys, alert settings, grading rubrics, cost centres, retention and system health. | [Product overview](docs/product-overview.md#administration) · [Roles](docs/security-and-data-protection.md#roles) |
 
-![The dashboard: an AI briefing, the organisation risk score and AI recommendations](docs/images/dashboard.png)
+![The dashboard: the intelligence briefing, the organisation risk score, six AI recommendations and the headline figures](docs/images/dashboard.png)
 
 *Sample data from Acme Corp, a fictional company.* More screenshots are in the [product overview](docs/product-overview.md#at-a-glance).
 
@@ -80,7 +83,7 @@ ChatGPT and Codex support is in preview, and we are looking for organisations on
 
 ## How it works
 
-Command Centre is two parts that you run, the **Hub** (the web application you sign in to, which also fetches Claude Chat, ChatGPT and Codex activity from Anthropic's and OpenAI's Compliance APIs) and the **collector** (which receives the activity Claude Code, Claude Cowork and Claude in Office and Google apps send), plus a **PostgreSQL database**. Where they run depends on how you use it:
+Command Centre is two parts that you run, plus a **PostgreSQL database**. The **Hub** is the web application you sign in to; it also fetches Claude Chat, ChatGPT and Codex activity from Anthropic's and OpenAI's Compliance APIs. The **collector** receives the activity Claude Code, Claude Cowork and Claude in Office and Google apps send. Where they run depends on how you use it:
 
 | | On your computer | On one server | On AWS or Azure |
 |---|---|---|---|
@@ -127,7 +130,7 @@ This runs Command Centre on your own computer with a fictional organisation's da
 - **Ports 3001 and 4318** available on your computer.
 - **A Claude API key (optional):** Required for AI-powered features such as grading work, generating briefings and producing reports. Create a key in a workspace through the [Claude Console](https://platform.claude.com/settings/keys). Command Centre requires a workspace-associated key. This is the only API key needed for the initial setup.
 
-You can explore Command Centre using sample data without an API key. See [What works without a key](docs/ai-data-flow.md#running-with-ai-features-off) for the capabilities available.
+You can explore Command Centre using sample data without an API key, but the Dashboard briefing and Ask the data need one. See [What works without a key](docs/ai-data-flow.md#running-with-ai-features-off) for the capabilities available.
 
 AI-powered features incur Anthropic API charges. Sample-data evaluation is expected to cost around $5 initially, depending on usage. See [indicative costs](docs/costs.md).
 
@@ -178,7 +181,7 @@ Run the commands below in PowerShell on Windows, or Terminal on macOS and Linux.
 
    If the log says a token was already printed, wait 10 minutes, run `docker compose restart hub`, then run the command again.
 
-5. **Load the sample data**: Acme Corp, with thirteen weeks of Claude Chat, ChatGPT and Codex activity and about two months of Claude Code, Claude Cowork and Claude in Office/Google activity, graded work, use cases, alerts and spend. Loading takes about two minutes. Create your admin account in step 4 first: once the sample data is loaded, the setup page closes.
+5. **Load the sample data**: Acme Corp, with thirteen weeks of Claude Chat, ChatGPT and Codex activity and about two months of Claude Code, Claude Cowork and Claude in Office/Google activity, graded work, use cases, alerts and spend. Loading takes about six minutes. Create your admin account in step 4 first: once the sample data is loaded, the setup page closes.
 
    ```bash
    docker compose --profile demo run --rm demo-data
@@ -203,14 +206,14 @@ Claude Code tells you what it runs and asks before each step. You end in the sam
 
 Select **Dashboard** in the sidebar. The Dashboard's **Get started** panel is your checklist from here, and ticks each step off as you do it:
 
-- **Add your Claude API key** under Admin → Access & Keys. Use its test button, then select **Save settings**.
+- **Add your Claude API key** under Admin → Access & Keys. Use its test button, then select **Save settings**. The Dashboard briefing needs it: until it is added, the briefing panel asks for it.
 - **Review how work is classified**: check that the three tiers Work Pulse and Developer Pulse use to grade work fit your organisation. In Work Pulse they run from routine tasks to whole processes, and in Developer Pulse from single-step edits to substantial work the engineer supervises. Admins can change both: **Tier config** in Admin → Work Pulse, and **Tiers** in Admin → Developer Pulse.
 
 You don't need the panel's other steps for the sample data. They are for running it for your own organisation, as in journeys 2 to 4.
 
 ### You have finished when
 
-The Dashboard shows Acme Corp's briefing and recommendations, and Work Pulse, Developer Pulse, FinOps and Use Cases are filled in.
+Work Pulse, Developer Pulse, FinOps and Use Cases are filled in, and, once your Claude API key is added, the Dashboard shows Acme Corp's briefing and recommendations.
 
 ### Next steps
 
@@ -409,7 +412,7 @@ Vote or add ideas in [Discussions](https://github.com/frontiercc/command-centre/
 
 ## Status
 
-1.0.0, in October 2026, was the first public release; the current release is 1.3.0, which adds ChatGPT and Codex in preview and department sync from Microsoft Entra ID. Command Centre was built with Claude Code, then reviewed, tested and run in production; it has been in daily use since mid-2026. Several features ship switched off and are turned on from the admin pages: FinOps, Use Cases, the Weekly Digest, Weekly Highlights, human time, Dev Framework Alignment, single sign-on and department sync.
+1.0.0, in October 2026, was the first public release; the current release is 1.4.0, which redesigns every page, adds So What and Team Coaching to Work Pulse and Developer Pulse, and adds Ask the data in preview. Command Centre was built with Claude Code, then reviewed, tested and run in production; it has been in daily use since mid-2026. Several features ship switched off and are turned on from the admin pages: FinOps, Use Cases, Ask the data, the Weekly Digest, Weekly Highlights, human time, Dev Framework Alignment, single sign-on and department sync.
 
 ## Support
 

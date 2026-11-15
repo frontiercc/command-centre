@@ -10,7 +10,7 @@ import { Suspense, useCallback, useEffect, useState } from 'react';
 import { useSearchParams } from 'next/navigation';
 import TopBar from '@/components/layout/TopBar';
 import LoadingSpinner from '@/components/shared/LoadingSpinner';
-import { PageBody, Panel, Notice, B, cx } from '@/components/precision/ui';
+import { PageBody, Panel, Notice, Tag, B, cx } from '@/components/precision/ui';
 import { linkCls } from '@/components/pulse/WorkPulseOverview';
 import type { Card, Choice, SoWhat } from '@/lib/pulse/code/so-what';
 
@@ -212,6 +212,7 @@ function SoWhatBody() {
               </p>
             )}
             <h2 className="m-0 text-[17px] leading-6 font-semibold text-[#0A0A0A]">{card.headline}</h2>
+            {card.kind === 'rarely_used' && card.body.some(t => t.includes('estimated $')) && <span className="inline-block mt-1"><Tag tone="judged">Estimate</Tag></span>}
             {card.body.map((t, i) => (
               <p key={i} className="m-0 mt-1 text-[14px] leading-[21px] text-[#333333]">{t}</p>
             ))}

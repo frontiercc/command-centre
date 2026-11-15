@@ -1,6 +1,6 @@
 # Frontier Command Centre: Troubleshooting and FAQ
 
-Fixes for the problems people most often hit when installing, signing in, connecting Claude, connecting ChatGPT and Codex, using department sync, running and updating Command Centre.
+Fixes for the problems people most often hit when installing, signing in, connecting Claude, connecting ChatGPT and Codex, using department sync and Ask the data, running and updating Command Centre.
 
 The commands are for Docker Compose installations: run them from the `command-centre` folder. If your problem is not listed, ask in [Discussions](https://github.com/frontiercc/command-centre/discussions), or report a bug in [Issues](https://github.com/frontiercc/command-centre/issues).
 
@@ -22,6 +22,8 @@ The commands are for Docker Compose installations: run them from the `command-ce
 
 **Pages still empty.** They fill in a few minutes after loading, once the scheduled jobs run. Reload to see new items in the sidebar.
 
+**The Dashboard says the briefing needs a Claude API key.** The briefing is written by Claude. Add your key under **Admin → Access & Keys**, test it, then select **Save settings**.
+
 **Dev Framework Alignment scores missing.** Its demo scores are hidden by default. In `.env`, remove the `#` from `# CCC_DX_ALLOW_MOCK=1`, then run `docker compose up -d`. Do not do this on an installation with real data.
 
 ## Connecting Claude
@@ -36,7 +38,7 @@ On Windows, use `curl.exe` and `-o NUL`. `200` means the token is right, `401` m
 
 **Some Claude Cowork sessions are missing.** Sessions run on Anthropic's cloud don't currently send their activity reliably. In Organization settings, switch off **Cowork in the cloud** (under Claude Cowork) and **Chat and Cowork unified** (under Capabilities).
 
-**Claude in Office/Google activity doesn't arrive.** Check that **Office agents → Monitoring** in Claude's Organization settings has the collector's address, `http/json` and the bearer token. The add-in sends from the person's browser, so the collector must be reachable from their computer over HTTPS and must accept requests from `https://pivot.claude.ai`: the collector configurations supplied with Command Centre do, but a reverse proxy or load balancer in front of it must pass the browser's cross-origin check (an `OPTIONS` request) through to the collector rather than answer or block it. Then ask Claude something in Excel, Word or PowerPoint and check the **By product** panel on the Work Pulse overview a few minutes later.
+**Claude in Office/Google activity doesn't arrive.** Check that **Office agents → Monitoring** in Claude's Organization settings has the collector's address, `http/json` and the bearer token. The add-in sends from the person's browser, so the collector must be reachable from their computer over HTTPS and must accept requests from `https://pivot.claude.ai`. The collector configurations supplied with Command Centre do. A reverse proxy or load balancer in front of it must pass the browser's cross-origin check (an `OPTIONS` request) through to the collector, rather than answer or block it. Then ask Claude something in Excel, Word or PowerPoint and check the **Which products are people using?** panel on the Work Pulse overview a few minutes later.
 
 **Claude Cowork prompts show as `<REDACTED>`.** Set `otlpContentCapture` on the machine, then quit and reopen Claude Desktop.
 
@@ -70,11 +72,17 @@ The setup is in [Connect ChatGPT and Codex](configure-command-centre.md#connect-
 
 **The test passes but says spend is not checked.** No organisation ID is entered. Prompts and Codex spend will still arrive. ChatGPT spend needs the organisation ID.
 
-**The test passed but nothing arrives.** Select **Save settings** after the test: the test does not save. Then check the status line in **Admin → Ingestion → Connect ChatGPT and Codex**. "Key set, awaiting the first sync" clears within a few minutes. "The last sync reported errors" means a log could not be read: the **System health** card on **Admin → System** shows the OpenAI sync job and its error.
+**The test passed but nothing arrives.** Select **Save settings** after the test: the test does not save. Then check the status line in **Admin → Ingestion → Connect ChatGPT and Codex**. "Key set, awaiting the first sync" clears within a few minutes. "The last sync reported errors" means a log could not be read. The **System health** card on **Admin → System** shows the OpenAI sync job and its error.
 
 **Only older activity has arrived.** The first sync reads the last 30 days oldest first, at most 300 files a run, so on a busy workspace the newest activity arrives last and can take some hours.
 
 **Some people's prompts are missing.** A record with no single plain email address is skipped, and so is anyone on the exclusion list on **Admin → Ingestion**.
+
+## Ask the data
+
+**Ask the data is not in the sidebar.** It is for admins only, and appears once an admin turns it on under **Admin → Ask the data**. The **Ask the data** button in the top bar also needs the Claude API key.
+
+**It says this month's spend cap has been reached.** Questions stop for the rest of the month once its spend reaches the cap. Raise **Monthly spend cap (USD)** on **Admin → Ask the data**, or wait for the next month.
 
 ## Settings
 
@@ -117,6 +125,15 @@ Back up the database, and keep a copy of `.env` with it: stored secrets, such as
 ```bash
 docker compose exec -T postgres pg_dump -U ccc -d ccc > command-centre-backup.sql
 ```
+
+### Upgrading from 1.3.0 to 1.4.0
+
+- **Back up first.** On its first start, 1.4.0 adds six tables and columns to the database (migrations 0050 to 0055: Team Coaching actions, So What decisions, the names of files ChatGPT and Claude Chat replies list, and the Ask the data question log). Nothing existing is rewritten, but updates go forward only, so going back means restoring the backup.
+- **FinOps stays for administrators and managers.** Anyone else who opens its address directly is now told so and sees no figures. Each person reaches their own Spend Review from My Pulse or My Developer Pulse while FinOps is on.
+- **A person's spend is shown only to them, administrators and managers.** Colleagues and viewers who could see each department member's Claude Code and Codex spend on Developer Pulse now see "hidden".
+- **Two time-saved settings are gone.** Minutes saved per Claude Cowork session and per Claude Chat conversation have been removed; Developer Pulse's Value counts time saved from pull requests and commits only. Any values you set are ignored.
+- **Ask the data is off.** It is new in 1.4.0, in preview and for administrators only; turn it on under **Admin → Ask the data** if you want it.
+- **Skills discovery no longer runs.** Its weekly web search had nowhere to show its results once the Work Pulse skills page became the S&C Board, so it is switched off and makes no further model calls.
 
 ### Upgrading from 1.2.0 to 1.3.0
 

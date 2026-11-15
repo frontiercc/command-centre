@@ -87,13 +87,20 @@ export async function GET(request: NextRequest) {
     if (session.role === 'admin' || session.role === 'manager') {
       userId = queryUserId;
     } else if (isDeptScoped(session.role) && session.department) {
-      // Verify the requested user is in the same department
+      // Verify the requested user is in the same department: their sign-in account's department,
+      // else their own record's (as Person 360 and the Users list do), so a colleague with no
+      // sign-in account can be opened too.
       const targetAdminRows = await client
         .select({ department: schema.adminUsers.department })
         .from(schema.adminUsers)
         .where(eq(schema.adminUsers.linked_cowork_user_id, queryUserId))
         .limit(1);
-      if (targetAdminRows[0]?.department === session.department) {
+      const targetUserRows = targetAdminRows[0] ? [] : await client
+        .select({ department: schema.users.department })
+        .from(schema.users)
+        .where(eq(schema.users.id, queryUserId))
+        .limit(1);
+      if ((targetAdminRows[0]?.department ?? targetUserRows[0]?.department ?? null) === session.department) {
         userId = queryUserId;
       } else {
         return NextResponse.json({ error: 'Forbidden' }, { status: 403 });
@@ -344,9 +351,10 @@ export async function GET(request: NextRequest) {
   } catch (err) {
     console.error('[pulse/me] period failed', err);
   }
+  // A person's spend: admins and managers for anyone, everyone else only their own.
   let spendThisMonth: Awaited<ReturnType<typeof monthSpend>> | null = null;
   try {
-    spendThisMonth = await monthSpend([userId], vendor, now);
+    if (seesPerson) spendThisMonth = await monthSpend([userId], vendor, now);
   } catch (err) {
     console.error('[pulse/me] month spend failed', err);
   }

@@ -59,13 +59,16 @@ export async function GET(request: NextRequest) {
       ? { department: scope.department, question, hires: hires ?? 1 }
       : null;
     await log('success', asked ? `department=${asked.department} ask=${asked.question} hires=${asked.hires}` : undefined);
+    const decisions = await listDecisions();
+    // A decided card is still read after its find stops qualifying, so its follow-up comes back.
+    const kept = new Set(decisions.map(d => `${d.card}\u0000${d.department}`));
     const out = buildSoWhat({
       groups: groups.filter(g => scope.teams.includes(g.department)),
-      decisions: await listDecisions(),
+      decisions,
       asked,
       // What the page found on its own is about the whole of engineering, so only a caller who
       // can see every team gets it.
-      finds: scope.teams.length > 1 ? await getFinds(vendor) : undefined,
+      finds: scope.teams.length > 1 ? await getFinds(vendor, (card, department) => kept.has(`${card}\u0000${department}`)) : undefined,
       nowS: Math.floor(Date.now() / 1000),
     });
     return NextResponse.json({ ...out, department: scope.department });

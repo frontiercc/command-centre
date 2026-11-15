@@ -27,6 +27,7 @@ export interface NavVisibility {
   code: boolean;
   codeOverview: boolean;
   codeTeam: boolean;      // Developer Pulse Users and Departments
+  codeUsers: boolean;     // Developer Pulse Users (not viewers: they cannot open another person)
   codeCoaching: boolean;  // Team coaching: names people, so admin and manager only
   codeOrg: boolean;       // Dev Framework Alignment, Value
   useCases: boolean;
@@ -114,7 +115,7 @@ export default function PrecisionSidebar(p: PrecisionSidebarProps) {
     if (vis.codeOverview) items.push({ href: '/pulse/code', label: 'Overview', exact: true });
     items.push({ href: '/pulse/code/me', label: 'My Developer Pulse' });
     if (vis.codeTeam) {
-      items.push({ href: '/pulse/code/users', label: 'Users' });
+      if (vis.codeUsers) items.push({ href: '/pulse/code/users', label: 'Users' });
       items.push({ href: '/pulse/code/dept', label: 'Departments' });
     }
     if (vis.codeCoaching) {

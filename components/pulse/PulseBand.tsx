@@ -14,6 +14,7 @@ import Link from 'next/link';
 import { Panel, Tag, Muted, Empty, Segmented } from '@/components/precision/ui';
 import { WORK_PULSE_VENDOR_LABELS, type Vendor } from '@/lib/dashboard/vendor';
 import { useOpenAiOnly } from '@/components/shared/VendorSwitch';
+import { useSessionRole } from '@/components/shared/useSessionRole';
 import { useAskPageNote } from '@/components/ask/useAskAvailable';
 import { deepWords, tierNamesOr, type TierNames } from '@/lib/pulse/tier-names';
 import { NEW_WAYS_OF_WORKING } from '@/lib/pulse/cowork/coaching-words';
@@ -65,9 +66,11 @@ export function WorkPulsePanel({ data, product, title = 'Work Pulse', actions = 
   const t = tierNamesOr(names);
   const deepName = deepWords(names);
   const d = data.dashboard;
+  // The review queue is an admin page and only admins confirm other people's work, so only they get the link.
+  const isAdmin = useSessionRole() === 'admin';
   const q = d?.window === 'quarter';
   const span = q ? 'the last quarter' : 'the last 30 days';
-  const prior = q ? 'the quarter before' : 'the month before';
+  const prior = q ? 'the quarter before' : 'the 30 days before';
   // Tell Ask the data's drawer which window this panel shows.
   useAskPageNote('work-pulse', d ? `The Work Pulse panel shows ${q ? 'the last quarter (the last 13 completed weeks)' : 'the last 30 days'}.` : null);
   const tc = d?.tierCounts ?? data.tierCounts;
@@ -121,14 +124,16 @@ export function WorkPulsePanel({ data, product, title = 'Work Pulse', actions = 
         <QuestionCard
           question="New ways of working"
           value={d ? (d.capabilitiesRecent === 0 ? 'None' : String(d.capabilitiesRecent)) : undefined}
-          unit={q ? 'confirmed this quarter' : 'confirmed this month'}
+          unit={q ? 'confirmed last quarter' : 'confirmed in the last 30 days'}
           sub={d && d.capabilitiesPending > 0
-            ? <Link href="/admin/pulse?tab=overview" className="text-[#1F6F8B] font-medium hover:underline">{d.capabilitiesPending} waiting for your review</Link>
+            ? (isAdmin
+              ? <Link href="/admin/pulse?tab=overview" className="text-[#1F6F8B] font-medium hover:underline">{d.capabilitiesPending} waiting for your review</Link>
+              : `${d.capabilitiesPending} waiting for review`)
             : undefined}
           trend={d?.capabilityWeeks}
           trendKind="bars"
           notMeasured={!d ? 'Not available' : undefined}
-          todo={actions && d ? (d.capabilitiesPending > 0 ? 'Confirm the ones that are real, below.' : 'Nothing waiting for review.') : undefined}
+          todo={actions && d ? (d.capabilitiesPending > 0 ? (isAdmin ? 'Confirm the ones that are real, below.' : 'Each person, or an admin, confirms the ones that are real.') : 'Nothing waiting for review.') : undefined}
         />
         <QuestionCard
           question={`${t.t3} work rests on`}

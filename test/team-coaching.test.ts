@@ -61,6 +61,12 @@ describe('what the plan says', () => {
     expect(p.actions.some(a => a.key === 'learn_from')).toBe(true);
   });
 
+  it('says "All N people" when everyone uses it regularly, and the split otherwise', () => {
+    const all = team({ hardlyUsed: 0, hardlyUsedShare: 0 });
+    expect(teamParts(all, figures(all)).where.join(' ')).toContain('All 10 people use it regularly.');
+    expect(teamParts(team(), figures(team())).where.join(' ')).toContain('Of 10 people, 8 use it regularly and 2 have hardly used it.');
+  });
+
   it('suggests acting when a kind of work is far from what was intended', () => {
     const { actions, workOn } = teamParts(team(), figures(team()));
     const gap = actions.find(a => a.key === 'work_target:feature');
@@ -82,13 +88,13 @@ describe('what the plan says', () => {
       { workType: 'bugfix', label: 'Bug fixing', sessions: 50, share: 0.5, target: null },
     ] });
     const { workOn } = teamParts(t, figures(t));
-    expect(workOn[0]).toBe('Most sessions went on feature build and bug fixing: 50% of them each.');
+    expect(workOn[0]).toBe('The commonest kinds of work were feature build and bug fixing: 50% of sessions each.');
   });
 
   it('names the model of single-answer sessions as the Model mix does, not its raw id', () => {
     const t = team({ costlyOnSimple: { model: 'claude-opus-4-1-20250805', sessions: 12 } });
     const { workOn } = teamParts(t, figures(t));
-    expect(workOn.join(' ')).toContain('Most single-answer sessions ran on Claude Opus 4.1: 12 sessions.');
+    expect(workOn.join(' ')).toContain('More single-answer sessions ran on Claude Opus 4.1 than on any other model: 12 sessions.');
   });
 
   it('puts finding out what stopped people first when most have hardly used it', () => {

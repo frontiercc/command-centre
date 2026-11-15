@@ -57,7 +57,8 @@ function buildFacts(canvas: ProcessCanvas, products: SuggestionProducts | null |
     facts.push({ label: 'Systems seen', value: canvas.systems.join(' · ') });
   }
   if (canvas.tierNote) {
-    facts.push({ label: 'Delegation depth', value: canvas.tierNote });
+    // The one fact here that is not measured: the tiers are Claude's judgement.
+    facts.push({ label: 'Delegation depth (AI-judged)', value: canvas.tierNote });
   }
   if (canvas.activeHours != null) {
     facts.push({ label: 'Time observed', value: `≈${canvas.activeHours} hrs`, sub: 'active work in sessions' });

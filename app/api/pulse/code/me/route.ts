@@ -67,12 +67,19 @@ export async function GET(request: NextRequest) {
     if (session.role === 'admin' || session.role === 'manager') {
       userId = queryUserId;
     } else if (isDeptScoped(session.role) && session.department) {
+      // Same department: the sign-in account's, else the person's own record's (as Person 360
+      // and the Users list do), so a colleague with no sign-in account can be opened too.
       const targetAdminRows = await client
         .select({ department: au.department })
         .from(au)
         .where(eq(au.linked_cowork_user_id, queryUserId))
         .limit(1);
-      if (targetAdminRows[0]?.department === session.department) {
+      const targetUserRows = targetAdminRows[0] ? [] : await client
+        .select({ department: schema.users.department })
+        .from(schema.users)
+        .where(eq(schema.users.id, queryUserId))
+        .limit(1);
+      if ((targetAdminRows[0]?.department ?? targetUserRows[0]?.department ?? null) === session.department) {
         userId = queryUserId;
       } else {
         return NextResponse.json({ error: 'Forbidden' }, { status: 403 });
@@ -429,5 +436,21 @@ export async function GET(request: NextRequest) {
       }
     : null;
 
-  return NextResponse.json({ userId, displayName, vendor, codexPresent, metricsSplit, metrics, priorMetrics, trends, sessions, modelMix, journeyGrid, tierWeeks, tierGrid, tierNames, periodWork, workMix, bestSession, githubRepos, humanTime, canSeeSpendReview });
+  // A person's spend: admins and managers for anyone, everyone else only their own. A colleague's
+  // page is sent without any spend figure, and says it is hidden.
+  const spendHidden = !seesPerson;
+  if (spendHidden) {
+    if (metrics) metrics.spend_usd = null;
+    if (priorMetrics) priorMetrics.spend_usd = null;
+    if (metricsSplit) {
+      if (metricsSplit.claude) metricsSplit.claude.spend_usd = null;
+      if (metricsSplit.openai) metricsSplit.openai.spend_usd = null;
+    }
+    for (const s of sessions) s.spend_usd = null;
+  }
+  const periodWorkOut = spendHidden && periodWork
+    ? { ...periodWork, spendUsd: null, trend: { ...periodWork.trend, spendUsd: [] } }
+    : periodWork;
+
+  return NextResponse.json({ userId, displayName, vendor, codexPresent, metricsSplit, metrics, priorMetrics, trends, sessions, modelMix, journeyGrid, tierWeeks, tierGrid, tierNames, periodWork: periodWorkOut, workMix, bestSession, githubRepos, humanTime, canSeeSpendReview, spendHidden });
 }
