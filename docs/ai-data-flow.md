@@ -33,6 +33,7 @@ Some figures are worked out in code from AI judgements, such as the four delegat
 ### How AI output is checked
 
 - **Numbers in briefings:** every number the AI writes must appear in the figures it was given. A sentence that fails is removed, and a briefing that cannot be repaired is not shown. The risk score is the one number the AI sets itself.
+- **Numbers in Ask the data:** the same check applies to every answer, against the figures its lookups returned. Arithmetic (changes, shares, sums) is done in code by a calculate lookup, never by the model.
 - **Fixed answers:** grading, use case matching and suggestions must reply in a fixed format. Code rejects or sets aside anything outside it, such as a tier or label that does not exist.
 - **People decide:** suggested use cases, capabilities and skill drafts only count once a person accepts them.
 - **Monthly tier audit:** each month, an admin can grade 50 Work Pulse prompts without seeing the AI's grade, and Command Centre reports how often they agree (Admin → Work Pulse → Audit).
@@ -100,6 +101,7 @@ The table lists every model call in the application. Defaults are the values a f
 | Human time estimates | Hourly (Claude Cowork and ChatGPT); with the classifier (Claude Code and Codex) | Core AI model; Developer Pulse classifier model | Up to 8 masked prompts, output file names (Claude Cowork only), connector names, department name | Human time off, per surface |
 | Briefings | Weekly, monthly, or on request | Briefing models (Sonnet; personal follows Core AI) | Computed figures, kinds of work, department names; the personal briefing also the person's display name | Work Pulse or Developer Pulse off (scheduled runs) |
 | Dashboard briefing | On opening the Dashboard, cached up to 10 minutes | Core AI model (Haiku) | Organisation figures, recent alert titles, use case titles, acceptable use policy | Always on |
+| Ask the data (preview) | When an admin asks a question | Claude Haiku 5.5, fixed | The question; the page it was asked from and what that page shows; the figures the pages hold for the lookups the model chooses, including people's names, departments and per-person figures, alert titles and the person they relate to; no prompt text, alert explanations or evidence | Off until an admin turns it on (Admin → Ask the data); admins only; monthly spend cap |
 | Intent severity assessment | When a prompt matches an intent phrase | Core AI model (Haiku) | The matched prompt as written, matched phrases, acceptable use policy | Always on |
 | Personal-data confirmation | When one of seven shape-only patterns matches | Core AI model (Haiku) | The matched prompt as written, pattern name, masked value | Always on |
 | Governance reports | On request | Core AI model (Haiku) | Chosen report sections, usage snapshots, 20 most recent alerts with their evidence, which can include up to 200 characters of a prompt | Do not generate |
@@ -157,6 +159,16 @@ Every briefing is number-checked: each number in the reply must appear in the da
 ### Dashboard briefing
 
 Opening the Dashboard produces a short narrative, a risk score and up to six recommendations, cached in memory for up to ten minutes (a refresh makes a new call). The call carries organisation-level figures (active users, alert counts by severity, session and commit counts, tier mix, spend), the titles, types and statuses of the ten most recent alerts, the titles of up to five adopted and five at-risk use cases, per-department counts of open process opportunities, and your acceptable use policy if one is configured. The dashboard briefing is number-checked like the briefings, except for the model's own risk score, but gets only the one retry, not the repeat from the start; if that also fails, the Dashboard shows the last narrative it produced while one is still held in memory. The dashboard briefing is not written to the database. Reads are recorded in the access audit log.
+
+### Ask the data
+
+Ask the data (in preview) lets an admin ask a question in their own words, on its own page, from the slide-out panel in the top bar, or from the jump-to search. It is off until an admin turns it on in Admin → Ask the data, it is available to admins only, and it always runs on Claude Haiku 5.5.
+
+The model never reads the database. It chooses from a fixed set of lookups, and each lookup calls the API route behind a page (the Dashboard, Work Pulse, a department, Developer Pulse, FinOps, Spend Review, Alerts, the S&C Board, Use Cases) with the asking admin's own session, so it receives exactly the figures that page shows, under the same access rules, and each read is recorded in the access audit log. What a lookup returns is reduced before it is sent: any field that could carry a prompt, an AI reply, an alert's explanation or evidence, or other free text is removed, and long text is dropped. The call therefore carries organisation figures and, where the question needs them, people's names, departments and per-person figures (for example a person's spend by kind of work, or who has the most open alerts), but never prompt text. The question, the page it was asked from, and a short note of what that page shows (its period, team and product filter) are sent with it.
+
+Every number in an answer is checked against what the lookups returned (see How AI output is checked). An answer that fails gets one correction; after that, the sentences carrying unchecked numbers are removed, and if most of the answer would go, the admin is told it could not give a checked answer. Questions it is not built for (prompt text, reasons the data does not show, forecasts beyond the pages' projections, judging a person's worth, writing emails or reports, changing anything) are declined.
+
+Each question is logged with who asked, when, from which page, the lookups that ran, the outcome and the cost at list price. The answer text is never stored. Rows older than the admin's retention setting (90 days by default) are deleted, and questions stop for the rest of the month once the admin's monthly spend cap is reached.
 
 ### Intent severity assessment
 

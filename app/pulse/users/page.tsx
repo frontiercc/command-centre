@@ -265,7 +265,7 @@ export default function UsersPickerPage() {
                   <DeeperPanel q={q} who={who} names={d.tierNames ?? undefined} />
 
                   {/* 4. By hand vs with Claude */}
-                  <ByHandPanel h={d.humanTime} who={who} onSeeSessions={() => setDrill('humantime')} tool={product === 'Claude and ChatGPT' ? 'AI' : product} />
+                  <ByHandPanel h={d.humanTime} who={who} onSeeSessions={() => setDrill('humantime')} tool={product === 'Claude and ChatGPT' ? 'AI' : product} surface="cowork" />
 
                   {/* 5 and 6 */}
                   <div className="grid grid-cols-1 xl:grid-cols-2 gap-4 items-start">

@@ -5,7 +5,7 @@
 
 /**
  * Dashboard "Which departments are using it?" (was the department adoption heatmap). One slim
- * bar per department: the share of the department active in the last 7 days, against the
+ * bar per department: the share of the department active in the last 30 days, against the
  * admin-set target. Only a department below the target is coloured (amber). Two columns, so the
  * panel stays short.
  */
@@ -17,7 +17,7 @@ interface DeptStats {
   department: string;
   user_count: number;
   active_users: number;
-  /** People who used each product in the last 7 days. */
+  /** People who used each product in the last 30 days. */
   products: ProductCounts;
 }
 
@@ -41,7 +41,7 @@ export default function DepartmentHeatmap({ data: all, targetPct, productNames =
   const below = target === null ? [] : rows.filter(r => r.active < target);
   const top = rows[0];
   const answer = target === null
-    ? <><b className="font-semibold">{top.department}</b> uses it most: {Math.round(top.active * 100)}% of the department in the last 7 days.</>
+    ? <><b className="font-semibold">{top.department}</b> uses it most: {Math.round(top.active * 100)}% of the department in the last 30 days.</>
     : below.length === 0
       ? <>Every department is at or above your <b className="font-semibold">{targetPct}%</b> target.</>
       : below.length <= 3
@@ -52,7 +52,7 @@ export default function DepartmentHeatmap({ data: all, targetPct, productNames =
     <Panel
       title={`Which departments are using ${productNames}?`}
       badge={<Tag tone="neutral">Measured</Tag>}
-      right={<span className="text-[13px] text-[#8F8F8F]">Last 7 days</span>}
+      right={<span className="text-[13px] text-[#8F8F8F]">Last 30 days</span>}
     >
       <p className="m-0 mb-2 text-[14px] leading-[22px] text-[#1A1A1A]">{answer}</p>
       <div className="grid grid-cols-1 md:grid-cols-2 gap-x-8">
@@ -71,7 +71,7 @@ export default function DepartmentHeatmap({ data: all, targetPct, productNames =
         })}
       </div>
       <p className="m-0 mt-2.5 pt-2 border-t border-dashed border-[#EAEAEA] text-[12px] text-[#8F8F8F]">
-        Each bar is the share of the department active in the last 7 days.{target !== null ? ` The dashed line is your ${targetPct}% target, set in Admin → System; departments below it are amber.` : ''}
+        Each bar is the share of the department active in the last 30 days.{target !== null ? ` The dashed line is your ${targetPct}% target, set in Admin → System; departments below it are amber.` : ''}
       </p>
     </Panel>
   );

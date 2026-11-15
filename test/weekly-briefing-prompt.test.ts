@@ -34,4 +34,11 @@ describe('weekly briefing prompt', () => {
     expect(WEEKLY_BRIEFING_SYSTEM).toMatch(/Never use scores, indexes or ratios/);
     expect(WEEKLY_BRIEFING_SYSTEM).not.toMatch(/governance score"|"delegation depth"/);
   });
+
+  it('says Claude judged the tasks, and that it judges tasks, never the person', () => {
+    const msg = buildWeeklyBriefingUserMessage(ctx as never);
+    expect(msg).toMatch(/^Tasks Claude judged: \d+$/m);
+    expect(msg).not.toContain('Total tasks judged');
+    expect(WEEKLY_BRIEFING_SYSTEM).toContain('Claude judges the tasks, never the person');
+  });
 });

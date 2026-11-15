@@ -56,7 +56,12 @@ const COWORK_PROMPTS_SAM = [
 const TASK_TYPES = ['analysis', 'structured_report', 'synthesis', 'summarisation', 'process_substitution'];
 const MODELS_WEIGHTED = [['claude-opus-4-8', 2], ['claude-sonnet-4-6', 6], ['claude-haiku-4-5', 3]];
 const weightedModel = () => pick(MODELS_WEIGHTED.flatMap(([m, w]) => Array(w).fill(m)));
-const CODE_TASK_TYPES = ['bug_investigation', 'feature_build', 'code_review', 'documentation', 'refactor'];
+// Kinds of Code work from the classifier's rubric (lib/pulse/code/classifier-prompt.ts); a review is exploration.
+// Testing is left to the Team Coaching people (13-team-coaching.cjs), whose story is tests repeated with no skill.
+const CODE_TASK_TYPES = ['bugfix', 'feature', 'exploration', 'documentation', 'refactor'];
+// The prompt that opens each current-week session; none is an opener 10-conversations.cjs extends.
+const CODE_PROMPTS = ['Fix the failing lint step in the build.', 'Add pagination to the export endpoint.', 'Tidy up the config loader and remove dead options.',
+  'Explain how the retry queue decides when to give up.', 'Update the README with the new setup steps.', 'Write a small script to clean up this CSV export.'];
 const RATES = { 'claude-opus-4-8': { in: 5, out: 25 }, 'claude-sonnet-4-6': { in: 3, out: 15 }, 'claude-haiku-4-5': { in: 1, out: 5 } };
 
 async function main() {
@@ -73,6 +78,8 @@ async function main() {
     await c.query(`DELETE FROM code_session_classifications WHERE session_id LIKE $1`, [`${MARKER}%`]);
     await c.query(`DELETE FROM pulse_classifications WHERE cowork_message_id LIKE $1`, [`${MARKER}%`]);
     await c.query(`DELETE FROM pulse_events WHERE cowork_message_id LIKE $1`, [`${MARKER}%`]);
+    // Alerts the Hub raised on these prompts would point at nothing once they go.
+    await c.query(`DELETE FROM alerts WHERE raw_evidence->>'message_id' LIKE $1`, [`${MARKER}%`]);
     await c.query(`DELETE FROM cowork_skill_invocations WHERE id LIKE $1`, [`${MARKER}%`]);
     await c.query(`DELETE FROM cowork_mcp_invocations WHERE id LIKE $1`, [`${MARKER}%`]);
     await c.query(`DELETE FROM cowork_messages WHERE id LIKE $1`, [`${MARKER}%`]);
@@ -108,15 +115,22 @@ async function main() {
       const model = weightedModel();
       const input = rand(3000, 22000), output = rand(400, 3500);
       const sessionId = uid('jsess');
+      const cacheRead = rand(2000, 30000), tools = rand(1, 6);
+      // The prompt that started the session, a little before its one model call.
+      const promptAt = Math.max(currentWeekStart, ts - rand(20, 240));
+      await c.query(
+        `INSERT INTO cowork_messages (id, session_id, user_id, message_type, role, content_preview, occurred_at, ingested_at, surface, source)
+         VALUES ($1,$2,$3,'code_user_message','user',$4,$5,$5,'code','otel')`,
+        [uid('jmsg'), sessionId, u.id, pick(CODE_PROMPTS), promptAt]);
       await c.query(
         `INSERT INTO code_assistant_meta (id, user_id, session_id, model, input_tokens, output_tokens, cache_creation_tokens, cache_read_tokens, stop_reason, tool_use_count, error_count, cwd, git_branch, occurred_at, ingested_at, commit_count, source, query_source)
          VALUES ($1,$2,$3,$4,$5,$6,0,$7,'end_turn',$8,0,$9,'main',$10,$10,$11,'otel','main')`,
-        [uid('jmeta'), u.id, sessionId, model, input, output, rand(2000, 30000), rand(1, 6), `/repos/${repo}`, ts, tier === 3 ? 1 : 0]);
+        [uid('jmeta'), u.id, sessionId, model, input, output, cacheRead, tools, `/repos/${repo}`, ts, tier === 3 ? 1 : 0]);
       await c.query(
         `INSERT INTO code_session_stats (session_id, user_id, repo, git_branch, first_at, last_at, user_msg_count, assistant_turns, tool_use_count, error_count, input_tokens, output_tokens, cache_creation_tokens, cache_read_tokens, models_json, skills_json, mcp_json, commit_count, computed_at)
-         VALUES ($1,$2,$3,'main',$4,$4,1,1,$5,0,$6,$7,0,0,$8,'[]','[]',$9,$4)
+         VALUES ($1,$2,$3,'main',$4,$5,1,1,$6,0,$7,$8,0,$9,$10,'[]','[]',$11,$5)
          ON CONFLICT (session_id) DO NOTHING`,
-        [sessionId, u.id, repo, ts, rand(1, 6), input, output, JSON.stringify({ [model]: { input, output, cache_creation: 0, cache_read: 0 } }), tier === 3 ? 1 : 0]);
+        [sessionId, u.id, repo, promptAt, ts, tools, input, output, cacheRead, JSON.stringify({ [model]: { input, output, cache_creation: 0, cache_read: cacheRead } }), tier === 3 ? 1 : 0]);
       await c.query(
         `INSERT INTO code_session_classifications (session_id, user_id, work_type, tier, confidence, classifier_model, status, classified_at)
          VALUES ($1,$2,$3,$4,$5,'claude-haiku-4-5-20251001','classified',$6)

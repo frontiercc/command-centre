@@ -154,12 +154,18 @@ export function teamParts(t: CoworkTeamFigures, f: CoworkCoachingFigures): { whe
   if (t.newStarters.length > 0) {
     const s = t.newStarters[0];
     where.push(`${t.newStarters.length === 1 ? `${s.name} started` : `${t.newStarters.length} people started`} in the last six weeks${t.newStarters.length === 1 ? `, and ${pct(s.deepShare)} of their work so far was ${MEANINGFUL_WORK} or better` : ''}.`);
-    actions.push({
-      key: 'new_starters',
-      text: `Pair ${list(t.newStarters.map(x => x.name))} with someone who hands over well, in their first weeks.`,
-      because: 'They are new, and habits set early.',
-      metric: 'deep_share',
-    });
+    // Pairing is for those still finding their feet: not someone the team learns from, not
+    // someone the stuck action already names, and not someone at or above the team's own share.
+    const named = new Set([...t.champions, ...t.stuck].map(x => x.userId));
+    const toPair = t.newStarters.filter(x => !named.has(x.userId) && (t.deepShare === null || x.deepShare < t.deepShare));
+    if (toPair.length > 0) {
+      actions.push({
+        key: 'new_starters',
+        text: `Pair ${list(toPair.map(x => x.name))} with someone who hands over well, in their first weeks.`,
+        because: 'They are new, and habits set early.',
+        metric: 'deep_share',
+      });
+    }
   }
 
   const top = t.work[0];
@@ -170,7 +176,7 @@ export function teamParts(t: CoworkTeamFigures, f: CoworkCoachingFigures): { whe
     workOn.push(`${t.producedNothing.sessions} of ${t.producedNothing.measured} sessions ended with nothing saved, sent or published.`);
     actions.push({
       key: 'produced_nothing',
-      text: 'Take one of those sessions and ask for the finished document, not the answer to a question.',
+      text: 'Take a session that ended with nothing saved, and ask for the finished document, not the answer to a question.',
       because: `${pct(t.producedNothing.share)} of the team's sessions produced nothing.`,
       metric: 'produced_nothing_share',
     });

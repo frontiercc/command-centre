@@ -21,10 +21,14 @@ import {
 import { PERIOD_SHAPE, type MyPeriod, type PulsePeriod } from '@/lib/pulse/period-shape';
 import type { Vendor } from '@/lib/dashboard/vendor';
 import { deepWords, DeepWords, tierList, tierNamesOr, type TierNames } from '@/lib/pulse/tier-names';
+import { NEW_WAYS_OF_WORKING } from '@/lib/pulse/cowork/coaching-words';
+import { humanTimeKindLabel } from '@/components/pulse/HumanTimeCard';
 
 const words = (v: number) => (v < 0.15 ? `${Math.round(v * 100)}%` : shareWords(v));
 const hours = (m: number) => { const h = m / 60; return h < 10 ? h.toFixed(1) : Math.round(h).toLocaleString('en-GB'); };
-const plural = (c: number, one: string, many: string) => `${c.toLocaleString('en-GB')} ${c === 1 ? one : many}`;
+/** A count with en-GB thousands separators. */
+const num = (c: number) => c.toLocaleString('en-GB');
+const plural = (c: number, one: string, many: string) => `${num(c)} ${c === 1 ? one : many}`;
 const dateOf = (s: number) => new Date(s * 1000).toLocaleDateString('en-GB', { day: 'numeric', month: 'short' });
 
 export interface MonthSpend {
@@ -72,9 +76,16 @@ export function WorkPanel({ q, product, who, period, onPeriod, onDrill, drill, r
   const r = q.realWork;
   const change = r.beforeAll === 0
     ? `nothing classified ${shape.prior}`
-    : r.before === r.now ? `the same as ${shape.prior}` : `${r.now > r.before ? 'up' : 'down'} from ${r.before} ${shape.prior}`;
-  const deptLine = r.deptAverage === null ? 'No department average yet.'
-    : `${r.now > r.deptAverage * 1.25 ? 'Above' : r.now < r.deptAverage * 0.75 ? 'Below' : 'About'} the department average of ${Math.round(r.deptAverage)}.`;
+    : r.before === r.now ? `the same as ${shape.prior}` : `${r.now > r.before ? 'up' : 'down'} from ${num(r.before)} ${shape.prior}`;
+  // A department's page sets its share beside the rest of the organisation's; a person's page
+  // sets their count beside their department's per-person average.
+  const pct = (v: number) => `${Math.round(v * 100)}%`;
+  const deptLine = r.orgShare !== undefined
+    ? (r.orgShare === null || r.all === 0
+      ? 'Not enough work judged elsewhere yet to compare.'
+      : `${pct(r.now / r.all)} of ${who.name}'s tasks are ${deep}, against ${pct(r.orgShare)} across the rest of the organisation.`)
+    : r.deptAverage === null ? 'No department average yet.'
+      : `${r.now > r.deptAverage * 1.25 ? 'Above' : r.now < r.deptAverage * 0.75 ? 'Below' : 'About'} the department average of ${num(Math.round(r.deptAverage))}.`;
   // Nothing before to compare with: say nothing rather than filling the line with it.
   const shareChange = q.share.before === null || q.share.now === null ? null
       : Math.round(q.share.now * 100) === Math.round(q.share.before * 100) ? `the same as ${shape.prior}`
@@ -96,10 +107,10 @@ export function WorkPanel({ q, product, who, period, onPeriod, onDrill, drill, r
         {q.people && (
           <QuestionCard
             question={`People doing ${deep} work`}
-            value={`${q.people.deep} of ${q.people.active}`}
+            value={`${num(q.people.deep)} of ${num(q.people.active)}`}
             unit="people"
             sub={q.people.active > q.people.deep
-              ? `${q.people.active - q.people.deep} only did ${t.t1.toLowerCase()} work`
+              ? `${num(q.people.active - q.people.deep)} only did ${t.t1.toLowerCase()} work`
               : 'everyone active did some'}
             notMeasured={q.people.active === 0 ? `Nobody active ${shape.label.toLowerCase()}` : undefined}
             todo="Counts people with any classified task in the period."
@@ -107,10 +118,10 @@ export function WorkPanel({ q, product, who, period, onPeriod, onDrill, drill, r
         )}
         <QuestionCard
           question={`Tasks judged ${deep}`}
-          value={`${r.now} of ${r.all}`}
+          value={`${num(r.now)} of ${num(r.all)}`}
           unit="tasks"
           change={change}
-          sub={r.now > 0 ? <SeeLink onClick={() => onDrill(drill === 'realwork' ? null : 'realwork')}>See the {r.now} tasks</SeeLink> : undefined}
+          sub={r.now > 0 ? <SeeLink onClick={() => onDrill(drill === 'realwork' ? null : 'realwork')}>See the {num(r.now)} tasks</SeeLink> : undefined}
           trend={r.trend}
           trendKind="bars"
           notMeasured={r.all === 0 ? `No classified tasks ${shape.label.toLowerCase()}` : undefined}
@@ -119,23 +130,23 @@ export function WorkPanel({ q, product, who, period, onPeriod, onDrill, drill, r
         <QuestionCard
           question={`How much is ${deep}`}
           value={q.share.now !== null ? cap(words(q.share.now)) : undefined}
-          sub={q.share.now !== null ? <>{plural(r.now, 'of', 'of')} {r.all} tasks{shareChange ? `, ${shareChange}` : ''}</> : undefined}
+          sub={q.share.now !== null ? <>{plural(r.now, 'of', 'of')} {num(r.all)} tasks{shareChange ? `, ${shareChange}` : ''}</> : undefined}
           trend={q.share.trend}
           notMeasured={q.share.now === null ? `No classified tasks ${shape.label.toLowerCase()}` : undefined}
-          todo={r.all > 0 ? <SeeLink onClick={() => onDrill(drill === 'tasks' ? null : 'tasks')}>See all {r.all} tasks</SeeLink> : undefined}
+          todo={r.all > 0 ? <SeeLink onClick={() => onDrill(drill === 'tasks' ? null : 'tasks')}>See all {num(r.all)} tasks</SeeLink> : undefined}
         />
         <QuestionCard
           question={`New ways of working ${who.you ? 'you' : 'they'} started`}
-          value={q.capabilities.confirmed}
+          value={num(q.capabilities.confirmed)}
           unit="confirmed"
-          sub={q.capabilities.pending > 0 ? `${q.capabilities.pending} waiting for review` : 'none waiting for review'}
+          sub={q.capabilities.pending > 0 ? `${num(q.capabilities.pending)} waiting for review` : 'none waiting for review'}
           trend={q.capabilities.trend}
           trendKind="bars"
           todo={q.capabilities.pending > 0 && reviewHref
-            ? <Link href={reviewHref} className={linkCls}>Review the {q.capabilities.pending} waiting</Link>
+            ? <Link href={reviewHref} className={linkCls}>Review the {num(q.capabilities.pending)} waiting</Link>
             : q.capabilities.confirmed > 0
               ? <SeeLink onClick={() => onDrill(drill === 'capabilities' ? null : 'capabilities')}>See them</SeeLink>
-              : 'Claude flags work that creates something reusable; a manager confirms it.'}
+              : NEW_WAYS_OF_WORKING}
         />
       </div>
     </Frame>
@@ -151,21 +162,35 @@ export interface ByHand {
   claudeMinutes: number;
   ratio: number | null;
   byKind: Array<{ kind: string; sessions: number; humanMinutes: number; claudeMinutes: number }>;
+  /** Every session with no row of its own (lib/pulse/human-time-summary.ts). */
+  otherKinds?: { kind: string; sessions: number; humanMinutes: number; claudeMinutes: number };
   check?: { period: string; reviewed: number; aboutRight: number } | null;
 }
 
 /**
  * `tool` names what the "with" side counts, so the title is never wrong: Claude, ChatGPT or AI on
- * Work Pulse, Claude Code, Codex or AI on Developer Pulse. Claude when not given.
+ * Work Pulse, Claude Code, Codex or AI on Developer Pulse. Claude when not given. `surface` names
+ * the kinds of work as HumanTimeCard does: Work Pulse's pages pass 'cowork', Developer Pulse's
+ * leave it out.
  */
-export function ByHandPanel({ h, who, onSeeSessions, tool = 'Claude' }: { h: ByHand | null | undefined; who: Who; onSeeSessions?: () => void; tool?: string }) {
+export function ByHandPanel({ h, who, onSeeSessions, tool = 'Claude', surface = 'code' }: {
+  h: ByHand | null | undefined; who: Who; onSeeSessions?: () => void; tool?: string; surface?: 'code' | 'cowork';
+}) {
   if (!h || h.sessions === 0) return null;
   const whose = who.you ? 'your work' : `${who.name}'s work`;
   const longer = h.ratio === null ? null
     : h.ratio >= 1.8 && h.ratio < 2.5 ? 'about twice as long'
       : h.ratio >= 2.5 && h.ratio < 3.5 ? 'about three times as long'
         : h.ratio >= 1.2 ? `about ${Math.round(h.ratio)} times as long` : null;
-  const kinds = [...h.byKind].sort((a, b) => b.humanMinutes - a.humanMinutes).slice(0, 4);
+  const kinds = [...h.byKind].sort((a, b) => b.humanMinutes - a.humanMinutes).slice(0, 4)
+    .map(k => ({ ...k, label: humanTimeKindLabel(k.kind, surface) }));
+  // Every session without a row of its own, so the rows add up to the total.
+  const rest = {
+    sessions: h.sessions - kinds.reduce((n, k) => n + k.sessions, 0),
+    humanMinutes: h.humanMinutes.likely - kinds.reduce((n, k) => n + k.humanMinutes, 0),
+    claudeMinutes: h.claudeMinutes - kinds.reduce((n, k) => n + k.claudeMinutes, 0),
+  };
+  if (kinds.length > 0 && rest.sessions > 0) kinds.push({ kind: '_other_kinds', ...rest, label: 'Other kinds' });
   return (
     <Frame
       title={`By hand vs with ${tool}`}
@@ -174,7 +199,7 @@ export function ByHandPanel({ h, who, onSeeSessions, tool = 'Claude' }: { h: ByH
       answer={<>By hand, {whose} would have taken about <b>{hours(h.humanMinutes.likely)} hours</b>, against <b>{hours(h.claudeMinutes)} hours</b> with {tool}{longer ? <>, {longer}</> : null}.</>}
       note={<>
         {plural(h.sessions, 'session', 'sessions')} with an estimate. The by-hand figure is Claude&apos;s estimate per session (range {hours(h.humanMinutes.low)} to {hours(h.humanMinutes.high)} hours); the time with {tool} is measured active time.
-        {h.check ? ` Spot-checked in ${h.check.period}: ${h.check.aboutRight} of ${h.check.reviewed} about right.` : ' The estimates have not been spot-checked yet.'}
+        {h.check ? ` Spot-checked in ${h.check.period}: ${num(h.check.aboutRight)} of ${num(h.check.reviewed)} about right.` : ' The estimates have not been spot-checked yet.'}
         {onSeeSessions ? <> <button type="button" onClick={onSeeSessions} className={linkCls}>See the sessions</button></> : null}
       </>}
     >
@@ -190,7 +215,7 @@ export function ByHandPanel({ h, who, onSeeSessions, tool = 'Claude' }: { h: ByH
           <div className="text-[12px] font-semibold text-[#333333] mb-0.5">By kind of work</div>
           {kinds.map(k => (
             <div key={k.kind} className="flex items-center gap-2.5 py-1 text-[13px]">
-              <span className="min-w-0 truncate text-[#333333]">{cap(k.kind.replace(/_/g, ' '))}</span>
+              <span className="min-w-0 truncate text-[#333333]">{k.label}</span>
               <span className="text-[#8F8F8F] whitespace-nowrap">{plural(k.sessions, 'session', 'sessions')}</span>
               <span className="ml-auto text-[#333333] whitespace-nowrap tabular-nums">≈{hours(k.humanMinutes)} h by hand · {hours(k.claudeMinutes)} h with {tool}</span>
             </div>
@@ -352,10 +377,10 @@ export function PeoplePanel({ rows, dept, names, thenVsNow }: {
     <Frame
       title={`Who is in ${dept}`}
       judged
-      period={`${rows.length} ${rows.length === 1 ? 'person' : 'people'}`}
+      period={plural(rows.length, 'person', 'people')}
       answer={<>
         {top.share !== null ? <><b>{top.display_name ?? top.email}</b> does the deepest work, {words(top.share)} of their tasks.</> : <>Nobody has classified work in this period.</>}
-        {quiet.length > 0 ? <> {quiet.length === 1 ? `${quiet[0].display_name ?? quiet[0].email} has` : `${quiet.length} people have`} handed over nothing.</> : null}
+        {quiet.length > 0 ? <> {quiet.length === 1 ? `${quiet[0].display_name ?? quiet[0].email} has` : `${num(quiet.length)} people have`} handed over nothing.</> : null}
       </>}
       note="Click a name to open that person's page. Sorted by how much of their work reached the top two tiers."
     >
@@ -367,7 +392,7 @@ export function PeoplePanel({ rows, dept, names, thenVsNow }: {
         return (
           <div key={r.id} className="grid grid-cols-[minmax(0,1fr)_86px_minmax(0,120px)_52px_92px_80px] gap-2.5 items-center py-[3px] text-[13px] border-b border-[#F7F7F7] last:border-b-0">
             <Link href={`/pulse/users?userId=${encodeURIComponent(r.id)}`} className="truncate text-[#0A0A0A] hover:text-[#1F6F8B]">{r.display_name ?? r.email}</Link>
-            <span className="text-right tabular-nums text-[#333333]">{r.all > 0 ? `${r.deep} of ${r.all}` : '—'}</span>
+            <span className="text-right tabular-nums text-[#333333]">{r.all > 0 ? `${num(r.deep)} of ${num(r.all)}` : '—'}</span>
             <span>{r.share !== null && <Track value={r.share} />}</span>
             <span className="text-right tabular-nums">{r.share !== null ? `${Math.round(r.share * 100)}%` : ''}</span>
             <span className="text-[12px] whitespace-nowrap" style={{ color: t ? arrowInk[t.arrow] : '#B3B3B3' }}>
@@ -393,7 +418,9 @@ export function ProducedPanel({ q, who, period, uploads }: {
 }) {
   const p = q.produced;
   const max = Math.max(1, ...p.byKind.map(k => k.files));
-  const top = p.byKind.filter(k => k.kind !== 'Other').slice(0, 2).map(k => k.kind.toLowerCase());
+  // The second kind is named only when it is at least half the size of the first.
+  const named = p.byKind.filter(k => k.kind !== 'Other');
+  const top = named.slice(0, 2).filter((k, i) => i === 0 || k.files * 2 >= named[0].files).map(k => k.kind.toLowerCase());
   return (
     <Frame
       title={who.you ? 'What you produced' : 'What they produced'}
@@ -401,13 +428,13 @@ export function ProducedPanel({ q, who, period, uploads }: {
       answer={p.files === 0
         ? <>No files saved, sent or published, from <b>{plural(p.sessions, 'session', 'sessions')}</b>.</>
         : <><b>{plural(p.files, 'file', 'files')}</b> from {plural(p.sessions, 'session', 'sessions')}{top.length ? <>, mostly {top.join(' and ')}</> : null}.</>}
-      note={<>A session produced a file when Claude saved, sent or published one.{uploads && uploads.sessions > 0 ? ` ${uploads.sessions} ${uploads.sessions === 1 ? 'session had' : 'sessions had'} documents brought in, ${uploads.files} ${uploads.files === 1 ? 'file' : 'files'} in all.` : ''}</>}
+      note={<>A session produced a file when Claude saved, sent or published one, in Claude Chat when a reply made an artifact or a file, and in ChatGPT when a reply listed a file.{uploads && uploads.sessions > 0 ? ` ${num(uploads.sessions)} ${uploads.sessions === 1 ? 'session had' : 'sessions had'} documents brought in, ${plural(uploads.files, 'file', 'files')} in all.` : ''}</>}
     >
       {p.byKind.map(k => (
         <div key={k.kind} className="grid grid-cols-[minmax(0,120px)_minmax(0,1fr)_36px] gap-2.5 items-center py-[3px] text-[13px]">
           <span className="truncate text-[#333333]">{k.kind}</span>
           <Track value={k.files / max} />
-          <span className="text-right tabular-nums">{k.files}</span>
+          <span className="text-right tabular-nums">{num(k.files)}</span>
         </div>
       ))}
     </Frame>
@@ -416,16 +443,19 @@ export function ProducedPanel({ q, who, period, uploads }: {
 
 /* ── 5: Skills and connectors colleagues use ──────────────────── */
 
-export function ColleagueToolsPanel({ q, who, department, period }: {
+export function ColleagueToolsPanel({ q, who, department, period, team = false }: {
   q: MyPeriod; who: Who; department: string | null; period: PulsePeriod;
+  /** A department's own page: the colleagues counted are the people in other teams. */
+  team?: boolean;
 }) {
   const t = q.colleagueTools;
   const skills = t.filter(x => x.type === 'skill').length, conns = t.length - skills;
-  const parts = [skills ? `${skills} ${skills === 1 ? 'skill' : 'skills'}` : null, conns ? `${conns} ${conns === 1 ? 'connector' : 'connectors'}` : null].filter(Boolean).join(' and ');
-  const where = department ? `in ${department}` : 'across the organisation';
+  const parts = [skills ? plural(skills, 'skill', 'skills') : null, conns ? plural(conns, 'connector', 'connectors') : null].filter(Boolean).join(' and ');
+  // A person is compared with their own department; a department with the people in other teams.
+  const where = team ? 'in other teams' : department ? `in ${department}` : 'across the organisation';
   return (
     <Frame
-      title="Skills and connectors colleagues use"
+      title={team ? 'Skills and connectors other teams use' : 'Skills and connectors colleagues use'}
       period={PERIOD_SHAPE[period].label}
       answer={t.length === 0
         ? <>{who.you ? 'You use' : `${who.name} uses`} every skill and connector two or more colleagues {where} use.</>
@@ -435,7 +465,7 @@ export function ColleagueToolsPanel({ q, who, department, period }: {
       {t.map(x => (
         <div key={`${x.type}:${x.name}`} className="flex items-center gap-2.5 py-1.5 border-b border-[#F2F2F2] last:border-b-0 text-[13px]">
           <span className="min-w-0 truncate text-[#0A0A0A]">{x.name}</span>
-          <span className="text-[#777777] whitespace-nowrap">{x.type} · {x.people} colleagues</span>
+          <span className="text-[#777777] whitespace-nowrap">{x.type} · {num(x.people)} {team ? (x.people === 1 ? 'person in other teams' : 'people in other teams') : (x.people === 1 ? 'colleague' : 'colleagues')}</span>
           {x.libraryId !== null && <Link href={`/library/${x.libraryId}`} className={`${linkCls} ml-auto`}>See it</Link>}
         </div>
       ))}
@@ -478,9 +508,9 @@ export function CapabilitiesPanel({ items, pending, canReview, onChanged }: {
       judged
       period="Last 30 days"
       answer={items.length === 0
-        ? <>Nothing new this month. Claude flags work that creates something reusable; a manager confirms it.</>
-        : <><b>{confirmed} confirmed</b>{pending > 0 ? <>, and <b>{pending}</b> {pending === 1 ? 'is' : 'are'} waiting for review</> : null}.</>}
-      note="A new way of working is a session that produced something the department can use again."
+        ? <>Nothing new this month.</>
+        : <><b>{num(confirmed)} confirmed</b>{pending > 0 ? <>, and <b>{num(pending)}</b> {pending === 1 ? 'is' : 'are'} waiting for review</> : null}.</>}
+      note={NEW_WAYS_OF_WORKING}
     >
       {items.map(i => (
         <div key={i.sessionId} className="py-2 border-b border-[#F2F2F2] last:border-b-0 flex items-start gap-3">

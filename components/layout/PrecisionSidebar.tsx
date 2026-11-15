@@ -32,6 +32,7 @@ export interface NavVisibility {
   useCases: boolean;
   useCasesOverview: boolean;
   library: boolean;
+  ask: boolean;           // Ask the data: admins, when it is turned on
   admin: boolean;
   adminHref: string;
 }
@@ -49,11 +50,12 @@ export interface PrecisionSidebarProps {
 }
 
 interface Item { href: string; label: string; exact?: boolean }
-interface Group { key: string; label: string; icon: IconName; href?: string; items?: Item[]; badge?: number; activeWhen: (p: string) => boolean }
-type IconName = 'grid' | 'bell' | 'pulse' | 'code' | 'target' | 'layers' | 'currency' | 'shield' | 'file' | 'settings';
+interface Group { key: string; label: string; icon: IconName; href?: string; items?: Item[]; badge?: number; tag?: string; activeWhen: (p: string) => boolean }
+type IconName = 'grid' | 'chat' | 'bell' | 'pulse' | 'code' | 'target' | 'layers' | 'currency' | 'shield' | 'file' | 'settings';
 
 const ICONS: Record<IconName, React.ReactNode> = {
   grid: <><rect x="3" y="3" width="7" height="7" /><rect x="14" y="3" width="7" height="7" /><rect x="3" y="14" width="7" height="7" /><rect x="14" y="14" width="7" height="7" /></>,
+  chat: <path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z" />,
   bell: <><path d="M6 8a6 6 0 0 1 12 0c0 7 3 9 3 9H3s3-2 3-9" /><path d="M10.3 21a1.94 1.94 0 0 0 3.4 0" /></>,
   pulse: <path d="M22 12h-4l-3 9L9 3l-3 9H2" />,
   code: <><path d="m16 18 6-6-6-6" /><path d="m8 6-6 6 6 6" /></>,
@@ -91,6 +93,7 @@ export default function PrecisionSidebar(p: PrecisionSidebarProps) {
   const top: Group[] = [];
   if (vis.core) top.push({ key: 'dash', label: 'Dashboard', icon: 'grid', href: '/', activeWhen: x => x === '/' });
   if (vis.core) top.push({ key: 'alerts', label: 'Alerts', icon: 'bell', href: '/alerts', badge: p.openAlerts, activeWhen: x => x.startsWith('/alerts') });
+  if (vis.ask) top.push({ key: 'ask', label: 'Ask the data', icon: 'chat', href: '/ask', tag: 'Preview', activeWhen: x => x === '/ask' });
 
   const productivity: Group[] = [];
   if (vis.cowork) {
@@ -194,6 +197,7 @@ export default function PrecisionSidebar(p: PrecisionSidebarProps) {
                 return (
                   <Link key={g.key} href={g.href} className={`ccc-psb-link${active ? ' is-active' : ''}`} aria-current={active ? 'page' : undefined}>
                     <Icon name={g.icon} /><span>{g.label}</span>
+                    {g.tag && <span className="ml-auto font-mono text-[10px] leading-4 px-1.5 rounded-full uppercase bg-[#FFF4E5] border border-[#F5D9A8] text-[#8A5300]">{g.tag}</span>}
                     {!!g.badge && g.badge > 0 && <span className="ccc-psb-badge">{g.badge}</span>}
                   </Link>
                 );
@@ -246,19 +250,23 @@ export default function PrecisionSidebar(p: PrecisionSidebarProps) {
         </div>
       </div>
 
-      {searchOpen && <JumpTo destinations={destinations} onClose={() => setSearchOpen(false)} />}
+      {searchOpen && <JumpTo destinations={destinations} canAsk={vis.ask} onClose={() => setSearchOpen(false)} />}
     </aside>
   );
 }
 
-function JumpTo({ destinations, onClose }: { destinations: { href: string; label: string }[]; onClose: () => void }) {
+function JumpTo({ destinations, canAsk, onClose }: { destinations: { href: string; label: string }[]; canAsk: boolean; onClose: () => void }) {
   const router = useRouter();
   const [q, setQ] = useState('');
   const [sel, setSel] = useState(0);
   const inputRef = useRef<HTMLInputElement>(null);
   useEffect(() => { inputRef.current?.focus(); }, []);
 
-  const matches = destinations.filter(d => d.label.toLowerCase().includes(q.trim().toLowerCase()));
+  const pages = destinations.filter(d => d.label.toLowerCase().includes(q.trim().toLowerCase()));
+  // Typed something that isn't a page name: offer to ask it (admins, when Ask the data is on).
+  const matches = canAsk && q.trim().length > 2
+    ? [...pages, { href: `/ask?q=${encodeURIComponent(q.trim())}`, label: `Ask the data: ${q.trim()}` }]
+    : pages;
   const go = (href: string) => { onClose(); router.push(href); };
 
   return (
@@ -267,7 +275,7 @@ function JumpTo({ destinations, onClose }: { destinations: { href: string; label
         <input
           ref={inputRef}
           value={q}
-          placeholder="Jump to a page"
+          placeholder={canAsk ? 'Jump to a page, or ask a question' : 'Jump to a page'}
           aria-label="Jump to a page"
           onChange={e => { setQ(e.target.value); setSel(0); }}
           onKeyDown={e => {

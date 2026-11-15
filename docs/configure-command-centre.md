@@ -249,6 +249,15 @@ Then register your first use cases on the Use Cases page, by guided form, transc
 
 The Skills and Connectors Board needs no configuration. The Board discovers the skills and connectors used in every connected product (Claude Cowork, Claude Code, the connectors used in Claude Chat, ChatGPT's skills and the connectors called through Codex and ChatGPT Work), tags each with the products it is used in, and invites the people who built them to claim and document them. A set of Anthropic's own skills, such as the document skills, is recognised and published automatically. After the first week, encourage the owners of unclaimed entries to claim them; an entry can be installed from the Board only once it is claimed and has an install guide. Administrators and managers can restrict an entry to one department.
 
+## Ask the data (preview)
+
+Ask the data lets admins ask questions about the data in their own words and get answers built from the pages' own figures, with links to those pages. It needs the Claude API key, is off until you turn it on, and is for admins only. Turn it on in Admin → Ask the data, where you also set:
+
+- **Monthly spend cap (USD):** default $5. Once this month's spend reaches it, questions stop until next month. Spend is worked out at list price from the token counts Anthropic returns, on Claude Haiku 5.5, which Ask the data always uses.
+- **Question log retention (days):** default 90. The log keeps each question, who asked, the lookups that ran, the outcome and the cost, never the answer.
+
+Once it is on, admins find it in the sidebar, in the jump-to search (Ctrl K: type a question and choose "Ask the data"), and as a button in the top bar of every page, which opens a panel that knows the page's period and filters. What each question sends to Anthropic is set out in the [AI data flow document](ai-data-flow.md#ask-the-data).
+
 ## Weekly Digest
 
 The Weekly Digest is a Monday summary of the last completed week, sent by email and Slack. The digest is built from stored weekly figures, and no AI model writes any of it.

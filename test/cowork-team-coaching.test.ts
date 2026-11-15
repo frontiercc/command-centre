@@ -96,6 +96,25 @@ describe('what the plan says', () => {
     const { workOn, actions } = teamParts(t, figures(t));
     expect(workOn.join(' ')).toContain('18 of 20 sessions ended with nothing saved');
     expect(actions.find(a => a.key === 'produced_nothing')!.metric).toBe('produced_nothing_share');
+    // The action stands on its own, without pointing at another panel.
+    expect(actions.find(a => a.key === 'produced_nothing')!.text).toBe('Take a session that ended with nothing saved, and ask for the finished document, not the answer to a question.');
+  });
+
+  it('pairs only the new starters still finding their feet', () => {
+    const starter = (userId: string, name: string, deepShare: number) => ({ userId, name, firstAt: NOW - 86400, prompts: 10, deepShare });
+    const t = team({
+      champions: [{ userId: 'u1', name: 'Ada', prompts: 40, deepShare: 0.8 }],
+      stuck: [{ userId: 'u2', name: 'Bea', prompts: 60, deepShare: 0.05 }],
+      newStarters: [starter('u1', 'Ada', 0.8), starter('u2', 'Bea', 0.05), starter('u3', 'Cal', 0.4), starter('u4', 'Dee', 0.6), starter('u5', 'Eve', 0.1)],
+    });
+    const { where, actions } = teamParts(t, figures(t));
+    // Everyone new still counts as new.
+    expect(where.join(' ')).toContain('5 people started in the last six weeks');
+    // A champion, someone in the stuck action, and anyone at or above the team's 40% are left out.
+    expect(actions.find(a => a.key === 'new_starters')!.text).toBe('Pair Eve with someone who hands over well, in their first weeks.');
+    // Nobody left to pair: no pairing action.
+    const none = team({ newStarters: [starter('u1', 'Ada', 0.8), starter('u3', 'Cal', 0.5)] });
+    expect(teamParts(none, figures(none)).actions.some(a => a.key === 'new_starters')).toBe(false);
   });
 
   it('leaves output alone when most sessions do produce something', () => {

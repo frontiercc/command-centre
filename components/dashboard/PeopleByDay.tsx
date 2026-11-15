@@ -4,9 +4,10 @@
 'use client';
 
 /**
- * Dashboard "Who is using it each day?" One line per product, every line counting people a day,
- * never prompts, so the lines can be compared. Weekends are shaded; today, still in progress, is
- * drawn dashed.
+ * Dashboard "Who is using it each day?" One line per product over the last 30 days, every line
+ * counting people a day, never prompts, so the lines can be compared. Weekends are shaded; today,
+ * still in progress, is drawn dashed. The sentence above it gives the Active users card's figures
+ * (the last 7 days against the 7 before), so it keeps that window.
  *
  * The plot stretches to whatever height the row needs, so this panel always matches the one
  * beside it. Only the lines and the shading stretch: every label is HTML at a fixed size, and the
@@ -16,22 +17,28 @@ import { Panel, Tag } from '@/components/precision/ui';
 import { PRODUCT_COLOR } from '@/lib/ui/chart-colours';
 import type { Product, ProductCounts } from '@/lib/dashboard/vendor';
 
-export default function PeopleByDay({ days, products, activeThisWeek, activeLastWeek, productNames }: {
+export default function PeopleByDay({ days, products, activeThisWeek, activeLastWeek, productNames, split }: {
   days: Array<{ date: string; products: ProductCounts }>;
   products: readonly Product[];
   activeThisWeek: number;
   activeLastWeek: number;
   /** The products in words, e.g. "Claude or ChatGPT". */
   productNames: string;
+  /**
+   * On the All view, this week's people for each vendor. The total is their sum (a person using
+   * both counts in each), so the sentence says "product users" and gives the split.
+   */
+  split?: { claude: number; openai: number };
 }) {
   const n = days.length;
   const shown = products.filter(p => days.some(d => d.products[p.id] > 0));
   const max = Math.max(4, ...days.flatMap(d => shown.map(p => d.products[p.id])));
   // The plot is drawn in a 0–100 box on both axes and stretched by CSS.
   const x = (i: number) => (n > 1 ? (i / (n - 1)) * 100 : 50);
-  const y = (v: number) => (1 - v / max) * 100;
+  // The scale runs to the top tick, so every tick is drawn and every line sits under one.
   const tickTop = Math.ceil(max / 5) * 5;
-  const ticks = [0, Math.round(tickTop / 2), tickTop].filter((t, i, a) => a.indexOf(t) === i && t <= max * 1.05);
+  const y = (v: number) => (1 - v / tickTop) * 100;
+  const ticks = [0, Math.round(tickTop / 2), tickTop].filter((t, i, a) => a.indexOf(t) === i);
   const yIdx = n >= 2 ? n - 2 : n - 1;
   const lead = shown.length > 0 ? [...shown].sort((a, b) => days[yIdx].products[b.id] - days[yIdx].products[a.id])[0] : null;
   const diff = activeThisWeek - activeLastWeek;
@@ -39,21 +46,27 @@ export default function PeopleByDay({ days, products, activeThisWeek, activeLast
   const weekday = (d: string) => new Date(`${d}T00:00:00Z`).getUTCDay();
   const label = (d: string) => { const dt = new Date(`${d}T00:00:00Z`); return `${dt.getUTCDate()} ${dt.toLocaleString('en-GB', { month: 'short', timeZone: 'UTC' })}`; };
   const half = n > 1 ? 50 / (n - 1) : 50;
+  // Date labels counting back from today: every other day over a fortnight, weekly over longer.
+  const labelStep = n > 14 ? 7 : 2;
 
   return (
     <Panel
       title="Who is using it each day?"
       badge={<Tag tone="measured">Measured</Tag>}
-      right={<span className="text-[13px] text-[#8F8F8F]">Last 14 days</span>}
+      right={<span className="text-[13px] text-[#8F8F8F]">Last {n} days</span>}
       className="h-full flex flex-col"
       bodyClassName="flex-1 flex flex-col"
     >
-      <p className="m-0 mb-3 text-[15px] leading-6 text-[#0A0A0A]">
-        <b className="font-semibold">{activeThisWeek} people</b> used {productNames} in the last 7 days, {change} the week before.
+      <p className="m-0 mb-3 text-[14px] leading-5 text-[#0A0A0A]">
+        {split ? (
+          <><b className="font-semibold">{activeThisWeek.toLocaleString('en-GB')} product users</b> in the last 7 days, {change} the week before: {split.claude.toLocaleString('en-GB')} on Claude, {split.openai.toLocaleString('en-GB')} on ChatGPT or Codex (someone using both counts in each).</>
+        ) : (
+          <><b className="font-semibold">{activeThisWeek.toLocaleString('en-GB')} {activeThisWeek === 1 ? 'person' : 'people'}</b> used {productNames} in the last 7 days, {change} the week before.</>
+        )}
         {lead ? <> {lead.label} has the most people each day: <b className="font-semibold">{days[yIdx].products[lead.id]}</b> yesterday.</> : null}
       </p>
       {shown.length === 0 ? (
-        <p className="m-0 text-[13px] text-[#8F8F8F]">No activity in the last 14 days.</p>
+        <p className="m-0 text-[13px] text-[#8F8F8F]">No activity in the last {n} days.</p>
       ) : (
         <>
           <div className="flex-1 min-h-[130px] flex">
@@ -63,7 +76,7 @@ export default function PeopleByDay({ days, products, activeThisWeek, activeLast
               ))}
             </div>
             <div className="relative flex-1">
-              <svg viewBox="0 0 100 100" preserveAspectRatio="none" className="absolute inset-0 w-full h-full" role="img" aria-label="People a day by product, last 14 days">
+              <svg viewBox="0 0 100 100" preserveAspectRatio="none" className="absolute inset-0 w-full h-full" role="img" aria-label={`People a day by product, last ${n} days`}>
                 {days.map((d, i) => (weekday(d.date) === 0 || weekday(d.date) === 6)
                   ? <rect key={`w${i}`} x={Math.max(0, x(i) - half)} y={0} width={half * 2} height={100} fill="#F2F2F4" />
                   : null)}
@@ -83,7 +96,7 @@ export default function PeopleByDay({ days, products, activeThisWeek, activeLast
             </div>
           </div>
           <div className="relative h-4 mt-1 ml-7">
-            {days.map((d, i) => (i % 2 === 1 || i === n - 1) ? (
+            {days.map((d, i) => (n - 1 - i) % labelStep === 0 ? (
               <span key={`l${i}`} className="absolute -translate-x-1/2 text-[11px] leading-4 text-[#8F8F8F] whitespace-nowrap" style={{ left: `${x(i)}%` }}>
                 {i === n - 1 ? 'Today' : label(d.date)}
               </span>

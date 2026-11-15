@@ -9,7 +9,8 @@
 // Salesforce, Chrome, Playwright...) and org or plugin skills stay eligible.
 // Extend when a new built-in shows up as a route.
 
-const BUILT_IN_CONNECTORS = [
+/** Claude's own connectors (MCP servers), as telemetry names them. */
+export const BUILT_IN_CONNECTOR_NAMES: readonly string[] = [
   'workspace', 'cowork', 'remote-devices', 'dynamic', 'memory', 'session_info',
   'widgets', 'scheduled-tasks', 'claude-code-remote', 'ccd_session', 'ccd_session_mgmt',
   'ccd_view', 'ccd_directory', 'ccd_connectors', 'ccd_sidebar', 'ccd_window', 'ccd_pr', 'ccd_host',
@@ -24,13 +25,13 @@ const BUILT_IN_SKILLS = [
 ];
 
 /** Case, spaces and underscores ignored: telemetry spells the same server several ways. */
-function norm(name: string): string {
+export function normToolName(name: string): string {
   return name.trim().toLowerCase().replace(/[\s_]+/g, '-');
 }
 
-const CONNECTORS = new Set(BUILT_IN_CONNECTORS.map(norm));
-const SKILLS = new Set(BUILT_IN_SKILLS.map(norm));
+const CONNECTORS = new Set(BUILT_IN_CONNECTOR_NAMES.map(normToolName));
+const SKILLS = new Set(BUILT_IN_SKILLS.map(normToolName));
 
 export function isBuiltInTool(type: 'skill' | 'connector', name: string): boolean {
-  return (type === 'skill' ? SKILLS : CONNECTORS).has(norm(name));
+  return (type === 'skill' ? SKILLS : CONNECTORS).has(normToolName(name));
 }

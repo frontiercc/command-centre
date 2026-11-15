@@ -84,7 +84,29 @@ function priceUsd(model, input, output) {
 }
 
 const SKILLS = ['code-review', 'writing-plans', 'systematic-debugging', 'doc-coauthoring', 'meeting-notes', 'internal-comms', 'brand-guidelines'];
-const MCP_SERVERS = [['github', 'search_repos'], ['slack', 'post_message'], ['salesforce', 'query_records'], ['linear', 'list_issues'], ['google-drive', 'search_files']];
+// Anthropic's connectors by the names Claude reports them under (lib/otel/cowork-receiver.ts).
+const MCP_SERVERS = [['github', 'search_repos'], ['Slack', 'post_message'], ['Salesforce', 'query_records'], ['linear', 'list_issues'], ['Google Drive', 'search_files']];
+
+// The prompt that opens each day's Cowork sitting (step 5), so its spend has
+// the prompt behind it a real session has. Short asks, none of them an opener
+// 10-conversations.cjs turns into a longer thread. Kinds of work as in
+// 01-organisation.cjs.
+const DAY_PROMPTS = {
+  Engineering: ['Explain what this stack trace is telling me.', 'Turn these review comments into a short checklist.', 'Summarise the open questions from this design thread.'],
+  Product: ['Summarise what customers said about onboarding in these notes.', 'Draft three options for the release note headline.', 'List the open decisions from this planning doc.'],
+  Sales: ['Summarise this account’s last three calls in a few lines.', 'Draft a short reply confirming next week’s demo.', 'Pull the objections out of these call notes.'],
+  Marketing: ['Tighten this paragraph for the product page.', 'Summarise the survey comments about pricing.', 'Draft two social posts for the webinar.'],
+  Legal: ['List the obligations in this clause in plain English.', 'Compare these two indemnity clauses.', 'Summarise what changed between these contract drafts.'],
+  Finance: ['Explain the movement in this cost centre month on month.', 'Summarise these supplier invoices by category.', 'Draft the note to budget holders about the forecast deadline.'],
+  'Customer Success': ['Summarise this customer’s open tickets.', 'Draft a short check-in email for this account.', 'Pull the renewal risks out of these notes.'],
+  HR: ['Draft a reply to this question about annual leave.', 'Summarise the feedback from this week’s interviews.', 'Turn this policy change into a short staff update.'],
+  Enablement: ['Turn these notes into three quiz questions.', 'Summarise the questions people asked in this session.', 'Draft the reminder for next week’s training.'],
+};
+const DAY_PROMPTS_DEFAULT = ['Summarise this document in a few lines.', 'Draft a short reply to this message.', 'Tidy up these notes into a short list.'];
+const TASK_TYPES = ['analysis', 'structured_report', 'synthesis', 'summarisation', 'basic_drafting', 'template_population', 'process_substitution'];
+// The prompt that opens each Journey Grid session (step 8), likewise not one 10-conversations.cjs extends.
+const CODE_PROMPTS = ['Fix the failing lint step in the build.', 'Add pagination to the export endpoint.', 'Tidy up the config loader and remove dead options.',
+  'Explain how the retry queue decides when to give up.', 'Update the README with the new setup steps.', 'Write a small script to clean up this CSV export.'];
 
 // Novel one-off task-type slugs so "First X task" reads as genuinely new
 // territory, distinct from the recurring commodity task types already seeded.
@@ -136,6 +158,10 @@ async function main() {
     // ── 0. Clear this script's own prior rows (FK-safe) ─────────────────────
     await c.query(`DELETE FROM code_session_classifications WHERE session_id LIKE $1`, [`${MARKER}%`]);
     await c.query(`DELETE FROM pulse_events WHERE cowork_message_id LIKE $1`, [`${MARKER}%`]);
+    await c.query(`DELETE FROM pulse_classifications WHERE cowork_message_id LIKE $1`, [`${MARKER}%`]);
+    await c.query(`DELETE FROM pulse_skill_runs WHERE cowork_message_id LIKE $1`, [`${MARKER}%`]);
+    // Alerts the Hub raised on these prompts would point at nothing once they go.
+    await c.query(`DELETE FROM alerts WHERE raw_evidence->>'message_id' LIKE $1`, [`${MARKER}%`]);
     await c.query(`DELETE FROM cowork_skill_invocations WHERE id LIKE $1`, [`${MARKER}%`]);
     await c.query(`DELETE FROM cowork_mcp_invocations WHERE id LIKE $1`, [`${MARKER}%`]);
     await c.query(`DELETE FROM cowork_messages WHERE id LIKE $1`, [`${MARKER}%`]);
@@ -210,8 +236,10 @@ async function main() {
     // active every day any more (activeToday gate) — every user having spend
     // every single day, unconditionally, was the other half of both the
     // heatmap-100% and the inflated-session-count problems.
-    let coworkApiN = 0, coworkSpend = 0, codeMetaN = 0;
+    let coworkApiN = 0, coworkSpend = 0, codeMetaN = 0, dayPromptN = 0;
     const lastActivityByUser = {};
+    // Code top-ups wait for step 8, which writes the Journey Grid sessions they go into.
+    const pendingTopUps = [];
     for (const u of allUsers) {
       const intensity = intensityFor(u.department);
       const activeChance = intensity === 'high' ? 0.8 : intensity === 'medium' ? 0.6 : 0.4;
@@ -232,48 +260,52 @@ async function main() {
         // Journey Grid without ever fixing it here at the source.
         const dayEnd = daysAgo === 0 ? now : dayStart + DAY;
 
-        // Cowork API requests — grouped under one session for the day.
+        // Cowork API requests — grouped under one session for the day, opened
+        // by the prompt that asked for them (graded as 01-organisation.cjs
+        // grades its prompts, deepening over the eight weeks), so no session
+        // carries spend with no prompt behind it.
         const nReq = rand(1, 4);
         const daySessionId = uid('capisess');
-        for (let i = 0; i < nReq; i++) {
-          const ts = dayStart + rand(0, Math.max(1, dayEnd - dayStart - 1));
+        const reqTimes = Array.from({ length: nReq }, () => dayStart + rand(0, Math.max(1, dayEnd - dayStart - 1))).sort((a, b) => a - b);
+        const promptAt = Math.max(dayStart, reqTimes[0] - rand(20, 240));
+        const promptId = uid('cwp');
+        await c.query(
+          `INSERT INTO cowork_messages (id, session_id, user_id, message_type, role, content_preview, occurred_at, ingested_at, surface, source)
+           VALUES ($1,$2,$3,'cowork_user_message','user',$4,$5,$5,'cowork','otel')`,
+          [promptId, daySessionId, u.id, pick(DAY_PROMPTS[u.department] || DAY_PROMPTS_DEFAULT), promptAt]);
+        const trendP = (55 - daysAgo) / 55;
+        const tier = Math.random() < 0.25 + 0.45 * trendP ? (Math.random() < 0.15 + 0.35 * trendP ? 3 : 2) : 1;
+        await c.query(
+          `INSERT INTO pulse_classifications (cowork_message_id, user_id, tier, task_type, classifier_confidence, classifier_model, classified_at)
+           VALUES ($1,$2,$3,$4,$5,'claude-haiku-4-5-20251001',$6)`,
+          [promptId, u.id, tier, pick(TASK_TYPES), 0.85 + Math.random() * 0.12, promptAt + 30]);
+        dayPromptN++;
+        for (const ts of reqTimes) {
           const model = weightedModel();
           const input = rand(2000, 25000), output = rand(300, 4000);
           const cost = priceUsd(model, input, output);
           coworkSpend += cost; coworkApiN++;
+          // Token counts in the receiver's own shape (lib/otel/cowork-receiver.ts), which the session aggregator reads.
+          const usage = JSON.stringify({ inputTokens: input, outputTokens: output, cacheReadTokens: 0, cacheCreationTokens: 0 });
           await c.query(
-            `INSERT INTO cowork_messages (id, session_id, user_id, message_type, surface, source, model, cost_usd, content_preview, occurred_at, ingested_at)
-             VALUES ($1,$2,$3,'cowork_api_request','cowork','otel',$4,$5,$6,$7,$7)`,
-            [uid('capi'), daySessionId, u.id, model, cost.toFixed(6), `${model} | {"input_tokens":${input},"output_tokens":${output}}`, ts]);
+            `INSERT INTO cowork_messages (id, session_id, user_id, message_type, surface, source, model, cost_usd, token_usage, content_preview, occurred_at, ingested_at)
+             VALUES ($1,$2,$3,'cowork_api_request','cowork','otel',$4,$5,$6::jsonb,$7,$8,$8)`,
+            [uid('capi'), daySessionId, u.id, model, cost.toFixed(6), usage, `${model} | ${usage}`, ts]);
           if (ts > (lastActivityByUser[u.id] ?? 0)) lastActivityByUser[u.id] = ts;
         }
 
-        // Code spend top-up — intensity-gated, the same rate every day.
+        // Code spend top-up — intensity-gated, the same rate every day. Placed
+        // in one of the person's Claude Code sessions in step 8, never in a
+        // session of its own: a session with no prompt is not one a real
+        // installation records.
         const codeChance = intensity === 'high' ? 0.9 : intensity === 'medium' ? 0.6 : 0.3;
         if (Math.random() < codeChance) {
-          const model = weightedModel();
-          const input = rand(3000, 20000), output = rand(500, 3500);
           const ts = dayStart + rand(0, Math.max(1, dayEnd - dayStart - 1));
-          await c.query(
-            `INSERT INTO code_assistant_meta (id, user_id, session_id, model, input_tokens, output_tokens, cache_creation_tokens, cache_read_tokens, stop_reason, tool_use_count, error_count, cwd, git_branch, occurred_at, ingested_at, commit_count, source, query_source)
-             VALUES ($1,$2,$3,$4,$5,$6,0,$7,'end_turn',$8,0,$9,'main',$10,$10,0,'otel','main')`,
-            [uid('capm'), u.id, `ff2-topup-${u.id}-${daysAgo}`, model, input, output, rand(3000, 40000), rand(1, 5), `/repos/${REPO_BY_DEPT[u.department] || 'internal-tools'}`, ts]);
-          codeMetaN++;
-          if (ts > (lastActivityByUser[u.id] ?? 0)) lastActivityByUser[u.id] = ts;
+          pendingTopUps.push({ u, ts, model: weightedModel(), input: rand(3000, 20000), output: rand(500, 3500), cacheRead: rand(3000, 40000), tools: rand(1, 5) });
         }
       }
     }
-    // Only push last_seen_at forward for users who actually got activity in
-    // this pass — never overwrite a more recent value v1 (or a prior pass)
-    // already set, and never touch users with no activity here at all.
-    let lastSeenBumped = 0;
-    for (const [userId, ts] of Object.entries(lastActivityByUser)) {
-      const r = await c.query(
-        `UPDATE users SET last_seen_at = $1 WHERE id = $2 AND (last_seen_at IS NULL OR last_seen_at < $1)`,
-        [ts, userId]);
-      lastSeenBumped += r.rowCount;
-    }
-    console.log(`[fullflow-v2] spend: cowork_api_request=${coworkApiN} (~$${coworkSpend.toFixed(2)}), code_assistant_meta top-up=${codeMetaN}, last_seen_at advanced for ${lastSeenBumped} users.`);
+    console.log(`[fullflow-v2] spend: cowork_api_request=${coworkApiN} (~$${coworkSpend.toFixed(2)}) in ${dayPromptN} sessions, each opened by a graded prompt.`);
 
     // ── 6. Frontier push / capability creation / skills & connectors ────────
     // Spread across a good chunk of users (not literally everyone — matches
@@ -319,13 +351,15 @@ async function main() {
         eventN++;
       }
 
-      // Skills & connectors — last 7 days.
+      // Skills & connectors, used in the anchor's own session, a few minutes
+      // after its prompt and never later than now.
+      const inSession = () => Math.min(now - 60, anchorTs + rand(30, 900));
       const nSkills = rand(1, 3);
       for (let i = 0; i < nSkills; i++) {
         await c.query(
           `INSERT INTO cowork_skill_invocations (id, user_id, session_id, skill_name, occurred_at, invocation_type, surface, source)
            VALUES ($1,$2,$3,$4,$5,$6,'cowork','otel')`,
-          [uid('skill'), u.id, anchorId, pick(SKILLS), now - rand(0, 7 * DAY), Math.random() < 0.5 ? 'agent_chained' : 'user_typed']);
+          [uid('skill'), u.id, anchorId, pick(SKILLS), inSession(), Math.random() < 0.5 ? 'agent_chained' : 'user_typed']);
         skillN++;
       }
       const nMcp = rand(1, 2);
@@ -334,7 +368,7 @@ async function main() {
         await c.query(
           `INSERT INTO cowork_mcp_invocations (id, user_id, session_id, mcp_server, mcp_tool, occurred_at, surface, source)
            VALUES ($1,$2,$3,$4,$5,$6,'cowork','otel')`,
-          [uid('mcp'), u.id, anchorId, server, tool, now - rand(0, 7 * DAY)]);
+          [uid('mcp'), u.id, anchorId, server, tool, inSession()]);
         mcpN++;
       }
     }
@@ -386,7 +420,9 @@ async function main() {
     console.log(`[fullflow-v2] GitHub overlay (mimicked, no PAT needed): ${repoNames.length} repos mapped, github_repo_stats=${ghRepoStatN}, github_user_repo_stats=${ghUserStatN}.`);
 
     // ── 8. Developer Pulse Journey Grid — top up the exact 6-week window ────────
-    const CODE_TASK_TYPES = ['bug_investigation', 'feature_build', 'code_review', 'documentation', 'refactor'];
+    // Kinds of Code work from the classifier's rubric (lib/pulse/code/classifier-prompt.ts); a review is exploration.
+    // Testing is left to the Team Coaching people (13-team-coaching.cjs), whose story is tests repeated with no skill.
+    const CODE_TASK_TYPES = ['bugfix', 'feature', 'exploration', 'documentation', 'refactor'];
     let journeySessN = 0;
     for (const u of allUsers) {
       const intensity = intensityFor(u.department);
@@ -405,15 +441,22 @@ async function main() {
         const input = rand(3000, 22000), output = rand(400, 3500);
         const sessionId = uid('jsess');
         const metaId = uid('jmeta');
+        const cacheRead = rand(2000, 30000), tools = rand(1, 6);
+        // The prompt that started the session, a little before its one model call.
+        const promptAt = Math.max(wStart, ts - rand(20, 240));
+        await c.query(
+          `INSERT INTO cowork_messages (id, session_id, user_id, message_type, role, content_preview, occurred_at, ingested_at, surface, source)
+           VALUES ($1,$2,$3,'code_user_message','user',$4,$5,$5,'code','otel')`,
+          [uid('jmsg'), sessionId, u.id, pick(CODE_PROMPTS), promptAt]);
         await c.query(
           `INSERT INTO code_assistant_meta (id, user_id, session_id, model, input_tokens, output_tokens, cache_creation_tokens, cache_read_tokens, stop_reason, tool_use_count, error_count, cwd, git_branch, occurred_at, ingested_at, commit_count, source, query_source)
            VALUES ($1,$2,$3,$4,$5,$6,0,$7,'end_turn',$8,0,$9,'main',$10,$10,$11,'otel','main')`,
-          [metaId, u.id, sessionId, model, input, output, rand(2000, 30000), rand(1, 6), `/repos/${repo}`, ts, tier === 3 ? 1 : 0]);
+          [metaId, u.id, sessionId, model, input, output, cacheRead, tools, `/repos/${repo}`, ts, tier === 3 ? 1 : 0]);
         await c.query(
           `INSERT INTO code_session_stats (session_id, user_id, repo, git_branch, first_at, last_at, user_msg_count, assistant_turns, tool_use_count, error_count, input_tokens, output_tokens, cache_creation_tokens, cache_read_tokens, models_json, skills_json, mcp_json, commit_count, computed_at)
-           VALUES ($1,$2,$3,'main',$4,$4,1,1,$5,0,$6,$7,0,0,$8,'[]','[]',$9,$4)
+           VALUES ($1,$2,$3,'main',$4,$5,1,1,$6,0,$7,$8,0,$9,$10,'[]','[]',$11,$5)
            ON CONFLICT (session_id) DO NOTHING`,
-          [sessionId, u.id, repo, ts, rand(1, 6), input, output, JSON.stringify({ [model]: { input, output, cache_creation: 0, cache_read: 0 } }), tier === 3 ? 1 : 0]);
+          [sessionId, u.id, repo, promptAt, ts, tools, input, output, cacheRead, JSON.stringify({ [model]: { input, output, cache_creation: 0, cache_read: cacheRead } }), tier === 3 ? 1 : 0]);
         await c.query(
           `INSERT INTO code_session_classifications (session_id, user_id, work_type, tier, confidence, classifier_model, status, classified_at)
            VALUES ($1,$2,$3,$4,$5,'claude-haiku-4-5-20251001','classified',$6)
@@ -423,6 +466,42 @@ async function main() {
       }
     }
     console.log(`[fullflow-v2] Developer Pulse Journey Grid: ${journeySessN} classified sessions across the trailing 6 weeks, all ${allUsers.length} users.`);
+
+    // ── 8b. The Code spend top-ups from step 5, as extra model calls in one of
+    // the person's Claude Code sessions that week (01-organisation.cjs's or the
+    // Journey Grid's above), a few minutes after the session starts. A week in
+    // which the person had no Claude Code session keeps no top-up. ──
+    const codeSessions = new Map();
+    for (const r of (await c.query(
+      `SELECT session_id, user_id, first_at FROM code_session_stats
+        WHERE (session_id LIKE 'ff-code-sess-%' OR session_id LIKE $1) AND first_at IS NOT NULL`, [`${MARKER}jsess-%`])).rows) {
+      const key = `${r.user_id}|${mondayUtcStart(Number(r.first_at))}`;
+      (codeSessions.get(key) || codeSessions.set(key, []).get(key)).push({ id: r.session_id, at: Number(r.first_at) });
+    }
+    let topUpsDropped = 0;
+    for (const t of pendingTopUps) {
+      const options = codeSessions.get(`${t.u.id}|${mondayUtcStart(t.ts)}`);
+      if (!options) { topUpsDropped++; continue; }
+      const s = options.reduce((a, b) => (Math.abs(b.at - t.ts) < Math.abs(a.at - t.ts) ? b : a));
+      const at = Math.min(now - 60, s.at + rand(60, 1500));
+      await c.query(
+        `INSERT INTO code_assistant_meta (id, user_id, session_id, model, input_tokens, output_tokens, cache_creation_tokens, cache_read_tokens, stop_reason, tool_use_count, error_count, cwd, git_branch, occurred_at, ingested_at, commit_count, source, query_source)
+         VALUES ($1,$2,$3,$4,$5,$6,0,$7,'end_turn',$8,0,$9,'main',$10,$10,0,'otel','main')`,
+        [uid('capm'), t.u.id, s.id, t.model, t.input, t.output, t.cacheRead, t.tools, `/repos/${REPO_BY_DEPT[t.u.department] || 'internal-tools'}`, at]);
+      codeMetaN++;
+      if (at > (lastActivityByUser[t.u.id] ?? 0)) lastActivityByUser[t.u.id] = at;
+    }
+    // Only push last_seen_at forward for users who actually got activity in
+    // this pass — never overwrite a more recent value v1 (or a prior pass)
+    // already set, and never touch users with no activity here at all.
+    let lastSeenBumped = 0;
+    for (const [userId, ts] of Object.entries(lastActivityByUser)) {
+      const r = await c.query(
+        `UPDATE users SET last_seen_at = $1 WHERE id = $2 AND (last_seen_at IS NULL OR last_seen_at < $1)`,
+        [ts, userId]);
+      lastSeenBumped += r.rowCount;
+    }
+    console.log(`[fullflow-v2] Code spend top-up: ${codeMetaN} model calls in existing sessions (${topUpsDropped} in weeks with no session left out); last_seen_at advanced for ${lastSeenBumped} users.`);
 
     // ── 9. Reset aggregator cursors so rolling snapshots recompute ─────────
     for (const key of ['pulse_aggregator_last_run', 'pulse_aggregator_daily_last_run', 'code_aggregator_last_run']) {

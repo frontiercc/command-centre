@@ -11,6 +11,7 @@
 // needed.
 import { sql, type SQL } from 'drizzle-orm';
 import { getTypedClient } from '@/lib/db/client';
+import { latestRunStart } from '@/lib/pulse/code/vendor-view';
 
 export interface CodeDeptMember {
   user_id: string;
@@ -96,7 +97,9 @@ export async function getCodeDeptMembers(
      ) roster
      LEFT JOIN (
        SELECT scope_id, MAX(id) AS max_id FROM ${source.table}
-       WHERE scope_type = 'user' AND granularity = 'rolling' ${source.only} GROUP BY scope_id
+       WHERE scope_type = 'user' AND granularity = 'rolling' ${source.only}
+         AND computed_at >= ${latestRunStart(source.table, source.only)}
+       GROUP BY scope_id
      ) latest ON latest.scope_id = roster.id
      LEFT JOIN ${source.table} cm ON cm.id = latest.max_id AND cm.granularity = 'rolling'
      ORDER BY cm.spend_usd DESC NULLS LAST, roster.display_name

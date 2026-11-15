@@ -4,7 +4,7 @@
 'use client';
 
 import { Strip, Figure } from '@/components/precision/ui';
-import { type CodeMetricsRow, formatDuration, PendingValue } from './CodeStatStrip';
+import { type CodeMetricsRow, formatDuration, roundDurationSeconds, PendingValue } from './CodeStatStrip';
 
 /**
  * Phase 1 OTel productivity strip — the developer-and-activity signals the OTel
@@ -29,7 +29,8 @@ export default function CodeProductivityStrip({ metrics }: { metrics: CodeMetric
     (m.pr_count ?? 0) + (m.edit_accept_count ?? 0) + (m.edit_reject_count ?? 0)
   ) > 0;
 
-  const engagedTotal = (m?.active_time_user_s ?? 0) + (m?.active_time_cli_s ?? 0);
+  // The total of the two parts as shown, so it reads as their sum.
+  const engagedTotal = roundDurationSeconds(m?.active_time_user_s ?? 0) + roundDurationSeconds(m?.active_time_cli_s ?? 0);
   const accepts = m?.edit_accept_count ?? 0;
   const rejects = m?.edit_reject_count ?? 0;
   const decisions = accepts + rejects;
@@ -39,27 +40,27 @@ export default function CodeProductivityStrip({ metrics }: { metrics: CodeMetric
 
   const signals: Signal[] = [
     {
-      label: 'Engaged time · 7 days',
+      label: 'Engaged time · 30 days',
       value: hasAny ? formatDuration(engagedTotal) : null,
       sublabel: 'Active AI-assisted engineering time',
       hint: `${formatDuration(m?.active_time_user_s ?? 0)} interacting · ${formatDuration(m?.active_time_cli_s ?? 0)} processing`,
     },
     {
-      label: 'Code output · 7 days',
+      label: 'Code output · 30 days',
       value: hasAny ? `+${(m?.lines_added ?? 0).toLocaleString()}` : null,
       sublabel: 'Lines added with Claude Code',
       hint: `−${(m?.lines_removed ?? 0).toLocaleString()} removed`,
     },
     {
-      label: 'Shipping · 7 days',
+      label: 'Shipping · 30 days',
       // Commits come from session data (Claude Code and Codex), not the
       // metrics stream, so they show as soon as there are any.
       value: hasAny || commits > 0 ? String(commits) : null,
       sublabel: 'AI-assisted commits',
-      hint: `${prs} pull request${prs === 1 ? '' : 's'} merged`,
+      hint: `${prs} pull request${prs === 1 ? '' : 's'} opened`,
     },
     {
-      label: 'Edit acceptance',
+      label: 'Edit acceptance · 30 days',
       value: acceptRate === null ? null : `${acceptRate}%`,
       sublabel: 'Edits accepted vs rejected',
       hint: decisions > 0 ? `${accepts} accepted · ${rejects} rejected` : 'No edit decisions in the window',

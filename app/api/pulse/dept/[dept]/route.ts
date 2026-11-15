@@ -36,6 +36,10 @@ import {
 } from '@/lib/pulse/delegation';
 import { getDeptCoachingPrompts } from '@/lib/usecases/spread';
 import { readHumanTime } from '@/lib/pulse/human-time-summary';
+import { REPEAT_MIN_PROMPTS } from '@/lib/pulse/cowork/coaching-figures';
+import { MECHANISM_TASK_TYPES } from '@/lib/finance/model-efficiency';
+import { kindLabel } from '@/lib/pulse/cowork/coaching-words';
+import { soleWorkByPerson } from '@/lib/pulse/sole-work';
 import { chatgptSpend } from '@/lib/openai/spend';
 
 export const dynamic = 'force-dynamic';
@@ -76,7 +80,6 @@ export async function GET(
   }
   const client = await getTypedClient();
   const now = Math.floor(Date.now() / 1000);
-  const twoWeeksAgo = now - 14 * 24 * 3600;
 
   const u = schema.users;
   // The Claude / OpenAI switch: a vendor view narrows classifications, skills
@@ -236,32 +239,23 @@ export async function GET(
     dds: numOrNull(r.dds), oti: numOrNull(r.oti), last_active: numOrNull(r.last_active),
   })));
 
-  // Concentration risk: Tier 3 task types run by only one member in past 2 weeks
-  const tier3ByType = await client
+  // Work only one person does, by Team Coaching's rule (soloWork in
+  // lib/pulse/cowork/coaching-figures.ts), so Departments, Team Coaching and So What
+  // agree: a kind of work, at any depth, in the last 30 days, that exactly one member
+  // does, with at least REPEAT_MIN_PROMPTS prompts. Mechanism labels are left out.
+  const soloSince = now - 30 * 24 * 3600;
+  const workByType = await client
     .select({ user_id: pc.user_id, task_type: pc.task_type, cnt: sql<number | string>`COUNT(*)` })
     .from(pc)
     .innerJoin(cm, eq(cm.id, pc.cowork_message_id))
-    .where(and(inArray(pc.user_id, memberIds), eq(pc.tier, 3), eq(pc.classifier_status, 'classified'), gte(cm.occurred_at, twoWeeksAgo), messageVendor(vendor)))
+    .where(and(inArray(pc.user_id, memberIds), eq(pc.classifier_status, 'classified'), gte(cm.occurred_at, soloSince), messageVendor(vendor)))
     .groupBy(pc.user_id, pc.task_type);
 
-  const typeUsersMap = new Map<string, Set<string>>();
-  for (const row of tier3ByType) {
-    const set = typeUsersMap.get(row.task_type) ?? new Set();
-    set.add(row.user_id);
-    typeUsersMap.set(row.task_type, set);
-  }
-
-  const soleWorkflowCounts = new Map<string, number>();
-  const soleWorkflowTypes = new Map<string, string[]>(); // user_id → sole task_types
-  for (const [taskType, users] of typeUsersMap) {
-    if (users.size === 1) {
-      const uid = [...users][0];
-      soleWorkflowCounts.set(uid, (soleWorkflowCounts.get(uid) ?? 0) + 1);
-      const types = soleWorkflowTypes.get(uid) ?? [];
-      types.push(taskType);
-      soleWorkflowTypes.set(uid, types);
-    }
-  }
+  const soleWorkflowTypes = soleWorkByPerson(
+    workByType.map(r => ({ user_id: r.user_id, task_type: r.task_type, prompts: Number(r.cnt) })),
+    { minPrompts: REPEAT_MIN_PROMPTS, skip: MECHANISM_TASK_TYPES, label: kindLabel },
+  ); // user_id → kinds of work only they do
+  const soleWorkflowCounts = new Map([...soleWorkflowTypes].map(([uid, kinds]) => [uid, kinds.length]));
 
   const concentrationRisk: Array<{
     user_id: string; display_name: string | null; sole_workflows: number;
@@ -274,9 +268,7 @@ export async function GET(
     if (count >= 1) {
       const member = members.find(m => m.id === uid);
       const displayName = member?.display_name ?? member?.email ?? uid;
-      if (count >= 3) {
-        concentrationRisk.push({ user_id: uid, display_name: displayName, sole_workflows: count });
-      }
+      concentrationRisk.push({ user_id: uid, display_name: displayName, sole_workflows: count });
       concentrationDetail.push({
         user_id: uid,
         display_name: displayName,

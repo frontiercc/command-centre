@@ -9,6 +9,7 @@
 import { sql } from 'drizzle-orm';
 import { getTypedClient } from '@/lib/db/client';
 import type { Vendor } from '@/lib/dashboard/vendor';
+import { hasCodexData, pickCodeMetricsSource } from '@/lib/pulse/code/vendor-view';
 import { PERIOD_SHAPE, type PulsePeriod } from '@/lib/pulse/period-shape';
 
 const WEEK = 7 * 86400;
@@ -41,6 +42,7 @@ interface Row {
   commit_count: number | string | null;
   pr_count: number | string | null;
   active_time_user_s: number | string | null;
+  active_time_cli_s: number | string | null;
   lines_added: number | string | null;
   spend_usd: number | string | null;
   autonomy_ratio: number | string | null;
@@ -67,19 +69,20 @@ export async function buildCodePeriodWork(opts: {
 }): Promise<CodePeriodWork> {
   const weeks = WEEKS[opts.period];
   const thisWeek = mondayOf(opts.nowS);
-  const start = thisWeek - (weeks - 1) * WEEK;
+  // The quarter is the 13 completed weeks, as on Work Pulse; a week or a month runs to now.
+  const lastWeek = opts.period === 'quarter' ? thisWeek - WEEK : thisWeek;
+  const start = lastWeek - (weeks - 1) * WEEK;
   const priorStart = start - weeks * WEEK;
-  const byVendor = opts.vendor !== 'all';
-  const table = byVendor ? 'code_metrics_vendor' : 'code_metrics';
+  const { table, only } = await pickCodeMetricsSource(opts.vendor, await hasCodexData());
 
   const client = await getTypedClient();
   const rows = (await (client as unknown as { execute: (q: ReturnType<typeof sql>) => Promise<{ rows: unknown[] }> }).execute(sql`
-    SELECT period_start, session_count, commit_count, pr_count, active_time_user_s, lines_added,
+    SELECT period_start, session_count, commit_count, pr_count, active_time_user_s, active_time_cli_s, lines_added,
            spend_usd, autonomy_ratio, cache_hit_ratio, edit_accept_count, edit_reject_count, repo_count
-    FROM ${sql.raw(table)}
+    FROM ${table}
     WHERE granularity = 'week' AND scope_type = ${opts.scopeType} AND scope_id = ${opts.scopeId}
-      AND period_start >= ${priorStart} AND period_start <= ${thisWeek}
-      ${byVendor ? sql`AND vendor = ${opts.vendor}` : sql``}
+      AND period_start >= ${priorStart} AND period_start <= ${lastWeek}
+      ${only}
     ORDER BY period_start
   `)).rows as Row[];
 
@@ -95,6 +98,8 @@ export async function buildCodePeriodWork(opts: {
   const byWeek = new Map(inWindow.map(r => [n(r.period_start), r]));
   const weekList = Array.from({ length: weeks }, (_, i) => byWeek.get(start + i * WEEK));
   const series = (k: keyof Row) => weekList.map(r => (r ? n(r[k]) : 0));
+  // Engaged time is the person's time plus the CLI's, as on the productivity strip.
+  const engaged = (rs: Row[]) => sum(rs, 'active_time_user_s') + sum(rs, 'active_time_cli_s');
 
   const accept = sum(inWindow, 'edit_accept_count');
   const reject = sum(inWindow, 'edit_reject_count');
@@ -106,13 +111,13 @@ export async function buildCodePeriodWork(opts: {
     sessions: { now: sum(inWindow, 'session_count'), before: sum(before, 'session_count') },
     commits: { now: sum(inWindow, 'commit_count'), before: sum(before, 'commit_count') },
     prs: { now: sum(inWindow, 'pr_count'), before: sum(before, 'pr_count') },
-    engagedSecs: { now: sum(inWindow, 'active_time_user_s'), before: sum(before, 'active_time_user_s') },
+    engagedSecs: { now: engaged(inWindow), before: engaged(before) },
     linesAdded: { now: sum(inWindow, 'lines_added'), before: sum(before, 'lines_added') },
     spendUsd: { now: sum(inWindow, 'spend_usd'), before: sum(before, 'spend_usd') },
     trend: {
       sessions: series('session_count'),
       commits: series('commit_count'),
-      engagedSecs: series('active_time_user_s'),
+      engagedSecs: weekList.map(r => (r ? n(r.active_time_user_s) + n(r.active_time_cli_s) : 0)),
       spendUsd: series('spend_usd'),
     },
     automation: mean(inWindow, 'autonomy_ratio'),

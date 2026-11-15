@@ -15,7 +15,7 @@ import CodeBriefingCard from '@/components/pulse/code/CodeBriefingCard';
 import ShippingAlignmentChart from '@/components/pulse/code/ShippingAlignmentChart';
 import GithubRepoCards from '@/components/pulse/code/GithubRepoCards';
 import Sparkline from '@/components/pulse/Sparkline';
-import WeeklyDeltaBadge from '@/components/pulse/WeeklyDeltaBadge';
+import PriorPeriodBadge, { priorPeriodChange } from '@/components/pulse/code/PriorPeriodBadge';
 import HumanTimeCard, { type HumanTimeSummary } from '@/components/pulse/HumanTimeCard';
 import { displayDefinition } from '@/lib/pulse/code/work-type-labels';
 import { useVendor, useOpenAiOnly, VendorSwitch, formatSplit } from '@/components/shared/VendorSwitch';
@@ -42,7 +42,8 @@ interface OrgSummary {
   metricsSplit?: { claude: CodeMetricsRow | null; openai: CodeMetricsRow | null } | null;
   humanTime?: HumanTimeSummary | null;
   metrics: CodeMetricsRow | null;
-  priorMetrics: { spend_usd: number | null; autonomy_ratio: number | null; session_count: number } | null;
+  /** The 30 days before the headline window; null when nothing happened in them. */
+  priorMetrics: { spend_usd: number | null; autonomy_ratio: number | null; session_count: number; commit_count?: number } | null;
   trends: { spend: WeeklyTrend; autonomy: WeeklyTrend; commits: WeeklyTrend; sessions: WeeklyTrend };
   modelMix: ModelMixItem[];
   unpricedModels: string[];
@@ -86,6 +87,8 @@ interface Verdict {
   status: 'good' | 'building' | 'attention' | 'neutral';
   plain: string;
   trend?: WeeklyTrend;
+  /** Change on the 30 days before, as a fraction; null when there is nothing to compare with. */
+  change?: number | null;
   /** Violet estimate note shown under the value — used by the spend verdict only. */
   estimateBadge?: string;
   /** Month-end spend projection line (spend verdict only). */
@@ -130,10 +133,11 @@ function buildVerdicts(d: OrgSummary, vendor: Vendor): Verdict[] {
     return `Claude Code ${fmt(c)} · Codex ${fmt(o)}`;
   };
   const spendPerSession = m && m.spend_usd !== null && m.session_count > 0 ? m.spend_usd / m.session_count : null;
-  // Trend wording comes from the completed-week delta, never a render-time
-  // guess against the rolling snapshot — pct is null until two completed
-  // weeks of history exist, in which case we omit trend language entirely.
-  const spendPct = d.trends?.spend?.delta?.pct ?? null;
+  // Changes compare the last 30 days with the 30 days before (the aggregator's
+  // 'rolling' and 'rolling_prior' rows). pct is null when the 30 days before
+  // had no figure, in which case trend language is left out entirely.
+  const p = d.priorMetrics;
+  const spendPct = priorPeriodChange(m?.spend_usd, p?.spend_usd);
   const spendTrend = spendPct == null ? null : spendPct >= 0.20 ? 'rising' : spendPct <= -0.20 ? 'falling' : 'steady';
 
   const autonomy = m?.autonomy_ratio ?? null;
@@ -151,11 +155,12 @@ function buildVerdicts(d: OrgSummary, vendor: Vendor): Verdict[] {
       status: 'neutral',
       plain: m?.spend_usd == null
         ? 'No priced activity in the window yet.'
-        : `${formatCurrency(m.spend_usd)} this week across ${m.session_count} sessions` +
+        : `${formatCurrency(m.spend_usd)} in the last 30 days across ${m.session_count} sessions` +
           (spendPerSession !== null ? ` (${formatCurrency(spendPerSession)} per session)` : '') +
-          (spendTrend ? `, ${spendTrend} week-on-week` : '') +
+          (spendTrend ? `, ${spendTrend} against the 30 days before` : '') +
           '. Spend is context, not a verdict: read it alongside autonomy and shipping.',
       trend: d.trends?.spend,
+      change: spendPct,
       estimateBadge: d.spendIsPartlyEstimated
         ? 'Includes provider-routed usage estimated at list pricing'
         : undefined,
@@ -176,6 +181,7 @@ function buildVerdicts(d: OrgSummary, vendor: Vendor): Verdict[] {
             ? `${w.actor} takes ${autonomy.toFixed(1)} actions per instruction: delegation is forming but still hands-on.`
             : `Under one action per instruction: ${w.actor === 'The AI' ? 'AI' : w.actor} is being used as a conversational aid more than a delegate. Expect this to rise as trust builds.`) + subagentNote,
       trend: d.trends?.autonomy,
+      change: priorPeriodChange(autonomy, p?.autonomy_ratio),
       split: part(r => r.autonomy_ratio, v => `${v.toFixed(1)}×`),
     },
     {
@@ -183,12 +189,13 @@ function buildVerdicts(d: OrgSummary, vendor: Vendor): Verdict[] {
       value: String(commits),
       status: commits > 0 ? 'good' : 'attention',
       plain: (commits > 0
-        ? `${commits} AI-assisted commit${commits === 1 ? '' : 's'} from ${w.sessions} this week.`
-        : `No AI-assisted commits in ${w.sessions} this week. Activity may be exploration, review, or Q&A rather than shipping.`)
+        ? `${commits} AI-assisted commit${commits === 1 ? '' : 's'} from ${w.sessions} in the last 30 days.`
+        : `No AI-assisted commits in ${w.sessions} in the last 30 days. Activity may be exploration, review, or Q&A rather than shipping.`)
         + (d.githubOverlay
-            ? ` Shipping context: the ${d.githubOverlay.trackedRepoCount} tracked repo${d.githubOverlay.trackedRepoCount === 1 ? '' : 's'} saw ${d.githubOverlay.totalCommits7d} commit${d.githubOverlay.totalCommits7d === 1 ? '' : 's'} and ${d.githubOverlay.totalPrs7d} merged PR${d.githubOverlay.totalPrs7d === 1 ? '' : 's'} on GitHub this week.`
+            ? ` Shipping context: the ${d.githubOverlay.trackedRepoCount} tracked repo${d.githubOverlay.trackedRepoCount === 1 ? '' : 's'} saw ${d.githubOverlay.totalCommits7d} commit${d.githubOverlay.totalCommits7d === 1 ? '' : 's'} and ${d.githubOverlay.totalPrs7d} merged PR${d.githubOverlay.totalPrs7d === 1 ? '' : 's'} on GitHub in the last 7 days.`
             : ' Add repositories in admin to see GitHub shipping volume alongside this.'),
       trend: d.trends?.commits,
+      change: priorPeriodChange(m?.commit_count, p?.commit_count),
       split: part(r => r.commit_count ?? null, v => String(v)),
     },
     {
@@ -196,8 +203,8 @@ function buildVerdicts(d: OrgSummary, vendor: Vendor): Verdict[] {
       value: `${activeCount} repo${activeCount === 1 ? '' : 's'}`,
       status: darkCount > activeCount ? 'attention' : activeCount > 0 ? 'building' : 'neutral',
       plain: darkCount > 0
-        ? `${activeCount} active repo${activeCount === 1 ? '' : 's'} this week; ${darkCount} repo${darkCount === 1 ? ' has' : 's have'} gone quiet for 30+ days. Quiet repos are the expansion opportunity.`
-        : `${activeCount} repo${activeCount === 1 ? '' : 's'} with ${vendor === 'all' && d.codexPresent ? 'Claude Code' : w.tool} activity this week and nothing has gone quiet.`,
+        ? `${activeCount} active repo${activeCount === 1 ? '' : 's'} in the last 30 days; ${darkCount} repo${darkCount === 1 ? ' has' : 's have'} gone quiet for 30+ days. Quiet repos are the expansion opportunity.`
+        : `${activeCount} repo${activeCount === 1 ? '' : 's'} with ${vendor === 'all' && d.codexPresent ? 'Claude Code' : w.tool} activity in the last 30 days and nothing has gone quiet.`,
       // Codex reports no repository, so with Codex data the All view's repos are Claude Code's alone.
       note: vendor === 'all' && d.codexPresent
         ? 'Repos Claude Code worked in. Codex does not report which repository it worked in, so its repos are on the Codex view, worked out from GitHub.'
@@ -216,7 +223,7 @@ function buildVerdicts(d: OrgSummary, vendor: Vendor): Verdict[] {
       question: 'How much of our codebase does this reach?',
       value: `${a} repo${a === 1 ? '' : 's'}`,
       status: quiet > a ? 'attention' : a > 0 ? 'building' : 'neutral',
-      plain: `${a} tracked repo${a === 1 ? '' : 's'} received commits made with Codex this week` +
+      plain: `${a} tracked repo${a === 1 ? '' : 's'} received commits made with Codex in the last 7 days` +
         (quiet > 0
           ? `; ${quiet} of ${reach.trackedRepos} had none in the last 30 days. Quiet repos are the expansion opportunity.`
           : ', and every tracked repo had one in the last 30 days.'),
@@ -256,7 +263,7 @@ function VerdictPanel({ v }: { v: Verdict }) {
         {v.trend && (
           <div className="flex items-center gap-2 flex-wrap text-[13px] text-[#8F8F8F]">
             <span>8-week trend · week to date shown hollow</span>
-            <span className="ml-auto"><WeeklyDeltaBadge pct={v.trend.delta.pct} /></span>
+            <span className="ml-auto"><PriorPeriodBadge pct={v.change ?? null} /></span>
           </div>
         )}
       </div>
@@ -318,7 +325,7 @@ function EfficiencyCard({ metrics, claude }: { metrics: CodeMetricsRow | null; c
     { label: 'Tokens per accepted edit', value: tokensPerAccept == null ? '—' : formatTokens(Math.round(tokensPerAccept)) },
   ];
   return (
-    <Panel title="Efficiency" subtitle="7 days" flush>
+    <Panel title="Efficiency" subtitle="30 days" flush>
       <FigureGrid cols={4}>
         {cells.map(c => <Figure key={c.label} label={c.label} value={c.value} />)}
       </FigureGrid>
@@ -352,12 +359,13 @@ function SpendConcentrationCard({ data }: { data: OrgSummary['spendConcentration
   );
 }
 
+/** `turns` counts prompts during which the skill or subagent was active, not invocations. */
 function leverageValue(item: { turns: number; spend_usd: number | null }): string {
-  const costPerUse = item.spend_usd != null && item.turns > 0 ? item.spend_usd / item.turns : null;
-  const costPerUseDisplay = costPerUse != null
-    ? costPerUse < 0.005 ? '<$0.01/use' : `$${costPerUse.toFixed(2)}/use`
+  const costPerPrompt = item.spend_usd != null && item.turns > 0 ? item.spend_usd / item.turns : null;
+  const costPerPromptDisplay = costPerPrompt != null
+    ? costPerPrompt < 0.005 ? '<$0.01 per prompt' : `$${costPerPrompt.toFixed(2)} per prompt`
     : null;
-  return `${item.spend_usd == null ? 'unpriced' : formatCurrency(item.spend_usd)} · ${item.turns}×${costPerUseDisplay ? ` · ${costPerUseDisplay}` : ''}`;
+  return `${item.spend_usd == null ? 'unpriced' : formatCurrency(item.spend_usd)} · ${item.turns} prompt${item.turns === 1 ? '' : 's'}${costPerPromptDisplay ? ` · ${costPerPromptDisplay}` : ''}`;
 }
 
 function LeverageRow({ item, max }: { item: { name: string; turns: number; spend_usd: number | null }; max: number }) {
@@ -412,8 +420,8 @@ export default function CodePulseOverviewPage() {
           <>
             <Toolbar
               left={data?.metrics
-                ? `Last 7 days · ${formatTokens(data.metrics.input_tokens + data.metrics.output_tokens)} tokens processed`
-                : 'Last 7 days'}
+                ? `Last 30 days · ${formatTokens(data.metrics.input_tokens + data.metrics.output_tokens)} tokens processed`
+                : 'Last 30 days'}
             >
               <span className="flex flex-wrap items-center justify-end gap-3.5 text-[13px] text-[#666666]">
                 <VendorSwitch vendor={vendor} onChange={setVendor} openaiPresent={codexPresent} labels={DEVELOPER_PULSE_VENDOR_LABELS} />
@@ -505,7 +513,7 @@ export default function CodePulseOverviewPage() {
                     </div>
                   )}
                   <PanelFoot>
-                    Session digests classified by Claude: the only judged numbers on this page. Everything else is measured.
+                    Session digests classified by Claude. The Work mix, the By hand estimate and the AI summary are judged; everything else is measured.
                   </PanelFoot>
                 </Panel>
               ) : (
@@ -622,9 +630,9 @@ export default function CodePulseOverviewPage() {
             )}
 
             <Muted>
-              Everything on this page except the Work mix is computed directly from session telemetry: token counts,
-              tool actions, commits, repositories.
-              {data && data.metrics ? ` Window: 7 days (lists 30 days) · ${formatTokens(data.metrics.input_tokens + data.metrics.output_tokens)} tokens processed.` : ''}
+              The Work mix, the By hand estimate and the AI summary are judged; everything else is measured from
+              session telemetry: token counts, tool actions, commits, repositories.
+              {data && data.metrics ? ` Window: 30 days · ${formatTokens(data.metrics.input_tokens + data.metrics.output_tokens)} tokens processed.` : ''}
             </Muted>
           </>
         )}

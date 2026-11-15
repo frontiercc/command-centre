@@ -14,7 +14,9 @@ import Link from 'next/link';
 import { Panel, Tag, Muted, Empty, Segmented } from '@/components/precision/ui';
 import { WORK_PULSE_VENDOR_LABELS, type Vendor } from '@/lib/dashboard/vendor';
 import { useOpenAiOnly } from '@/components/shared/VendorSwitch';
+import { useAskPageNote } from '@/components/ask/useAskAvailable';
 import { deepWords, tierNamesOr, type TierNames } from '@/lib/pulse/tier-names';
+import { NEW_WAYS_OF_WORKING } from '@/lib/pulse/cowork/coaching-words';
 import { QuestionCard, DASH, DASH_SHADES, shareWords, cap } from '@/components/dashboard/QuestionCard';
 
 type Tier = { t1: number; t2: number; t3: number };
@@ -44,6 +46,8 @@ export interface OrgSummary {
     deepPeopleWeeks?: number[];
     frontierPeople30d?: number;
     frontierHalfPeople?: number | null;
+    /** On All, the half-the-work count for each product; frontierHalfPeople is their sum. */
+    frontierHalfSplit?: { claude: number; openai: number } | null;
     frontierTopShare?: number | null;
   };
 }
@@ -64,6 +68,8 @@ export function WorkPulsePanel({ data, product, title = 'Work Pulse', actions = 
   const q = d?.window === 'quarter';
   const span = q ? 'the last quarter' : 'the last 30 days';
   const prior = q ? 'the quarter before' : 'the month before';
+  // Tell Ask the data's drawer which window this panel shows.
+  useAskPageNote('work-pulse', d ? `The Work Pulse panel shows ${q ? 'the last quarter (the last 13 completed weeks)' : 'the last 30 days'}.` : null);
   const tc = d?.tierCounts ?? data.tierCounts;
   const now = deep(tc);
   const before = d ? deep(d.priorTierCounts) : null;
@@ -74,7 +80,7 @@ export function WorkPulsePanel({ data, product, title = 'Work Pulse', actions = 
     ? (Math.round(now * 100) === Math.round(before * 100) ? `the same as ${prior}` : `${now > before ? 'up' : 'down'} from ${shareWords(before) === 'half' ? 'about half' : shareWords(before)} ${prior}`)
     : null;
   const answer = people !== null && active !== null && people > 0
-    ? <><b>{people} of {active}</b> people handed {product} {deepName} work in {span}{now !== null ? <>, and <b>{shareWords(now)}</b> of all the tasks they gave it were {deepName}</> : null}.</>
+    ? <><b>{people} of {active}</b> people handed {product} {deepName} work in {span}{now !== null ? <>, and <b>{shareWords(now)}</b> {shareWords(now) === 'all' ? '' : 'of all '}the tasks they gave it were {deepName}</> : null}.</>
     : now !== null
       ? <><b>{cap(shareWords(now))}</b> of the tasks people handed {product} in {span} were {deepName}.</>
       : null;
@@ -88,7 +94,7 @@ export function WorkPulsePanel({ data, product, title = 'Work Pulse', actions = 
       {answer && <p className="m-0 mt-2 text-[14px] leading-[22px] text-[#1A1A1A] [&_b]:font-semibold">{answer}</p>}
       <div className="grid grid-cols-2 xl:grid-cols-4 gap-2.5 mt-3">
         <QuestionCard
-          question={`People doing ${deepName} work with it`}
+          question={`People doing ${deepName} work`}
           value={people !== null && active !== null ? `${people} of ${active}` : undefined}
           unit="people"
           trend={d?.deepPeopleWeeks}
@@ -96,7 +102,7 @@ export function WorkPulsePanel({ data, product, title = 'Work Pulse', actions = 
           notMeasured={people === null ? 'No classified work yet' : undefined}
           todo={actions && people !== null && active !== null
             ? (active - people > 0
-              ? <>{active - people} {active - people === 1 ? 'person only uses' : 'people only use'} it for {t.t1.toLowerCase()} tasks. <Link href="/pulse/users" className="text-[#1F6F8B] font-medium hover:underline">See who</Link></>
+              ? <>{active - people} {active - people === 1 ? 'person only uses' : 'people only use'} it for {t.t1.toLowerCase()} tasks. <Link href={`/pulse/people?list=admin-only&window=${q ? 'quarter' : 'month'}`} className="text-[#1F6F8B] font-medium hover:underline">See who</Link></>
               : `Everyone active is doing some ${deepName} work.`)
             : undefined}
         />
@@ -127,15 +133,17 @@ export function WorkPulsePanel({ data, product, title = 'Work Pulse', actions = 
         <QuestionCard
           question={`${t.t3} work rests on`}
           value={half !== null ? (half === 1 ? 'One person' : `${half} people`) : undefined}
-          sub={half !== null && d ? <>They do half of it, out of {d.frontierPeople30d} doing any. <Link href="/pulse/dept" className="text-[#1F6F8B] font-medium hover:underline">See who</Link></> : undefined}
+          sub={half !== null && d ? <>{d.frontierHalfSplit
+            ? <>{d.frontierHalfSplit.claude} on Claude and {d.frontierHalfSplit.openai} on ChatGPT do half of each one&apos;s {t.t3.toLowerCase()} work, out of {d.frontierPeople30d} doing any.</>
+            : <>They do half of it, out of {d.frontierPeople30d} doing any.</>} <Link href={`/pulse/people?list=frontier-half&window=${q ? 'quarter' : 'month'}`} className="text-[#1F6F8B] font-medium hover:underline">See who</Link></> : undefined}
           notMeasured={half === null ? `No ${t.t3.toLowerCase()} work in ${span}` : undefined}
           todo={actions && d?.frontierTopShare != null
-            ? <>If the busiest person left, {d.frontierTopShare < 0.15 ? `${Math.round(d.frontierTopShare * 100)}%` : shareWords(d.frontierTopShare)} of it would go. <Link href="/pulse/dept" className="text-[#1F6F8B] font-medium hover:underline">See who</Link></>
+            ? <>If the busiest person left, {d.frontierTopShare < 0.15 ? `${Math.round(d.frontierTopShare * 100)}%` : shareWords(d.frontierTopShare)} of it would go. <Link href={`/pulse/people?list=frontier-half&window=${q ? 'quarter' : 'month'}`} className="text-[#1F6F8B] font-medium hover:underline">See who</Link></>
             : undefined}
         />
       </div>
       <p className="m-0 mt-3 pt-2.5 border-t border-dashed border-[#EAEAEA] text-[12px] text-[#8F8F8F]">
-        {t.t2} and {t.t3} are the top two tiers Claude judges each task against; the rest are {t.t1.toLowerCase()}. A new way of working is one a manager has confirmed. {q ? 'Bars and lines show the quarter week by week.' : 'Bars and lines show the last 8 weeks.'} <Link href="/pulse/cio" className="text-[#1F6F8B] font-medium hover:underline">Open Work Pulse</Link>
+        {t.t2} and {t.t3} are the top two tiers Claude judges each task against; the rest are {t.t1.toLowerCase()}. New ways of working: {NEW_WAYS_OF_WORKING} {q ? 'Bars and lines show the quarter week by week.' : 'Bars and lines show the last 8 weeks.'} <Link href="/pulse/cio" className="text-[#1F6F8B] font-medium hover:underline">Open Work Pulse</Link>
       </p>
     </section>
   );
@@ -143,22 +151,23 @@ export function WorkPulsePanel({ data, product, title = 'Work Pulse', actions = 
 
 /* ── 11: How deep is the work? This month against last ─────────── */
 
-function DepthPanel({ now, before, product }: { now: Tier; before: Tier | null; product: string }) {
+function DepthPanel({ now, before, product, names }: { now: Tier; before: Tier | null; product: string; names?: TierNames }) {
+  const tn = tierNamesOr(names);
   if (total(now) === 0) {
     return <Panel title="How deep is the work?" right={<Tag tone="neutral">AI-judged</Tag>}><Muted>No classified work in the last 30 days.</Muted></Panel>;
   }
   const f = (t: Tier) => (total(t) > 0 ? t.t3 / total(t) : 0);
   const hasBefore = before !== null && total(before) > 0;
   const answer = hasBefore
-    ? <>Frontier work {f(now) > f(before!) ? 'rose' : f(now) < f(before!) ? 'fell' : 'held'} {Math.round(f(now) * 100) === Math.round(f(before!) * 100) ? 'at' : `from ${pct(f(before!))} to`} <b>{pct(f(now))}</b> of everything people handed {product}.</>
-    : <>Frontier work was <b>{pct(f(now))}</b> of everything people handed {product} in the last 30 days.</>;
+    ? <>{tn.t3} work {f(now) > f(before!) ? 'rose' : f(now) < f(before!) ? 'fell' : 'held'} {Math.round(f(now) * 100) === Math.round(f(before!) * 100) ? 'at' : `from ${pct(f(before!))} to`} <b>{pct(f(now))}</b> of everything people handed {product}.</>
+    : <>{tn.t3} work was <b>{pct(f(now))}</b> of everything people handed {product} in the last 30 days.</>;
   const row = (label: string, t: Tier, bold: boolean) => (
     <div className="grid grid-cols-[96px_minmax(0,1fr)_44px] gap-2.5 items-center text-[13px] py-1.5">
       <span className="text-[#333333]">{label}</span>
       <div className="flex h-[14px] rounded-[3px] overflow-hidden gap-[2px]">
-        {t.t1 > 0 && <span style={{ flex: t.t1, background: T1 }} title={`Routine ${pct(t.t1 / total(t))}`} />}
-        {t.t2 > 0 && <span style={{ flex: t.t2, background: T2 }} title={`Meaningful ${pct(t.t2 / total(t))}`} />}
-        {t.t3 > 0 && <span style={{ flex: t.t3, background: T3 }} title={`Frontier ${pct(t.t3 / total(t))}`} />}
+        {t.t1 > 0 && <span style={{ flex: t.t1, background: T1 }} title={`${tn.t1} ${pct(t.t1 / total(t))}`} />}
+        {t.t2 > 0 && <span style={{ flex: t.t2, background: T2 }} title={`${tn.t2} ${pct(t.t2 / total(t))}`} />}
+        {t.t3 > 0 && <span style={{ flex: t.t3, background: T3 }} title={`${tn.t3} ${pct(t.t3 / total(t))}`} />}
       </div>
       <span className={`text-right tabular-nums ${bold ? 'font-semibold text-[#0A0A0A]' : 'text-[#666666]'}`}>{pct(deep(t)!)}</span>
     </div>
@@ -174,10 +183,10 @@ function DepthPanel({ now, before, product }: { now: Tier; before: Tier | null; 
       {hasBefore && row('30 days before', before!, false)}
       {row('Last 30 days', now, true)}
       <div className="flex flex-wrap gap-x-3.5 gap-y-1 mt-2 text-[12px] text-[#666666]">
-        <span className="inline-flex items-center gap-1.5"><span className="w-2.5 h-2.5 rounded-[2px]" style={{ background: T1 }} />Routine</span>
-        <span className="inline-flex items-center gap-1.5"><span className="w-2.5 h-2.5 rounded-[2px]" style={{ background: T2 }} />Meaningful</span>
-        <span className="inline-flex items-center gap-1.5"><span className="w-2.5 h-2.5 rounded-[2px]" style={{ background: T3 }} />Frontier</span>
-        <span className="ml-auto">right: meaningful or frontier</span>
+        <span className="inline-flex items-center gap-1.5"><span className="w-2.5 h-2.5 rounded-[2px]" style={{ background: T1 }} />{tn.t1}</span>
+        <span className="inline-flex items-center gap-1.5"><span className="w-2.5 h-2.5 rounded-[2px]" style={{ background: T2 }} />{tn.t2}</span>
+        <span className="inline-flex items-center gap-1.5"><span className="w-2.5 h-2.5 rounded-[2px]" style={{ background: T3 }} />{tn.t3}</span>
+        <span className="ml-auto">right: {deepWords(names)}</span>
       </div>
     </section>
   );
@@ -219,7 +228,7 @@ function SpreadPanel({ skills, connectors, activePeople }: { skills: { total: nu
       {rows.length > 0 && (
         <div>
           <div className="grid grid-cols-[minmax(0,1fr)_minmax(0,1.2fr)_90px] gap-3 text-[12px] text-[#8F8F8F] py-1 border-b border-[#EAEAEA]">
-            <span>{kind === 'skills' ? 'Skill' : 'Connector'}</span><span>People using it, of {activePeople} active</span><span className="text-right">Change</span>
+            <span>{kind === 'skills' ? 'Skill' : 'Connector'}</span><span>Using it, of {activePeople.toLocaleString('en-GB')} product users</span><span className="text-right">Change</span>
           </div>
           {rows.map(r => {
             const grew = r.people - r.priorPeople;
@@ -286,7 +295,7 @@ export default function PulseBand({ children, vendor = 'all', showVendor = false
           )}
           <div className="grid grid-cols-1 xl:grid-cols-[minmax(0,2fr)_minmax(0,1fr)] gap-4 items-stretch">
             <WorkPulsePanel data={data} product={product} />
-            <DepthPanel now={data.tierCounts} before={data.dashboard?.priorTierCounts ?? null} product={product} />
+            <DepthPanel now={data.tierCounts} before={data.dashboard?.priorTierCounts ?? null} product={product} names={data.tierNames ?? undefined} />
           </div>
 
           {children}

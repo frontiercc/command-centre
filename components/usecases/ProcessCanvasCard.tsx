@@ -26,6 +26,8 @@ export interface SuggestionDraft {
   evidence: { distinctUsers: number; sessionCount: number; departments: string[] };
   department: string | null;
   canvas: ProcessCanvas | null;
+  /** When it was drafted (epoch seconds): the end of the canvas's window. */
+  generatedAt: number;
   /** Sessions by product; null while ChatGPT and Codex are hidden or on older rows. */
   products?: SuggestionProducts | null;
 }
@@ -88,6 +90,7 @@ export default function ProcessCanvasCard({
 }) {
   const canvas = suggestion.canvas;
   const facts = canvas ? buildFacts(canvas, suggestion.products) : [];
+  const draftedOn = new Date(suggestion.generatedAt * 1000).toLocaleDateString('en-GB', { day: 'numeric', month: 'long', year: 'numeric' });
 
   return (
     <div
@@ -106,8 +109,8 @@ export default function ProcessCanvasCard({
           {canvas && (
             <span className="text-[13px] text-[#8F8F8F]">
               {suggestion.department
-                ? <>Drafted from this department&apos;s own activity over the last {canvas.windowDays} days</>
-                : <>Drafted from activity in several departments over the last {canvas.windowDays} days</>}
+                ? <>Drafted from this department&apos;s own activity in the {canvas.windowDays} days to {draftedOn}</>
+                : <>Drafted from activity in several departments in the {canvas.windowDays} days to {draftedOn}</>}
             </span>
           )}
           {position && (

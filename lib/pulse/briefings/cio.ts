@@ -2,6 +2,7 @@
 // SPDX-License-Identifier: Apache-2.0
 
 import { getOrgBriefingModel } from '@/lib/anthropic/model';
+import { briefingPeriodLabel } from '@/lib/pulse/briefings/described-facts';
 import { personPerProduct } from '@/lib/dashboard/product-sql';
 import Anthropic from '@anthropic-ai/sdk';
 import { createAnthropicClient } from '@/lib/anthropic/client';
@@ -26,10 +27,6 @@ async function getClient(): Promise<Anthropic> {
   const apiKey = await getConfigValue('anthropicAiApiKey');
   if (!apiKey) throw new Error('No AI API key configured');
   return createAnthropicClient(apiKey);
-}
-
-function periodLabel(date: Date): string {
-  return date.toLocaleDateString('en-GB', { month: 'long', year: 'numeric' });
 }
 
 interface RawFacade {
@@ -137,7 +134,7 @@ export async function generateCioBriefing(
 
   const tierNames = await getTierNames();
   const ctx: CioBriefingContext = {
-    period_label: periodLabel(new Date(periodStart * 1000)),
+    period_label: briefingPeriodLabel(periodStart, periodEnd),
     weekly_active_users: activeCount,
     total_classified_events: totalTier,
     tier_lines: tierLines(tierNames, tierCounts),
@@ -195,7 +192,7 @@ export async function runCioBriefingJob(): Promise<void> {
   const periodEnd = new Date(now.getFullYear(), now.getMonth(), 1); // 1st of current month = end of last
   const periodStart = new Date(now.getFullYear(), now.getMonth() - 1, 1);
 
-  console.log(`[CioBriefing] Generating CIO briefing for ${periodLabel(periodStart)} with ${model}`);
+  console.log(`[CioBriefing] Generating CIO briefing for ${briefingPeriodLabel(Math.floor(periodStart.getTime() / 1000), Math.floor(periodEnd.getTime() / 1000))} with ${model}`);
 
   // A failure (including a reply the number check refused twice) is thrown, so
   // the scheduler's runJob records it and System health shows it. Nothing is

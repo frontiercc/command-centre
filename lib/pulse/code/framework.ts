@@ -4,6 +4,7 @@
 // lib/pulse/code/framework.ts
 // Pure crosswalk: maps measured Developer Pulse signals onto DX Core 4 boxes.
 // No IO, no LLM, no causation. Fit labels keep the measured/proxy/not-captured line honest.
+import { formatModelLabel } from '@/lib/pulse/code/model-label';
 
 export type FitLevel = 'measured' | 'proxy' | 'ai_judged' | 'ai_specific' | 'not_captured';
 export type SpaceDim = 'activity' | 'efficiency' | 'performance' | 'satisfaction' | 'communication';
@@ -21,6 +22,8 @@ export interface CodeSignals {
   engagedHours: number | null;
   cacheHitRatio: number | null;
   hasWorkMix: boolean;
+  /** The configured session classifier model (codeClassifierModel), named on the work mix cell. */
+  classifierModel?: string | null;
   /**
    * Developer Pulse's view: Claude Code (the default), Codex ('openai') or both
    * ('all'). Only the wording changes, plus, in the Codex view, the signals
@@ -103,9 +106,9 @@ export function buildCrosswalk(s: CodeSignals): FrameworkBox[] {
         'Lead time and deployment frequency come from your CD pipeline. Connect DX to fill these.',
       notCaptured: ['Lead time', 'Deployment frequency'],
       cells: [
-        { label: 'AI-assisted commits (7d)', value: num(s.commitCount), fit: 'proxy', space: 'activity',
+        { label: 'AI-assisted commits (30d)', value: num(s.commitCount), fit: 'proxy', space: 'activity',
           note: `Count of commits made inside ${sessionsIn}, not total delivery.` },
-        codexGap({ label: 'Merged PRs (7d)', value: num(s.prCount), fit: 'proxy', space: 'activity' }),
+        codexGap({ label: 'Pull requests opened (30d)', value: num(s.prCount), fit: 'proxy', space: 'activity' }),
         codexGap({ label: 'Code output (lines ±)', value:
             s.linesAdded === null && s.linesRemoved === null ? null
               : `+${num(s.linesAdded) ?? '—'} / −${num(s.linesRemoved) ?? '—'}`,
@@ -134,7 +137,7 @@ export function buildCrosswalk(s: CodeSignals): FrameworkBox[] {
         'The Developer Experience Index (DXI) is a survey signal Command Centre does not capture. Connect DX to fill this.',
       notCaptured: ['Developer Experience Index (DXI)'],
       cells: [
-        codexGap({ label: 'Engaged AI time (hrs, 7d)', value: num(s.engagedHours), fit: 'proxy', space: 'efficiency' }),
+        codexGap({ label: 'Engaged AI time (hrs, 30d)', value: num(s.engagedHours), fit: 'proxy', space: 'efficiency' }),
         { label: 'Cache efficiency', value: pct(s.cacheHitRatio), fit: 'ai_specific', space: 'efficiency',
           note: 'AI-specific cost efficiency, not a framework metric.' },
       ],
@@ -149,7 +152,7 @@ export function buildCrosswalk(s: CodeSignals): FrameworkBox[] {
       cells: [
         s.hasWorkMix
           ? { label: 'AI-judged work mix', value: 'See Work Mix', fit: 'ai_judged', space: 'performance',
-              note: 'Judged by Haiku: the one non-measured signal here.' }
+              note: `Judged by ${s.classifierModel ? formatModelLabel(s.classifierModel).label : 'the classifier'}: the one non-measured signal here.` }
           : { label: 'AI-judged work mix', value: null, fit: 'not_captured', space: 'performance',
               note: 'Session classifier is off. Enable it in Developer Pulse admin.' },
         { label: spendLabel, value: usd(s.spendUsd), fit: 'ai_specific', space: 'efficiency',

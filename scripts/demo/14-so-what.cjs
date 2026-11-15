@@ -81,6 +81,8 @@ async function main() {
     await c.query(`DELETE FROM pulse_skill_runs WHERE cowork_message_id LIKE $1`, [like]);
     await c.query(`DELETE FROM pulse_classifications WHERE cowork_message_id LIKE $1`, [like]);
     await c.query(`DELETE FROM chat_assistant_meta WHERE id LIKE $1`, [like]);
+    // Alerts the Hub raised on these prompts would point at nothing once they go.
+    await c.query(`DELETE FROM alerts WHERE raw_evidence->>'message_id' LIKE $1`, [like]);
     await c.query(`DELETE FROM cowork_messages WHERE id LIKE $1`, [like]);
     await c.query(`DELETE FROM cowork_session_stats WHERE session_id LIKE $1`, [like]);
     await c.query(`DELETE FROM cowork_sessions WHERE id LIKE $1`, [like]);

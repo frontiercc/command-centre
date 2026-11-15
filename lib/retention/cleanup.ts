@@ -548,8 +548,10 @@ export async function runRetentionCleanup(): Promise<CleanupResult> {
     const rollingCutoff = nowSeconds - (30 * 86400);
     const weeklyCutoff = nowSeconds - (400 * 86400);
 
+    // Developer Pulse writes three rolling snapshots each run: the last 30 days, the 30 before, and the last 7 days.
+    const codeRolling = ['rolling', 'rolling_prior', 'rolling_7d'];
     const codeMetricsRollingDeleted = rowsAffected(
-      await tx.delete(schema.codeMetrics).where(and(eq(schema.codeMetrics.granularity, 'rolling'), lt(schema.codeMetrics.computed_at, rollingCutoff)))
+      await tx.delete(schema.codeMetrics).where(and(inArray(schema.codeMetrics.granularity, codeRolling), lt(schema.codeMetrics.computed_at, rollingCutoff)))
     );
     const codeMetricsWeeklyDeleted = rowsAffected(
       await tx.delete(schema.codeMetrics).where(and(eq(schema.codeMetrics.granularity, 'week'), lt(schema.codeMetrics.computed_at, weeklyCutoff)))
@@ -562,7 +564,7 @@ export async function runRetentionCleanup(): Promise<CleanupResult> {
     );
     // Per-product twin (migration 0045): the same three cuts.
     const cmv = schema.codeMetricsVendor;
-    codeMetricsAffected += rowsAffected(await tx.delete(cmv).where(and(eq(cmv.granularity, 'rolling'), lt(cmv.computed_at, rollingCutoff))));
+    codeMetricsAffected += rowsAffected(await tx.delete(cmv).where(and(inArray(cmv.granularity, codeRolling), lt(cmv.computed_at, rollingCutoff))));
     codeMetricsAffected += rowsAffected(await tx.delete(cmv).where(and(eq(cmv.granularity, 'week'), lt(cmv.computed_at, weeklyCutoff))));
     codeMetricsAffected += rowsAffected(await tx.delete(cmv).where(gt(cmv.computed_at, nowSeconds)));
     codeMetricsAffected += codeMetricsRollingDeleted + codeMetricsWeeklyDeleted + codeMetricsFutureDeleted;

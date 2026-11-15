@@ -18,7 +18,8 @@ import { getTypedClient } from '@/lib/db/client';
 import { schema } from '@/lib/db/schema';
 import { visibleVendor } from '@/lib/sources/openai-visibility';
 import { vendorClause } from '@/lib/dashboard/product-sql';
-import { PERIOD_SHAPE, type PulsePeriod } from '@/lib/pulse/period-shape';
+import type { PulsePeriod } from '@/lib/pulse/period-shape';
+import { periodWindow } from '@/lib/pulse/my-period';
 import { errorResponse } from '@/lib/api/errors';
 
 export const dynamic = 'force-dynamic';
@@ -95,9 +96,8 @@ export async function GET(request: NextRequest) {
     const nameOf = (id: string) => (askedDept ? names.get(id) ?? null : null);
 
     const vendor = await visibleVendor(p.get('vendor'));
-    const { buckets, bucketSecs } = PERIOD_SHAPE[period];
-    const end = Math.floor(Date.now() / 1000);
-    const start = end - buckets * bucketSecs;
+    // The panel's own window (lib/pulse/my-period.ts): the quarter is the 13 completed weeks.
+    const { start, end } = periodWindow(period, Math.floor(Date.now() / 1000));
     const msgVendor = sql.raw(vendorClause(vendor, 'cm.'));
 
     if (kind === 'capabilities') {

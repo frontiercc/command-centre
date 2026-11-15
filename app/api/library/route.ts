@@ -29,11 +29,12 @@ import { boardUses, hideOpenAiOnlyEntries } from '@/lib/library/visible-uses';
 import { NextRequest, NextResponse } from 'next/server';
 import { normaliseSourceUrl, SOURCE_URL_ERROR } from '@/lib/library/source-url';
 import { callerPersonId } from '@/lib/library/author';
-import { and, desc, eq, gte, inArray, isNull, notInArray, or, sql, type SQL } from 'drizzle-orm';
+import { and, desc, eq, gte, inArray, isNull, or, sql, type SQL } from 'drizzle-orm';
 import { canAccessOrgOverview, getAdminSession } from '@/lib/auth/admin-auth';
 import { getTypedClient } from '@/lib/db/client';
 import { schema } from '@/lib/db/schema';
 import { getConnectorReadWriteCounts } from '@/lib/pulse/mcp-classify';
+import { notBoardHiddenConnector, entryNotBoardHidden } from '@/lib/library/built-in-connectors';
 
 export const dynamic = 'force-dynamic';
 
@@ -47,7 +48,6 @@ async function rawAll<T>(client: unknown, query: unknown): Promise<T[]> {
   return res.rows as T[];
 }
 
-const EXCLUDED_MCP_SERVERS = ['workspace', 'cowork', 'Claude_in_Chrome'];
 
 interface LibraryEntry {
   id: number;
@@ -67,6 +67,7 @@ interface LibraryEntry {
   vote_count: number | string;
   user_voted: number | string;
   week_count: number | string;
+  week_user_count: number | string;
   prev_week_count: number | string;
   reads?: number;
   writes?: number;
@@ -92,12 +93,19 @@ export async function GET(req: NextRequest) {
   const weekAgo = now - 7 * 86400;
   const twoWeeksAgo = now - 14 * 86400;
   const userId = session.userId ?? '';
+  // The caller's person record (users.id), not their sign-in id: the two
+  // differ for admin-created and linked accounts, whose uses, standing,
+  // skills to try and department picks are recorded against the person.
+  const personId = (await callerPersonId(session)) ?? '';
+  // Votes are written with the sign-in id (the vote route); older ones may
+  // carry the person id, so either counts as the caller's own vote.
+  const voterIds = [...new Set([userId, personId].filter(Boolean))];
 
   // Current user's department, computed here so the visibility filter can
   // use it too.
   const u0 = schema.users;
-  const userDeptRows0 = userId
-    ? await client.select({ department: u0.department }).from(u0).where(eq(u0.id, userId))
+  const userDeptRows0 = personId
+    ? await client.select({ department: u0.department }).from(u0).where(eq(u0.id, personId))
     : [];
   const userDept = userDeptRows0[0]?.department ?? null;
   // "The caller's department" for VISIBILITY GATING
@@ -123,6 +131,8 @@ export async function GET(req: NextRequest) {
   const uses = await boardUses();
   const conditions: SQL[] = [];
   if (!uses.shown) conditions.push(hideOpenAiOnlyEntries());
+  // Claude's own connectors are never listed or counted (lib/library/built-in-connectors.ts).
+  conditions.push(entryNotBoardHidden(sql.raw('e.type'), sql.raw('e.name')));
   if (type) conditions.push(sql`e.type = ${type}`);
   if (surface && surface !== 'both') conditions.push(sql`(e.surface = ${surface} OR e.surface = 'both')`);
   if (surface === 'both') conditions.push(sql`e.surface = 'both'`);
@@ -160,6 +170,18 @@ export async function GET(req: NextRequest) {
   // so interpolating it via sql.raw is safe.
   const orderBy = orderMap[sort] ?? orderMap.most_used;
 
+  // Skill uses and connector uses as one set, tagged by kind, so a connector
+  // counts its connector uses and a skill its skill uses, and a skill and a
+  // connector that share a name never mix. Connector uses leave out the same
+  // built-in servers as everywhere else on the Board.
+  const allUses = sql`(
+    SELECT 'skill' AS kind, skill_name AS name, user_id, occurred_at FROM ${uses.skills}
+    UNION ALL
+    SELECT 'connector' AS kind, mcp_server AS name, user_id, occurred_at FROM ${uses.connectors}
+    WHERE ${notBoardHiddenConnector(sql.raw('mcp_server'))}
+  ) AS board_uses`;
+  const entryKind = sql`(CASE WHEN e.type = 'connector' THEN 'connector' ELSE 'skill' END)`;
+
   const rowsRaw = await rawAll<LibraryEntry>(client, sql`
     SELECT
       e.*,
@@ -169,32 +191,34 @@ export async function GET(req: NextRequest) {
       COALESCE(v.vcnt, 0)   AS vote_count,
       COALESCE(mv.voted, 0) AS user_voted,
       COALESCE(wk.wcnt, 0)  AS week_count,
+      COALESCE(wk.wucnt, 0) AS week_user_count,
       COALESCE(pw.pcnt, 0)  AS prev_week_count
     FROM skill_library_entries e
     LEFT JOIN users u ON u.id = e.author_user_id
     LEFT JOIN (
-      SELECT skill_name, COUNT(*) AS cnt, COUNT(DISTINCT user_id) AS ucnt
-      FROM ${uses.skills}
-      GROUP BY skill_name
-    ) inv ON inv.skill_name = e.name
+      SELECT kind, name, COUNT(*) AS cnt, COUNT(DISTINCT user_id) AS ucnt
+      FROM ${allUses}
+      GROUP BY kind, name
+    ) inv ON inv.name = e.name AND inv.kind = ${entryKind}
     LEFT JOIN (
       SELECT entry_id, COUNT(*) AS vcnt FROM skill_library_votes GROUP BY entry_id
     ) v ON v.entry_id = e.id
     LEFT JOIN (
-      SELECT entry_id, 1 AS voted FROM skill_library_votes WHERE voter_user_id = ${userId}
+      SELECT DISTINCT entry_id, 1 AS voted FROM skill_library_votes
+      WHERE ${voterIds.length ? sql`voter_user_id IN (${sql.join(voterIds.map(id => sql`${id}`), sql`, `)})` : sql`false`}
     ) mv ON mv.entry_id = e.id
     LEFT JOIN (
-      SELECT skill_name, COUNT(*) AS wcnt
-      FROM ${uses.skills}
+      SELECT kind, name, COUNT(*) AS wcnt, COUNT(DISTINCT user_id) AS wucnt
+      FROM ${allUses}
       WHERE occurred_at >= ${weekAgo}
-      GROUP BY skill_name
-    ) wk ON wk.skill_name = e.name
+      GROUP BY kind, name
+    ) wk ON wk.name = e.name AND wk.kind = ${entryKind}
     LEFT JOIN (
-      SELECT skill_name, COUNT(*) AS pcnt
-      FROM ${uses.skills}
+      SELECT kind, name, COUNT(*) AS pcnt
+      FROM ${allUses}
       WHERE occurred_at >= ${twoWeeksAgo} AND occurred_at < ${weekAgo}
-      GROUP BY skill_name
-    ) pw ON pw.skill_name = e.name
+      GROUP BY kind, name
+    ) pw ON pw.name = e.name AND pw.kind = ${entryKind}
     ${whereSql}
     ORDER BY ${sql.raw(orderBy)}
     LIMIT ${perPage} OFFSET ${(page - 1) * perPage}
@@ -211,6 +235,7 @@ export async function GET(req: NextRequest) {
     vote_count: Number(r.vote_count),
     user_voted: Number(r.user_voted),
     week_count: Number(r.week_count),
+    week_user_count: Number(r.week_user_count),
     prev_week_count: Number(r.prev_week_count),
   }));
 
@@ -226,8 +251,16 @@ export async function GET(req: NextRequest) {
   const unclaimedRows = await client
     .select({ cnt: sql<number | string>`COUNT(*)` })
     .from(e)
-    .where(and(eq(e.is_published, 0), eq(e.source, 'org')));
+    .where(and(eq(e.is_published, 0), eq(e.source, 'org'), entryNotBoardHidden(sql`${e.type}`, sql`${e.name}`)));
   const unclaimedCount = Number(unclaimedRows[0]?.cnt ?? 0);
+
+  // The banner's count: unclaimed entries someone has actually used.
+  const unclaimedInUseRows = await rawAll<{ cnt: number | string }>(client, sql`
+    SELECT COUNT(*) AS cnt FROM skill_library_entries e
+    WHERE e.is_published = 0 AND e.source = 'org' AND ${entryNotBoardHidden(sql.raw('e.type'), sql.raw('e.name'))}
+    AND EXISTS (SELECT 1 FROM ${allUses} WHERE board_uses.name = e.name AND board_uses.kind = ${entryKind})
+  `);
+  const unclaimedInUseCount = Number(unclaimedInUseRows[0]?.cnt ?? 0);
 
   // Same department-visibility gate as the main listing above, so the
   // headline stats/capability aggregates can never inflate past what the
@@ -245,7 +278,7 @@ export async function GET(req: NextRequest) {
       connector_count: sql<number | string | null>`SUM(CASE WHEN ${e.type} = 'connector' THEN 1 ELSE 0 END)`,
     })
     .from(e)
-    .where(visibilityWhere ? and(eq(e.source, 'org'), visibilityWhere) : eq(e.source, 'org'));
+    .where(visibilityWhere ? and(eq(e.source, 'org'), entryNotBoardHidden(sql`${e.type}`, sql`${e.name}`), visibilityWhere) : and(eq(e.source, 'org'), entryNotBoardHidden(sql`${e.type}`, sql`${e.name}`)));
   const skillCount = Number(statsRows[0]?.skill_count ?? 0);
   const connectorCount = Number(statsRows[0]?.connector_count ?? 0);
 
@@ -255,7 +288,7 @@ export async function GET(req: NextRequest) {
       total: sql<number | string>`COUNT(*)`,
     })
     .from(e)
-    .where(visibilityWhere ? and(eq(e.source, 'org'), visibilityWhere) : eq(e.source, 'org'));
+    .where(visibilityWhere ? and(eq(e.source, 'org'), entryNotBoardHidden(sql`${e.type}`, sql`${e.name}`), visibilityWhere) : and(eq(e.source, 'org'), entryNotBoardHidden(sql`${e.type}`, sql`${e.name}`)));
   const capabilityClaimed = Number(capabilityRows[0]?.claimed ?? 0);
   const capabilityTotal = Number(capabilityRows[0]?.total ?? 0);
 
@@ -287,7 +320,7 @@ export async function GET(req: NextRequest) {
       COALESCE(s.skill_count, 0) + COALESCE(c.connector_count, 0) AS total_count
     FROM users u
     LEFT JOIN (SELECT user_id, COUNT(*) AS skill_count FROM ${uses.skills} GROUP BY user_id) s ON s.user_id = u.id
-    LEFT JOIN (SELECT user_id, COUNT(*) AS connector_count FROM ${uses.connectors} WHERE mcp_server NOT IN ('workspace', 'cowork', 'Claude_in_Chrome') GROUP BY user_id) c ON c.user_id = u.id
+    LEFT JOIN (SELECT user_id, COUNT(*) AS connector_count FROM ${uses.connectors} WHERE ${notBoardHiddenConnector(sql.raw('mcp_server'))} GROUP BY user_id) c ON c.user_id = u.id
     WHERE COALESCE(s.skill_count, 0) + COALESCE(c.connector_count, 0) > 0
     ORDER BY total_count DESC
     LIMIT 5
@@ -316,7 +349,7 @@ export async function GET(req: NextRequest) {
     ? await client
         .select({ user_id: cmi.user_id, mcp_server: cmi.mcp_server, cnt: sql<number | string>`COUNT(*)` })
         .from(cmi)
-        .where(and(inArray(cmi.user_id, leaderboardIds), notInArray(cmi.mcp_server, EXCLUDED_MCP_SERVERS), uses.claudeOnly))
+        .where(and(inArray(cmi.user_id, leaderboardIds), notBoardHiddenConnector(sql`${cmi.mcp_server}`), uses.claudeOnly))
         .groupBy(cmi.user_id, cmi.mcp_server)
         .orderBy(cmi.user_id, desc(sql`COUNT(*)`))
     : [];
@@ -341,7 +374,7 @@ export async function GET(req: NextRequest) {
   }));
 
   // Current user's rank (even if outside top 5) — window function, kept raw.
-  const userRankRaw = userId ? await rawAll<{
+  const userRankRaw = personId ? await rawAll<{
     rank: number | string; total_count: number | string; skill_count: number | string; connector_count: number | string;
   }>(client, sql`
     SELECT ranked.rank, ranked.total_count, ranked.skill_count, ranked.connector_count
@@ -354,10 +387,10 @@ export async function GET(req: NextRequest) {
         ROW_NUMBER() OVER (ORDER BY COALESCE(s.skill_count, 0) + COALESCE(c.connector_count, 0) DESC) AS rank
       FROM users u
       LEFT JOIN (SELECT user_id, COUNT(*) AS skill_count FROM ${uses.skills} GROUP BY user_id) s ON s.user_id = u.id
-      LEFT JOIN (SELECT user_id, COUNT(*) AS connector_count FROM ${uses.connectors} WHERE mcp_server NOT IN ('workspace', 'cowork', 'Claude_in_Chrome') GROUP BY user_id) c ON c.user_id = u.id
+      LEFT JOIN (SELECT user_id, COUNT(*) AS connector_count FROM ${uses.connectors} WHERE ${notBoardHiddenConnector(sql.raw('mcp_server'))} GROUP BY user_id) c ON c.user_id = u.id
       WHERE COALESCE(s.skill_count, 0) + COALESCE(c.connector_count, 0) > 0
     ) ranked
-    WHERE ranked.user_id = ${userId}
+    WHERE ranked.user_id = ${personId}
   `) : [];
   const userRankRow = userRankRaw[0]
     ? {
@@ -372,7 +405,7 @@ export async function GET(req: NextRequest) {
   // visibility here uses the same callerDepts union (deptOr, built above)
   // as the main listing/detail routes — an entry restricted to either
   // session.department or the users-table department is visible.
-  const skillsToTryRaw = userId ? await rawAll<{
+  const skillsToTryRaw = personId ? await rawAll<{
     id: number; name: string; type: string; description: string | null; install_guide: string | null;
     invocation_count: number | string; user_count: number | string;
   }>(client, sql`
@@ -386,7 +419,7 @@ export async function GET(req: NextRequest) {
     WHERE e.is_published = 1 AND e.source = 'org'
     AND (e.department IS NULL OR ${deptOr})
     AND e.name NOT IN (
-      SELECT DISTINCT skill_name FROM ${uses.skills} WHERE user_id = ${userId}
+      SELECT DISTINCT skill_name FROM ${uses.skills} WHERE user_id = ${personId}
     )
     ORDER BY invocation_count DESC
     LIMIT 5
@@ -431,13 +464,15 @@ export async function GET(req: NextRequest) {
   // Department activity breakdown — pre-aggregate per user to avoid cross-join
   // inflation. Postgres does not allow a SELECT-list alias in HAVING (only
   // ORDER BY/GROUP BY), so the aggregate expression is repeated verbatim.
+  // Every department with a use is listed, and its people are those with at
+  // least one use, not its headcount.
   const deptBreakdownRaw = await rawAll<{
     department: string; user_count: number | string; skill_uses: number | string;
     connector_uses: number | string; total_uses: number | string;
   }>(client, sql`
     SELECT
       u.department,
-      COUNT(DISTINCT u.id)           AS user_count,
+      COUNT(DISTINCT u.id) FILTER (WHERE COALESCE(s.skill_count, 0) + COALESCE(c.connector_count, 0) > 0) AS user_count,
       COALESCE(SUM(s.skill_count), 0)     AS skill_uses,
       COALESCE(SUM(c.connector_count), 0) AS connector_uses,
       COALESCE(SUM(s.skill_count), 0) + COALESCE(SUM(c.connector_count), 0) AS total_uses
@@ -450,14 +485,13 @@ export async function GET(req: NextRequest) {
     LEFT JOIN (
       SELECT user_id, COUNT(*) AS connector_count
       FROM ${uses.connectors}
-      WHERE mcp_server NOT IN ('workspace', 'cowork', 'Claude_in_Chrome')
+      WHERE ${notBoardHiddenConnector(sql.raw('mcp_server'))}
       GROUP BY user_id
     ) c ON c.user_id = u.id
     WHERE u.department IS NOT NULL AND u.department != ''
     GROUP BY u.department
     HAVING COALESCE(SUM(s.skill_count), 0) + COALESCE(SUM(c.connector_count), 0) > 0
     ORDER BY total_uses DESC
-    LIMIT 6
   `);
   const deptBreakdown = deptBreakdownRaw.map(r => ({
     department: r.department,
@@ -489,6 +523,7 @@ export async function GET(req: NextRequest) {
     entries,
     total,
     unclaimed_count: unclaimedCount,
+    unclaimed_in_use_count: unclaimedInUseCount,
     stats: {
       skill_count:           skillCount,
       connector_count:       connectorCount,

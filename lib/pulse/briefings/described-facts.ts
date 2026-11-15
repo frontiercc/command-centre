@@ -83,3 +83,22 @@ export async function departmentsBelowFloor(since: number, until: number, names:
   if (below.length === 0) return `Every one of the ${measured.length} departments is at or above the floor of ${floor}% ${deep}.`;
   return `Departments below the floor of ${floor}% ${deep}, ${below.length} of ${measured.length}: ${below.map(b => `${b.d} (${Math.round(b.share * 100)}%)`).join(', ')}.`;
 }
+
+/**
+ * The briefing's period in words. A whole calendar month (the scheduled run) reads "October 2026";
+ * any other window (Generate now covers the last 30 days) reads by its dates, "15 October to
+ * 14 November 2026", so a briefing never names a month it only half covers. Times are seconds;
+ * the end is exclusive.
+ */
+export function briefingPeriodLabel(startS: number, endS: number): string {
+  const start = new Date(startS * 1000);
+  const last = new Date((endS - 1) * 1000);
+  const wholeMonth = start.getDate() === 1 && start.getHours() === 0 && start.getMinutes() === 0
+    && new Date(endS * 1000).getDate() === 1
+    && start.getMonth() === last.getMonth() && start.getFullYear() === last.getFullYear();
+  if (wholeMonth) return start.toLocaleDateString('en-GB', { month: 'long', year: 'numeric' });
+  const sameYear = start.getFullYear() === last.getFullYear();
+  const from = start.toLocaleDateString('en-GB', sameYear ? { day: 'numeric', month: 'long' } : { day: 'numeric', month: 'long', year: 'numeric' });
+  const to = last.toLocaleDateString('en-GB', { day: 'numeric', month: 'long', year: 'numeric' });
+  return `${from} to ${to}`;
+}

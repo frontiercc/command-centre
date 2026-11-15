@@ -42,6 +42,7 @@ Tone constraints:
 - Never say "it's important to" or "make sure to"
 - Never use em dashes
 - Use British spelling throughout
+- Claude judges the tasks, never the person: say what kind of work a task was, never what the person is like or how good they are
 - ${DESCRIBE_NOT_SCORE_RULE}
 - ${PRODUCT_NAMING_RULE}
 
@@ -61,7 +62,7 @@ export function buildWeeklyBriefingUserMessage(ctx: WeeklyBriefingContext): stri
 PERIOD: ${ctx.period_start_label} to ${ctx.period_end_label}
 
 ACTIVITY THIS WEEK
-Total tasks judged: ${totalTasks}
+Tasks Claude judged: ${totalTasks}
 ${ctx.tier_lines.join('\n')}
 ${ctx.produced_line}
 

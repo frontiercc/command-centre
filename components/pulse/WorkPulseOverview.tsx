@@ -20,6 +20,7 @@ import type { ActNextItem, DeptProcessBoxItem } from '@/components/pulse/ActNext
 import { depthColumns, depthSentence, DepthChart, DepthSwitch, type DepthWindow, type TierWeek } from '@/components/pulse/DepthChart';
 import { deepWords, tierNamesOr, type TierNames } from '@/lib/pulse/tier-names';
 import { FAMILY_LABEL, PRODUCT_FAMILY, PRODUCT_LABEL, type WorkProduct } from '@/lib/pulse/cowork/products';
+import { NEW_WAYS_OF_WORKING } from '@/lib/pulse/cowork/coaching-words';
 import type { Vendor } from '@/lib/dashboard/vendor';
 
 const AMBER = '#DC8A00';
@@ -185,7 +186,7 @@ export function Produced({ output, human }: { output: SessionOutputReport | null
     <Frame
       title="What did the work produce?"
       period="Last quarter"
-      answer={<>{output.rate === null ? 'Not measured yet.' : <><b>{cap(words(output.rate))}</b> of sessions produced a file.</>}{times ? <> By hand, the same work would have taken <b>{times}</b>.</> : null}</>}
+      answer={<>{output.rate === null ? 'Not measured yet.' : <><b>{cap(words(output.rate))}</b> {output.rate >= 1 ? '' : 'of '}sessions produced a file.</>}{times ? <> By hand, the same work would have taken <b>{times}</b>.</> : null}</>}
       note={<>A session produced a file when Claude saved, sent or published one, in Claude Chat when a reply made an artifact or a file, and in ChatGPT when a reply listed a file.{times ? ' The by-hand time is Claude’s estimate.' : ''}</>}
     >
       {ratio !== null && human && (
@@ -230,7 +231,7 @@ export function Products({ data, names }: { data: ByProductData | null | undefin
       title="Which products are people using?"
       period="Last 30 days"
       answer={lead && lead.people > 0
-        ? <>{label(lead.product)} carries most of the work: <b>{lead.people} people</b>{lead.meaningfulPct !== null ? <>, and <b>{words(lead.meaningfulPct / 100)}</b> of their tasks are {deepWords(names)}</> : null}.</>
+        ? <>{label(lead.product)} is used by the most people: <b>{lead.people.toLocaleString('en-GB')}</b>{lead.meaningfulPct !== null ? <>, and <b>{words(lead.meaningfulPct / 100)}</b> of their tasks are {deepWords(names)}</> : null}.</>
         : <>No product has been used in the last 30 days.</>}
       note={<>{tierNamesOr(names).t2} and {tierNamesOr(names).t3} are Claude&apos;s judgement of each task. Produced counts sessions where Claude saved, sent or published a file, Claude Chat conversations where a reply made an artifact or a file, and ChatGPT conversations where a reply listed a file. Spend for each product is on <Link href="/finops" className={linkCls}>FinOps</Link>.</>}
     >
@@ -284,7 +285,7 @@ export function NewWaysOfWorking({ confirmedTotal, confirmedRecent, vendor }: { 
       answer={list.length > 0
         ? <><b>{list.length}</b> {list.length === 1 ? 'is' : 'are'} waiting for your review. {confirmedRecent === 0 ? 'None were' : `${confirmedRecent} ${confirmedRecent === 1 ? 'was' : 'were'}`} confirmed this quarter.</>
         : <>Nothing is waiting for review. {confirmedRecent === 0 ? 'None were' : `${confirmedRecent} ${confirmedRecent === 1 ? 'was' : 'were'}`} confirmed this quarter.</>}
-      note="Claude flags work that creates something reusable; a manager confirms it."
+      note={NEW_WAYS_OF_WORKING}
     >
       {oldest.length > 0 && (
         <>

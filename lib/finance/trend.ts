@@ -41,7 +41,11 @@ export async function buildSpendTrend(nowS: number, months = 12): Promise<SpendT
     const d = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth() - i, 1));
     const period = `${d.getUTCFullYear()}-${String(d.getUTCMonth() + 1).padStart(2, '0')}`;
     const report = await buildChargeback(period, nowS);
-    series.push({ period, usd: report.grandTotalUsd, parts: reportProductParts(report) });
+    // A month with no people and no unallocated spend has no data: null,
+    // drawn as "no data", never a $0.00 bar.
+    const hasUsers = (report.costCentres ?? []).some(c => (c.users ?? []).length > 0) || (report.unallocated?.users ?? []).length > 0;
+    const noData = !hasUsers && (report.unallocated?.totalUsd ?? 0) === 0;
+    series.push({ period, usd: noData ? null : report.grandTotalUsd, parts: reportProductParts(report) });
   }
   const monthsWithSpend = series.filter(p => (p.usd ?? 0) > 0).length;
   return { series, render: monthsWithSpend >= 3 };

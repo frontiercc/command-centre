@@ -13,7 +13,7 @@ import { VENDORS, VENDOR_LABELS, parseVendor, type Vendor, type VendorSplit } fr
 import { isOpenAiOnly, openAiConnected, type ConnectedProducts } from '@/lib/sources/connected-shared';
 import { fetchConfigOnce } from '@/lib/client/config-once';
 
-const VENDOR_KEY = 'ccc-dashboard-vendor';
+export const VENDOR_KEY = 'ccc-dashboard-vendor';
 const CONNECTED_KEY = 'ccc-connected-products';
 
 // One read per page load (lib/client/config-once.ts). The last answer is kept

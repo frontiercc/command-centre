@@ -136,7 +136,9 @@ function TeamCoaching() {
                 judged
                 period="Last 30 days"
                 answer={plan.workOn.length > 0 ? <>{plan.workOn[0]}</> : <>No kinds of work stand out.</>}
-                note="The share each kind of work takes, against what an admin intended on Admin → Developer Pulse."
+                note={plan.figures.work.some(w => w.target !== null)
+                  ? 'The share each kind of work takes, against what an admin intended on Admin → Developer Pulse.'
+                  : 'The share each kind of work takes.'}
               >
                 {plan.workOn.slice(1).map((t, i) => <p key={i} className="m-0 pb-1 text-[13px] leading-5 text-[#333333]">{t}</p>)}
                 {plan.figures.work.slice(0, 6).map(w => (

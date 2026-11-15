@@ -33,6 +33,7 @@ import {
   getSessionsThisWeekByProduct,
   getTierMixThisWeekByVendor,
   hasOpenAiData,
+  tierMixShares,
 } from '@/lib/dashboard/queries';
 
 /** The Code snapshot without its session count, which includes Codex sessions. */
@@ -165,7 +166,8 @@ export async function GET(request: NextRequest) {
     .where(and(
       eq(schema.codeMetrics.scope_type, 'organisation'),
       eq(schema.codeMetrics.scope_id, ORG_SCOPE_ID),
-      eq(schema.codeMetrics.granularity, 'rolling'),
+      // The briefing's Code figures cover 7 days, so it reads the 7-day rows, not the 30-day headline rows.
+      eq(schema.codeMetrics.granularity, 'rolling_7d'),
     ))
     .orderBy(desc(schema.codeMetrics.computed_at))
     .limit(1);
@@ -214,7 +216,10 @@ export async function GET(request: NextRequest) {
     sessionsThisWeek,
     ...(openaiPresent ? { activeUsersByVendor: activeByVendor } : {}),
     workPulse: {
-      tierMixThisWeek: openaiPresent ? tierMixByVendor : tierMixByVendor.claude,
+      // Shares, not prompt counts, so they are never read beside session counts.
+      tierMixThisWeek: openaiPresent
+        ? { claude: tierMixShares(tierMixByVendor.claude), openai: tierMixShares(tierMixByVendor.openai) }
+        : tierMixShares(tierMixByVendor.claude),
       capabilitiesConfirmedTotal: capabilitiesConfirmed,
     },
     // session_count is left out: it counts Codex sessions too, and
@@ -309,7 +314,7 @@ PRODUCTS AND SESSIONS:
 
 WORK PULSE DATA UNDERSTANDING:
 - Report knowledge work by concrete activity first: the Work and Chat sessions in sessionsThisWeek, and workPulse.capabilitiesConfirmedTotal (new processes now handled end to end, confirmed by a human; this is the "shipping" signal for knowledge work).
-- workPulse.tierMixThisWeek is an AI-JUDGED read of the character of the prompts (Claude judges every product's prompts): mostly routine admin tasks, meaningful multi-step / connector-assisted work, or high-stakes autonomous work. When it has "claude" and "openai" parts, they cover prompts sent to Claude and prompts sent to ChatGPT. Use it only to describe in plain words how the character of work is shifting, always attributed ("work Claude judged to be…"). Never quote tier numbers, a score, or the phrase "DDS".
+- workPulse.tierMixThisWeek is an AI-JUDGED read of the character of the prompts (Claude judges every product's prompts): mostly routine admin tasks, meaningful multi-step / connector-assisted work, or high-stakes autonomous work. It gives each kind of work as a share of the week's classified prompts (tier1 = routine admin, tier2 = multi-step, tier3 = high-stakes autonomous), and is null when no prompt was classified. The shares cover Claude Chat, Cowork and the Office and Google apps prompts together, not any one product. NEVER pair a share with a session count, never describe it as a share of sessions or of one product's activity, and never turn it back into a number of prompts. When it has "claude" and "openai" parts, they cover prompts sent to Claude and prompts sent to ChatGPT. Use it only to describe in plain words how the character of work is shifting, always attributed ("work Claude judged to be…"). Never quote tier numbers, a score, or the phrase "DDS".
 
 DEVELOPER PULSE DATA UNDERSTANDING:
 - Report Code by concrete activity: the Code sessions in sessionsThisWeek, and from codePulse.sevenDay commit_count (git commits shipped inside Claude Code sessions, the "shipping" signal), repo_count, and spend_usd (cost, as context not a verdict). commit_count and spend_usd cover Claude Code only; Codex spend and commits are not measured yet, so never attribute them to Codex or say Codex costs nothing.

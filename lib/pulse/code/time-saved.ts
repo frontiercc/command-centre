@@ -68,7 +68,7 @@ export function resolveTimeSavedAssumptions(config: RawTimeSavedConfig): TimeSav
 
 export function computeTimeSaved(counts: TimeSavedCounts, a: TimeSavedAssumptions): { totalHours: number; rows: TimeSavedRow[] } {
   const specs: Array<{ label: string; count: number; minutesEach: number }> = [
-    { label: 'PRs', count: counts.prCount, minutesEach: a.minPerPr },
+    { label: 'pull requests opened', count: counts.prCount, minutesEach: a.minPerPr },
     { label: 'AI-assisted commits', count: counts.commitCount, minutesEach: a.minPerCommit },
     { label: 'Cowork sessions', count: counts.coworkSessions, minutesEach: a.minPerCoworkSession },
     { label: 'Chat conversations', count: counts.chatConversations, minutesEach: a.minPerChatConversation },

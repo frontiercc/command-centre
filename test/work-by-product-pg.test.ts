@@ -109,9 +109,10 @@ async function runSpec(): Promise<void> {
     expect(built.total.spendUsd!).toBeGreaterThan(1.25);
     expect(built.total.spendEstimated).toBe(true);
 
-    // Produced something counts the sessions in the Sessions column only. Five
-    // Cowork sessions with a prompt, two of which produced something, plus 40
-    // stats rows for sessions with no prompt (as a demo hub has): 40%, not 4%.
+    // Produced something counts every session started in the window, whether or
+    // not its prompts are still stored (purge-mode retention keeps session rows).
+    // Five Cowork sessions with a prompt, two of which produced something, plus
+    // 40 sessions whose prompts are gone: 2 of 45, 4%.
     for (let i = 2; i <= 5; i++) {
       await sql.run(`INSERT INTO cowork_sessions (id, conversation_id, user_id, source, started_at) VALUES (?, ?, 'cw-user', 'otel', ?)`, [`cw-s${i}`, `cw-s${i}`, t]);
       await sql.run(`INSERT INTO cowork_messages (id, session_id, user_id, message_type, surface, source, content_full, occurred_at) VALUES (?, ?, 'cw-user', 'cowork_user_message', 'cowork', 'otel', 'Next task', ?)`, [`cw-p${i}`, `cw-s${i}`, t]);
@@ -124,8 +125,12 @@ async function runSpec(): Promise<void> {
       await sql.run(`INSERT INTO cowork_session_stats (session_id, user_id, first_event_at, produced_output, computed_at) VALUES (?, 'cw-user', ?, 0, ?)`, [`np-${i}`, t, nowS]);
     }
     const withOutput = (await buildByProduct())!;
-    expect(withOutput.rows.find(r => r.product === 'cowork')).toMatchObject({ sessions: 5, producedPct: 40 });
-    expect(withOutput.total.producedPct).toBe(40);
+    expect(withOutput.rows.find(r => r.product === 'cowork')).toMatchObject({ sessions: 5, producedPct: 4 });
+    expect(withOutput.total.producedPct).toBe(4);
+    // A session started before the window is not counted.
+    await sql.run(`INSERT INTO cowork_sessions (id, conversation_id, user_id, source, started_at) VALUES ('old-s', 'old-s', 'cw-user', 'otel', ?)`, [nowS - 40 * 86400]);
+    await sql.run(`INSERT INTO cowork_session_stats (session_id, user_id, first_event_at, produced_output, computed_at) VALUES ('old-s', 'cw-user', ?, 1, ?)`, [nowS - 40 * 86400, nowS]);
+    expect((await buildByProduct())!.total.producedPct).toBe(4);
 
     // Five judged Cowork prompts (one Tier 1, four Tier 2): Cowork's share shows.
     for (let i = 2; i <= 5; i++) {

@@ -63,9 +63,9 @@ describe('buildSpendTrend', () => {
     expect(mar.usd).not.toBeNull();
     expect(mar.usd!).toBeCloseTo(1.0, 6);
 
-    // Empty months are 0 (not null) — buildChargeback always returns a real number.
+    // A month with no people and no unallocated spend has no data: null, not $0.
     const dec = trend.series.find(p => p.period === '2025-12')!;
-    expect(dec.usd).toBe(0);
+    expect(dec.usd).toBeNull();
 
     expect(trend.render).toBe(true);
   });

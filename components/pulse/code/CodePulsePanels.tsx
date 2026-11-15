@@ -74,7 +74,7 @@ export function CodeWorkPanel({ w, who, period, onPeriod, product }: {
     ? <>No {product} sessions {w.label.toLowerCase()}.</>
     : <>{subj(who)} ran <b>{plural(w.sessions.now, 'session', 'sessions')}</b> with {product} {w.label.toLowerCase()}
       {shipped > 0
-        ? <>, shipping <b>{plural(w.commits.now, 'commit', 'commits')}</b>{w.prs.now > 0 ? <> and <b>{plural(w.prs.now, 'pull request', 'pull requests')}</b></> : null}.</>
+        ? <>, shipping <b>{plural(w.commits.now, 'commit', 'commits')}</b>{w.prs.now > 0 ? <> and opening <b>{plural(w.prs.now, 'pull request', 'pull requests')}</b></> : null}.</>
         : <>, with nothing committed yet.</>}</>;
   return (
     <Frame
@@ -111,7 +111,7 @@ export function CodeWorkPanel({ w, who, period, onPeriod, product }: {
           value={w.commits.now.toLocaleString('en-GB')}
           unit={w.commits.now === 1 ? 'commit' : 'commits'}
           change={change(w.commits.now, w.commits.before, w.prior, v => String(v))}
-          sub={`${plural(w.prs.now, 'pull request', 'pull requests')} · ${w.linesAdded.now.toLocaleString('en-GB')} lines added`}
+          sub={`${plural(w.prs.now, 'pull request', 'pull requests')} opened · ${w.linesAdded.now.toLocaleString('en-GB')} lines added`}
           trend={w.trend.commits}
           trendKind="bars"
         />

@@ -182,7 +182,7 @@ export default function PersonalPulsePage() {
             <DeeperPanel q={q} who={who} names={data.tierNames ?? undefined} />
 
             {/* 4. By hand vs with Claude */}
-            <ByHandPanel h={data.humanTime} who={who} onSeeSessions={() => setDrill('humantime')} tool={product === 'Claude and ChatGPT' ? 'AI' : product} />
+            <ByHandPanel h={data.humanTime} who={who} onSeeSessions={() => setDrill('humantime')} tool={product === 'Claude and ChatGPT' ? 'AI' : product} surface="cowork" />
 
             {/* 4 and 5 */}
             <div className="grid grid-cols-1 xl:grid-cols-2 gap-4 items-start">

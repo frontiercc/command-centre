@@ -48,6 +48,7 @@ export const ROUTE_ROLE_MATRIX: Record<string, MatrixEntry> = {
   'admin/connector-tokens POST': ADMIN,
   'admin/connector-tokens DELETE': ADMIN,
   'admin/digest/preview GET': ADMIN_MANAGER,
+  'admin/ask GET': ADMIN,
   'admin/digest GET': ADMIN,
   'admin/digest PUT': ADMIN,
   'admin/digest/test POST': ADMIN,
@@ -91,6 +92,9 @@ export const ROUTE_ROLE_MATRIX: Record<string, MatrixEntry> = {
   'ai/report POST': CORE,
   'alerts/count GET': CORE,
   'alerts GET': CORE,
+  // Ask the data: anyone may ask whether it is available (only an admin gets a yes); only an admin may ask.
+  'ask GET': EVERY_ROLE,
+  'ask POST': ADMIN,
   'alerts PATCH': ADMIN,
   'alerts DELETE': ADMIN,
   'anthropic/models GET': ADMIN,
@@ -158,6 +162,7 @@ export const ROUTE_ROLE_MATRIX: Record<string, MatrixEntry> = {
   'pulse/admin/tiers POST': ADMIN,
   'pulse/admin/users/[userId] GET': ADMIN_MANAGER,
   'pulse/admin/users GET': COWORK_PULSE, // + dept scoping for contributor roles
+  'pulse/people GET': COWORK_PULSE, // + dept scoping for contributor roles, as the Users page
   'pulse/briefing POST': ADMIN_MANAGER,
   'pulse/capabilities GET': 'SELF_OR_DATA', // non-admins see their own events only
   'pulse/capabilities PATCH': 'SELF_OR_DATA', // non-admins may action their own events only

@@ -53,6 +53,7 @@ export default function Sidebar({ theme = 'default' }: { theme?: Theme }) {
   const [finopsOpen, setFinopsOpen] = useState(false);
   const [useCasesOpen, setUseCasesOpen] = useState(true);
   const [useCasesEnabled, setUseCasesEnabled] = useState(false);
+  const [askEnabled, setAskEnabled] = useState(false);
   const [chargebackEnabled, setChargebackEnabled] = useState(false);
   const [displayName, setDisplayName] = useState('');
   const [email, setEmail] = useState('');
@@ -97,9 +98,10 @@ export default function Sidebar({ theme = 'default' }: { theme?: Theme }) {
     fetchConfigOnce()
       .then(raw => {
         if (!raw) return;
-        const data = raw as { organisationName?: string; useCasesEnabled?: boolean; chargebackEnabled?: boolean };
+        const data = raw as { organisationName?: string; useCasesEnabled?: boolean; chargebackEnabled?: boolean; askEnabled?: boolean };
         if (data.organisationName) setOrgName(data.organisationName);
         setUseCasesEnabled(data.useCasesEnabled === true);
+        setAskEnabled(data.askEnabled === true);
         setChargebackEnabled(data.chargebackEnabled === true);
         saveNavCache({ orgName: data.organisationName ?? '', useCasesEnabled: data.useCasesEnabled === true, chargebackEnabled: data.chargebackEnabled === true });
       })
@@ -207,6 +209,8 @@ export default function Sidebar({ theme = 'default' }: { theme?: Theme }) {
     useCases: useCasesEnabled && (userRole === 'admin' || userRole === 'manager' || userRole === 'viewer'),
     useCasesOverview: canSeeUseCasesOverview(userRole, useCasesEnabled),
     library: userRole !== '',
+    // Admin config carries askEnabled; other roles never get it, so they never see the link.
+    ask: userRole === 'admin' && askEnabled,
     admin: userRole === 'admin' || userRole === 'manager',
     adminHref: userRole === 'admin' ? '/admin/overview' : '/admin/pulse',
   };

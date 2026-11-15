@@ -4,6 +4,10 @@
 'use client';
 
 import { useEffect, useState } from 'react';
+
+/** Longer than about two lines at the panel's width: offer to open it. */
+const LONG_BRIEFING = 220;
+const LONG_DETAIL = 120;
 import { Panel, Tag, Pill, Muted, SubHead, SEVERITY_COLOR } from '@/components/precision/ui';
 
 interface Recommendation {
@@ -98,6 +102,9 @@ const BADGE = <Tag tone="judged">AI summary</Tag>;
 export default function AiBriefing({ refreshKey, coversBoth = false }: { refreshKey?: number; coversBoth?: boolean }) {
   const [data, setData] = useState<BriefingData | null>(null);
   const [loading, setLoading] = useState(true);
+  // The briefing and each recommendation show two lines until opened.
+  const [briefingOpen, setBriefingOpen] = useState(false);
+  const [openRecs, setOpenRecs] = useState<Set<number>>(new Set());
   const [refreshing, setRefreshing] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
@@ -162,8 +169,15 @@ export default function AiBriefing({ refreshKey, coversBoth = false }: { refresh
       >
         <div className="grid grid-cols-1 lg:grid-cols-3">
           {/* Briefing text */}
-          <div className="lg:col-span-2 p-4 flex flex-col gap-3">
-            <p className="m-0 text-[14px] leading-[1.6] text-[#333333]">{data.briefing}</p>
+          <div className="lg:col-span-2 p-3 flex flex-col gap-2.5">
+            <div>
+              <p className={`m-0 text-[14px] leading-[1.5] text-[#333333]${briefingOpen ? '' : ' line-clamp-2'}`}>{data.briefing}</p>
+              {data.briefing.length > LONG_BRIEFING && (
+                <button type="button" onClick={() => setBriefingOpen(o => !o)} className="mt-1 text-[13px] font-medium text-[#1F6F8B] hover:underline" aria-expanded={briefingOpen}>
+                  {briefingOpen ? 'Show less' : 'Read the full briefing'}
+                </button>
+              )}
+            </div>
             {coversBoth && (
               <p className="m-0 text-[13px] text-[#8F8F8F]">This briefing covers Claude, ChatGPT and Codex together, whichever view is selected above.</p>
             )}
@@ -176,7 +190,7 @@ export default function AiBriefing({ refreshKey, coversBoth = false }: { refresh
           </div>
 
           {/* Risk score */}
-          <div className="p-4 border-t lg:border-t-0 lg:border-l border-[#F2F2F2] flex flex-col items-center justify-center gap-3">
+          <div className="p-3 border-t lg:border-t-0 lg:border-l border-[#F2F2F2] flex flex-col items-center justify-center gap-2.5">
             <span className="text-[13px] text-[#666666]">Organisation risk</span>
             <RiskGauge score={data.risk_score} tone={riskTone} />
             <span><Pill tone={riskTone}><span className="capitalize">{data.risk_label}</span>&nbsp;risk</Pill></span>
@@ -193,13 +207,13 @@ export default function AiBriefing({ refreshKey, coversBoth = false }: { refresh
         flush
       >
         {/* One box per recommendation, three to a row, edged in its priority colour. */}
-        <ul className="m-0 p-4 list-none grid gap-3 grid-cols-1 md:grid-cols-2 xl:grid-cols-3">
+        <ul className="m-0 p-3 list-none grid gap-2 grid-cols-1 md:grid-cols-2 xl:grid-cols-3">
           {data.recommendations.map((rec, i) => {
             const colour = SEVERITY_COLOR[rec.priority] ?? SEVERITY_COLOR.low;
             return (
               <li
                 key={i}
-                className="bg-[#F8F9FB] rounded-[12px] px-4 py-3 flex flex-col gap-1.5"
+                className="bg-[#F8F9FB] rounded-[12px] px-3 py-2.5 flex flex-col gap-1"
                 style={{ borderLeft: `3px solid ${colour}` }}
               >
                 <div className="flex items-center gap-2 text-[12px] font-semibold uppercase tracking-[0.04em]" style={{ color: colour }}>
@@ -209,7 +223,17 @@ export default function AiBriefing({ refreshKey, coversBoth = false }: { refresh
                   <span>{rec.priority}</span>
                 </div>
                 <span className="text-[14px] font-semibold text-[#0A0A0A] leading-5">{rec.title}</span>
-                <p className="m-0 text-[13px] leading-5 text-[#4D4D4D]">{rec.detail}</p>
+                <p className={`m-0 text-[13px] leading-5 text-[#4D4D4D]${openRecs.has(i) ? '' : ' line-clamp-2'}`}>{rec.detail}</p>
+                {rec.detail.length > LONG_DETAIL && (
+                  <button
+                    type="button"
+                    aria-expanded={openRecs.has(i)}
+                    onClick={() => setOpenRecs(prev => { const next = new Set(prev); if (next.has(i)) next.delete(i); else next.add(i); return next; })}
+                    className="self-start text-[12px] font-medium text-[#1F6F8B] hover:underline"
+                  >
+                    {openRecs.has(i) ? 'Show less' : 'More'}
+                  </button>
+                )}
               </li>
             );
           })}

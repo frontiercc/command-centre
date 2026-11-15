@@ -65,6 +65,16 @@ describe('formatModelLabel', () => {
     });
   });
 
+  it("names OpenAI's GPT models as OpenAI's rate card does", () => {
+    expect(formatModelLabel('gpt-6.1-sol').label).toBe('GPT-6.1 Sol');
+    expect(formatModelLabel('gpt-6-pro').label).toBe('GPT-6 Pro');
+    expect(formatModelLabel('gpt-6').label).toBe('GPT-6');
+    expect(formatModelLabel('gpt-6-astra-law').label).toBe('GPT-6 Astra Law');
+    expect(formatModelLabel('gpt-5.5-rosalind-research').label).toBe('GPT-5.5 Rosalind Research');
+    expect(formatModelLabel('gpt-5.3-codex').label).toBe('GPT-5.3-Codex');
+    expect(formatModelLabel('o4-mini-deep-research').label).toBe('o4-mini-deep-research');
+  });
+
   it('falls back to the raw string for an empty model', () => {
     expect(formatModelLabel('')).toEqual({
       label: '',

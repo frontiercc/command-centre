@@ -27,17 +27,24 @@ const pick = (arr) => arr[Math.floor(Math.random() * arr.length)];
 const uid = (prefix) => `${MARKER}${prefix}-${Math.random().toString(36).slice(2, 10)}-${Math.random().toString(36).slice(2, 10)}`;
 
 // ── PII examples: diverse types, realistic-but-tasteful content, masked value
-// matching the shape lib/pii/detect.ts's maskValue() would produce. ─────────
+// matching the shape lib/pii/detect.ts's maskValue() would produce. Types,
+// severities and titles as lib/alerts/pii-alerts.ts gives them. ─────────
 const PII_EXAMPLES = [
-  { type: 'email', dept: 'Sales', severity: 'medium', text: 'Send the renewal terms to sarah.jones@clientcorp.example and loop in their procurement lead.', masked: 's*****@clientcorp.example' },
-  { type: 'national_insurance', dept: 'HR', severity: 'high', text: 'Update the payroll record — NINO QQ123456C, start date next Monday.', masked: 'QQ1**56C' },
+  { type: 'email', dept: 'Sales', severity: 'low', text: 'Send the renewal terms to sarah.jones@clientcorp.example and loop in their procurement lead.', masked: 's*****@clientcorp.example' },
+  { type: 'nino', dept: 'HR', severity: 'high', text: 'Update the payroll record — NINO QQ123456C, start date next Monday.', masked: 'QQ1**56C' },
   { type: 'credit_card', dept: 'Finance', severity: 'high', text: 'Can you update the vendor payment method to card 4532 0151 1283 0366?', masked: '****-****-****-0366' },
   { type: 'api_key', dept: 'Engineering', severity: 'high', text: 'Here is the staging key sk-live-51J8x9K2mN4pQ7rT3vW6yB0cE for the integration test.', masked: 'sk-live-***********0cE' },
   { type: 'date_of_birth', dept: 'HR', severity: 'medium', text: 'Confirm the new starter\'s details — DOB 14/03/1985, start Monday.', masked: 'DOB **/**/1985' },
   { type: 'aws_key', dept: 'Engineering', severity: 'high', text: 'Rotate the AKIAIOSFODNN7EXAMPLE credential before Friday\'s audit.', masked: 'AKIA***********PLE' },
   { type: 'iban', dept: 'Finance', severity: 'medium', text: 'Wire the refund to GB29 NWBK 6016 1331 9268 19 by end of week.', masked: 'GB29 **** **** **** 19' },
-  { type: 'passport', dept: 'People', severity: 'medium', text: 'Passport GB1234567 needs renewing before the conference trip.', masked: 'Passport **1234567' },
+  { type: 'passport', dept: 'People', severity: 'high', text: 'Passport GB1234567 needs renewing before the conference trip.', masked: 'Passport **1234567' },
 ];
+// lib/alerts/pii-alerts.ts TITLES, for the types above.
+const PII_TITLES = {
+  email: 'Email address detected', nino: 'UK National Insurance number detected', credit_card: 'Credit card number detected',
+  api_key: 'API key detected', date_of_birth: 'Date of birth detected', aws_key: 'AWS access key detected',
+  iban: 'IBAN detected', passport: 'Passport number detected',
+};
 
 // ── Intent examples: one per built-in category, id/name from lib/intent/categories.ts. ──
 const INTENT_EXAMPLES = [
@@ -66,6 +73,8 @@ async function main() {
   try {
     // ── 0. Clear this script's own prior rows ───────────────────────────────
     await c.query(`DELETE FROM alerts WHERE id LIKE $1`, [`${MARKER}%`]);
+    // And any alert the Hub raised on this step's prompts, which would point at nothing once they go.
+    await c.query(`DELETE FROM alerts WHERE raw_evidence->>'message_id' LIKE $1`, [`${MARKER}%`]);
     await c.query(`DELETE FROM cowork_messages WHERE id LIKE $1`, [`${MARKER}%`]);
     console.log('[alert-evidence] cleared prior seed rows.');
     if (CLEAN_ONLY) { console.log('[alert-evidence] --clean complete (thin-evidence fixes on pre-existing alerts are left in place).'); return; }
@@ -133,8 +142,9 @@ async function main() {
         `INSERT INTO alerts (id, user_id, alert_type, severity, title, explanation, raw_evidence, status, generated_at)
          VALUES ($1,$2,'policy',$3,$4,$5,$6,'open',$7)`,
         [uid('alert'), userId, ex.severity,
-          `Potential ${ex.type.replace(/_/g, ' ').replace(/\bapi\b/gi, 'API')} detected in prompt`,
-          `${/^[aeiou]/i.test(ex.type) ? 'An' : 'A'} ${ex.type.replace(/_/g, ' ').replace(/\bapi\b/gi, 'API')} pattern was detected in a Cowork prompt. Review the evidence below and confirm whether this is permitted under the data-handling policy.`,
+          PII_TITLES[ex.type],
+          // As the Hub writes it (lib/alerts/pii-alerts.ts).
+          `${PII_TITLES[ex.type]} via OTel. Flagged automatically by PII pattern detection.`,
           JSON.stringify({ surface: 'cowork', message_id: msgId, pii_type: ex.type, masked_value: ex.masked }),
           ts + 30]);
       newN++;

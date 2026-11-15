@@ -4,8 +4,9 @@
 // Developer Pulse Value page with Codex: once Codex data exists and ChatGPT
 // and Codex are shown, Codex's priced turns join the 30-day spend (and the
 // annual spend behind the return estimate) and its commits join the measured
-// commits, each part returned apart for the measured strip. Unit economics
-// stay Claude Code's. Hidden: the page reads as before.
+// commits, each part returned apart for the measured strip. Cost per commit
+// and per session follow the view, like the Overview; cost per PR and per
+// engaged hour stay Claude Code's. Hidden: the page reads as before.
 import { describe, it, expect, vi, beforeAll, beforeEach, afterAll } from 'vitest';
 import type { TestSql } from './helpers/sql';
 import { NextRequest } from 'next/server';
@@ -76,7 +77,7 @@ describe('GET /api/pulse/code/value with Codex', () => {
     expect(body.calibrations.annualSpend.value).toBeCloseTo(2 * 365 / 30, 6);
   });
 
-  it('adds Codex spend and commits, returns the split, keeps unit economics Claude Code only', async () => {
+  it('adds Codex spend and commits, returns the split', async () => {
     await seedCodex();
     const body = await (await get()).json();
     expect(body.measured.spend30d).toBeCloseTo(4, 6);
@@ -87,7 +88,7 @@ describe('GET /api/pulse/code/value with Codex', () => {
     expect(body.split.codex.commitCount).toBe(3);
     expect(body.split.codex.spend30d).toBeCloseTo(2, 6);
     expect(body.split.codex.unpricedModels).toEqual([]);
-    // Claude Code's row spend over Claude Code's commits
+    // No all-tools row yet: the view reads code_metrics, Claude Code's spend over its commits
     expect(body.measured.costPerCommit).toBeCloseTo(0.5, 6);
   });
 
@@ -177,6 +178,24 @@ describe('GET /api/pulse/code/value with Codex', () => {
     expect(codex.observedLift).toBeNull();
     const rows = codex.timeSaved.rows.map((r: { label: string }) => r.label);
     expect(rows).toEqual(['AI-assisted commits']);
+  });
+
+  it('cost per commit and per session cover Claude Code and Codex on All, like the Overview; per PR and engaged hour stay Claude Code', async () => {
+    await seedCodex();
+    await sql.run(`INSERT INTO code_metrics_vendor (vendor, scope_type, scope_id, granularity, period_start, period_end, commit_count, pr_count,
+        session_count, active_time_user_s, active_time_cli_s, spend_usd, computed_at)
+      VALUES ('claude', 'organisation', ?, 'rolling', ?, ?, 4, 1, 2, 1800, 1800, 2, ?),
+             ('all', 'organisation', ?, 'rolling', ?, ?, 7, 1, 4, 1800, 1800, 5, ?)`,
+      [ORG_SCOPE_ID, NOW - 7 * DAY, NOW, NOW, ORG_SCOPE_ID, NOW - 7 * DAY, NOW, NOW]);
+    const all = (await (await get('all')).json()).measured;
+    // The Overview's figures: the all-tools row's spend over its commits and sessions.
+    expect(all.costPerCommit).toBeCloseTo(5 / 7, 6);
+    expect(all.costPerSession).toBeCloseTo(5 / 4, 6);
+    expect(all.costPerPr).toBeCloseTo(2, 6);
+    expect(all.costPerEngagedHour).toBeCloseTo(2, 6);
+    const claude = (await (await get('claude')).json()).measured;
+    expect(claude.costPerCommit).toBeCloseTo(0.5, 6);
+    expect(claude.costPerSession).toBeCloseTo(1, 6);
   });
 
   it('leaves Codex out while ChatGPT and Codex are hidden', async () => {

@@ -73,6 +73,11 @@ describe('ChatGPT in human time', () => {
       const chatgpt = await readHumanTime('cowork', undefined, 'openai');
       expect(chatgpt?.sessions).toBe(1);
       expect(chatgpt?.humanMinutes.likely).toBe(180);
+      // A fixed window (the overview's quarter): sessions outside it are left out.
+      const before = await readHumanTime('cowork', undefined, 'all', { startS: NOW - 100 * 86400, endS: NOW - 86400 });
+      expect(before?.sessions).toBe(0);
+      expect(before?.windowDays).toBe(99);
+      expect((await readHumanTime('cowork', undefined, 'all', { startS: NOW - 86400, endS: NOW + 60 }))?.sessions).toBe(2);
 
       // The digest, Highlights, Reports and the Connector stay Claude Cowork only.
       const org = await readOrgHumanTime(NOW - 30 * 86400, NOW + 60);

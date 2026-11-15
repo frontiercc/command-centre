@@ -91,7 +91,7 @@ interface DashboardData {
     mode: 'max' | 'enterprise';
   };
   licensedSeats: number | null;
-  /** People a day per product, last 14 days, oldest first. */
+  /** People a day per product, last 30 days, oldest first. */
   peopleByDay: Array<{ date: string; products: ProductCounts }>;
   /** Department adoption target, a percentage; null when switched off. */
   adoptionTargetPct: number | null;
@@ -301,7 +301,7 @@ export default function DashboardPage() {
           />
         </Strip>
 
-        {/* 14-day adoption trend (2/3) + product stickiness (1/3) */}
+        {/* People a day over the last 30 days (2/3) + product stickiness (1/3) */}
         <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
           <div className="lg:col-span-2 min-w-0">
             <PeopleByDay
@@ -310,6 +310,7 @@ export default function DashboardPage() {
               activeThisWeek={stats.activeUsersThisWeek}
               activeLastWeek={stats.activeUsersLastWeek}
               productNames={vendor === 'openai' ? 'ChatGPT or Codex' : vendor === 'claude' || !data.openaiPresent ? 'Claude' : 'Claude, ChatGPT or Codex'}
+              split={split ? data.products.activeUsers : undefined}
             />
           </div>
           <StickinessCard vendor={vendor} openaiPresent={data.openaiPresent} officeShown={data.officeShown !== false} />

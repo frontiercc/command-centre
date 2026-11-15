@@ -24,6 +24,7 @@ import CoachingPrompts, { type CoachingPromptItem } from '@/components/pulse/Coa
 import { PageBody, Toolbar, Notice, B, cx } from '@/components/precision/ui';
 import { useVendor, useOpenAiOnly, VendorSwitch } from '@/components/shared/VendorSwitch';
 import { WORK_PULSE_VENDOR_LABELS } from '@/lib/dashboard/vendor';
+import { useAskPageNote } from '@/components/ask/useAskAvailable';
 
 // Based on DeptPulseData from app/pulse/dept/[dept]/page.tsx (a redirect-only
 // legacy page) but intentionally diverges: `delegation?` exists only here.
@@ -85,6 +86,7 @@ export default function DeptPickerPage() {
   const [drill, setDrill] = useState<DrillKind | null>(null);
 
   const selectedDept = searchParams.get('dept') ?? '';
+  useAskPageNote('dept', selectedDept ? `The department page shows ${selectedDept} over ${period === 'week' ? 'the last 7 days' : period === 'month' ? 'the last 30 days' : 'the last quarter (the last 13 completed weeks)'}.` : null);
 
   // Load dept list once
   useEffect(() => {
@@ -227,7 +229,7 @@ export default function DeptPickerPage() {
 
                   {/* 4 and 5: what the work took, and what came out of it */}
                   <div className="grid grid-cols-1 xl:grid-cols-2 gap-4">
-                    <ByHandPanel h={d.humanTime} who={who} tool={product === 'Claude and ChatGPT' ? 'AI' : product} />
+                    <ByHandPanel h={d.humanTime} who={who} tool={product === 'Claude and ChatGPT' ? 'AI' : product} surface="cowork" />
                     <ProducedPanel q={q} who={who} period={period} uploads={d.docSessions ? { sessions: d.docSessions.sessions_with_uploads, files: d.docSessions.total_uploads } : null} />
                   </div>
 
@@ -256,11 +258,11 @@ export default function DeptPickerPage() {
                     />
                     {d.spendThisMonth
                       ? <SpendPanel s={d.spendThisMonth} product={product} who={who} reviewHref={null} />
-                      : <ColleagueToolsPanel q={q} who={who} department={d.dept} period={period} />}
+                      : <ColleagueToolsPanel q={q} who={who} department={d.dept} period={period} team />}
                   </div>
 
                   {/* 11. What colleagues elsewhere use */}
-                  {d.spendThisMonth && <ColleagueToolsPanel q={q} who={who} department={d.dept} period={period} />}
+                  {d.spendThisMonth && <ColleagueToolsPanel q={q} who={who} department={d.dept} period={period} team />}
                 </>
               ) : (
                 <Notice tone="info" title="No work yet.">Nothing has been recorded for this department yet.</Notice>

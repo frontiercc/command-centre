@@ -18,10 +18,10 @@ function taskTypeLabel(slug: string): string {
   return words.charAt(0).toUpperCase() + words.slice(1);
 }
 
-/** `{distinctUsers} users · {departments joined or —} · {[...skills,...connectors,...taskTypes].join(' + ')}` */
+/** `{distinctUsers} people · {departments joined or —} · {[...skills,...connectors,...taskTypes].join(' + ')}` */
 export function formatSuggestionEvidenceLine(draft: SuggestionDraftEvidenceLine): string {
   const userCount = draft.evidence.distinctUsers;
-  const userLabel = `${userCount} user${userCount === 1 ? '' : 's'}`;
+  const userLabel = `${userCount} ${userCount === 1 ? 'person' : 'people'}`;
   const deptLabel = draft.evidence.departments.length > 0 ? draft.evidence.departments.join(', ') : '—';
   const signals = [
     ...draft.matchingRule.skills,
@@ -38,15 +38,25 @@ export interface SuggestionProducts { cowork: number; code: number; chatgpt: num
 /**
  * `chatgpt:` ids are ChatGPT and `codex:` ids Codex (the OpenAI sync's
  * prefixes). Every other id is Claude's: Claude Code when it is in
- * `claudeCodeIds` (sessions with a code_session_stats row), otherwise Claude
- * Cowork, which covers Cowork, Claude Chat and Claude in Office and Google.
+ * `claudeCodeIds` (sessions with a code_session_stats row), Claude Cowork
+ * when it is in `found.coworkIds` (Cowork, Claude Chat and Claude in Office
+ * and Google). An id found in neither takes the suggestion's own surface
+ * (`found.surface`, Claude Code for a code suggestion), so every cited
+ * session is counted once and the split adds up to the session count shown.
+ * Without `found.coworkIds`, every id not in `claudeCodeIds` is Claude Cowork.
  */
-export function productsOfSessions(ids: string[], claudeCodeIds: ReadonlySet<string> = new Set()): SuggestionProducts {
+export function productsOfSessions(
+  ids: string[],
+  claudeCodeIds: ReadonlySet<string> = new Set(),
+  found: { coworkIds?: ReadonlySet<string>; surface?: 'cowork' | 'code' | null } = {},
+): SuggestionProducts {
   const out: SuggestionProducts = { cowork: 0, code: 0, chatgpt: 0, codex: 0 };
   for (const id of new Set(ids)) {
     if (id.startsWith('chatgpt:')) out.chatgpt += 1;
     else if (id.startsWith('codex:')) out.codex += 1;
     else if (claudeCodeIds.has(id)) out.code += 1;
+    else if (!found.coworkIds || found.coworkIds.has(id)) out.cowork += 1;
+    else if (found.surface === 'code') out.code += 1;
     else out.cowork += 1;
   }
   return out;

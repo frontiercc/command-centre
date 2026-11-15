@@ -90,7 +90,7 @@ export interface CoworkTeamFigures {
   /** Work several people repeat with no skill behind it: worth codifying once. */
   repeated: Array<{ taskType: string; label: string; prompts: number; people: number }>;
   /** People whose first prompt was recent, with how far they have got so far. */
-  newStarters: Array<{ name: string; firstAt: number; prompts: number; deepShare: number }>;
+  newStarters: Array<{ userId: string; name: string; firstAt: number; prompts: number; deepShare: number }>;
   /** Kinds of work only one person in the team does at all. */
   soloWork: Array<{ taskType: string; label: string; name: string; prompts: number }>;
   /** New ways of working the classifier flagged in the window. */
@@ -278,7 +278,7 @@ function newStarters(rows: Row[], firstEver: Map<string, number>, nowS: number):
     by.set(r.user_id, e);
   }
   return [...by.entries()]
-    .map(([userId, v]) => ({ name: v.name, firstAt: firstEver.get(userId)!, prompts: v.prompts, deepShare: v.prompts > 0 ? v.deep / v.prompts : 0 }))
+    .map(([userId, v]) => ({ userId, name: v.name, firstAt: firstEver.get(userId)!, prompts: v.prompts, deepShare: v.prompts > 0 ? v.deep / v.prompts : 0 }))
     .sort((a, b) => b.firstAt - a.firstAt)
     .slice(0, 5);
 }

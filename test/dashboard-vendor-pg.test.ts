@@ -36,9 +36,11 @@ beforeAll(async () => {
     ['m8', 'codex:s1', 'u-openai', 'code', 'codex', 0, 9],           // Codex
   ];
   for (const [id, session, user, surface, source, flagged, ago] of rows) {
-    await sql.run(`INSERT INTO cowork_messages (id, session_id, user_id, message_type, surface, source, flagged, occurred_at)
-      VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
-      [id, session, user, surface === 'code' ? 'code_user_message' : 'cowork_user_message', surface, source, flagged, NOW - ago * HOUR]);
+    // A flagged prompt carries a personal-data reason, as the receivers write it.
+    await sql.run(`INSERT INTO cowork_messages (id, session_id, user_id, message_type, surface, source, flagged, flag_reason, occurred_at)
+      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+      [id, session, user, surface === 'code' ? 'code_user_message' : 'cowork_user_message', surface, source, flagged,
+        flagged ? 'PII detected: email' : null, NOW - ago * HOUR]);
   }
   await sql.run(`INSERT INTO code_session_stats (session_id, user_id, first_at, last_at, computed_at) VALUES
     ('code-1', 'u-both', ?, ?, ?), ('codex:s1', 'u-openai', ?, ?, ?)`,
@@ -137,6 +139,12 @@ describe('dashboard figures by kind of work and vendor', () => {
       claude: { tier1: 0, tier2: 1, tier3: 1 },
       openai: { tier1: 1, tier2: 1, tier3: 0 },
     });
+  });
+
+  it('gives the tier mix to the briefing as shares, null when nothing was classified', async () => {
+    const { tierMixShares } = await import('@/lib/dashboard/queries');
+    expect(tierMixShares({ tier1: 1, tier2: 2, tier3: 1 })).toEqual({ tier1: '25%', tier2: '50%', tier3: '25%' });
+    expect(tierMixShares({ tier1: 0, tier2: 0, tier3: 0 })).toBeNull();
   });
 
   it('knows when OpenAI data exists', async () => {

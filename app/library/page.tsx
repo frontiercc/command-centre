@@ -31,6 +31,8 @@ interface LibraryEntry {
   vote_count: number;
   user_voted: number;
   week_count: number;
+  /** People who used it this week. */
+  week_user_count?: number;
   trend_pct: number;
   /** Products it is used in, from its uses (Claude, ChatGPT, Codex). */
   products?: string[];
@@ -118,6 +120,8 @@ interface LibraryData {
   entries: LibraryEntry[];
   total: number;
   unclaimed_count: number;
+  /** Unclaimed entries with at least one use, for the banner. */
+  unclaimed_in_use_count?: number;
   stats: { skill_count: number; connector_count: number; invocations_this_week: number; new_this_week: number };
   capability: { claimed: number; total: number };
   leaderboard: LeaderboardUser[];
@@ -350,7 +354,7 @@ function Highlights({ entries, recentEntries, deptPicks, userDept }: {
     .map(e => ({
       id: e.id, name: e.name, type: e.type, description: e.description, install_guide: e.install_guide,
       badge: `+${e.trend_pct}%`, badgeTone: 'measured',
-      meta: `${e.week_count} uses this week · ${e.user_count} ${e.user_count === 1 ? 'user' : 'users'}`,
+      meta: `${e.week_count} uses this week · ${e.week_user_count ?? 0} ${e.week_user_count === 1 ? 'user' : 'users'}`,
     }));
 
   const newCards: StripCard[] = recentEntries.slice(0, 3).map(e => ({
@@ -715,7 +719,7 @@ function DeptBreakdown({ rows }: { rows: DeptRow[] }) {
             <div className="flex items-baseline gap-2 min-w-0">
               <span className="text-[14px] font-medium text-[#0A0A0A] truncate">{r.department}</span>
               <span className="text-[13px] text-[#8F8F8F] tabular-nums truncate">
-                {r.skill_uses} skills · {r.connector_uses} connectors · {r.user_count} {r.user_count === 1 ? 'person' : 'people'}
+                {r.skill_uses} skill {r.skill_uses === 1 ? 'use' : 'uses'} · {r.connector_uses} connector {r.connector_uses === 1 ? 'use' : 'uses'} · {r.user_count} {r.user_count === 1 ? 'person' : 'people'}
               </span>
               <span className="ml-auto text-[13px] font-medium text-[#0A0A0A] tabular-nums shrink-0">{r.total_uses.toLocaleString()}</span>
             </div>
@@ -749,7 +753,7 @@ function UnclaimedBanner({ count, onDismiss, onClaim }: { count: number; onDismi
       title={
         <>
           <LineIcon d={ICON.flag} className="inline-block align-[-2px] mr-1.5" />
-          {`${count} skill${count !== 1 ? 's' : ''} ${count !== 1 ? 'have' : 'has'} no owner.`}
+          {count === 1 ? '1 skill or connector has no owner.' : `${count} skills and connectors have no owner.`}
         </>
       }
       action={
@@ -774,7 +778,9 @@ function UnclaimedBanner({ count, onDismiss, onClaim }: { count: number; onDismi
         </span>
       }
     >
-      These are in use across your organisation but nobody has claimed them yet. Be the first: add a description and own it.
+      {count === 1
+        ? 'This is in use across your organisation but nobody has claimed it yet. Be the first: add a description and own it.'
+        : 'These are in use across your organisation but nobody has claimed them yet. Be the first: add a description and own it.'}
     </Notice>
   );
 }
@@ -1030,9 +1036,9 @@ export default function LibraryPage() {
         {data && <HeadlineStrip data={data} />}
 
         {/* Unclaimed banner */}
-        {!bannerDismissed && data && data.unclaimed_count > 0 && (
+        {!bannerDismissed && data && (data.unclaimed_in_use_count ?? 0) > 0 && (
           <UnclaimedBanner
-            count={data.unclaimed_count}
+            count={data.unclaimed_in_use_count ?? 0}
             onDismiss={() => setBannerDismissed(true)}
             onClaim={() => { setTypeFilter(''); setClaimedFilter('false'); setSourceFilter(''); }}
           />

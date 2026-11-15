@@ -110,6 +110,22 @@ describe('createIntentAlerts', () => {
     expect(types).toContain('policy_evasion');
     expect(types).toContain('data_exfiltration');
   });
+
+  it('skips a message and category that already has an alert, and still raises a new category', async () => {
+    const exfil = { categoryId: 'data_exfiltration', categoryName: 'Data Exfiltration', matchedPhrases: ['extract all'], defaultSeverity: 'high' as const };
+    const evasion = { categoryId: 'policy_evasion', categoryName: 'Policy Evasion', matchedPhrases: ["don't log this"], defaultSeverity: 'critical' as const };
+    await createIntentAlerts('user-1', 'cowork', 'msg-dup', 'extract all', [exfil]);
+    await createIntentAlerts('user-1', 'cowork', 'msg-dup', 'extract all', [exfil]);
+    expect(await getAlerts()).toHaveLength(1);
+
+    await createIntentAlerts('user-1', 'cowork', 'msg-dup', "extract all, don't log this", [exfil, evasion]);
+    const alerts = await getAlerts() as Array<Record<string, unknown>>;
+    expect(alerts.map(a => JSON.parse(a.raw_evidence as string).intent_category).sort()).toEqual(['data_exfiltration', 'policy_evasion']);
+
+    // Another message with the same category is a separate alert.
+    await createIntentAlerts('user-1', 'cowork', 'msg-other', 'extract all', [exfil]);
+    expect(await getAlerts()).toHaveLength(3);
+  });
 });
 
 describe('intent alerts name the product', () => {

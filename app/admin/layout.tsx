@@ -19,6 +19,7 @@ const adminNavItems = [
   { href: '/admin/pulse', label: 'Work Pulse' },
   { href: '/admin/code-pulse', label: 'Developer Pulse' },
   { href: '/admin/use-cases', label: 'Use Cases' },
+  { href: '/admin/ask', label: 'Ask the data' },
   { href: '/admin/cost-centres', label: 'Cost Centres' },
   { href: '/admin/compliance', label: 'Compliance' },
   { href: '/admin/access-audit', label: 'Access Audit' },

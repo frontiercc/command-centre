@@ -138,39 +138,40 @@ async function runSpec(): Promise<void> {
       { id: 'mi2', user_id: 'u1', session_id: 's1', mcp_server: 'workspace', mcp_tool: 'x', occurred_at: NOW - 1 * DAY },
     ]);
 
-    // ── code_metrics: org + user scope, current (rolling) + prior rows.
+    // ── code_metrics: org + user scope, the last 30 days ('rolling') and the
+    // 30 days before ('rolling_prior', what priorMetrics reads).
     // spend_usd is written as a STRING — numeric on pg requires it (mirrors
     // lib/pulse/code/aggregator.ts's writeCodeMetric). ──
     await client.insert(schema.codeMetrics).values([
       {
-        scope_type: 'organisation', scope_id: ORG_SCOPE_ID, period_start: NOW - 7 * DAY, period_end: NOW,
+        scope_type: 'organisation', scope_id: ORG_SCOPE_ID, period_start: NOW - 30 * DAY, period_end: NOW,
         spend_usd: '12.0', session_count: 2, repo_count: 2, commit_count: 3, skill_leverage: 0.5,
         friction_index: 0.4, active_time_user_s: 3600, active_time_cli_s: 1800, lines_added: 100,
         lines_removed: 20, pr_count: 1, edit_accept_count: 10, edit_reject_count: 2,
         granularity: 'rolling', computed_at: NOW,
       },
       {
-        scope_type: 'organisation', scope_id: ORG_SCOPE_ID, period_start: NOW - 17 * DAY, period_end: NOW - 10 * DAY,
+        scope_type: 'organisation', scope_id: ORG_SCOPE_ID, period_start: NOW - 60 * DAY, period_end: NOW - 30 * DAY,
         spend_usd: '8.0', autonomy_ratio: 0.4, cache_hit_ratio: 0.3, session_count: 1, repo_count: 1,
-        granularity: 'rolling', computed_at: NOW - 10 * DAY,
+        granularity: 'rolling_prior', computed_at: NOW,
       },
       // Oldest-first so the newest row gets the highest id: /api/pulse/code/{users,depts}
       // pick the latest per-scope row by MAX(id) (the aggregator writes append-only,
       // so higher id == newer), unlike org-summary/me which use MAX(computed_at).
       {
-        scope_type: 'user', scope_id: 'u1', period_start: NOW - 17 * DAY, period_end: NOW - 10 * DAY,
+        scope_type: 'user', scope_id: 'u1', period_start: NOW - 60 * DAY, period_end: NOW - 30 * DAY,
         spend_usd: '5.0', session_count: 1, repo_count: 1,
-        granularity: 'rolling', computed_at: NOW - 10 * DAY,
+        granularity: 'rolling_prior', computed_at: NOW,
       },
       {
-        scope_type: 'user', scope_id: 'u1', period_start: NOW - 7 * DAY, period_end: NOW,
+        scope_type: 'user', scope_id: 'u1', period_start: NOW - 30 * DAY, period_end: NOW,
         spend_usd: '12.0', session_count: 2, repo_count: 2, commit_count: 3,
         active_time_user_s: 3600, active_time_cli_s: 1800, lines_added: 100,
         granularity: 'rolling', computed_at: NOW,
       },
       // Function (department) scope — drives /api/pulse/code/depts (A2).
       {
-        scope_type: 'function', scope_id: 'Engineering', period_start: NOW - 7 * DAY, period_end: NOW,
+        scope_type: 'function', scope_id: 'Engineering', period_start: NOW - 30 * DAY, period_end: NOW,
         spend_usd: '12.0', session_count: 2, repo_count: 2, commit_count: 3,
         input_tokens: 2_000_000, output_tokens: 500_000,
         granularity: 'rolling', computed_at: NOW,

@@ -169,7 +169,8 @@ async function runSpec(): Promise<void> {
       scope_type: 'organisation', scope_id: 'org', period_start: NOW - 7 * 24 * 3600, period_end: NOW,
       spend_usd: '12.5', session_count: 4, repo_count: 2, commit_count: 6,
       autonomy_ratio: 1.5, cache_hit_ratio: 0.4, input_tokens: 1000, output_tokens: 500,
-      granularity: 'rolling', computed_at: NOW,
+      // The weekly briefing reads the aggregator's 7-day rows.
+      granularity: 'rolling_7d', computed_at: NOW,
     });
     await config.setConfigValue('anthropicAiApiKey', 'sk-test-key');
     const mockCreate = await getMockCreate();

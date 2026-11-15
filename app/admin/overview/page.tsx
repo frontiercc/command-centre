@@ -178,7 +178,7 @@ export default function AdminOverviewPage() {
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
 
             {/* 1. Users */}
-            <Tile href="/admin/users" title="User Insights" icon={<IconUsers />} value={userCount ?? '—'} caption="total users" />
+            <Tile href="/admin/users" title="User Insights" icon={<IconUsers />} value={userCount != null ? userCount.toLocaleString('en-GB') : '—'} caption="total users" />
 
             {/* 2. Database */}
             <Tile
@@ -200,7 +200,7 @@ export default function AdminOverviewPage() {
             />
 
             {/* 4. Events (last 24h) */}
-            <Tile href="/audit" title="Events" icon={<IconActivity />} value={eventsLast24h ?? '—'} caption="in last 24 hours" />
+            <Tile href="/audit" title="Events" icon={<IconActivity />} value={eventsLast24h != null ? Number(eventsLast24h).toLocaleString('en-GB') : '—'} caption="in last 24 hours" />
 
             {/* 5. Archive */}
             <Tile

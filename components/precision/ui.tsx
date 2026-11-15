@@ -70,7 +70,7 @@ export function cx(...parts: Array<string | false | null | undefined>): string {
  *  a fixed cap left a wide empty band on large screens. `wide` is kept for callers and no longer changes anything. */
 export function PageBody({ children, className }: { children: ReactNode; wide?: boolean; className?: string }) {
   return (
-    <div className={cx('px-6 lg:px-8 pt-4 pb-10 flex flex-col gap-4 w-full', className)}>
+    <div className={cx('px-6 lg:px-8 pt-3 pb-10 flex flex-col gap-3 w-full', className)}>
       {children}
     </div>
   );
@@ -103,14 +103,14 @@ export function Panel({ title, subtitle, right, badge, children, className, body
   return (
     <section id={id} className={cx('bg-white border border-[#EAEAEA] rounded-[14px] min-w-0', className)}>
       {(title || right) && (
-        <div className="flex items-center gap-x-3 gap-y-1 flex-wrap px-4 py-3 border-b border-[#EAEAEA]">
+        <div className="flex items-center gap-x-3 gap-y-1 flex-wrap px-3 py-2.5 border-b border-[#EAEAEA]">
           {title && <h2 className="m-0 text-[14px] font-semibold text-[#0A0A0A] leading-5">{title}</h2>}
           {badge}
           {subtitle && <span className="text-[13px] text-[#8F8F8F]">{subtitle}</span>}
           {right && <div className="ml-auto flex items-center gap-2 flex-wrap">{right}</div>}
         </div>
       )}
-      <div className={cx(flush ? '' : 'p-4', bodyClassName)}>{children}</div>
+      <div className={cx(flush ? '' : 'p-3', bodyClassName)}>{children}</div>
     </section>
   );
 }
@@ -118,7 +118,7 @@ export function Panel({ title, subtitle, right, badge, children, className, body
 /** A footnote strip at the bottom of a panel. Put it inside a flush Panel. */
 export function PanelFoot({ children, tone = 'neutral' }: { children: ReactNode; tone?: Tone }) {
   return (
-    <div className={cx('px-4 py-2.5 border-t border-[#F2F2F2] text-[13px]', tone === 'neutral' ? 'text-[#8F8F8F]' : toneText[tone])}>
+    <div className={cx('px-3 py-2 border-t border-[#F2F2F2] text-[13px]', tone === 'neutral' ? 'text-[#8F8F8F]' : toneText[tone])}>
       {children}
     </div>
   );
@@ -164,7 +164,7 @@ export function Figure({ label, value, sub, tone = 'neutral', unit, delta, delta
   title?: string;
 }) {
   return (
-    <div className="p-4 flex flex-col gap-1.5 min-w-0" title={title}>
+    <div className="px-3 py-2.5 flex flex-col gap-1 min-w-0" title={title}>
       <span className="text-[13px] text-[#666666]">{label}</span>
       <span className={cx('text-[24px] leading-7 font-semibold tracking-[-0.02em] tabular-nums', tone === 'judged' ? 'text-[#1F6F8B]' : toneText[tone])}>
         {value}{unit && <span className="text-[14px] font-normal text-[#8F8F8F] tracking-normal"> {unit}</span>}
@@ -191,7 +191,7 @@ export function BarRow({ label, value, pct, tone = 'measured', title, rank, colo
   color?: string;
 }) {
   return (
-    <div className="px-4 py-2 border-t border-[#F2F2F2] first:border-t-0 flex flex-col gap-1" title={title}>
+    <div className="px-3 py-2 border-t border-[#F2F2F2] first:border-t-0 flex flex-col gap-1" title={title}>
       <div className="flex items-baseline gap-2 min-w-0">
         {rank !== undefined && <span className="text-[12px] text-[#B3B3B3] w-4 shrink-0 tabular-nums">{rank}</span>}
         <span className="text-[14px] text-[#0A0A0A] truncate">{label}</span>
@@ -216,12 +216,12 @@ export function Bar({ pct, tone = 'measured', height = 3, color }: { pct: number
 export const T = {
   table: 'w-full border-collapse text-[14px]',
   headRow: 'text-left text-[13px] text-[#8F8F8F]',
-  th: 'font-medium px-2 py-2 first:pl-4 last:pr-4 whitespace-nowrap',
-  thRight: 'font-medium px-2 py-2 first:pl-4 last:pr-4 text-right whitespace-nowrap',
+  th: 'font-medium px-2 py-2 first:pl-3 last:pr-3 whitespace-nowrap',
+  thRight: 'font-medium px-2 py-2 first:pl-3 last:pr-3 text-right whitespace-nowrap',
   row: 'border-t border-[#F2F2F2] hover:bg-[#FAFAFA]',
-  td: 'px-2 py-2.5 first:pl-4 last:pr-4 align-middle',
-  tdRight: 'px-2 py-2.5 first:pl-4 last:pr-4 align-middle text-right tabular-nums',
-  tdMute: 'px-2 py-2.5 first:pl-4 last:pr-4 align-middle text-[#666666]',
+  td: 'px-2 py-2 first:pl-3 last:pr-3 align-middle',
+  tdRight: 'px-2 py-2 first:pl-3 last:pr-3 align-middle text-right tabular-nums',
+  tdMute: 'px-2 py-2 first:pl-3 last:pr-3 align-middle text-[#666666]',
 };
 
 /* ── Small parts ───────────────────────────────────────────────────── */

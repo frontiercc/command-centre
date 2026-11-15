@@ -183,7 +183,9 @@ async function runSpec(): Promise<void> {
     // in the past 2 weeks — below the >=3 risk threshold, so risk is empty
     // but the detail list still surfaces it.
     expect(deptBody.concentrationRisk).toEqual([]);
-    expect(deptBody.concentrationDetail).toContainEqual({ user_id: 'u1', display_name: 'Ada Lovelace', task_types: ['coding'] });
+    // Team Coaching's rule: one member's kind of work needs at least 8 prompts in 30 days to
+    // count, and this fixture has fewer, so nobody is named (test/sole-work.test.ts covers the rule).
+    expect(deptBody.concentrationDetail).toEqual([]);
 
     // Skill concentration: u1 is the sole user of 'brand-review'.
     expect(deptBody.skillConcentration).toContainEqual({ user_id: 'u1', display_name: 'Ada Lovelace', skills: ['brand-review'] });

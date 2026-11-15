@@ -40,7 +40,15 @@ export interface HumanTimeSummary {
   /** humanMinutes.likely / claudeMinutes, or null below the session floor or with no Claude time. */
   ratio: number | null;
   byKind: HumanTimeRow[];
+  /**
+   * Every session with no row of its own (a kind below MIN_SESSIONS_FOR_RATE, or no named kind),
+   * so the rows and this add up to the totals. Absent when there are no rows or nothing is left.
+   */
+  otherKinds?: HumanTimeRow;
 }
+
+/** The kind of the otherKinds row: not a task or work type (Code has its own 'other'). */
+export const OTHER_KINDS = '_other_kinds';
 
 interface SessionFigures {
   session_id: string;
@@ -66,16 +74,28 @@ export function summariseHumanTime(rows: SessionFigures[], minSessionsForRatio: 
     k.claudeMinutes += r.claudeSecs / 60;
     byKindMap.set(r.kind, k);
   }
-  return {
+  const byKind = [...byKindMap.values()]
+    .filter(k => k.sessions >= MIN_SESSIONS_FOR_RATE)
+    .sort((a, b) => b.humanMinutes - a.humanMinutes);
+  const shown = new Set(byKind.map(k => k.kind));
+  const rest = rows.filter(r => !r.kind || !shown.has(r.kind));
+  const summary: HumanTimeSummary = {
     windowDays,
     sessions: rows.length,
     humanMinutes: { low, likely, high },
     claudeMinutes,
     ratio: rows.length >= minSessionsForRatio && claudeMinutes > 0 ? likely / claudeMinutes : null,
-    byKind: [...byKindMap.values()]
-      .filter(k => k.sessions >= MIN_SESSIONS_FOR_RATE)
-      .sort((a, b) => b.humanMinutes - a.humanMinutes),
+    byKind,
   };
+  if (byKind.length > 0 && rest.length > 0) {
+    summary.otherKinds = {
+      kind: OTHER_KINDS,
+      sessions: rest.length,
+      humanMinutes: rest.reduce((n, r) => n + r.likely, 0),
+      claudeMinutes: rest.reduce((n, r) => n + r.claudeSecs, 0) / 60,
+    };
+  }
+  return summary;
 }
 
 export async function buildHumanTimeSummary(opts: {
@@ -179,13 +199,19 @@ export async function buildHumanTimeSummary(opts: {
  * read fails (the card hides; the rest of the page is unaffected). Callers
  * decide the scope and who may see it.
  */
-export async function readHumanTime(surface: 'code' | 'cowork', userIds?: string[], vendor: Vendor = 'all'): Promise<(HumanTimeSummary & { check: { period: string; reviewed: number; aboutRight: number } | null }) | null> {
+export async function readHumanTime(
+  surface: 'code' | 'cowork',
+  userIds?: string[],
+  vendor: Vendor = 'all',
+  /** A fixed [startS, endS) window instead of the last 30 days (the overview's quarter). */
+  range?: { startS: number; endS: number },
+): Promise<(HumanTimeSummary & { check: { period: string; reviewed: number; aboutRight: number } | null }) | null> {
   try {
     const { getConfigValue } = await import('@/lib/config');
     const { humanTimeOn } = await import('@/lib/pulse/human-time-flags');
     if (!(await humanTimeOn(surface))) return null;
     const min = parseInt(await getConfigValue('humanTimeMinSessionsForRatio'), 10);
-    const summary = await buildHumanTimeSummary({ surface, userIds, vendor, includeChatgpt: surface === 'cowork', minSessionsForRatio: Number.isFinite(min) && min > 0 ? min : 20 });
+    const summary = await buildHumanTimeSummary({ surface, userIds, vendor, range, includeChatgpt: surface === 'cowork', minSessionsForRatio: Number.isFinite(min) && min > 0 ? min : 20 });
     // The spot-check result (counts only), so the card can say how well the estimates held up.
     const { latestCheckResult } = await import('@/lib/pulse/human-time-checks');
     return { ...summary, check: await latestCheckResult(surface) };

@@ -7,7 +7,7 @@ import { useCallback, useEffect, useState } from 'react';
 import Link from 'next/link';
 import TopBar from '@/components/layout/TopBar';
 import LoadingSpinner from '@/components/shared/LoadingSpinner';
-import { ALL_CATEGORIES, CATEGORY_LABELS, categoryForType } from '@/lib/alerts/categories';
+import { ALL_CATEGORIES, CATEGORY_LABELS, alertTypeLabel, categoryForType } from '@/lib/alerts/categories';
 import { useCorePlatformGuard } from '@/components/shared/useCorePlatformGuard';
 import { PageBody, Panel, Segmented, Chip, Dot, Pill, Empty, B, SEVERITY_COLOR } from '@/components/precision/ui';
 
@@ -239,7 +239,7 @@ export default function AlertsPage() {
                           {[
                             alert.user_id ? `User: ${alert.user_display_name || alert.user_id}` : null,
                             new Date(alert.generated_at * 1000).toLocaleString('en-GB'),
-                            alert.alert_type,
+                            alertTypeLabel(alert.alert_type),
                             CATEGORY_LABELS[categoryForType(alert.alert_type)],
                           ].filter(Boolean).join(' · ')}
                         </p>

@@ -76,6 +76,21 @@ describe('what the plan says', () => {
     expect(workOn.join(' ')).toContain('within five points');
   });
 
+  it('names every kind of work that ties for the top', () => {
+    const t = team({ work: [
+      { workType: 'feature', label: 'Feature build', sessions: 50, share: 0.5, target: null },
+      { workType: 'bugfix', label: 'Bug fixing', sessions: 50, share: 0.5, target: null },
+    ] });
+    const { workOn } = teamParts(t, figures(t));
+    expect(workOn[0]).toBe('Most sessions went on feature build and bug fixing: 50% of them each.');
+  });
+
+  it('names the model of single-answer sessions as the Model mix does, not its raw id', () => {
+    const t = team({ costlyOnSimple: { model: 'claude-opus-4-1-20250805', sessions: 12 } });
+    const { workOn } = teamParts(t, figures(t));
+    expect(workOn.join(' ')).toContain('Most single-answer sessions ran on Claude Opus 4.1: 12 sessions.');
+  });
+
   it('puts finding out what stopped people first when most have hardly used it', () => {
     const t = team({ hardlyUsed: 7, hardlyUsedShare: 0.7 });
     const { actions } = teamParts(t, figures(t));

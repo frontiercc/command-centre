@@ -18,8 +18,8 @@
  * `numeric` column on Postgres) is also Number()-coerced at the read site.
  * The "repos gone quiet" subquery needed an explicit alias on its derived
  * table (`AS quiet_repos`) — Postgres requires one.
- * The 7-day-ago date param compared against `github_repo_stats.date` is a
- * plain TEXT column (YYYY-MM-DD), so the JS-computed date string param is a
+ * The 7-day window's first date compared against `github_repo_stats.date` is
+ * a plain TEXT column (YYYY-MM-DD), so the JS-computed date string param is a
  * lexicographic comparison.
  */
 import { getCodeWorkTypeLabeller } from '@/lib/pulse/code/tier-config';
@@ -33,6 +33,7 @@ import { getConfigValue } from '@/lib/config';
 import { ORG_SCOPE_ID } from '@/lib/pulse/code/aggregator';
 import { createGroundedJson, paragraphsShape, pctChange, pctOf } from '@/lib/anthropic/grounded-json';
 import { hasCodexData, pickCodeMetricsSource } from '@/lib/pulse/code/vendor-view';
+import { buildDailyWindow } from '@/lib/pulse/code/shipping-alignment';
 
 export const CODE_BRIEFING_SCOPE_ID = 'code-org';
 
@@ -86,7 +87,8 @@ async function buildDataSummary(codexPresent: boolean): Promise<string> {
   const client = await getTypedClient();
   const now = Math.floor(Date.now() / 1000);
   const lines: string[] = [];
-  // All products once Codex data exists (lib/pulse/code/vendor-view.ts).
+  // All products once Codex data exists (lib/pulse/code/vendor-view.ts). A weekly briefing, so it
+  // reads the aggregator's 7-day rows ('rolling_7d'), not Developer Pulse's 30-day headline rows.
   const src = await pickCodeMetricsSource('all', codexPresent);
 
   const m = await rawGet<{
@@ -102,7 +104,7 @@ async function buildDataSummary(codexPresent: boolean): Promise<string> {
   }>(client, sql`
     SELECT spend_usd, input_tokens, output_tokens, cache_hit_ratio, autonomy_ratio,
            session_count, repo_count, commit_count, skill_leverage
-    FROM ${src.table} WHERE scope_type = 'organisation' AND scope_id = ${ORG_SCOPE_ID} AND granularity = 'rolling' ${src.only}
+    FROM ${src.table} WHERE scope_type = 'organisation' AND scope_id = ${ORG_SCOPE_ID} AND granularity = 'rolling_7d' ${src.only}
     ORDER BY computed_at DESC LIMIT 1
   `);
   const prior = await rawGet<{
@@ -112,7 +114,7 @@ async function buildDataSummary(codexPresent: boolean): Promise<string> {
     commit_count: number | string;
   }>(client, sql`
     SELECT spend_usd, autonomy_ratio, session_count, commit_count
-    FROM ${src.table} WHERE scope_type = 'organisation' AND scope_id = ${ORG_SCOPE_ID} AND granularity = 'rolling' AND computed_at <= ${now - 7 * 24 * 3600} ${src.only}
+    FROM ${src.table} WHERE scope_type = 'organisation' AND scope_id = ${ORG_SCOPE_ID} AND granularity = 'rolling_7d' AND computed_at <= ${now - 7 * 24 * 3600} ${src.only}
     ORDER BY computed_at DESC LIMIT 1
   `);
 
@@ -140,7 +142,7 @@ async function buildDataSummary(codexPresent: boolean): Promise<string> {
         spend_usd: string | number | null; session_count: number | string; commit_count: number | string; autonomy_ratio: number | null;
       }>(client, sql`
         SELECT spend_usd, session_count, commit_count, autonomy_ratio
-        FROM ${table} WHERE scope_type = 'organisation' AND scope_id = ${ORG_SCOPE_ID} AND granularity = 'rolling' ${only}
+        FROM ${table} WHERE scope_type = 'organisation' AND scope_id = ${ORG_SCOPE_ID} AND granularity = 'rolling_7d' ${only}
         ORDER BY computed_at DESC LIMIT 1
       `);
     };
@@ -157,17 +159,26 @@ async function buildDataSummary(codexPresent: boolean): Promise<string> {
     }
   }
 
-  // github_repo_stats.date is TEXT (YYYY-MM-DD) — a JS-computed date-string
-  // param compared with >= is a lexicographic comparison.
-  const overlaySince = new Date((now - 7 * 24 * 3600) * 1000).toISOString().slice(0, 10);
-  const overlayTotal = await rawGet<{ c: number | string }>(client, sql`
-    SELECT COALESCE(SUM(commit_count), 0) AS c FROM github_repo_stats WHERE date >= ${overlaySince}
+  // The Shipping alignment card's basis: the last 7 days (today and the six
+  // before), tracked (mapped) repos only, and the GitHub commits a sync matched
+  // to Claude Code or Codex. github_repo_stats.date is TEXT (YYYY-MM-DD), so the
+  // date-string param compares lexicographically. While Codex is hidden (or has
+  // no data), commits matched to Codex count as no AI tool recorded, as there.
+  const overlaySince = buildDailyWindow(new Date(now * 1000).toISOString().slice(0, 10), 7)[0];
+  const splitKnown = sql`claude_commit_count IS NOT NULL AND codex_commit_count IS NOT NULL AND no_tool_commit_count IS NOT NULL`;
+  const overlay = await rawGet<{ total: number | string; split_total: number | string; matched: number | string }>(client, sql`
+    SELECT COALESCE(SUM(commit_count), 0) AS total,
+           COALESCE(SUM(commit_count) FILTER (WHERE ${splitKnown}), 0) AS split_total,
+           COALESCE(SUM(claude_commit_count${codexPresent ? sql` + codex_commit_count` : sql``}) FILTER (WHERE ${splitKnown}), 0) AS matched
+    FROM github_repo_stats
+    WHERE date >= ${overlaySince} AND repo IN (SELECT repo FROM github_repo_map)
   `);
-  const overlayCount = Number(overlayTotal?.c ?? 0);
+  const overlayCount = Number(overlay?.total ?? 0);
   if (overlayCount > 0) {
-    const share = pctOf(Number(m.commit_count), overlayCount);
-    // A share over 100% means the two counts cover different repos; say nothing rather than mislead.
-    lines.push(`github_overlay: total_commits_shipped_in_mapped_repos=${overlayCount}${share !== null && share <= 100 ? `, ai_assisted_share_of_shipped_commits=${share}%` : ''}`);
+    // Only when every commit in the window has been matched to a tool or none; otherwise no share.
+    const share = Number(overlay?.split_total ?? 0) === overlayCount ? pctOf(Number(overlay?.matched ?? 0), overlayCount) : null;
+    const shareKey = codexPresent ? 'share_of_shipped_commits_matched_to_claude_code_or_codex' : 'share_of_shipped_commits_matched_to_claude_code';
+    lines.push(`github_overlay: total_commits_shipped_in_mapped_repos=${overlayCount}${share !== null ? `, ${shareKey}=${share}%` : ''}`);
   }
 
   if ((await getConfigValue('codeClassifierEnabled')) !== 'false') {

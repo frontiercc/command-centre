@@ -1201,6 +1201,31 @@ export const decisionLog = pgTable('decision_log', {
     primaryKey({ columns: [t.card, t.department] }),
 ]);
 
+/**
+ * Ask the data (admin only): one row per question, with the lookups that ran, the outcome and
+ * the measured cost. The answer text is never stored. Pruned to the admin's retention setting.
+ */
+export const askLog = pgTable('ask_log', {
+    id: text().primaryKey().notNull(),
+    asked_at: bigint({ mode: 'number' }).notNull(),
+    asked_by: text().notNull(),
+    question: text().notNull(),
+    page: text(),
+    /** JSON array of {name, input} for each lookup the model ran. */
+    lookups_json: text().notNull(),
+    /** answered | not_answerable | refused | capped | error */
+    outcome: text().notNull(),
+    model: text().notNull(),
+    input_tokens: integer().default(0).notNull(),
+    output_tokens: integer().default(0).notNull(),
+    cache_read_tokens: integer().default(0).notNull(),
+    cache_write_tokens: integer().default(0).notNull(),
+    cost_usd: numeric(),
+    duration_ms: integer(),
+}, (t) => [
+    index('idx_ask_log_asked_at').on(t.asked_at),
+]);
+
 export const coachingActions = pgTable('coaching_actions', {
     // 'code' or 'cowork': the same department has a plan on both, with overlapping action keys.
     surface: text().notNull().default('code'),
@@ -1448,6 +1473,7 @@ export const pgSchema = {
   coachingAcks,
   coachingActions,
   decisionLog,
+  askLog,
   codeAssistantMeta,
   codeMetrics,
   codeOtelMetrics,

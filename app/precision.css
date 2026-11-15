@@ -109,11 +109,11 @@ html[data-theme="precision"] .ccc-pbar-crumb { display: inline-flex; align-items
 html[data-theme="precision"] .ccc-pbar-muted { color: var(--p-faint); }
 html[data-theme="precision"] .ccc-pbar-sep { color: #D4D4D4; }
 html[data-theme="precision"] .ccc-pbar-current { color: var(--p-ink); font-weight: 500; }
-html[data-theme="precision"] .ccc-ptitle { padding: 24px 32px 0; }
+html[data-theme="precision"] .ccc-ptitle { padding: 20px 32px 0; }
 html[data-theme="precision"] .ccc-ptitle h1 { margin: 0; font-size: 17px; line-height: 24px; font-weight: 600; letter-spacing: -0.02em; color: var(--p-ink); }
 html[data-theme="precision"] .ccc-ptitle p { margin: 2px 0 0; font-size: 13px; color: var(--p-mute); }
 html[data-theme="precision"] .ccc-ptitle + .p-8,
-html[data-theme="precision"] .ccc-ptitle + .p-6 { padding-top: 16px; }
+html[data-theme="precision"] .ccc-ptitle + .p-6 { padding-top: 12px; }
 
 /* ── Admin sub-navigation (app/admin/layout.tsx) ─────────────────── */
 html[data-theme="precision"] .ccc-admin-nav { width: 196px; border-color: var(--p-line); }
@@ -186,7 +186,7 @@ html[data-theme="precision"] .ccc-strip {
   gap: 0; background: #FFFFFF; border: 1px solid var(--p-line); border-radius: 14px; overflow: hidden;
 }
 html[data-theme="precision"] .ccc-strip > * {
-  border: 0; border-radius: 0; background: transparent; box-shadow: none; padding: 16px;
+  border: 0; border-radius: 0; background: transparent; box-shadow: none; padding: 10px 12px;
 }
 html[data-theme="precision"] .ccc-strip > * + * { border-top: 1px solid var(--p-line); }
 @media (min-width: 768px) {

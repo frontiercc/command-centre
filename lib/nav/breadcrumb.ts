@@ -17,6 +17,7 @@ export interface Crumbs {
 const EXACT: Record<string, Crumbs> = {
   '/': { trail: [], page: 'Dashboard' },
   '/alerts': { trail: [], page: 'Alerts' },
+  '/ask': { trail: [], page: 'Ask the data' },
   '/audit': { trail: [], page: 'Audit Log' },
   '/reports': { trail: [], page: 'Reports' },
   '/users': { trail: [], page: 'Users' },
@@ -27,6 +28,7 @@ const EXACT: Record<string, Crumbs> = {
   '/pulse/cio': { trail: ['Work Pulse'], page: 'Overview' },
   '/pulse/me': { trail: ['Work Pulse'], page: 'My Pulse' },
   '/pulse/users': { trail: ['Work Pulse'], page: 'Users' },
+  '/pulse/people': { trail: ['Work Pulse'], page: 'People behind the figures' },
   '/pulse/dept': { trail: ['Work Pulse'], page: 'Departments' },
   '/pulse/code': { trail: ['Developer Pulse'], page: 'Overview' },
   '/pulse/code/me': { trail: ['Developer Pulse'], page: 'My Developer Pulse' },

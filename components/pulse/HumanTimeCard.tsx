@@ -20,6 +20,8 @@ export interface HumanTimeSummary {
   claudeMinutes: number;
   ratio: number | null;
   byKind: HumanTimeRow[];
+  /** Every session with no row of its own, so the rows add up to the totals. */
+  otherKinds?: HumanTimeRow;
   /** Latest monthly spot-check (counts only); null = not yet checked. */
   check?: { period: string; reviewed: number; aboutRight: number } | null;
 }
@@ -34,7 +36,8 @@ function monthName(period: string): string {
   return new Date(Date.UTC(y, m - 1, 1)).toLocaleString('en-GB', { month: 'long', year: 'numeric', timeZone: 'UTC' });
 }
 
-function label(k: string, surface: 'code' | 'cowork'): string {
+/** A kind of work's name on a by-hand panel, as Work Pulse or Developer Pulse names it. */
+export function humanTimeKindLabel(k: string, surface: 'code' | 'cowork'): string {
   if (surface === 'code') return codeWorkTypeLabel(k);
   return k.replace(/_/g, ' ').replace(/\b\w/g, c => c.toUpperCase());
 }
@@ -64,7 +67,12 @@ export default function HumanTimeCard({ summary, surface, scope, className = '',
   const bp = summary.byProduct;
   const { low, likely, high } = summary.humanMinutes;
 
-  const maxKind = Math.max(1, ...summary.byKind.map(k => k.humanMinutes));
+  // The named rows and the rest, so the rows add up to the totals above.
+  const kindRows = [
+    ...summary.byKind.map(k => ({ ...k, label: humanTimeKindLabel(k.kind, surface) })),
+    ...(summary.otherKinds ? [{ ...summary.otherKinds, label: 'Other kinds' }] : []),
+  ];
+  const maxKind = Math.max(1, ...kindRows.map(k => k.humanMinutes));
   const pct = (m: number) => Math.max(1, Math.round((m / maxKind) * 100));
 
   return (
@@ -112,10 +120,10 @@ export default function HumanTimeCard({ summary, surface, scope, className = '',
           <div className="min-w-0">
             <SubHead>By kind of work, hours</SubHead>
             <div className="flex flex-col gap-3">
-              {summary.byKind.map(k => (
+              {kindRows.map(k => (
                 <div key={k.kind} className="flex flex-col gap-1">
                   <div className="flex items-baseline justify-between gap-3 text-[13px]">
-                    <span className="text-[14px] text-[#0A0A0A]">{label(k.kind, surface)}</span>
+                    <span className="text-[14px] text-[#0A0A0A]">{k.label}</span>
                     <span className="shrink-0 tabular-nums text-[#8F8F8F]">
                       <span className="text-[#1F6F8B]">~{hours(k.humanMinutes)}</span> by hand ·{' '}
                       <span className="text-[#1F6F8B]">{hours(k.claudeMinutes)}</span> with {name} · {k.sessions} sessions

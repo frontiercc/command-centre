@@ -54,7 +54,7 @@ describe('getPerson360', () => {
       [NOW - 7 * 86400, NOW, NOW],
     );
 
-    // Code: rolling user-scope code_metrics row
+    // Code: 7-day user-scope code_metrics row (Person 360 reads 'rolling_7d')
     await sql.run(
       `INSERT INTO code_metrics (
          scope_type, scope_id, period_start, period_end,
@@ -63,7 +63,7 @@ describe('getPerson360', () => {
          edit_accept_count, edit_reject_count,
          input_tokens, output_tokens,
          granularity, computed_at
-       ) VALUES ('user', 'u1', ?, ?, 12.5, 4, 6, 1.3, 3600, 1200, 250, 8, 2, 0, 0, 'rolling', ?)`,
+       ) VALUES ('user', 'u1', ?, ?, 12.5, 4, 6, 1.3, 3600, 1200, 250, 8, 2, 0, 0, 'rolling_7d', ?)`,
       [NOW - 7 * 86400, NOW, NOW],
     );
 
@@ -180,7 +180,7 @@ describe('getPerson360', () => {
          edit_accept_count, edit_reject_count,
          input_tokens, output_tokens,
          granularity, computed_at
-       ) VALUES ('user', 'u3', ?, ?, NULL, 2, 1, 1.0, 100, 100, 10, 0, 0, 0, 0, 'rolling', ?)`,
+       ) VALUES ('user', 'u3', ?, ?, NULL, 2, 1, 1.0, 100, 100, 10, 0, 0, 0, 0, 'rolling_7d', ?)`,
       [NOW - 7 * 86400, NOW, NOW],
     );
 

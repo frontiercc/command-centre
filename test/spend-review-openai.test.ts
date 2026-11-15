@@ -91,6 +91,8 @@ describe('model advice stays with one vendor', () => {
     return t;
   };
   const USAGE = (m: string) => new Map([[m, { inputTokens: 50_000_000, outputTokens: 5_000_000, cacheReadTokens: 0, cacheCreationTokens: 0 }]]);
+  // Where the person's sessions on a model ran.
+  const ran = (m: string, ...products: Array<'chat' | 'work'>) => new Map([[m, products]]);
 
   it('tells models apart by vendor', () => {
     expect(modelVendor('claude-haiku-4-5')).toBe('anthropic');
@@ -110,8 +112,32 @@ describe('model advice stays with one vendor', () => {
     const only = (...ms: string[]) => Object.fromEntries(ms.map(m => [m, RATES[m]]));
     // gpt-6 (Chat only) is the only cheaper general model here, so nothing is suggested.
     expect(deriveModelFit('codex', you, new Map(), USAGE('gpt-6-astra'), only('gpt-6-astra', 'gpt-6', 'o4-mini-deep-research'), 100).trial).toBeNull();
-    // The same mix for ChatGPT work may suggest gpt-6.
-    expect(deriveModelFit('chatgpt', you, new Map(), USAGE('gpt-6-astra'), only('gpt-6-astra', 'gpt-6', 'o4-mini-deep-research'), 100).trial?.toModel).toBe('gpt-6');
+    // The same mix in ChatGPT's Chat tab may suggest gpt-6, which Chat offers.
+    expect(deriveModelFit('chatgpt', you, new Map(), USAGE('gpt-6-astra'), only('gpt-6-astra', 'gpt-6', 'o4-mini-deep-research'), 100, ran('gpt-6-astra', 'chat')).trial?.toModel).toBe('gpt-6');
+    // ChatGPT Work does not offer gpt-6, and nor does unknown (it must be offered in both).
+    expect(deriveModelFit('chatgpt', you, new Map(), USAGE('gpt-6-astra'), only('gpt-6-astra', 'gpt-6', 'o4-mini-deep-research'), 100, ran('gpt-6-astra', 'work')).trial).toBeNull();
+    expect(deriveModelFit('chatgpt', you, new Map(), USAGE('gpt-6-astra'), only('gpt-6-astra', 'gpt-6', 'o4-mini-deep-research'), 100).trial).toBeNull();
+  });
+
+  it('ChatGPT advice names only a model offered where the work ran, Chat or Work', () => {
+    // Work on gpt-6.1-sol; colleagues reach deep work far more often on gpt-6-pro (Chat only)
+    // and on gpt-6-astra (Work), both dearer per token.
+    const you = new Map([['gpt-6.1-sol', tally(10, 1, 0.5, 1)]]);
+    const proOnly = new Map([['gpt-6-pro', tally(MIN_ADVICE_SESSIONS, 5, 2, 3)]]);
+    expect(deriveModelFit('chatgpt', you, proOnly, USAGE('gpt-6.1-sol'), RATES, 100, ran('gpt-6.1-sol', 'work')).advice).toBeNull();
+    const both = new Map([...proOnly, ['gpt-6-astra', tally(MIN_ADVICE_SESSIONS, 5, 2, 3)]]);
+    expect(deriveModelFit('chatgpt', you, both, USAGE('gpt-6.1-sol'), RATES, 100, ran('gpt-6.1-sol', 'work')).advice)
+      .toMatchObject({ direction: 'step_up', toModel: 'gpt-6-astra' });
+
+    // Chat on gpt-6-pro; colleagues' Work sessions on gpt-6.1-sol are a fifth of the price and do as well.
+    const chat = new Map([['gpt-6-pro', tally(10, 1, 5, 3)]]);
+    const sol = new Map([['gpt-6.1-sol', tally(MIN_ADVICE_SESSIONS, 5, 1, 3)]]);
+    expect(deriveModelFit('chatgpt', chat, sol, USAGE('gpt-6-pro'), RATES, 100, ran('gpt-6-pro', 'chat')).advice?.toModel ?? null).not.toBe('gpt-6.1-sol');
+    // The same person in ChatGPT Work is told to save with it.
+    expect(deriveModelFit('chatgpt', chat, sol, USAGE('gpt-6-pro'), RATES, 100, ran('gpt-6-pro', 'work')).advice)
+      .toMatchObject({ direction: 'save', toModel: 'gpt-6.1-sol' });
+    // Work done in both: only a model both offer.
+    expect(deriveModelFit('chatgpt', chat, sol, USAGE('gpt-6-pro'), RATES, 100, ran('gpt-6-pro', 'chat', 'work')).advice?.toModel ?? null).not.toBe('gpt-6.1-sol');
   });
 
   it('a Claude trial never suggests an OpenAI model, however cheap', () => {

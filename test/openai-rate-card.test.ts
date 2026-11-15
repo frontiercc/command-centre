@@ -8,7 +8,7 @@
  * would show as unpriced and its spend would be left out, so every row is held here.
  */
 import { describe, it, expect } from 'vitest';
-import { OPENAI_DEFAULT_RATES, OPENAI_SPECIALIST_MODELS, OPENAI_CHAT_ONLY_MODELS } from '@/lib/pulse/code/rates';
+import { OPENAI_DEFAULT_RATES, OPENAI_SPECIALIST_MODELS, OPENAI_CHAT_ONLY_MODELS, openaiModelOffered } from '@/lib/pulse/code/rates';
 
 // [model, input, cached input, output], as the card lists them.
 const CARD: Array<[string, number, number, number]> = [
@@ -56,5 +56,19 @@ describe("OpenAI's rate card", () => {
     }
     // The Chat-only models are the card's Chat table alone.
     expect([...OPENAI_CHAT_ONLY_MODELS].sort()).toEqual(['gpt-5.3', 'gpt-6', 'gpt-6-pro']);
+  });
+
+  it("knows which models each product offers, as the card's tables list them", () => {
+    const offered = (p: 'chat' | 'work' | 'codex') => Object.keys(OPENAI_DEFAULT_RATES).filter(m => openaiModelOffered(m, p)).sort();
+    expect(offered('chat')).toEqual(['gpt-5.3', 'gpt-5.5-rosalind-discovery', 'gpt-5.5-rosalind-research', 'gpt-5.6-sol', 'gpt-6', 'gpt-6-pro']);
+    // GPT-6.1 Sol, GPT-6.1 Terra and GPT-6 Luna are in Work and Codex only; GPT-6 Cyber in Codex only.
+    for (const m of ['gpt-6.1-sol', 'gpt-6.1-terra', 'gpt-6-luna']) {
+      expect(openaiModelOffered(m, 'chat')).toBe(false);
+      expect(openaiModelOffered(m, 'work')).toBe(true);
+    }
+    expect(openaiModelOffered('gpt-6-cyber', 'work')).toBe(false);
+    expect(openaiModelOffered('gpt-6-cyber', 'codex')).toBe(true);
+    // Deep research is a feature, not a model to pick.
+    for (const p of ['chat', 'work', 'codex'] as const) expect(openaiModelOffered('o4-mini-deep-research', p)).toBe(false);
   });
 });

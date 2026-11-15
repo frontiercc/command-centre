@@ -83,14 +83,26 @@ export interface CodeMetricsRow {
   edit_reject_count?: number;
 }
 
-/** "1h 23m" / "45m" / "30s" from a seconds count. */
+/**
+ * A seconds count rounded as formatDuration shows it: to the nearest minute, or
+ * to the second under a minute. A total of parts adds these, so it reads as the
+ * sum of the parts shown beside it.
+ */
+export function roundDurationSeconds(seconds: number): number {
+  if (seconds <= 0) return 0;
+  return seconds < 60 ? Math.round(seconds) : Math.round(seconds / 60) * 60;
+}
+
+/** "1h 23m" / "45m" / "30s" from a seconds count, rounded to the nearest minute. */
 export function formatDuration(seconds: number): string {
-  if (seconds <= 0) return '0m';
-  const h = Math.floor(seconds / 3600);
-  const m = Math.floor((seconds % 3600) / 60);
+  const s = roundDurationSeconds(seconds);
+  if (s <= 0) return '0m';
+  if (s < 60) return `${s}s`;
+  const mins = s / 60;
+  const h = Math.floor(mins / 60);
+  const m = mins % 60;
   if (h > 0) return m > 0 ? `${h}h ${m}m` : `${h}h`;
-  if (m > 0) return `${m}m`;
-  return `${seconds}s`;
+  return `${m}m`;
 }
 
 export default function CodeStatStrip({ metrics, githubRepos, view = 'claude', split }: {
@@ -126,7 +138,7 @@ export default function CodeStatStrip({ metrics, githubRepos, view = 'claude', s
   };
   const signals: CodeSignal[] = [
     {
-      label: view === 'openai' ? 'Codex spend · 7 days' : view === 'all' ? 'Spend · 7 days' : 'Claude Code spend · 7 days',
+      label: view === 'openai' ? 'Codex spend · 30 days' : view === 'all' ? 'Spend · 30 days' : 'Claude Code spend · 30 days',
       value: metrics === null ? null : metrics.spend_usd === null
         ? null
         : formatCurrency(metrics.spend_usd),
@@ -164,14 +176,14 @@ export default function CodeStatStrip({ metrics, githubRepos, view = 'claude', s
         }
       : metrics !== null && metrics.repo_count === 0
         ? {
-            label: 'Repos active · 7 days',
+            label: 'Repos active · 30 days',
             value: null,
             pending: 'Not captured',
             sublabel: 'Codebases with coding activity',
             hint: `${metrics.session_count} session${metrics.session_count === 1 ? '' : 's'} · no repo attribution in these sessions`,
           }
         : {
-            label: 'Repos active · 7 days',
+            label: 'Repos active · 30 days',
             value: metrics == null ? null : String(metrics.repo_count),
             sublabel: 'Codebases with coding activity',
             hint: `${metrics?.session_count ?? 0} session${(metrics?.session_count ?? 0) === 1 ? '' : 's'} · ${metrics?.commit_count ?? 0} AI-assisted commit${(metrics?.commit_count ?? 0) === 1 ? '' : 's'}`,

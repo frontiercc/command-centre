@@ -8,13 +8,16 @@ import Link from 'next/link';
 import { useSearchParams } from 'next/navigation';
 import TopBar from '@/components/layout/TopBar';
 import LoadingSpinner from '@/components/shared/LoadingSpinner';
-import { gapPct } from '@/lib/finance/spend-review-format';
+import { gapPct, routeRank } from '@/lib/finance/spend-review-format';
 import { MonthPicker, monthOptions, money, pct, ukDate, LimitsNotice, LimitBar, UpdatedLine, type LimitsStatus } from '@/components/spend-review/shared';
 import { PageBody, Toolbar, Panel, PanelFoot, Strip, Figure, T, B, Tag, Chip, Notice, Muted, Segmented, cx } from '@/components/precision/ui';
 import { SURFACE_COLOR, PRODUCT_COLOR } from '@/lib/ui/chart-colours';
 import { surfaceName, type SpendReviewSurface } from '@/lib/finance/spend-review-format';
 import { useOpenAiOnly, useConnectedProducts } from '@/components/shared/VendorSwitch';
 import { formatModelLabel } from '@/lib/pulse/code/model-label';
+import { useAskPageNote } from '@/components/ask/useAskAvailable';
+import { prettyModel } from '@/components/finance/ModelEfficiencySection';
+import type { SpendReviewTopRoute } from '@/lib/finance/spend-review';
 
 type Surface = SpendReviewSurface;
 interface LimitRow { period: string; limit: number | null; spend: number; currency: string; source: string; shareUsed: number | null }
@@ -33,6 +36,8 @@ interface Person {
   unpricedOnly: boolean;
   mainWork: { label: string; surface: Surface; share: number } | null;
   routeCount: number;
+  /** Their largest-saving route; null (or absent) with no route. */
+  topRoute?: SpendReviewTopRoute | null;
   anthropic: LimitRow | null;
   pendingRequestAt: string | null;
 }
@@ -228,19 +233,132 @@ function SortHeader({ label, k, sort, onSort, align = 'left' }: {
   );
 }
 
-/** A Strip cell for content that is not a single figure (a short list). Matches Figure's spacing. */
-function ListCell({ label, children }: { label: string; children: ReactNode }) {
+/** A section folded away by default: a header row that opens it. */
+function Fold({ title, sub, children, open: openProp, onOpenChange }: {
+  title: string; sub?: ReactNode; children: ReactNode;
+  /** Controlled from outside, when another control opens it. */
+  open?: boolean; onOpenChange?: (open: boolean) => void;
+}) {
+  const [openState, setOpenState] = useState(false);
+  const open = openProp ?? openState;
+  const setOpen = (f: (o: boolean) => boolean) => { const next = f(open); setOpenState(next); onOpenChange?.(next); };
   return (
-    <div className="p-4 flex flex-col gap-1.5 min-w-0">
-      <span className="text-[13px] text-[#666666]">{label}</span>
-      {children}
-    </div>
+    <section className="flex flex-col gap-3 min-w-0">
+      <button
+        type="button"
+        aria-expanded={open}
+        onClick={() => setOpen(o => !o)}
+        className="flex items-center gap-x-3 gap-y-1 flex-wrap w-full text-left bg-white border border-[#EAEAEA] rounded-[14px] px-4 py-3 hover:bg-[#FAFAFA]"
+      >
+        <span aria-hidden="true" className={cx('text-[11px] text-[#8F8F8F] transition-transform', open && 'rotate-90')}>▶</span>
+        <span className="text-[14px] font-semibold text-[#0A0A0A] leading-5">{title}</span>
+        {sub && <span className="text-[13px] text-[#8F8F8F]">{sub}</span>}
+        <span className="ml-auto text-[13px] font-medium text-[#1F6F8B]">{open ? 'Hide' : 'Show'}</span>
+      </button>
+      {open && children}
+    </section>
+  );
+}
+
+/** A route in full words, with the model it moves away from where there is one. */
+function routeWords(r: SpendReviewTopRoute): { text: string; from: string | null } {
+  switch (r.kind) {
+    case 'tool': return { text: `Use the ${r.name} ${r.toolType}`, from: null };
+    case 'context': return { text: 'Long conversations', from: null };
+    case 'scheduled': return { text: `Try ${r.cheaperFamilies.join(' or ')}`, from: r.fromModel };
+    case 'model':
+      return {
+        text: r.direction === 'save' ? `Save with ${prettyModel(r.toModel)}`
+          : r.direction === 'trial' ? `Worth a trial: ${prettyModel(r.toModel)}`
+          : `Worth trying ${prettyModel(r.toModel)}`,
+        from: r.fromModel,
+      };
+  }
+}
+
+/** Rows shown before "Show all". */
+const ROUTES_SHOWN = 10;
+
+/** One row per person with a better route: proven saves first, then untested trials, each largest saving first; routes with no saving after. */
+function BetterRoutes({ people, period, openai }: { people: Person[]; period: string; openai: boolean }) {
+  const [all, setAll] = useState(false);
+  const rows = people
+    .filter((p): p is Person & { topRoute: SpendReviewTopRoute } => !!p.topRoute)
+    .sort((a, b) => routeRank(a.topRoute) - routeRank(b.topRoute) || (b.topRoute.estSavingUsd ?? -1) - (a.topRoute.estSavingUsd ?? -1) || b.totalUsd - a.totalUsd);
+  const shown = all ? rows : rows.slice(0, ROUTES_SHOWN);
+  return (
+    <Panel
+      title="Better routes, proven savings first"
+      badge={<Tag tone="judged">Estimate</Tag>}
+      right={rows.length > 0 && <span className="text-[13px] text-[#8F8F8F] tabular-nums">{rows.length} {rows.length === 1 ? 'person' : 'people'}</span>}
+      flush
+    >
+      {rows.length === 0 ? (
+        <div className="p-6 text-center"><Muted>No route colleagues&apos; work points to yet.</Muted></div>
+      ) : (
+        <div className="overflow-x-auto">
+          <table className={T.table}>
+            <thead>
+              <tr className={T.headRow}>
+                <th scope="col" className={T.th}>Person</th>
+                <th scope="col" className={T.th}>Work</th>
+                <th scope="col" className={T.th}>Route</th>
+                <th scope="col" className={T.thRight}>Saving</th>
+              </tr>
+            </thead>
+            <tbody>
+              {shown.map(p => {
+                const r = p.topRoute;
+                const words = routeWords(r);
+                const href = reviewHref(p, period);
+                return (
+                  <tr key={p.userId ?? p.email ?? p.displayName} className={cx(T.row, 'relative align-top')}>
+                    <td className={T.td}>
+                      {href
+                        ? <Link href={href} className="block font-medium text-[#0A0A0A] hover:text-[#1F6F8B] hover:underline after:absolute after:inset-0">{p.displayName}</Link>
+                        : <span className="block font-medium text-[#0A0A0A]">{p.displayName}</span>}
+                      <span className="block text-[12px] text-[#8F8F8F]">{p.department ?? 'No department'}</span>
+                    </td>
+                    <td className={T.td}>
+                      <span className="block text-[#0A0A0A]">{r.kind === 'scheduled' ? `Scheduled task: ${r.workLabel}` : r.workLabel}</span>
+                      <span className="block text-[12px] text-[#8F8F8F] tabular-nums">{pct(r.workShare)} of their spend · {surfaceName(r.surface, openai)}</span>
+                    </td>
+                    <td className={T.td}>
+                      <span className="block text-[#0A0A0A]">{words.text}</span>
+                      {words.from && <span className="block text-[12px] text-[#8F8F8F]">instead of {prettyModel(words.from)}</span>}
+                    </td>
+                    <td className={T.tdRight}>
+                      {r.estSavingUsd !== null
+                        ? <span className="text-[#0A0A0A]">≈ {money(r.estSavingUsd)}</span>
+                        : <span className="text-[12px] text-[#8F8F8F]">No saving estimate</span>}
+                    </td>
+                  </tr>
+                );
+              })}
+            </tbody>
+          </table>
+        </div>
+      )}
+      {rows.length > ROUTES_SHOWN && (
+        <div className="px-4 py-2.5 border-t border-[#F2F2F2]">
+          <button type="button" onClick={() => setAll(v => !v)} className={B.link}>
+            {all ? 'Show the first 10' : `Show all ${rows.length} people`}
+          </button>
+        </div>
+      )}
+      <PanelFoot>
+        One row per person: their largest saving that colleagues&apos; results back up, else their largest untested trial, else the route on their biggest work.
+        {' '}Savings are estimates: this month&apos;s sessions repriced at list price, a ceiling rather than a promise.
+        {' '}Open a person for all their routes and what colleagues do.
+      </PanelFoot>
+    </Panel>
   );
 }
 
 function SpendReviewIndex() {
   const search = useSearchParams();
   const [period, setPeriod] = useState(() => search.get('period') || monthOptions()[0].value);
+  useAskPageNote('spend-review', `Spend Review shows the calendar month ${period}.`);
   const [data, setData] = useState<IndexData | null>(null);
   // Only OpenAI connected: no Anthropic limits and no Claude in the key or notes.
   const openaiOnly = useOpenAiOnly();
@@ -250,6 +368,8 @@ function SpendReviewIndex() {
   const [error, setError] = useState<string | null>(null);
   const [onlyRoutes, setOnlyRoutes] = useState(false);
   const [onlyNear, setOnlyNear] = useState(false);
+  // The Everyone table is folded; the limits figure opens it with its filter on.
+  const [everyoneOpen, setEveryoneOpen] = useState(false);
   const [dept, setDept] = useState('');
   const [sort, setSort] = useState<{ key: SortKey; desc: boolean } | null>(null);
   const [refreshKey, setRefreshKey] = useState(0);
@@ -353,6 +473,126 @@ function SpendReviewIndex() {
         </Notice>
   ) : null;
 
+  const peoplePanel = data && s ? (
+    <Panel
+      title="People"
+      right={data.people.length > 0 && (
+        <>
+          <Chip on={onlyRoutes} onClick={() => setOnlyRoutes(v => !v)}>Has a better route</Chip>
+          {limitsOn && (
+            <Chip on={onlyNear} onClick={() => setOnlyNear(v => !v)}>Close to limit or asked for more</Chip>
+          )}
+          {departments.length > 1 && (
+            <select value={dept} onChange={e => setDept(e.target.value)} className={B.select} aria-label="Department">
+              <option value="">All departments</option>
+              {departments.map(d => <option key={d} value={d}>{d}</option>)}
+            </select>
+          )}
+          <span className="text-[13px] text-[#8F8F8F] tabular-nums">{people.length} of {data.people.length}</span>
+        </>
+      )}
+      flush
+    >
+      {data.people.length === 0 ? (
+        <div className="px-6 py-8 text-center flex flex-col items-center gap-1.5">
+          <span className="text-[14px] font-medium text-[#0A0A0A]">No measured spend for this month yet.</span>
+          {data.isCurrentMonth && (
+            <button type="button" onClick={() => setPeriod(monthOptions()[1].value)} className={B.link}>
+              See {monthOptions()[1].label}
+            </button>
+          )}
+        </div>
+      ) : people.length === 0 ? (
+        <div className="p-6 text-center"><Muted>No one matches these filters.</Muted></div>
+      ) : (
+        <div className="overflow-x-auto">
+          <table className={T.table}>
+            <thead>
+              <tr className={T.headRow}>
+                <SortHeader label="Person" k="name" sort={sort ?? defaultSort} onSort={onSort} />
+                <SortHeader label="Main kind of work" k="work" sort={sort ?? defaultSort} onSort={onSort} />
+                <SortHeader label="Measured spend" k="spend" sort={sort ?? defaultSort} onSort={onSort} align="right" />
+                <SortHeader label="vs last month" k="change" sort={sort ?? defaultSort} onSort={onSort} align="right" />
+                <SortHeader label="Better routes" k="routes" sort={sort ?? defaultSort} onSort={onSort} />
+                {limitsOn && <SortHeader label="Anthropic limit" k="limit" sort={sort ?? defaultSort} onSort={onSort} />}
+                <th scope="col" className={T.th}><span className="sr-only">Action</span></th>
+              </tr>
+            </thead>
+            <tbody>
+              {people.map(p => {
+                const href = reviewHref(p, period);
+                return (
+                  <tr key={p.userId ?? p.email ?? p.displayName} className={cx(T.row, 'align-top')}>
+                    <td className={T.td}>
+                      <span className="block font-medium text-[#0A0A0A]">{p.displayName}</span>
+                      <span className="block text-[13px] text-[#8F8F8F]">{p.department ?? 'No department'}</span>
+                      {p.pendingRequestAt && <span className="inline-block mt-1"><Tag tone="warn">Asked for more</Tag></span>}
+                    </td>
+                    <td className={T.td}>
+                      {p.mainWork ? (
+                        <>
+                          <span className="block text-[#0A0A0A]">{p.mainWork.label}</span>
+                          <span className="block text-[13px] text-[#8F8F8F] tabular-nums">{pct(p.mainWork.share)} of their spend · {surfaceName(p.mainWork.surface, !!data.openai)}</span>
+                        </>
+                      ) : <span className="text-[13px] text-[#8F8F8F]">{p.totalUsd > 0 ? 'Not classified yet' : '—'}</span>}
+                    </td>
+                    <td className={T.tdRight}>
+                      {p.unpricedOnly
+                        ? <span className="text-[13px] text-[#B54708]">Not priced</span>
+                        : <><span className="block text-[#0A0A0A]">{money(p.totalUsd)}</span><SplitBar p={p} openai={!!data.openai} /></>}
+                    </td>
+                    <td className={T.tdRight}><Change now={p.totalUsd} prior={p.priorTotalUsd} pace={pace} /></td>
+                    <td className={T.td}>
+                      {p.routeCount > 0
+                        ? <Tag tone="measured">{p.routeCount} route{p.routeCount === 1 ? '' : 's'}</Tag>
+                        : <span className="text-[13px] text-[#B3B3B3]">—</span>}
+                    </td>
+                    {limitsOn && (
+                      <td className={T.td}>
+                        {p.anthropic ? (
+                          <>
+                            <LimitBar share={p.anthropic.shareUsed} nearShare={nearShare} />
+                            <span className="block text-[13px] text-[#8F8F8F] mt-1 tabular-nums">
+                              {money(p.anthropic.spend, p.anthropic.currency)} of {p.anthropic.limit === null ? 'no limit' : money(p.anthropic.limit, p.anthropic.currency)}
+                            </span>
+                          </>
+                        ) : <span className="text-[13px] text-[#8F8F8F]">Not in Anthropic org</span>}
+                      </td>
+                    )}
+                    <td className={cx(T.td, 'text-right')}>
+                      {href
+                        ? <Link href={href} className={B.link}>Review</Link>
+                        : <span className="text-[13px] text-[#8F8F8F]">Not seen by Command Centre</span>}
+                    </td>
+                  </tr>
+                );
+              })}
+            </tbody>
+          </table>
+        </div>
+      )}
+      <div className="px-4 py-2.5 border-t border-[#F2F2F2] flex flex-col gap-1.5 text-[13px] text-[#8F8F8F]">
+        <div className="flex gap-4 flex-wrap">
+          {!openaiOnly && <span className="flex items-center gap-1.5"><span className="w-2.5 h-1 rounded-full" style={{ background: SURFACE_COLOR.cowork }} />{surfaceName('cowork', !!data.openai)}</span>}
+          {!openaiOnly && <span className="flex items-center gap-1.5"><span className="w-2.5 h-1 rounded-full" style={{ background: SURFACE_COLOR.code }} />{surfaceName('code', !!data.openai)}</span>}
+          {data.openai && <span className="flex items-center gap-1.5"><span className="w-2.5 h-1 rounded-full" style={{ background: PRODUCT_COLOR.chatgpt_chat }} />ChatGPT</span>}
+          {data.openai && <span className="flex items-center gap-1.5"><span className="w-2.5 h-1 rounded-full" style={{ background: PRODUCT_COLOR.codex }} />Codex</span>}
+        </div>
+        <p className="m-0 leading-5">
+          {openaiOnly
+            ? <>ChatGPT and Codex spend from OpenAI&apos;s Compliance API, priced at OpenAI&apos;s USD token rates: the same figures as FinOps. ChatGPT spend per conversation is an estimate, since OpenAI reports cost per hour.</>
+            : data.openai
+            ? <>Measured by Command Centre: Claude Code and Cowork spend from telemetry, and ChatGPT and Codex spend from OpenAI&apos;s Compliance API priced at OpenAI&apos;s USD token rates, the same figures as FinOps. Claude Chat isn&apos;t included.</>
+            : <>Measured by Command Centre: Code and Cowork spend from telemetry, the same figures as FinOps. Chat isn&apos;t included.</>}
+          {data.isCurrentMonth && ' The change compares this month so far with last month scaled to the same point in the month.'}
+          {' '}Kind of work is AI-judged. The bar under each amount splits it {data.openai ? 'by product' : 'into Cowork and Code'}, coloured as in the key above.
+          {limitsOn && " Anthropic's figures cover every surface, including Chat, so they can differ from Command Centre's."}
+          {data.unpricedModels.length > 0 && ` Not priced, so left out: ${data.unpricedModels.map(m => formatModelLabel(m).label).join(', ')}.`}
+        </p>
+      </div>
+    </Panel>
+  ) : null;
+
   return (
     <>
       <TopBar title="Spend Review" subtitle="What each person's AI spend goes on, and whether there's a better route" />
@@ -374,52 +614,43 @@ function SpendReviewIndex() {
                 <Figure
                   label={data.isCurrentMonth ? 'Spend so far' : 'Spend'}
                   value={money(s.totalUsd)}
+                  tone="measured"
+                  title={vendorSplit ? `Claude ${money(vendorSplit.claudeUsd)} · ChatGPT and Codex ${money(vendorSplit.openaiUsd)}` : undefined}
                   sub={vendorSplit ? (
-                    <span className="flex flex-col gap-0.5">
-                      <span className="text-[#4D4D4D] tabular-nums">Claude {money(vendorSplit.claudeUsd)} · ChatGPT and Codex {money(vendorSplit.openaiUsd)}</span>
-                      {s.priorTotalUsd !== null && (
-                        <span>
-                          Claude <Change now={vendorSplit.claudeUsd} prior={s.priorVendors?.claudeUsd ?? null} pace={pace} />
-                          {' · '}ChatGPT and Codex <Change now={vendorSplit.openaiUsd} prior={s.priorVendors?.openaiUsd ?? null} pace={pace} />
-                          {' '}{data.isCurrentMonth ? 'against last month’s pace' : 'against last month'}
-                        </span>
-                      )}
-                    </span>
+                    s.priorTotalUsd !== null ? (
+                      <span>
+                        Claude <Change now={vendorSplit.claudeUsd} prior={s.priorVendors?.claudeUsd ?? null} pace={pace} />
+                        {' · '}ChatGPT and Codex <Change now={vendorSplit.openaiUsd} prior={s.priorVendors?.openaiUsd ?? null} pace={pace} />
+                        {' '}{data.isCurrentMonth ? 'against last month’s pace' : 'against last month'}
+                      </span>
+                    ) : <span className="tabular-nums">Claude {money(vendorSplit.claudeUsd)} · ChatGPT and Codex {money(vendorSplit.openaiUsd)}</span>
                   ) : s.priorTotalUsd !== null && <><Change now={s.totalUsd} prior={s.priorTotalUsd} pace={pace} /> {data.isCurrentMonth ? 'against last month’s pace' : 'against last month'}</>}
                 />
                 <Figure
                   label="Where it sits"
-                  value={s.halfSpendPeople !== null
-                    ? <>{s.halfSpendPeople}<span className="text-[14px] font-normal text-[#4D4D4D] tracking-normal"> {s.halfSpendPeople === 1 ? 'person makes' : 'people make'} up half</span></>
-                    : s.people}
-                  sub={`across ${s.people} ${s.people === 1 ? 'person' : 'people'}`}
+                  value={<>{s.halfSpendPeople ?? s.people}<span className="text-[14px] font-normal text-[#4D4D4D] tracking-normal"> {(s.halfSpendPeople ?? s.people) === 1 ? 'person' : 'people'}</span></>}
+                  sub={s.halfSpendPeople !== null
+                    ? `${s.halfSpendPeople === 1 ? 'makes' : 'make'} up half, across ${s.people}`
+                    : 'Too few people with spend to split'}
                 />
-                <ListCell label="Biggest kinds of work">
-                  {s.topWork.length === 0
-                    ? <span className="text-[14px] text-[#8F8F8F]">Not classified yet</span>
-                    : <ul className="m-0 p-0 list-none flex flex-col gap-0.5">
-                        {s.topWork.map(w => (
-                          <li key={w.surface + w.label} className="flex items-baseline justify-between gap-2 text-[14px]">
-                            <span className="truncate text-[#0A0A0A]">{w.label} <span className="text-[12px] text-[#8F8F8F]">{surfaceName(w.surface, !!data.openai)}</span></span>
-                            <span className="tabular-nums text-[#4D4D4D]">{pct(w.share)}</span>
-                          </li>
-                        ))}
-                      </ul>}
-                </ListCell>
+                <Figure
+                  label="Biggest kind of work"
+                  title={s.topWork.map(w => `${w.label} (${surfaceName(w.surface, !!data.openai)}) ${pct(w.share)}`).join(' · ') || undefined}
+                  value={s.topWork.length === 0
+                    ? <span className="text-[14px] font-normal text-[#8F8F8F] tracking-normal">Not classified yet</span>
+                    : <span className="block truncate">{s.topWork[0].label}</span>}
+                  sub={s.topWork.length > 0 ? `${pct(s.topWork[0].share)} · ${surfaceName(s.topWork[0].surface, !!data.openai)}` : undefined}
+                />
                 <Figure
                   label="Better routes waiting"
-                  value={
-                    <button type="button" onClick={() => setOnlyRoutes(v => !v)} disabled={s.peopleWithRoutes === 0} aria-pressed={onlyRoutes} className="text-left hover:text-[#1F6F8B] disabled:hover:text-inherit">
-                      {s.peopleWithRoutes}<span className="text-[14px] font-normal text-[#4D4D4D] tracking-normal"> {s.peopleWithRoutes === 1 ? 'person' : 'people'}</span>
-                    </button>
-                  }
-                  sub={s.peopleWithRoutes > 0 ? 'Colleagues doing the same work use a skill, connector or model they don’t' : 'No route colleagues’ work points to yet'}
+                  value={<>{s.peopleWithRoutes}<span className="text-[14px] font-normal text-[#4D4D4D] tracking-normal"> {s.peopleWithRoutes === 1 ? 'person' : 'people'}</span></>}
+                  sub={s.peopleWithRoutes > 0 ? 'See the list below' : 'No route colleagues’ work points to yet'}
                 />
                 {limitsOn && (
                   <Figure
                     label="Anthropic limits"
                     value={
-                      <button type="button" onClick={() => setOnlyNear(v => !v)} aria-pressed={onlyNear} className="text-left hover:text-[#1F6F8B]">
+                      <button type="button" onClick={() => { setOnlyNear(v => !v); setEveryoneOpen(true); }} aria-pressed={onlyNear} className="text-left hover:text-[#1F6F8B]">
                         {over}<span className="text-[14px] font-normal text-[#4D4D4D] tracking-normal"> over</span> · {near}<span className="text-[14px] font-normal text-[#4D4D4D] tracking-normal"> close</span>
                       </button>
                     }
@@ -429,139 +660,21 @@ function SpendReviewIndex() {
               </Strip>
             )}
 
-            {anyBoard && (requestsPanel || rereadNotice) ? (
-              <div className="grid grid-cols-1 lg:grid-cols-[minmax(0,3fr)_minmax(0,2fr)] gap-4 items-start">
+            {data.people.length > 0 && <BetterRoutes people={data.people} period={period} openai={!!data.openai} />}
+            {requestsPanel}
+            {rereadNotice}
+
+            {anyBoard && (
+              <Fold title="Most efficient" sub="Lower cost than colleagues for the same kinds of work, with work as deep as theirs">
                 <EfficiencyBoard boards={boards} period={period} />
-                <div className="flex flex-col gap-4 min-w-0">
-                  {requestsPanel}
-                  {rereadNotice}
-                </div>
-              </div>
-            ) : (
-              <>
-                <EfficiencyBoard boards={boards} period={period} />
-                {rereadNotice}
-                {requestsPanel}
-              </>
+              </Fold>
             )}
 
-            <Panel
-              title="People"
-              right={data.people.length > 0 && (
-                <>
-                  <Chip on={onlyRoutes} onClick={() => setOnlyRoutes(v => !v)}>Has a better route</Chip>
-                  {limitsOn && (
-                    <Chip on={onlyNear} onClick={() => setOnlyNear(v => !v)}>Close to limit or asked for more</Chip>
-                  )}
-                  {departments.length > 1 && (
-                    <select value={dept} onChange={e => setDept(e.target.value)} className={B.select} aria-label="Department">
-                      <option value="">All departments</option>
-                      {departments.map(d => <option key={d} value={d}>{d}</option>)}
-                    </select>
-                  )}
-                  <span className="text-[13px] text-[#8F8F8F] tabular-nums">{people.length} of {data.people.length}</span>
-                </>
-              )}
-              flush
-            >
-              {data.people.length === 0 ? (
-                <div className="px-6 py-8 text-center flex flex-col items-center gap-1.5">
-                  <span className="text-[14px] font-medium text-[#0A0A0A]">No measured spend for this month yet.</span>
-                  {data.isCurrentMonth && (
-                    <button type="button" onClick={() => setPeriod(monthOptions()[1].value)} className={B.link}>
-                      See {monthOptions()[1].label}
-                    </button>
-                  )}
-                </div>
-              ) : people.length === 0 ? (
-                <div className="p-6 text-center"><Muted>No one matches these filters.</Muted></div>
-              ) : (
-                <div className="overflow-x-auto">
-                  <table className={T.table}>
-                    <thead>
-                      <tr className={T.headRow}>
-                        <SortHeader label="Person" k="name" sort={sort ?? defaultSort} onSort={onSort} />
-                        <SortHeader label="Main kind of work" k="work" sort={sort ?? defaultSort} onSort={onSort} />
-                        <SortHeader label="Measured spend" k="spend" sort={sort ?? defaultSort} onSort={onSort} align="right" />
-                        <SortHeader label="vs last month" k="change" sort={sort ?? defaultSort} onSort={onSort} align="right" />
-                        <SortHeader label="Better routes" k="routes" sort={sort ?? defaultSort} onSort={onSort} />
-                        {limitsOn && <SortHeader label="Anthropic limit" k="limit" sort={sort ?? defaultSort} onSort={onSort} />}
-                        <th scope="col" className={T.th}><span className="sr-only">Action</span></th>
-                      </tr>
-                    </thead>
-                    <tbody>
-                      {people.map(p => {
-                        const href = reviewHref(p, period);
-                        return (
-                          <tr key={p.userId ?? p.email ?? p.displayName} className={cx(T.row, 'align-top')}>
-                            <td className={T.td}>
-                              <span className="block font-medium text-[#0A0A0A]">{p.displayName}</span>
-                              <span className="block text-[13px] text-[#8F8F8F]">{p.department ?? 'No department'}</span>
-                              {p.pendingRequestAt && <span className="inline-block mt-1"><Tag tone="warn">Asked for more</Tag></span>}
-                            </td>
-                            <td className={T.td}>
-                              {p.mainWork ? (
-                                <>
-                                  <span className="block text-[#0A0A0A]">{p.mainWork.label}</span>
-                                  <span className="block text-[13px] text-[#8F8F8F] tabular-nums">{pct(p.mainWork.share)} of their spend · {surfaceName(p.mainWork.surface, !!data.openai)}</span>
-                                </>
-                              ) : <span className="text-[13px] text-[#8F8F8F]">{p.totalUsd > 0 ? 'Not classified yet' : '—'}</span>}
-                            </td>
-                            <td className={T.tdRight}>
-                              {p.unpricedOnly
-                                ? <span className="text-[13px] text-[#B54708]">Not priced</span>
-                                : <><span className="block text-[#0A0A0A]">{money(p.totalUsd)}</span><SplitBar p={p} openai={!!data.openai} /></>}
-                            </td>
-                            <td className={T.tdRight}><Change now={p.totalUsd} prior={p.priorTotalUsd} pace={pace} /></td>
-                            <td className={T.td}>
-                              {p.routeCount > 0
-                                ? <Tag tone="measured">{p.routeCount} route{p.routeCount === 1 ? '' : 's'}</Tag>
-                                : <span className="text-[13px] text-[#B3B3B3]">—</span>}
-                            </td>
-                            {limitsOn && (
-                              <td className={T.td}>
-                                {p.anthropic ? (
-                                  <>
-                                    <LimitBar share={p.anthropic.shareUsed} nearShare={nearShare} />
-                                    <span className="block text-[13px] text-[#8F8F8F] mt-1 tabular-nums">
-                                      {money(p.anthropic.spend, p.anthropic.currency)} of {p.anthropic.limit === null ? 'no limit' : money(p.anthropic.limit, p.anthropic.currency)}
-                                    </span>
-                                  </>
-                                ) : <span className="text-[13px] text-[#8F8F8F]">Not in Anthropic org</span>}
-                              </td>
-                            )}
-                            <td className={cx(T.td, 'text-right')}>
-                              {href
-                                ? <Link href={href} className={B.link}>Review</Link>
-                                : <span className="text-[13px] text-[#8F8F8F]">Not seen by Command Centre</span>}
-                            </td>
-                          </tr>
-                        );
-                      })}
-                    </tbody>
-                  </table>
-                </div>
-              )}
-              <div className="px-4 py-2.5 border-t border-[#F2F2F2] flex flex-col gap-1.5 text-[13px] text-[#8F8F8F]">
-                <div className="flex gap-4 flex-wrap">
-                  {!openaiOnly && <span className="flex items-center gap-1.5"><span className="w-2.5 h-1 rounded-full" style={{ background: SURFACE_COLOR.cowork }} />{surfaceName('cowork', !!data.openai)}</span>}
-                  {!openaiOnly && <span className="flex items-center gap-1.5"><span className="w-2.5 h-1 rounded-full" style={{ background: SURFACE_COLOR.code }} />{surfaceName('code', !!data.openai)}</span>}
-                  {data.openai && <span className="flex items-center gap-1.5"><span className="w-2.5 h-1 rounded-full" style={{ background: PRODUCT_COLOR.chatgpt_chat }} />ChatGPT</span>}
-                  {data.openai && <span className="flex items-center gap-1.5"><span className="w-2.5 h-1 rounded-full" style={{ background: PRODUCT_COLOR.codex }} />Codex</span>}
-                </div>
-                <p className="m-0 leading-5">
-                  {openaiOnly
-                    ? <>ChatGPT and Codex spend from OpenAI&apos;s Compliance API, priced at OpenAI&apos;s USD token rates: the same figures as FinOps. ChatGPT spend per conversation is an estimate, since OpenAI reports cost per hour.</>
-                    : data.openai
-                    ? <>Measured by Command Centre: Claude Code and Cowork spend from telemetry, and ChatGPT and Codex spend from OpenAI&apos;s Compliance API priced at OpenAI&apos;s USD token rates, the same figures as FinOps. Claude Chat isn&apos;t included.</>
-                    : <>Measured by Command Centre: Code and Cowork spend from telemetry, the same figures as FinOps. Chat isn&apos;t included.</>}
-                  {data.isCurrentMonth && ' The change compares this month so far with last month scaled to the same point in the month.'}
-                  {' '}Kind of work is AI-judged. The bar under each amount splits it {data.openai ? 'by product' : 'into Cowork and Code'}, coloured as in the key above.
-                  {limitsOn && " Anthropic's figures cover every surface, including Chat, so they can differ from Command Centre's."}
-                  {data.unpricedModels.length > 0 && ` Not priced, so left out: ${data.unpricedModels.map(m => formatModelLabel(m).label).join(', ')}.`}
-                </p>
-              </div>
-            </Panel>
+            {data.people.length > 0 ? (
+              <Fold title="Everyone" sub={`${data.people.length} ${data.people.length === 1 ? 'person' : 'people'}, with filters`} open={everyoneOpen} onOpenChange={setEveryoneOpen}>
+                {peoplePanel}
+              </Fold>
+            ) : peoplePanel}
           </>
         )}
       </PageBody>

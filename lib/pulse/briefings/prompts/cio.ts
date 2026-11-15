@@ -16,7 +16,7 @@ export interface CioBriefingContext {
   concentration_risk_count: number;   // users who are sole runner of 3+ T3 workflows
   /** Measured organisation-wide deep-work lines — never names, summaries or file names. */
   deep_work: string[];
-  /** Measured sessions and people per product (Cowork, Claude in Office and Google apps); empty when neither was used. */
+  /** Measured sessions and people per product (Claude Chat, Cowork, Claude in Office and Google apps, ChatGPT); empty when fewer than two were used. */
   work_by_product?: string[];
   /** Departments below the admin's floor of meaningful or frontier work (described-facts.ts). */
   floor_line: string;
@@ -40,7 +40,7 @@ OUTPUT FORMAT (respond with a JSON object only):
   "recommendation": "one directly actionable recommendation"
 }
 
-PARAGRAPH 1: The headline adoption picture. Active users, how the work splits across the tiers, and what it means for how the organisation uses AI. If the data says where the work happened, add one sentence on how the work splits between Cowork, the Claude in Office apps (Excel, Word, PowerPoint, Outlook) and the Claude in Google apps (Sheets, Docs, Slides), using those counts.
+PARAGRAPH 1: The headline adoption picture. Active users, how the work splits across the tiers, and what it means for how the organisation uses AI. If the data says where the work happened, add one sentence on how the work splits between the products listed there (Claude Chat, Cowork, the Claude in Office apps (Excel, Word, PowerPoint, Outlook), the Claude in Google apps (Sheets, Docs, Slides) and ChatGPT), using those counts.
 PARAGRAPH 2: How deep the work goes and what it produced: the share of work in the two deeper tiers, how many sessions produced something, new ways of working confirmed, and work that rests on a few people if present.
 PARAGRAPH 3: What needs attention this month. Name specific teams or patterns. Be direct about gaps. If the data lists open department process opportunities, weave in at most one sentence saying how many are open and where they concentrate, and that they await review on the Use Cases register. The counts and department names are measured; never invent titles or describe their contents.
 NAMED RISK: The single most material risk. Specific, not generic.
@@ -67,7 +67,7 @@ PERIOD: ${ctx.period_label}
 
 ADOPTION
 Active users this month: ${ctx.weekly_active_users}
-Total tasks judged: ${ctx.total_classified_events}
+Tasks Claude judged: ${ctx.total_classified_events}
 ${ctx.tier_lines.join('\n')}
 ${ctx.work_by_product?.length ? `
 WHERE THE WORK HAPPENED

@@ -7,7 +7,7 @@
  */
 import { describe, it, expect } from 'vitest';
 import { groupFor, groupsFrom, groupsByTeam, peopleFrom, type Person, type PromptRow, type WorkData } from '@/lib/pulse/cowork/work-groups';
-import { evenings, keyPeople, outOfHours, standardJobs, timeFreed } from '@/lib/pulse/cowork/so-what-finds';
+import { evenings, keyPeople, outOfHours, rolloutsFrom, standardJobs, timeFreed } from '@/lib/pulse/cowork/so-what-finds';
 import {
   backfillCard, buildSoWhat, EVERYONE, eveningsCard, followUpSentence, hireCard, measureSentence, timeFreedCard,
   refusalFor, standardJobCard, workDecisions, DECISION_PREFIX, MAX_FOUND,
@@ -200,11 +200,26 @@ describe('the finds', () => {
     expect(t).toMatchObject({ department: 'HR', taskType: 'template_population', people: 3, beforeMinutes: 40, nowMinutes: 15, sessions: 6 });
     expect(t.hoursAMonth).toBeCloseTo(2.5);
     const card = timeFreedCard(t, undefined, NOW);
-    expect(card.body[0]).toMatch(/now takes 15 minutes, down from 40 minutes in /);
+    // The earlier window is named by its end date, not a month.
+    expect(card.body[0]).toBe('A session of template population now takes 15 minutes, down from 40 minutes in the 30 days to 15 September.');
     expect(card.body[1]).toBe('At 6 sessions a month, that is about 2.5 hours a month the team has back.');
     // A little quicker is not time freed; too few sessions is not a comparison.
     expect(timeFreed(window('n', 36), before)).toHaveLength(0);
     expect(timeFreed({ rows: window('n', 15).rows.slice(0, 4), sessions: window('n', 15).sessions.slice(0, 4) }, before)).toHaveLength(0);
+  });
+
+  it('never counts No department as a team a way of working could go to', () => {
+    const confirmed = [{ id: 7, title: 'Contract triage', confirmed_at: NOW - DAY, task_type: 'analysis', department: 'Legal' }];
+    const rows = [
+      row('a', 'Legal', 'analysis', 2, 's1'),
+      row('b', 'Finance', 'analysis', 2, 's2'),
+      row('c', '', 'analysis', 2, 's3'),
+      row('d', '', 'analysis', 2, 's4'),
+    ];
+    const [r] = rolloutsFrom(confirmed, rows);
+    expect(r).toMatchObject({ department: 'Legal', teams: 1, people: 1, teamsWithOne: 1 });
+    // Only people with no department doing it: no rollout.
+    expect(rolloutsFrom(confirmed, [rows[0], rows[2], rows[3]])).toHaveLength(0);
   });
 
   it('reads out of hours in the organisation\'s timezone, weekends included', () => {

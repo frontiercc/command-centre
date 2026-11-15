@@ -6,7 +6,7 @@
 /**
  * The Dashboard's Developer Pulse panel: an answer line and four plain questions (cost, what it
  * shipped, how much developers delegate, repos reached), the same card layout as the Work Pulse
- * panel above it. Last 7 days against the 7 before. A figure that isn't captured says so.
+ * panel above it. Last 30 days against the 30 days before. A figure that isn't captured says so.
  */
 import { useEffect, useState } from 'react';
 import Link from 'next/link';
@@ -48,20 +48,22 @@ export default function CodePulseBand({ vendor = 'all' }: { vendor?: 'all' | 'cl
   const spend = m?.spend_usd ?? null;
   const priorSpend = data.priorMetrics?.spend_usd ?? null;
   const commits = m?.commit_count ?? null;
-  const prs = data.githubOverlay?.totalPrs7d ?? m?.pr_count ?? null;
+  // Pull requests opened in Claude Code and Codex sessions (telemetry), like the commits beside them:
+  // AI work only, and following the view. GitHub's merged pull requests count every change, AI or not.
+  const prs = m?.pr_count ?? null;
   const autonomy = m?.autonomy_ratio ?? null;
   const priorAutonomy = data.priorMetrics?.autonomy_ratio ?? null;
   const ghRepos = data.githubOverlay?.reposActive7d;
   const repos = (m?.repo_count ?? 0) > 0 ? m!.repo_count : ghRepos !== undefined ? ghRepos : null;
 
   const spendChange = spend !== null && priorSpend !== null && priorSpend > 0
-    ? (() => { const p = Math.round(((spend - priorSpend) / priorSpend) * 100); return p === 0 ? 'the same as the 7 days before' : `${Math.abs(p)}% ${p > 0 ? 'more' : 'less'} than the 7 days before`; })()
+    ? (() => { const p = Math.round(((spend - priorSpend) / priorSpend) * 100); return p === 0 ? 'the same as the 30 days before' : `${Math.abs(p)}% ${p > 0 ? 'more' : 'less'} than the 30 days before`; })()
     : null;
 
   const answer = commits !== null && commits > 0
-    ? <>{tool} helped make <b>{commits.toLocaleString('en-GB')} commits</b> in the last 7 days{spend !== null ? <>, for <b>{formatCurrency(spend)}</b></> : null}.</>
+    ? <>{tool} helped make <b>{commits.toLocaleString('en-GB')} commits</b> in the last 30 days{spend !== null ? <>, for <b>{formatCurrency(spend)}</b></> : null}.</>
     : spend !== null
-      ? <>{tool} cost <b>{formatCurrency(spend)}</b> in the last 7 days{spendChange ? `, ${spendChange}` : ''}.</>
+      ? <>{tool} cost <b>{formatCurrency(spend)}</b> in the last 30 days{spendChange ? `, ${spendChange}` : ''}.</>
       : null;
 
   return (
@@ -69,7 +71,7 @@ export default function CodePulseBand({ vendor = 'all' }: { vendor?: 'all' | 'cl
       <div className="flex items-baseline gap-2 flex-wrap">
         <h2 className="m-0 text-[14px] font-semibold text-[#0A0A0A]">Developer Pulse</h2>
         <Tag tone="neutral">Measured</Tag>
-        <span className="ml-auto text-[12px] text-[#8F8F8F]">Last 7 days against the 7 before</span>
+        <span className="ml-auto text-[12px] text-[#8F8F8F]">{data.priorMetrics ? 'Last 30 days against the 30 days before' : 'Last 30 days'}</span>
       </div>
       {answer && <p className="m-0 mt-2 text-[14px] leading-[22px] text-[#1A1A1A] [&_b]:font-semibold">{answer}</p>}
       <div className="grid grid-cols-2 xl:grid-cols-4 gap-2.5 mt-3">
@@ -80,13 +82,13 @@ export default function CodePulseBand({ vendor = 'all' }: { vendor?: 'all' | 'cl
           sub={data.spendProjection ? `on pace for ${formatCurrency(data.spendProjection.projected)} this month (estimate)` : undefined}
           trend={series(data.trends?.spend.series)}
           trendKind="bars"
-          notMeasured={spend === null ? 'No priced model calls in the last 7 days' : undefined}
+          notMeasured={spend === null ? 'No priced model calls in the last 30 days' : undefined}
         />
         <QuestionCard
           question="What did it ship?"
           value={commits !== null ? commits.toLocaleString('en-GB') : undefined}
           unit="commits"
-          sub={prs !== null && prs > 0 ? `${prs} pull requests merged` : undefined}
+          sub={prs !== null && prs > 0 ? `${prs.toLocaleString('en-GB')} ${prs === 1 ? 'pull request' : 'pull requests'} opened` : undefined}
           trend={series(data.trends?.commits.series)}
           trendKind="bars"
           notMeasured={commits === null ? 'No commits recorded yet' : undefined}
@@ -95,7 +97,7 @@ export default function CodePulseBand({ vendor = 'all' }: { vendor?: 'all' | 'cl
           question="How much do developers delegate?"
           value={autonomy !== null ? autonomy.toFixed(1) : undefined}
           unit="actions per prompt"
-          change={changeFrom(autonomy, priorAutonomy, v => v.toFixed(1), 'the 7 days before')}
+          change={changeFrom(autonomy, priorAutonomy, v => v.toFixed(1), 'the 30 days before')}
           trend={series(data.trends?.autonomy.series)}
           notMeasured={autonomy === null ? 'Needs sessions with tool actions' : undefined}
         />

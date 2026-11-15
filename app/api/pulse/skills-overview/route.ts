@@ -7,6 +7,7 @@
 // COUNT/COUNT(DISTINCT) aggregate is Number()-coerced (bigint
 // comes back as a STRING on Postgres).
 import { NextRequest, NextResponse } from 'next/server';
+import { notBoardHiddenConnector, entryNotBoardHidden } from '@/lib/library/built-in-connectors';
 import { and, eq, gte, notInArray, sql } from 'drizzle-orm';
 import { getAdminSession } from '@/lib/auth/admin-auth';
 import { getTypedClient } from '@/lib/db/client';
@@ -133,7 +134,7 @@ export async function GET(request: NextRequest) {
       UNION ALL
       SELECT 'connector' AS kind, mcp_server AS name, ${connectorTagSql} AS tag, user_id, occurred_at
         FROM cowork_mcp_invocations
-        WHERE mcp_server NOT IN ('workspace', 'cowork', 'Claude_in_Chrome')
+        WHERE ${notBoardHiddenConnector(sql.raw('mcp_server'))}
     ) t
     GROUP BY kind, name, tag
     HAVING COUNT(DISTINCT CASE WHEN occurred_at >= ${thirtyDaysAgo} THEN user_id END) > 0
@@ -154,7 +155,7 @@ export async function GET(request: NextRequest) {
       UNION ALL
       SELECT 'connector' AS kind, mcp_server AS name, ${connectorTagSql} AS tag, user_id
         FROM cowork_mcp_invocations
-        WHERE occurred_at >= ${thirtyDaysAgo} AND mcp_server NOT IN ('workspace', 'cowork', 'Claude_in_Chrome')
+        WHERE occurred_at >= ${thirtyDaysAgo} AND ${notBoardHiddenConnector(sql.raw('mcp_server'))}
     ) t
     GROUP BY t.kind, t.name, t.tag
     HAVING COUNT(DISTINCT t.user_id) = 1
@@ -191,7 +192,7 @@ export async function GET(request: NextRequest) {
     LEFT JOIN users ou ON ou.id = e.author_user_id
     LEFT JOIN admin_users au ON au.linked_cowork_user_id = e.author_user_id
     WHERE e.is_published = 1 AND e.source <> 'anthropic'
-      AND e.name NOT IN ('workspace', 'cowork', 'Claude_in_Chrome')
+      AND ${entryNotBoardHidden(sql.raw('e.type'), sql.raw('e.name'))}
     ORDER BY e.name
   `)).rows as Array<{ id: number | string; name: string; type: string; is_published: number | string; author: string | null; last_at: number | string | null }>;
   const unused = unusedRows

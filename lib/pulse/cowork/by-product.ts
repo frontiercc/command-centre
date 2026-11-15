@@ -17,8 +17,9 @@
  *   people / sessions   measured, from each product's prompts
  *   meaningfulPct       AI-judged, share of classified prompts at Tier 2 or 3,
  *                       held back below MIN_JUDGED_FOR_RATE judged prompts
- *   producedPct         measured, share of those sessions that produced
- *                       something (cowork_session_stats.produced_output), held back
+ *   producedPct         measured, share of the sessions started in the window
+ *                       that produced something (cowork_session_stats.produced_output),
+ *                       every session counted, held back
  *                       below MIN_SESSIONS_FOR_RATE sessions like the Session
  *                       Output card. Claude Chat's comes from what its replies
  *                       made (chat_assistant_meta); ChatGPT stays not measured.
@@ -33,7 +34,7 @@
  * OpenAI shows the ChatGPT row, All shows both, and All products always
  * covers the rows of that view. Null always means "not measured", never zero.
  */
-import { and, eq, gte, inArray, isNotNull, isNull, sql, type SQL } from 'drizzle-orm';
+import { and, eq, gte, isNotNull, isNull, lte, sql, type SQL } from 'drizzle-orm';
 import { getTypedClient } from '@/lib/db/client';
 import { schema } from '@/lib/db/schema';
 import { officeSpendByUser, summariseOfficeSpend } from '@/lib/finance/office-spend';
@@ -189,20 +190,21 @@ export async function buildByProduct(
     if (row && total >= MIN_JUDGED_FOR_RATE) row.meaningfulPct = Math.round((Number(t.meaningful) / total) * 100);
   }
 
-  // Produced something: of the sessions in the Sessions column (a prompt in the
-  // window), the share with a measured answer that produced something. Reading
-  // every stats row started in the window instead also counted sessions with no
-  // prompt at all, which on a demo hub outnumbered the real ones 18 to 1 and
-  // pulled Cowork and All products to near zero. Session stats are built from
-  // Claude's telemetry only, so Claude Chat and ChatGPT sessions have none.
+  // Produced something: every Claude session started in the window with a
+  // measured answer (cowork_session_stats.produced_output), the same sessions
+  // the Session Output card counts. A session is counted whether or not its
+  // prompts are still stored: purge-mode retention deletes old prompts but
+  // keeps the session rows. Session stats are built from Claude's telemetry
+  // only, so Claude Chat and ChatGPT sessions have none and are read below.
   const cs = schema.coworkSessions;
   const css = schema.coworkSessionStats;
-  const promptedSessions = client
-    .selectDistinct({ id: cm.session_id })
-    .from(cm)
-    .where(and(inView, eq(cm.message_type, 'cowork_user_message')));
+  const statsInWindow = and(
+    isNotNull(css.produced_output),
+    gte(css.first_event_at, since),
+    lte(css.first_event_at, nowS),
+  );
   const sessionProduct = sql<string>`COALESCE(${cs.product}, 'cowork')`;
-  const produced = await client
+  const produced = !showClaude ? [] : await client
     .select({
       product: sessionProduct,
       measured: sql<number | string>`COUNT(*)`,
@@ -210,7 +212,7 @@ export async function buildByProduct(
     })
     .from(css)
     .innerJoin(cs, eq(cs.id, css.session_id))
-    .where(and(inArray(css.session_id, promptedSessions), isNotNull(css.produced_output)))
+    .where(statsInWindow)
     .groupBy(sessionProduct);
   for (const r of produced) {
     const row = isPanelProduct(r.product, order) ? rows.get(r.product) : undefined;
@@ -302,16 +304,9 @@ export async function buildByProduct(
     .from(pc)
     .innerJoin(cm, eq(cm.id, pc.cowork_message_id))
     .where(and(classifiedInWindow, viewVendor === 'all' ? undefined : messageVendor(viewVendor)));
-  const [allProduced] = await client
-    .select({
-      measured: sql<number | string>`COUNT(*)`,
-      yes: sql<number | string>`COUNT(*) FILTER (WHERE ${css.produced_output} = 1)`,
-    })
-    .from(css)
-    .where(and(inArray(css.session_id, promptedSessions), isNotNull(css.produced_output)));
   const tierTotal = Number(allTiers?.total ?? 0);
-  const producedTotal = Number(allProduced?.measured ?? 0) + chatProduced.measured + gptProduced.measured;
-  const producedYes = Number(allProduced?.yes ?? 0) + chatProduced.yes + gptProduced.yes;
+  const producedTotal = produced.reduce((n, r) => n + Number(r.measured), 0) + chatProduced.measured + gptProduced.measured;
+  const producedYes = produced.reduce((n, r) => n + Number(r.yes), 0) + chatProduced.yes + gptProduced.yes;
   const spendRows = [...rows.values()].filter(r => r.spendUsd !== null);
   const total: ProductRow = {
     product: 'all',

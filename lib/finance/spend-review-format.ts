@@ -58,3 +58,14 @@ export function sessionsFact(w: { sessions: number; activeSecs: number | null; f
   }
   return work ? `${count}, ${work}` : count;
 }
+
+/**
+ * How sure a route is, best first: a save colleagues' results back up, then an untested trial
+ * (price alone), then routes with no saving figure (a step up, a tool, long conversations).
+ * A proven save always outranks a trial, whatever the trial's (bigger, untested) saving.
+ */
+export function routeRank(r: { kind: string; direction?: string; estSavingUsd: number | null }): number {
+  if (r.kind === 'model' && r.direction === 'save' && r.estSavingUsd !== null) return 0;
+  if (r.kind === 'model' && r.direction === 'trial' && r.estSavingUsd !== null) return 1;
+  return 2;
+}

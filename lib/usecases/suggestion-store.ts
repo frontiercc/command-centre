@@ -87,18 +87,32 @@ async function claudeCodeIdsOf(rows: Row[]): Promise<Set<string>> {
   const found = (await client.select({ id: t.session_id }).from(t).where(inArray(t.session_id, ids))) as Array<{ id: string }>;
   return new Set(found.map(f => f.id));
 }
-async function toDrafts(rows: Row[]): Promise<SuggestionDraft[]> {
-  const codeIds = await claudeCodeIdsOf(rows);
-  return rows.map(r => toDraft(r, codeIds));
+/** Which of the rows' cited Claude sessions are known Cowork, Claude Chat or Office sessions (any non-code message). */
+async function claudeCoworkIdsOf(rows: Row[]): Promise<Set<string>> {
+  const ids = [...new Set(rows.flatMap(r => citedIds(r.cited_sessions) ?? []))]
+    .filter(id => !id.startsWith('chatgpt:') && !id.startsWith('codex:'));
+  if (ids.length === 0) return new Set();
+  const client = await getTypedClient();
+  const m = schema.coworkMessages;
+  const found = (await client.selectDistinct({ id: m.session_id }).from(m)
+    .where(and(inArray(m.session_id, ids), sql`COALESCE(${m.surface}, 'cowork') <> 'code'`))) as Array<{ id: string | null }>;
+  return new Set(found.map(f => f.id).filter((id): id is string => !!id));
 }
-function toDraft(r: Row, claudeCodeIds: ReadonlySet<string>): SuggestionDraft {
+async function toDrafts(rows: Row[]): Promise<SuggestionDraft[]> {
+  const [codeIds, coworkIds] = await Promise.all([claudeCodeIdsOf(rows), claudeCoworkIdsOf(rows)]);
+  return rows.map(r => toDraft(r, codeIds, coworkIds));
+}
+function toDraft(r: Row, claudeCodeIds: ReadonlySet<string>, coworkIds: ReadonlySet<string> = new Set()): SuggestionDraft {
   return {
     id: r.id, signalKey: r.signal_key, title: r.title, description: r.description,
     matchingRule: JSON.parse(r.matching_rule), evidence: JSON.parse(r.evidence),
     status: r.status as SuggestionDraft['status'], generatedAt: r.generated_at,
     department: r.department, canvas: parseCanvas(r.canvas_json),
     surface: r.surface === 'code' ? 'code' : r.surface === 'cowork' ? 'cowork' : null,
-    products: (() => { const ids = citedIds(r.cited_sessions); return ids ? productsOfSessions(ids, claudeCodeIds) : null; })(),
+    products: (() => {
+      const ids = citedIds(r.cited_sessions);
+      return ids ? productsOfSessions(ids, claudeCodeIds, { coworkIds, surface: r.surface === 'code' ? 'code' : 'cowork' }) : null;
+    })(),
   };
 }
 

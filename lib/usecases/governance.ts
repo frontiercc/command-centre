@@ -162,12 +162,21 @@ export function buildGovernanceNarrative(bets: GovernanceBet[]): string {
   const atRisk = bets.filter(b => b.lifecycle === 'at_risk');
   const parts: string[] = [];
 
-  // Adoption concentration by department (top 2 depts among adopted bets).
+  // Adoption concentration by department among adopted bets. "Concentrated"
+  // only when the top one or two departments strictly lead the next; a tie
+  // at the cut-off is a spread, not a concentration.
   const deptCounts = new Map<string, number>();
   for (const b of adopted) for (const d of b.departments) deptCounts.set(d, (deptCounts.get(d) ?? 0) + 1);
-  const topDepts = [...deptCounts.entries()].sort((a, b) => b[1] - a[1]).slice(0, 2).map(e => e[0]);
-  if (adopted.length > 0 && topDepts.length > 0) {
-    parts.push(`Adoption is concentrated in ${topDepts.join(' and ')}.`);
+  const ranked = [...deptCounts.entries()].sort((a, b) => b[1] - a[1] || a[0].localeCompare(b[0]));
+  const count = (i: number) => ranked[i]?.[1] ?? 0;
+  if (adopted.length > 0 && ranked.length > 0) {
+    if (ranked.length >= 3 && count(1) > count(2)) {
+      parts.push(`Adoption is concentrated in ${ranked[0][0]} and ${ranked[1][0]}.`);
+    } else if (ranked.length === 1 || count(0) > count(1)) {
+      parts.push(`Adoption is concentrated in ${ranked[0][0]}.`);
+    } else {
+      parts.push(`Adoption spans ${ranked.length} departments.`);
+    }
   } else if (adopted.length > 0) {
     parts.push(`${adopted.length} of ${bets.length} declared ${bets.length === 1 ? 'bet is' : 'bets are'} adopted.`);
   }

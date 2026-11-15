@@ -95,7 +95,7 @@ export async function GET(request: NextRequest) {
   }
 
   // Measured productivity numbers from the latest org code_metrics row (same source as Overview).
-  // Unit economics stay Claude Code's: once Codex data exists they read Claude Code's own row.
+  // Pull requests and engaged time are Claude Code's telemetry, so they read Claude Code's own row.
   const mRows = !withClaude ? [] : await readCodeMetrics('claude', codexPresent, (t, only) => client
     .select({
       spend_usd: t.spend_usd, commit_count: t.commit_count, pr_count: t.pr_count, session_count: t.session_count,
@@ -122,11 +122,21 @@ export async function GET(request: NextRequest) {
   const prCount = withClaude ? (m?.pr_count ?? 0) : null;
   const sessionCount = withClaude ? (m?.session_count ?? 0) : (codexRows[0]?.session_count ?? 0);
   const engagedHours = withClaude ? ((m?.active_time_user_s ?? 0) + (m?.active_time_cli_s ?? 0)) / 3600 : null;
-  // Unit economics read one row's spend against the same row's output: Claude Code's, or on the
-  // Codex view Codex's own (its spend and commits are in the per-product figures).
-  const unitRow = withClaude ? m : codexRows[0];
-  const rowSpend = unitRow?.spend_usd !== null && unitRow?.spend_usd !== undefined ? Number(unitRow.spend_usd) : null;
-  const unitCommits = withClaude ? commitCount : (codexCommitCount ?? 0);
+  // Unit economics read one row's spend against the same row's output. Cost per commit and per
+  // session read the view's own org row, as the Overview does: Claude Code plus Codex on All,
+  // Claude Code's on Claude, Codex's on Codex. Cost per PR and per engaged hour read Claude
+  // Code's row, as Codex sends no pull requests or engaged time.
+  const viewRows = await readCodeMetrics(vendor, codexShown, (t, only) => client
+    .select({ spend_usd: t.spend_usd, commit_count: t.commit_count, session_count: t.session_count })
+    .from(t)
+    .where(and(eq(t.scope_type, 'organisation'), eq(t.scope_id, ORG_SCOPE_ID), eq(t.granularity, 'rolling'), only))
+    .orderBy(desc(t.computed_at))
+    .limit(1));
+  const viewRow = viewRows[0];
+  const viewSpend = viewRow?.spend_usd !== null && viewRow?.spend_usd !== undefined ? Number(viewRow.spend_usd) : null;
+  const viewCommits = viewRow?.commit_count ?? 0;
+  const viewSessions = viewRow?.session_count ?? 0;
+  const claudeSpend = withClaude && m?.spend_usd !== null && m?.spend_usd !== undefined ? Number(m.spend_usd) : null;
   const windowRow = m ?? codexRows[0];
   const metricsWindowDays = windowRow ? Math.max(1, Math.round((windowRow.period_end - windowRow.period_start) / (24 * 3600))) : null;
 
@@ -171,12 +181,12 @@ export async function GET(request: NextRequest) {
   });
   const allCommitCount = commitCount + (codexCommitCount ?? 0);
   const timeSavedResult = computeTimeSaved({ prCount: prCount ?? 0, commitCount: allCommitCount, coworkSessions, chatConversations }, timeSavedAssumptions);
-  // Each row's count is drawn from a different measurement window: PR/commit counts come from the
-  // rolling code_metrics row (metricsWindowDays, typically 7d), while cowork/chat counts are always
-  // queried over a fixed 30d window (see d30 above). Attach the correct window per row rather than
-  // making a single blanket claim — a 30-day label on a 7-day PR/commit count would misrepresent it.
+  // Each row carries its own measurement window: PR/commit counts come from the rolling
+  // code_metrics row (metricsWindowDays, 30 days), while cowork/chat counts are queried over a fixed
+  // 30d window (see d30 above). The window is attached per row, read from the row itself, so a
+  // label can never claim a window its count was not drawn from.
   const ROW_WINDOW_DAYS: Record<string, number | null> = {
-    PRs: metricsWindowDays,
+    'pull requests opened': metricsWindowDays,
     'AI-assisted commits': metricsWindowDays,
     'Cowork sessions': 30,
     'Chat conversations': 30,
@@ -203,7 +213,7 @@ export async function GET(request: NextRequest) {
     observedLift,
     timeSaved,
     measured: {
-      // Claude Code plus Codex (when shown); unit economics below stay Claude Code's.
+      // Claude Code plus Codex (when shown); cost per PR and per engaged hour below stay Claude Code's.
       spend30d: totalSpend30d,
       annualSpend: calibrations.annualSpend.value,
       // Claude Code's people plus Codex's on the All view, like the split under it; the from-data
@@ -211,11 +221,11 @@ export async function GET(request: NextRequest) {
       activeUsers: codexShown && vendor === 'all' && codexUsers !== null ? claudeCodeUsers + codexUsers : users.size,
       commitCount: allCommitCount,
       prCount, sessionCount, engagedHours,
-      costPerCommit: rowSpend != null && unitCommits > 0 ? rowSpend / unitCommits : null,
-      costPerPr: rowSpend != null && prCount != null && prCount > 0 ? rowSpend / prCount : null,
-      costPerSession: rowSpend != null && sessionCount > 0 ? rowSpend / sessionCount : null,
-      // §5c: spend per engaged hour — rowSpend and engagedHours share the metrics window.
-      costPerEngagedHour: rowSpend != null && engagedHours != null && engagedHours > 0 ? rowSpend / engagedHours : null,
+      costPerCommit: viewSpend != null && viewCommits > 0 ? viewSpend / viewCommits : null,
+      costPerPr: claudeSpend != null && prCount != null && prCount > 0 ? claudeSpend / prCount : null,
+      costPerSession: viewSpend != null && viewSessions > 0 ? viewSpend / viewSessions : null,
+      // §5c: spend per engaged hour — Claude Code's spend and engagedHours share the metrics window.
+      costPerEngagedHour: claudeSpend != null && engagedHours != null && engagedHours > 0 ? claudeSpend / engagedHours : null,
       metricsWindowDays,
     },
   });

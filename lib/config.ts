@@ -247,6 +247,11 @@ export interface AppConfig {
   useCasesEnabled: boolean;
   useCasesExtractModel: string;
   useCasesIdeateModel: string;
+  // Ask the data (admin only): off until an admin turns it on, a monthly spend cap in USD, and
+  // how many days the question log keeps a question.
+  askEnabled: boolean;
+  askMonthlyCapUsd: string;
+  askLogRetentionDays: string;
   // Cost & Chargeback (dormant)
   chargebackEnabled: boolean;
   financeModelEfficiencyEnabled: boolean;
@@ -523,6 +528,9 @@ export const CONFIG_KEYS: Record<keyof AppConfig, string> = {
   useCasesEnabled: 'use_cases_enabled',
   useCasesExtractModel: 'use_cases_extract_model',
   useCasesIdeateModel: 'use_cases_ideate_model',
+  askEnabled: 'ask_enabled',
+  askMonthlyCapUsd: 'ask_monthly_cap_usd',
+  askLogRetentionDays: 'ask_log_retention_days',
   chargebackEnabled: 'chargeback_enabled',
   financeModelEfficiencyEnabled: 'finance_model_efficiency_enabled',
   finopsSeatPriceMonthly: 'finops_seat_price_monthly',
@@ -939,6 +947,9 @@ export async function getAllConfig(): Promise<AppConfig> {
     useCasesEnabled: resolve('useCasesEnabled', 'false') === 'true',
     useCasesExtractModel: resolve('useCasesExtractModel', 'claude-haiku-4-5-20251001'),
     useCasesIdeateModel: resolve('useCasesIdeateModel', 'claude-sonnet-5'),
+    askEnabled: resolve('askEnabled', 'false') === 'true',
+    askMonthlyCapUsd: resolve('askMonthlyCapUsd', '5'),
+    askLogRetentionDays: resolve('askLogRetentionDays', '90'),
     // Cost & Chargeback (dormant)
     chargebackEnabled: resolve('chargebackEnabled', 'false') === 'true',
     financeModelEfficiencyEnabled: resolve('financeModelEfficiencyEnabled', 'false') === 'true',
@@ -1062,6 +1073,8 @@ export interface DataSourceStatus {
   aiFeatures: boolean;
   /** An OpenAI Admin API key is saved, so the ChatGPT and Codex sync runs. */
   openai: boolean;
+  /** False when an admin switched "Show ChatGPT and Codex" off: the OpenAI source is then not listed. */
+  openaiShown: boolean;
   mode: 'max' | 'enterprise';
 }
 
@@ -1074,7 +1087,9 @@ export async function getDataSourceStatus(): Promise<DataSourceStatus> {
     coworkContent = coworkRows.length > 0;
   } catch { /* table might not exist yet */ }
 
-  const complianceKey = await getConfigValue('anthropicAdminApiKey');
+  // The Compliance API runs on the Compliance access key (lib/compliance/job.ts), not the Admin
+  // API key, which is for spend limits: the source is on when the key it runs on is saved.
+  const complianceKey = await getConfigValue('complianceAccessKey');
   const analyticsKey = await getConfigValue('anthropicAnalyticsApiKey');
   const complianceApi = !!complianceKey;
   const analyticsApi = !!analyticsKey;
@@ -1082,6 +1097,7 @@ export async function getDataSourceStatus(): Promise<DataSourceStatus> {
   const aiKey = await getConfigValue('anthropicAiApiKey');
   const aiFeatures = !!aiKey;
   const openai = !!(await getConfigValue('openaiAdminApiKey'));
+  const openaiShown = (await getConfigValue('openaiShown')) !== 'false';
   const mode = complianceApi || analyticsApi ? 'enterprise' : 'max';
 
   // Check if OTel Cowork data is present (users with source='otel')
@@ -1095,5 +1111,5 @@ export async function getDataSourceStatus(): Promise<DataSourceStatus> {
     otelCowork = otelUserRows.length > 0;
   } catch { /* users table may not have source column yet */ }
 
-  return { coworkContent, otelCowork, complianceApi, analyticsApi, aiFeatures, openai, mode };
+  return { coworkContent, otelCowork, complianceApi, analyticsApi, aiFeatures, openai, openaiShown, mode };
 }

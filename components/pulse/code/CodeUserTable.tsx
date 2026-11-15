@@ -81,7 +81,7 @@ export default function CodeUserTable({ users, showDepartment = true, githubBasi
           <tr className={T.headRow}>
             <th scope="col" className={T.th}>User</th>
             {showDepartment && <th scope="col" className={T.th}>Department</th>}
-            {header('Spend · 7d', 'spend_usd')}
+            {header('Spend · 30d', 'spend_usd')}
             {header('Automation', 'autonomy_ratio')}
             {header('Sessions', 'session_count')}
             {header('Commits', 'commit_count')}

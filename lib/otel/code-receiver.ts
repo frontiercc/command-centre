@@ -7,6 +7,7 @@
 // loop continues (each record's transaction rolls back independently —
 // no cross-record poisoning, so no savepointEach is needed at this granularity).
 import { v4 as uuidv4 } from 'uuid';
+import { isBoardHiddenConnector } from '@/lib/library/built-in-connectors';
 import { eq, sql } from 'drizzle-orm';
 import { getTypedClient } from '@/lib/db/client';
 import { schema } from '@/lib/db/schema';
@@ -122,6 +123,17 @@ async function firePendingPiiAlert(
 ): Promise<void> {
   if (!pending) return;
   await createPiiAlertsWithDedup(userId, pending.piiMatches, pending.prompt, pending.messageId, 'code');
+}
+
+type PendingIntentAlert = { matches: ReturnType<typeof detectIntent>; prompt: string; messageId: string } | null;
+
+/** Fires a deferred intent alert after the record commits; a standalone function for the same narrowing reason as firePendingPiiAlert. */
+async function firePendingIntentAlert(
+  userId: string,
+  pending: PendingIntentAlert,
+): Promise<void> {
+  if (!pending) return;
+  await createIntentAlerts(userId, 'code', pending.messageId, pending.prompt, pending.matches);
 }
 
 
@@ -301,6 +313,9 @@ export async function processCodeOtlpLogs(payload: unknown): Promise<ProcessResu
         // alertsFired counter and none is wanted — it raises no file-upload
         // alerts, so one would only ever read zero.
         let pendingPiiAlert: PendingPiiAlert = null;
+        // Intent alerts are deferred the same way, so none is written for a
+        // record whose transaction rolls back.
+        let pendingIntentAlert: PendingIntentAlert = null;
 
         try {
           // Wrap all DB writes for a single log record in ITS OWN top-level
@@ -366,17 +381,10 @@ export async function processCodeOtlpLogs(payload: unknown): Promise<ProcessResu
                 });
                 result.processed++;
 
-                // Intent alerts — async AI assessment enriches flag_reason post-insert
+                // Intent alerts — async AI assessment enriches flag_reason post-insert.
+                // Deferred to after the withTx commits, like the PII alert above.
                 if (!isRedacted && intentMatches.length > 0) {
-                  createIntentAlerts(
-                    resolvedUserId,
-                    'code',
-                    messageId,
-                    prompt,
-                    intentMatches,
-                  ).catch((e: Error) => {
-                    console.error('[code-otel-receiver] intent alert error:', e.message);
-                  });
+                  pendingIntentAlert = { matches: intentMatches, prompt, messageId };
                 }
                 break;
               }
@@ -450,7 +458,8 @@ export async function processCodeOtlpLogs(payload: unknown): Promise<ProcessResu
                   const mcpServerName = (rawName && !isUuid(rawName))
                     ? rawName
                     : (rawName ? MARKETPLACE_UUID_NAMES[rawName.toLowerCase()] ?? null : null);
-                  if (mcpServerName && !['workspace', 'cowork', 'Claude_in_Chrome'].includes(mcpServerName)) {
+                  // Claude's own connectors never get a board entry (lib/library/built-in-connectors.ts); their use is still recorded.
+                  if (mcpServerName && !isBoardHiddenConnector(mcpServerName)) {
                     await tx.insert(schema.coworkMcpInvocations).values({
                       id: uuidv4(),
                       user_id: resolvedUserId,
@@ -617,6 +626,9 @@ export async function processCodeOtlpLogs(payload: unknown): Promise<ProcessResu
           firePendingPiiAlert(resolvedUserId, pendingPiiAlert).catch((e: Error) => {
             console.error('[code-otel-receiver] pii alert error:', e.message);
             void recordPiiAlertFailure('code', pendingPiiAlert?.messageId, e);
+          });
+          firePendingIntentAlert(resolvedUserId, pendingIntentAlert).catch((e: Error) => {
+            console.error('[code-otel-receiver] intent alert error:', e.message);
           });
         } catch (e) {
           result.errors.push(`Event ${eventName}: ${e instanceof Error ? e.message : String(e)}`);

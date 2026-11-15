@@ -54,7 +54,7 @@ export default function StickinessCard({ vendor = 'all', openaiPresent = false, 
       ) : (
         <>
           {habit && (
-            <p className="m-0 mb-3 text-[15px] leading-6 text-[#0A0A0A]">
+            <p className="m-0 mb-3 text-[14px] leading-5 text-[#0A0A0A]">
               People come back to {habit.label} most: <b className="font-semibold">{Math.round(habit.s.avgDau)} of its {habit.s.mau}</b> users this month use it on a typical day.
             </p>
           )}

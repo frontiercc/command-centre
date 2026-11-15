@@ -15,7 +15,7 @@ import { visibleVendor, visibleOpenAi } from '@/lib/sources/openai-visibility';
 import { sql } from 'drizzle-orm';
 import { getAdminSession, canAccessCodePulse, isDeptScoped } from '@/lib/auth/admin-auth';
 import { getTypedClient } from '@/lib/db/client';
-import { hasCodexData, pickCodeMetricsSource } from '@/lib/pulse/code/vendor-view';
+import { hasCodexData, pickCodeMetricsSource, latestRunStart } from '@/lib/pulse/code/vendor-view';
 
 export const dynamic = 'force-dynamic';
 
@@ -71,8 +71,9 @@ export async function GET(request: NextRequest) {
   const vendor = await visibleVendor(request.nextUrl.searchParams.get('vendor'));
   const codexPresent = await visibleOpenAi(hasCodexData());
 
-  // Latest user-scope code_metrics row per user, joined to identity.
-  // Users with no Code activity are excluded — this is a Developer Pulse view.
+  // Latest user-scope code_metrics row per user from the view's latest run,
+  // joined to identity. Users with no Code activity in it are excluded — this
+  // is a Developer Pulse view.
   const { table, only } = await pickCodeMetricsSource(vendor, codexPresent);
   const rawRows = await rawAll<RawUserRow>(client, sql`
      SELECT cm.scope_id AS user_id,
@@ -84,6 +85,7 @@ export async function GET(request: NextRequest) {
      JOIN (
        SELECT scope_id, MAX(id) AS max_id
        FROM ${table} WHERE scope_type = 'user' AND granularity = 'rolling' ${only}
+         AND computed_at >= ${latestRunStart(table, only)}
        GROUP BY scope_id
      ) latest ON latest.max_id = cm.id
      LEFT JOIN users u ON u.id = cm.scope_id

@@ -10,6 +10,7 @@
 // conversation (cowork_sessions), the same way ChatGPT Chat is stored, so
 // Work Pulse classifies Claude Chat like every other prompt.
 import { sql, eq } from 'drizzle-orm';
+import { isBoardHiddenConnector } from '@/lib/library/built-in-connectors';
 import { v4 as uuidv4 } from 'uuid';
 import { getTypedClient } from '@/lib/db/client';
 import { schema } from '@/lib/db/schema';
@@ -99,7 +100,7 @@ async function extractConnectorInvocations(
     }).onConflictDoNothing();
     count++;
 
-    if (!SYSTEM_CONNECTOR_NAMES.has(mcpServer)) {
+    if (!SYSTEM_CONNECTOR_NAMES.has(mcpServer) && !isBoardHiddenConnector(mcpServer)) {
       await tx.insert(schema.skillLibraryEntries).values({
         name: mcpServer, type: 'connector', surface: 'chat',
         source: 'org', is_published: 0, created_at: nowS, updated_at: nowS,

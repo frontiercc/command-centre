@@ -427,8 +427,6 @@ export function rolloutCard(r: Rollout, decision: DecisionRecord | undefined, no
   }, decision, nowS);
 }
 
-const monthWord = (s: number) => new Date(s * 1000).toLocaleDateString('en-GB', { month: 'long' });
-
 /** A kind of work a team now does far quicker: decide what the freed time goes on. */
 export function timeFreedCard(t: TimeFreed, decision: DecisionRecord | undefined, nowS: number): Card {
   return foundCard({
@@ -438,7 +436,7 @@ export function timeFreedCard(t: TimeFreed, decision: DecisionRecord | undefined
     touches: t.people,
     headline: `Decide what ${t.department} does with the time ${t.label} has freed.`,
     body: [
-      `A session of ${t.label} now takes ${minutesWord(t.nowMinutes)}, down from ${minutesWord(t.beforeMinutes)} in ${monthWord(t.beforeFrom)}.`,
+      `A session of ${t.label} now takes ${minutesWord(t.nowMinutes)}, down from ${minutesWord(t.beforeMinutes)} in the ${WINDOW_DAYS} days to ${dateWord(t.beforeFrom + WINDOW_DAYS * 86400)}.`,
       `At ${t.sessions} ${t.sessions === 1 ? 'session' : 'sessions'} a month, that is about ${minutesWord(t.hoursAMonth * 60)} a month the team has back.`,
       'Decide where it goes: work the team has not had time for, or a team that is short of time.',
     ],

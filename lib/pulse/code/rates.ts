@@ -91,6 +91,27 @@ export const OPENAI_DEFAULT_RATES: ModelRates = {
 
 /** On the rate card for Chat only: never suggested for Codex work. */
 export const OPENAI_CHAT_ONLY_MODELS = new Set(['gpt-6-pro', 'gpt-6', 'gpt-5.3']);
+
+/** Where an OpenAI session ran: the Chat tab, ChatGPT Work, or Codex. */
+export type OpenAiProduct = 'chat' | 'work' | 'codex';
+/** The rate card's "Chat models" table: what the Chat tab offers. */
+const OPENAI_CHAT_MODELS = new Set(['gpt-6-pro', 'gpt-6', 'gpt-5.6-sol', 'gpt-5.5-rosalind-research', 'gpt-5.5-rosalind-discovery', 'gpt-5.3']);
+/** The rate card's "ChatGPT Work and Codex models" table, less GPT-6 Cyber, which is Codex only. */
+const OPENAI_WORK_MODELS = new Set([
+  'gpt-6.1-sol', 'gpt-6.1-terra', 'gpt-6-astra', 'gpt-6-astra-law', 'gpt-6-sol', 'gpt-6-luna',
+  'gpt-5.6-sol', 'gpt-5.6-terra', 'gpt-5.6-luna', 'gpt-6-rosalind-research', 'gpt-5.5-rosalind-research',
+  'gpt-5.5-rosalind-discovery', 'gpt-5.5-cyber', 'gpt-5.6-cyber', 'gpt-5.3-codex', 'gpt-5.2',
+]);
+const OPENAI_CODEX_MODELS = new Set([...OPENAI_WORK_MODELS, 'gpt-6-cyber']);
+
+/**
+ * True when the rate card lists `model` for `product`. A model the card does not list (deep
+ * research is a feature, not a model to pick) is offered nowhere, so it is never suggested.
+ */
+export function openaiModelOffered(model: string, product: OpenAiProduct): boolean {
+  const set = product === 'chat' ? OPENAI_CHAT_MODELS : product === 'work' ? OPENAI_WORK_MODELS : OPENAI_CODEX_MODELS;
+  return set.has(model.trim().toLowerCase());
+}
 /** Research, law and cyber models, which need approved access: priced, but never suggested as a cheaper model for everyday work. */
 export const OPENAI_SPECIALIST_MODELS = new Set([
   'gpt-6-rosalind-research', 'gpt-5.5-rosalind-research', 'gpt-5.5-rosalind-discovery', 'o4-mini-deep-research',

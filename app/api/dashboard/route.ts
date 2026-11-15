@@ -30,6 +30,7 @@ import {
   getDepartmentBreakdownByProduct,
   getTopUsersByProduct,
   getPeopleByDayByProduct,
+  DASHBOARD_PANEL_DAYS,
 } from '@/lib/dashboard/queries';
 
 // Disable Next.js route caching — all API routes read live data from the database
@@ -103,7 +104,7 @@ export async function GET(request: NextRequest) {
       getActiveUsersByVendor(nowS),
       getSessionsPerWeekByProduct(nowS),
       getFlaggedByProduct(),
-      getPeopleByDayByProduct(14, nowS),
+      getPeopleByDayByProduct(DASHBOARD_PANEL_DAYS, nowS),
     ]);
     // A box's figure for the chosen vendor.
     const pick = (s: { total: number; claude: number; openai: number }) => (vendor === 'all' ? s.total : s[vendor]);

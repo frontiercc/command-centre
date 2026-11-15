@@ -32,7 +32,9 @@ const DAYS = 90;
 const MODEL = 'claude-haiku-4-5-20251001';
 // The Claude sample's kinds of work (01-organisation.cjs), so both vendors read alike.
 const TASK_TYPES = ['analysis', 'structured_report', 'synthesis', 'summarisation', 'basic_drafting', 'template_population', 'process_substitution'];
-const CODE_TASK_TYPES = ['bug_investigation', 'feature_build', 'code_review', 'documentation', 'refactor'];
+// Kinds of Code work from the classifier's rubric (lib/pulse/code/classifier-prompt.ts); a review is exploration.
+// Testing is left to the Team Coaching people (13-team-coaching.cjs), whose story is tests repeated with no skill.
+const CODE_TASK_TYPES = ['bugfix', 'feature', 'exploration', 'documentation', 'refactor'];
 
 /** A ChatGPT prompt's kind of work from its words, as a classifier would read it; otherwise one at random. */
 function taskTypeFor(text: string): string {
@@ -77,6 +79,9 @@ function tierAt(at: number, startS: number, nowS: number): number {
     for (const t of ['pulse_classifications', 'pulse_events', 'pulse_skill_runs']) {
       await x.execute(sql`DELETE FROM ${sql.raw(t)} WHERE cowork_message_id IN ${msgs}`);
     }
+    // Alerts raised on those prompts go with them: the import brings the prompts back and the
+    // Hub raises their alerts again, so keeping these would leave duplicates pointing at nothing.
+    await x.execute(sql`DELETE FROM alerts WHERE raw_evidence->>'message_id' IN ${msgs}`);
     const cleared = await x.execute(sql`DELETE FROM cowork_messages WHERE source IN ${openai} AND user_id IN ${people}`);
     await x.execute(sql`DELETE FROM cowork_skill_invocations WHERE source IN ${openai} AND user_id IN ${people}`);
     await x.execute(sql`DELETE FROM cowork_mcp_invocations WHERE source IN ${openai} AND user_id IN ${people}`);

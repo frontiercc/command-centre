@@ -8,6 +8,7 @@
 // independently — no cross-record poisoning, so no savepointEach is needed at
 // this granularity).
 import { v4 as uuidv4 } from 'uuid';
+import { isBoardHiddenConnector } from '@/lib/library/built-in-connectors';
 import { eq, sql } from 'drizzle-orm';
 import { getTypedClient } from '@/lib/db/client';
 import { schema } from '@/lib/db/schema';
@@ -168,6 +169,17 @@ async function firePendingPiiAlert(
 ): Promise<void> {
   if (!pending) return;
   await createPiiAlertsWithDedup(userId, pending.piiMatches, pending.prompt, pending.messageId, 'cowork');
+}
+
+type PendingIntentAlert = { matches: ReturnType<typeof detectIntent>; prompt: string; messageId: string } | null;
+
+/** Fires a deferred intent alert after the record commits; a standalone function for the same narrowing reason as firePendingPiiAlert. */
+async function firePendingIntentAlert(
+  userId: string,
+  pending: PendingIntentAlert,
+): Promise<void> {
+  if (!pending) return;
+  await createIntentAlerts(userId, 'cowork', pending.messageId, pending.prompt, pending.matches);
 }
 
 
@@ -358,6 +370,9 @@ export async function processOtlpLogs(payload: unknown): Promise<ProcessResult> 
         //     failures are logged, not returned, and result.alertsFired no
         //     longer counts PII alerts at all.
         let pendingPiiAlert: PendingPiiAlert = null;
+        // Intent alerts are deferred the same way, so none is written for a
+        // record whose transaction rolls back.
+        let pendingIntentAlert: PendingIntentAlert = null;
         let pendingFileUploadFilenames: string[] | null = null;
 
         try {
@@ -455,17 +470,10 @@ export async function processOtlpLogs(payload: unknown): Promise<ProcessResult> 
                   }
                 }
 
-                // Intent alerts — async AI assessment enriches flag_reason with (severity)
+                // Intent alerts — async AI assessment enriches flag_reason with (severity).
+                // Deferred to after the withTx commits, like the PII alert above.
                 if (!isRedacted && intentMatches.length > 0) {
-                  createIntentAlerts(
-                    resolvedUserId,
-                    'cowork',
-                    messageId,
-                    prompt,
-                    intentMatches,
-                  ).catch((e: Error) => {
-                    console.error('[otel-receiver] intent alert error:', e.message);
-                  });
+                  pendingIntentAlert = { matches: intentMatches, prompt, messageId };
                 }
                 break;
               }
@@ -506,7 +514,8 @@ export async function processOtlpLogs(payload: unknown): Promise<ProcessResult> 
                   // Auto-register connector in the library (exclude system connectors).
                   // Connectors resolved from a known Anthropic UUID are pre-published as 'anthropic'.
                   // Custom org connectors appear as unclaimed (is_published=0, source='org').
-                  if (!['workspace', 'cowork', 'Claude_in_Chrome'].includes(mcpServerName)) {
+                  // Claude's own connectors never get a board entry (lib/library/built-in-connectors.ts); their use is still recorded.
+                  if (!isBoardHiddenConnector(mcpServerName)) {
                     const isAnthropicMarketplace = rawName != null && isUuid(rawName) && MARKETPLACE_UUID_NAMES[rawName.toLowerCase()] != null;
                     const nowSec = Math.floor(Date.now() / 1000);
                     if (isAnthropicMarketplace) {
@@ -702,6 +711,9 @@ export async function processOtlpLogs(payload: unknown): Promise<ProcessResult> 
           firePendingPiiAlert(resolvedUserId, pendingPiiAlert).catch((e: Error) => {
             console.error('[otel-receiver] pii alert error:', e.message);
             void recordPiiAlertFailure('cowork', pendingPiiAlert?.messageId, e);
+          });
+          firePendingIntentAlert(resolvedUserId, pendingIntentAlert).catch((e: Error) => {
+            console.error('[otel-receiver] intent alert error:', e.message);
           });
           if (pendingFileUploadFilenames) {
             const alertsFired = await createFileUploadAlerts(resolvedUserId, sessionId, pendingFileUploadFilenames);

@@ -43,7 +43,10 @@ async function main() {
     const like = `${COACH}%`;
     await c.query(`DELETE FROM code_session_classifications WHERE session_id LIKE $1`, [like]);
     await c.query(`DELETE FROM code_session_stats WHERE session_id LIKE $1`, [like]);
+    await c.query(`DELETE FROM code_assistant_meta WHERE id LIKE $1`, [like]);
     await c.query(`DELETE FROM pulse_classifications WHERE cowork_message_id LIKE $1`, [like]);
+    // Alerts the Hub raised on these prompts would point at nothing once they go.
+    await c.query(`DELETE FROM alerts WHERE raw_evidence->>'message_id' LIKE $1`, [like]);
     await c.query(`DELETE FROM pulse_events WHERE cowork_message_id LIKE $1`, [like]);
     await c.query(`DELETE FROM pulse_skill_runs WHERE cowork_message_id LIKE $1`, [like]);
     await c.query(`DELETE FROM cowork_messages WHERE id LIKE $1`, [like]);
@@ -94,14 +97,43 @@ async function main() {
       await c.query(`INSERT INTO pulse_classifications (cowork_message_id, user_id, tier, task_type, classifier_confidence, classifier_model, classified_at)
         VALUES ($1, $2, $3, $4, 0.9, $5, $6)`, [id, userId, tier, kind, MODEL, at + 30]);
     };
-    // models: the model the session ran on, recorded as the Hub records it, or none.
+    // A Claude Code session as the Hub receives one: the person's prompts and the assistant's
+    // turns (code_assistant_meta), spread evenly from `at` over `mins` minutes, and the session's
+    // figures written from exactly those rows, so the Hub's own rollup lands on the same figures.
+    // models: the model the session ran on, recorded as the Hub records it, or none (turns with
+    // no model name, the receiver's "not a model call" mark, which carry no tokens).
+    const CODE_TEXT = {
+      exploration: ['How does the session cache decide what to evict?', 'Where is the retry limit for the webhook set?', 'What does this pattern in the parser match?'],
+      feature: ['Add a CSV download to the usage report page.', 'Add a filter by team to the dashboard list.', 'Let admins rename a saved view.'],
+      testing: ['Write tests for the invoice rounding helper.', 'Fix the flaky test in the export suite.', 'Add test cases for empty and missing dates.'],
+    };
     const codeSession = async (userId, at, kind, tier, mins, model = null) => {
       const sid = nextId('c');
-      const models = model
-        ? JSON.stringify({ [model]: { input: rand(8000, 40000), output: rand(1500, 9000), cache_creation: 0, cache_read: rand(10000, 120000) } })
-        : '{}';
-      await c.query(`INSERT INTO code_session_stats (session_id, user_id, first_at, last_at, user_msg_count, assistant_turns, tool_use_count, commit_count, active_secs, skills_json, models_json, computed_at)
-        VALUES ($1, $2, $3, $4, $5, $6, $7, 0, $8, '[]', $9, $10)`, [sid, userId, at, at + mins * 60, rand(2, 6), rand(4, 12), rand(5, 30), mins * 60, models, now]);
+      const end = at + mins * 60;
+      const nPrompts = rand(2, 6), nTurns = rand(4, 12), tools = rand(5, 30);
+      // The first event is a prompt and the last a turn; the rest in any order.
+      const middle = [...Array(nPrompts - 1).fill('p'), ...Array(nTurns - 1).fill('t')].sort(() => Math.random() - 0.5);
+      const order = ['p', ...middle, 't'];
+      const timeAt = (i) => at + Math.round(((end - at) * i) / (order.length - 1));
+      const split = (total, n) => { const each = Array(n).fill(Math.floor(total / n)); each[0] += total - each[0] * n; return each; };
+      const input = model ? rand(8000, 40000) : 0, output = model ? rand(1500, 9000) : 0, cacheRead = model ? rand(10000, 120000) : 0;
+      const [ins, outs, crs, tls] = [split(input, nTurns), split(output, nTurns), split(cacheRead, nTurns), split(tools, nTurns)];
+      let turn = 0;
+      for (const [i, type] of order.entries()) {
+        if (type === 'p') {
+          await c.query(`INSERT INTO cowork_messages (id, session_id, user_id, message_type, role, surface, source, content_preview, content_full, occurred_at, ingested_at)
+            VALUES ($1, $2, $3, 'code_user_message', 'user', 'code', 'otel', $4, $4, $5, $6)`, [nextId('p'), sid, userId, pick(CODE_TEXT[kind] || CODE_TEXT.exploration), timeAt(i), now]);
+        } else {
+          await c.query(`INSERT INTO code_assistant_meta (id, user_id, session_id, model, input_tokens, output_tokens, cache_creation_tokens, cache_read_tokens, stop_reason, tool_use_count, error_count, commit_count, source, occurred_at, ingested_at)
+            VALUES ($1, $2, $3, $4, $5, $6, 0, $7, 'end_turn', $8, 0, 0, 'otel', $9, $10)`, [nextId('t'), userId, sid, model ?? '', ins[turn], outs[turn], crs[turn], tls[turn], timeAt(i), now]);
+          turn++;
+        }
+      }
+      const models = model ? JSON.stringify({ [model]: { input, output, cache_creation: 0, cache_read: cacheRead } }) : '{}';
+      await c.query(`INSERT INTO code_session_stats (session_id, user_id, first_at, last_at, user_msg_count, assistant_turns, tool_use_count, error_count, commit_count,
+          input_tokens, output_tokens, cache_creation_tokens, cache_read_tokens, active_secs, skills_json, mcp_json, models_json, computed_at)
+        VALUES ($1, $2, $3, $4, $5, $6, $7, 0, 0, $8, $9, 0, $10, $11, '[]', '[]', $12, $13)`,
+        [sid, userId, at, end, nPrompts, model ? nTurns : 0, tools, input, output, cacheRead, end - at, models, now]);
       await c.query(`INSERT INTO code_session_classifications (session_id, user_id, work_type, tier, confidence, classifier_model, status, classified_at)
         VALUES ($1, $2, $3, $4, 0.85, $5, 'classified', $6)`, [sid, userId, kind, tier, MODEL, at + mins * 60]);
     };

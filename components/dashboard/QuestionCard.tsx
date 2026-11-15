@@ -92,13 +92,15 @@ export function changeFrom(now: number | null, before: number | null, fmt: (v: n
   return `${now > before ? 'up' : 'down'} from ${fmt(before)} ${period}`;
 }
 
-/** A share as plain words: "two in three", "about half", "one in four"; a percentage otherwise. */
+/** A share as plain words: "all", "two in three", "half", "one in four", "none"; a percentage otherwise. */
 export function shareWords(v: number): string {
   const nice: Array<[number, string]> = [
     [1 / 5, 'one in five'], [1 / 4, 'one in four'], [1 / 3, 'one in three'], [2 / 5, 'two in five'],
     [1 / 2, 'half'], [3 / 5, 'three in five'], [2 / 3, 'two in three'], [3 / 4, 'three in four'], [4 / 5, 'four in five'],
   ];
   const near = nice.reduce((b, n) => (Math.abs(n[0] - v) < Math.abs(b[0] - v) ? n : b));
+  if (v >= 1) return 'all';
+  if (v <= 0) return 'none';
   if (v >= 0.9) return 'nearly all';
   if (v <= 0.1) return 'very few';
   return Math.abs(near[0] - v) <= 0.04 ? near[1] : `${Math.round(v * 100)}%`;

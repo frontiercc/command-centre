@@ -363,6 +363,43 @@ export function evenings(rows: PromptRow[], timezone: string, kept: Kept = keepN
 }
 
 /** Everything the page finds on its own. `data` is the window So What already read. */
+/** A confirmed new way of working, as read for the rollout finds. */
+export interface ConfirmedWay { id: number | string; title: string; confirmed_at: number | string; task_type: string; department: string | null }
+
+/**
+ * Rollouts: each confirmed new way of working, and the other teams doing the same kind of work
+ * without one. "No department" is not a team, so it is never counted as one, as on the evenings card.
+ */
+export function rolloutsFrom(confirmed: ConfirmedWay[], rows: PromptRow[], kept: Kept = keepNone): Rollout[] {
+  const withOne = new Map<string, Set<string>>();
+  for (const c of confirmed) {
+    if (dept(c) === NO_DEPARTMENT) continue;
+    const set = withOne.get(c.task_type) ?? new Set<string>();
+    set.add(dept(c));
+    withOne.set(c.task_type, set);
+  }
+  const rollouts: Rollout[] = [];
+  for (const c of confirmed) {
+    if (MECHANISM_TASK_TYPES.has(c.task_type)) continue;
+    const others = rows.filter(r => r.task_type === c.task_type && dept(r) !== NO_DEPARTMENT && dept(r) !== dept(c)
+      && !withOne.get(c.task_type)?.has(dept(r)));
+    const teams = new Set(others.map(r => dept(r))).size;
+    if (teams === 0 && !kept(`rollout:${n(c.id)}`, dept(c))) continue;
+    rollouts.push({
+      eventId: n(c.id),
+      title: c.title,
+      department: dept(c),
+      confirmedAt: n(c.confirmed_at),
+      taskType: c.task_type,
+      label: kindLabel(c.task_type),
+      teams,
+      people: new Set(others.map(r => r.user_id)).size,
+      teamsWithOne: withOne.get(c.task_type)?.size ?? 0,
+    });
+  }
+  return rollouts;
+}
+
 export async function getWorkFinds(vendor: Vendor, data: WorkData, kept: Kept = keepNone, nowS = Math.floor(Date.now() / 1000)): Promise<WorkFinds> {
   const since = nowS - WINDOW_DAYS * DAY;
   const client = await getTypedClient();
@@ -454,31 +491,8 @@ export async function getWorkFinds(vendor: Vendor, data: WorkData, kept: Kept = 
     WHERE pe.event_type = 'capability_creation' AND pe.status = 'confirmed' AND pe.confirmed_at IS NOT NULL
       AND ${onWorkPulse}
     ORDER BY pe.confirmed_at DESC
-  `)) as Array<{ id: number | string; title: string; confirmed_at: number | string; task_type: string; department: string | null }>;
-  const withOne = new Map<string, Set<string>>();
-  for (const c of confirmed) {
-    const set = withOne.get(c.task_type) ?? new Set<string>();
-    set.add(dept(c));
-    withOne.set(c.task_type, set);
-  }
-  const rollouts: Rollout[] = [];
-  for (const c of confirmed) {
-    if (MECHANISM_TASK_TYPES.has(c.task_type)) continue;
-    const others = data.rows.filter(r => r.task_type === c.task_type && dept(r) !== dept(c) && !withOne.get(c.task_type)?.has(dept(r)));
-    const teams = new Set(others.map(r => dept(r))).size;
-    if (teams === 0 && !kept(`rollout:${n(c.id)}`, dept(c))) continue;
-    rollouts.push({
-      eventId: n(c.id),
-      title: c.title,
-      department: dept(c),
-      confirmedAt: n(c.confirmed_at),
-      taskType: c.task_type,
-      label: kindLabel(c.task_type),
-      teams,
-      people: new Set(others.map(r => r.user_id)).size,
-      teamsWithOne: withOne.get(c.task_type)?.size ?? 1,
-    });
-  }
+  `)) as ConfirmedWay[];
+  const rollouts = rolloutsFrom(confirmed, data.rows, kept);
 
   return {
     jobs,

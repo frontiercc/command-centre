@@ -16,14 +16,15 @@ import { weekStarts } from '@/lib/pulse/period';
 import { getAdminSession, canAccessOrgOverview } from '@/lib/auth/admin-auth';
 import { getTypedClient } from '@/lib/db/client';
 import { schema } from '@/lib/db/schema';
-import { buildSessionOutputRate } from '@/lib/pulse/cowork/session-output-rate';
+import { buildSessionOutputRate, OUTPUT_RATE_WEEKS } from '@/lib/pulse/cowork/session-output-rate';
 import { buildByProduct } from '@/lib/pulse/cowork/by-product';
 import { getConnectedProducts, isOpenAiOnly } from '@/lib/sources/connected';
 import { getConfigValue } from '@/lib/config';
 import { readHumanTime } from '@/lib/pulse/human-time-summary';
-import { vendorClause, workPulseToolClause, personPerProduct } from '@/lib/dashboard/product-sql';
+import { vendorClause, workPulseToolClause, personPerProduct, vendorExpr } from '@/lib/dashboard/product-sql';
 import { messageVendor } from '@/lib/pulse/vendor-filter';
 import { isWorkPulseSurface } from '@/lib/pulse/work-surfaces';
+import { orgSummaryWindow } from '@/lib/pulse/org-window';
 
 export const dynamic = 'force-dynamic';
 
@@ -192,8 +193,13 @@ export async function GET(request: NextRequest) {
     console.error('[org-summary] by-product failed', e);
   }
 
-  // Human time vs Claude time — org totals; null when off.
-  const humanTime = await readHumanTime('cowork', undefined, vendor);
+  // Human time vs Claude time — org totals; null when off. Read over the file rate's own
+  // window, the 13 completed Monday-UTC weeks (lib/pulse/cowork/session-output-rate.ts), so the
+  // overview's "What did the work produce?" card describes one quarter throughout.
+  const outputWeeks = weekStarts(now - 7 * 86400, OUTPUT_RATE_WEEKS);
+  const humanTime = await readHumanTime('cowork', undefined, vendor, {
+    startS: outputWeeks[0], endS: outputWeeks[outputWeeks.length - 1] + 7 * 86400,
+  });
 
   // ── Dashboard figures (additive) ─────────────────────────────────────────
   // The Dashboard's Work Pulse cards, depth panel and skills-and-connectors panel. Weeks are
@@ -202,12 +208,13 @@ export async function GET(request: NextRequest) {
   // 13 before. The Dashboard keeps the last 30 days against the 30 before, with 8 weeks of trend.
   const quarterly = request.nextUrl.searchParams.get('window') === 'quarter';
   const sixtyDaysAgo = now - 60 * 24 * 3600;
-  const shown = quarterly ? 13 : 8;
-  const weeks = weekStarts(now, shown + 1).slice(0, shown);
+  // The same window the "See who" lists read (lib/pulse/org-window.ts).
+  const win = orgSummaryWindow(now, quarterly);
+  const weeks = win.weeks;
   const firstWeek = weeks[0];
-  const thisWeek = weekStarts(now, 1)[0];
-  const bStart = quarterly ? firstWeek : thirtyDaysAgo;
-  const bEnd = quarterly ? thisWeek : now + 1;
+  const thisWeek = win.thisWeek;
+  const bStart = win.start;
+  const bEnd = win.end;
   const pStart = quarterly ? firstWeek - 13 * 7 * 86400 : sixtyDaysAgo;
   const weekAvg = async (col: 'oti' | 'ors', scope: 'user' | 'function') => {
     const rows = await client
@@ -298,16 +305,32 @@ export async function GET(request: NextRequest) {
     GROUP BY 1
   `);
   const deepPeopleByWeek = new Map(deepPeopleWeekRows.map(r => [Number(r.w), Number(r.n)]));
-  const frontierByPerson = (await rawAll<{ n: number | string }>(client, sql`
-    SELECT COUNT(*) AS n
+  const frontierRows = (await rawAll<{ n: number | string; v: string }>(client, sql`
+    SELECT COUNT(*) AS n, MIN(${sql.raw(vendorExpr('cm.'))}) AS v
     FROM pulse_classifications pc JOIN cowork_messages cm ON cm.id = pc.cowork_message_id
     WHERE pc.classifier_status = 'classified' AND pc.tier = 3 AND cm.occurred_at >= ${bStart} AND cm.occurred_at < ${bEnd}
       AND cm.user_id IS NOT NULL AND ${sql.raw(vendorClause(vendor, 'cm.'))}
     GROUP BY ${sql.raw(personPerProduct('cm.'))} ORDER BY 1 DESC
-  `)).map(r => Number(r.n));
+  `)).map(r => ({ n: Number(r.n), v: r.v === 'openai' ? 'openai' as const : 'claude' as const }));
+  const frontierByPerson = frontierRows.map(r => r.n);
   const frontierTotal = frontierByPerson.reduce((a, b) => a + b, 0);
-  let frontierHalfPeople = 0;
-  for (let acc = 0; frontierHalfPeople < frontierByPerson.length && acc < frontierTotal / 2; frontierHalfPeople++) acc += frontierByPerson[frontierHalfPeople];
+  /** The fewest people (each counted once per product) who together do half of the work in `ns`, largest first. */
+  const halfOf = (ns: number[]): number => {
+    const total = ns.reduce((a, b) => a + b, 0);
+    let k = 0;
+    for (let acc = 0; k < ns.length && acc < total / 2; k++) acc += ns[k];
+    return k;
+  };
+  // On All, each product's own half added together, so the figure is Claude's plus ChatGPT's like
+  // every other All-view figure; the split says which is which.
+  const frontierHalfSplit = vendor === 'all'
+    && frontierRows.some(r => r.v === 'claude') && frontierRows.some(r => r.v === 'openai')
+    ? {
+        claude: halfOf(frontierRows.filter(r => r.v === 'claude').map(r => r.n)),
+        openai: halfOf(frontierRows.filter(r => r.v === 'openai').map(r => r.n)),
+      }
+    : null;
+  const frontierHalfPeople = frontierHalfSplit ? frontierHalfSplit.claude + frontierHalfSplit.openai : halfOf(frontierByPerson);
 
   // Tasks by depth over the same window, for the strip's share of real work.
   const windowTier = await rawGet<{ t1: number | string | null; t2: number | string | null; t3: number | string | null }>(client, sql`
@@ -327,6 +350,7 @@ export async function GET(request: NextRequest) {
     deepPeopleWeeks: weeks.map((_, i) => deepPeopleByWeek.get(i) ?? 0),
     frontierPeople30d: frontierByPerson.length,
     frontierHalfPeople: frontierTotal > 0 ? frontierHalfPeople : null,
+    frontierHalfSplit,
     frontierTopShare: frontierTotal > 0 ? frontierByPerson[0] / frontierTotal : null,
     otiWeeks: await weekAvg('oti', 'user'),
     orsWeeks: await weekAvg('ors', 'function'),

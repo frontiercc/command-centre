@@ -110,6 +110,7 @@ export async function GET(request: NextRequest) {
           unpricedOnly: false,
           mainWork: null,
           routeCount: 0,
+          topRoute: null,
           anthropic: row ? { ...row, shareUsed: shareUsed(row) } : null,
           pendingRequestAt: requests.get(email)?.createdAt ?? null,
         });

@@ -43,6 +43,8 @@ interface SuggestionDraft {
   evidence: { distinctUsers: number; sessionCount: number; departments: string[] };
   department: string | null;
   canvas: ProcessCanvas | null;
+  /** When it was drafted (epoch seconds). */
+  generatedAt: number;
   surface?: 'cowork' | 'code' | null;
   /** Sessions by product; null while ChatGPT and Codex are hidden or on older rows. */
   products?: SuggestionProducts | null;
@@ -394,7 +396,7 @@ export default function UseCasesRegisterPage() {
                     <div className="flex items-center gap-3">
                       <div className="flex-1"><Bar pct={(people / topPeople) * 100} /></div>
                       <span className="text-[13px] text-[#8F8F8F] tabular-nums whitespace-nowrap">
-                        {people} {people === 1 ? 'user' : 'users'} · {sessions} {sessions === 1 ? 'session' : 'sessions'}
+                        {people} {people === 1 ? 'person' : 'people'} · {sessions} {sessions === 1 ? 'session' : 'sessions'}
                       </span>
                     </div>
                   </li>

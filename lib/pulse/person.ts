@@ -111,7 +111,8 @@ export async function getPerson360(userId: string): Promise<Person360> {
       edit_reject_count: cm.edit_reject_count,
     })
     .from(cm)
-    .where(and(eq(cm.scope_type, 'user'), eq(cm.scope_id, userId), eq(cm.granularity, 'rolling'), only))
+    // 7-day rows: Person 360's Code figures sit beside 7-day Cowork and ChatGPT spend in one total.
+    .where(and(eq(cm.scope_type, 'user'), eq(cm.scope_id, userId), eq(cm.granularity, 'rolling_7d'), only))
     .orderBy(desc(cm.computed_at))
     .limit(1));
   const codeRow = codeRows[0];

@@ -19,7 +19,7 @@ import {
 import type { PulsePeriod } from '@/lib/pulse/period-shape';
 import type { TierNames } from '@/lib/pulse/tier-names';
 import Sparkline from '@/components/pulse/Sparkline';
-import WeeklyDeltaBadge from '@/components/pulse/WeeklyDeltaBadge';
+import PriorPeriodBadge, { priorPeriodChange } from '@/components/pulse/code/PriorPeriodBadge';
 import { PageBody, Toolbar, Panel, Tag, Empty, Muted, B } from '@/components/precision/ui';
 import { useVendor, useOpenAiOnly, VendorSwitch } from '@/components/shared/VendorSwitch';
 import { DEVELOPER_PULSE_VENDOR_LABELS, type Vendor } from '@/lib/dashboard/vendor';
@@ -64,6 +64,8 @@ interface MeData {
   canSeeSpendReview?: boolean;
   userId: string | null;
   metrics: CodeMetricsRow | null;
+  /** The 30 days before the headline window; null when nothing happened in them. */
+  priorMetrics?: { active_time_user_s: number; lines_added: number } | null;
   trends: { engagedTime: WeeklyTrend; codeOutput: WeeklyTrend } | null;
   sessions: SessionRow[];
   modelMix: ModelMixItem[];
@@ -71,7 +73,8 @@ interface MeData {
   githubRepos: { count7d: number; names7d: string[] } | null;
 }
 
-function TrendCard({ label, trend }: { label: string; trend?: WeeklyTrend }) {
+/** `change`: the last 30 days on the 30 days before, as a fraction (null: nothing to compare with). */
+function TrendCard({ label, trend, change }: { label: string; trend?: WeeklyTrend; change: number | null }) {
   if (!trend) return null;
   return (
     <Panel title={label} subtitle="8 weeks" right={<Tag tone="measured">Measured</Tag>}>
@@ -83,7 +86,7 @@ function TrendCard({ label, trend }: { label: string; trend?: WeeklyTrend }) {
         />
         <div className="flex items-center gap-2 flex-wrap text-[13px] text-[#8F8F8F]">
           <span>Week to date shown hollow</span>
-          <span className="ml-auto"><WeeklyDeltaBadge pct={trend.delta.pct} /></span>
+          <span className="ml-auto"><PriorPeriodBadge pct={change} /></span>
         </div>
       </div>
     </Panel>
@@ -97,7 +100,7 @@ function formatDuration(first: number, last: number): string {
 }
 
 function formatDate(epoch: number): string {
-  return new Date(epoch * 1000).toLocaleDateString(undefined, { month: 'short', day: 'numeric' });
+  return new Date(epoch * 1000).toLocaleDateString('en-GB', { month: 'short', day: 'numeric' });
 }
 
 function RecentSessions({ sessions }: { sessions: SessionRow[] }) {
@@ -117,7 +120,7 @@ function RecentSessions({ sessions }: { sessions: SessionRow[] }) {
                   )}
                 </span>
                 <span className="block text-[13px] text-[#8F8F8F] tabular-nums">
-                  {s.repo ? `${formatDate(s.last_at)} · ` : ''}{formatDuration(s.first_at, s.last_at)} · {s.user_msg_count} prompts · {s.tool_use_count} actions
+                  {s.repo ? `${formatDate(s.last_at)} · ` : ''}{formatDuration(s.first_at, s.last_at)} · {s.user_msg_count} prompt{s.user_msg_count === 1 ? '' : 's'} · {s.tool_use_count} action{s.tool_use_count === 1 ? '' : 's'}
                 </span>
               </div>
               <div className="shrink-0 text-right flex flex-col items-end gap-0.5">
@@ -125,7 +128,9 @@ function RecentSessions({ sessions }: { sessions: SessionRow[] }) {
                   {s.spend_usd === null ? '—' : formatCurrency(s.spend_usd)}
                 </span>
                 <span className="text-[13px] text-[#8F8F8F] tabular-nums">
-                  {formatTokens(s.input_tokens + s.output_tokens)} tokens
+                  {s.spend_usd === null && s.input_tokens + s.output_tokens === 0
+                    ? 'not measured'
+                    : `${formatTokens(s.input_tokens + s.output_tokens)} tokens`}
                 </span>
                 <Tag>{s.source === 'codex' ? 'Codex' : s.source === 'otel' ? 'OTel' : 'Agent'}</Tag>
               </div>
@@ -249,8 +254,8 @@ function MyCodePulseContent() {
 
             {data.trends && !openaiOnly && (
               <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                <TrendCard label="Engaged time" trend={data.trends.engagedTime} />
-                <TrendCard label="Code output" trend={data.trends.codeOutput} />
+                <TrendCard label="Engaged time" trend={data.trends.engagedTime} change={priorPeriodChange(data.metrics?.active_time_user_s, data.priorMetrics?.active_time_user_s)} />
+                <TrendCard label="Code output" trend={data.trends.codeOutput} change={priorPeriodChange(data.metrics?.lines_added, data.priorMetrics?.lines_added)} />
               </div>
             )}
 

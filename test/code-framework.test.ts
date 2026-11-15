@@ -57,6 +57,19 @@ describe('buildCrosswalk', () => {
     expect(mix.fit).toBe('ai_judged');
   });
 
+  it('names the configured classifier model on the work mix, or the classifier with none', () => {
+    const note = (s: CodeSignals) => buildCrosswalk(s).find(b => b.dimension === 'impact')!
+      .cells.find(c => c.label.toLowerCase().includes('work mix'))!.note;
+    expect(note({ ...full, classifierModel: 'claude-sonnet-4-5-20250929' })).toBe('Judged by Claude Sonnet 4.5: the one non-measured signal here.');
+    expect(note(full)).toBe('Judged by the classifier: the one non-measured signal here.');
+  });
+
+  it('labels pull requests from telemetry as opened, not merged', () => {
+    const labels = buildCrosswalk(full).flatMap(b => b.cells).map(c => c.label);
+    expect(labels).toContain('Pull requests opened (30d)');
+    expect(labels.some(l => /merged/i.test(l))).toBe(false);
+  });
+
   it('counts coverage from framework cells only: AI-specific cells count on neither side', () => {
     const cover = Object.fromEntries(buildCrosswalk(full).map(b => [b.dimension, frameworkCoverage(b)]));
     expect(cover.speed).toEqual({ covered: 3, total: 5 });

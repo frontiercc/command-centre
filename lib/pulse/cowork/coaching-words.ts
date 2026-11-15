@@ -6,6 +6,9 @@
 // database. The tiers it stands for are named in the page's own footnote, from the rubric.
 export const MEANINGFUL_WORK = 'meaningful work';
 
+/** What a new way of working is, said the same way on every page that counts them. */
+export const NEW_WAYS_OF_WORKING = 'Claude flags work that creates something reusable; a manager confirms it.';
+
 /** A kind of work as people read it: the stored name with its underscores taken out. */
 export function kindLabel(taskType: string): string {
   return taskType.replace(/_/g, ' ');

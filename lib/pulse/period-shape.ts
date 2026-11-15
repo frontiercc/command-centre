@@ -16,7 +16,7 @@ export type PulsePeriod = 'week' | 'month' | 'quarter';
 export const PERIOD_SHAPE: Record<PulsePeriod, { buckets: number; bucketSecs: number; label: string; prior: string }> = {
   week: { buckets: 7, bucketSecs: DAY, label: 'This week', prior: 'last week' },
   month: { buckets: 30, bucketSecs: DAY, label: 'This month', prior: 'the month before' },
-  quarter: { buckets: 13, bucketSecs: WEEK, label: 'This quarter', prior: 'the quarter before' },
+  quarter: { buckets: 13, bucketSecs: WEEK, label: 'Last quarter', prior: 'the quarter before' },
 };
 
 export interface PeriodTierWeek { weekStart: number; t1: number; t2: number; t3: number }
@@ -31,7 +31,17 @@ export interface MyPeriod {
   grid: PeriodTierWeek[];
   /** A department only: how many of its people did any of this work. */
   people?: { deep: number; active: number } | null;
-  realWork: { now: number; all: number; before: number; beforeAll: number; trend: number[]; deptAverage: number | null };
+  realWork: {
+    now: number; all: number; before: number; beforeAll: number; trend: number[];
+    /** A person's page: their department's meaningful-or-frontier tasks per person. Null on a department's page. */
+    deptAverage: number | null;
+    /**
+     * A department's page: the share of the rest of the organisation's judged tasks that were
+     * meaningful or frontier, to set beside the department's own share (like with like, whatever
+     * the team's size). Null when fewer than 3 people elsewhere had work judged; absent on a person's page.
+     */
+    orgShare?: number | null;
+  };
   share: { now: number | null; before: number | null; trend: Array<number | null> };
   capabilities: { confirmed: number; before: number; pending: number; trend: number[] };
   /** Null when switched off, when the viewer may not see it, or with nothing estimated yet. */

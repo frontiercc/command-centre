@@ -104,14 +104,14 @@ describe('GET /api/pulse/code/value — timeSaved', () => {
     const rowsByLabel = Object.fromEntries(
       data.timeSaved.rows.map((r: { label: string; count: number; windowDays: number | null }) => [r.label, r])
     );
-    expect(rowsByLabel['PRs'].count).toBe(2);
+    expect(rowsByLabel['pull requests opened'].count).toBe(2);
     expect(rowsByLabel['AI-assisted commits'].count).toBe(10);
     expect(rowsByLabel['Cowork sessions'].count).toBe(2);
     expect(rowsByLabel['Chat conversations'].count).toBe(1);
 
     // PR/commit rows are drawn from the rolling code_metrics window (7d fixture), NOT the fixed 30d
     // window used for cowork/chat — asserting this catches any regression back to a blanket 30d claim.
-    expect(rowsByLabel['PRs'].windowDays).toBe(METRICS_WINDOW_DAYS);
+    expect(rowsByLabel['pull requests opened'].windowDays).toBe(METRICS_WINDOW_DAYS);
     expect(rowsByLabel['AI-assisted commits'].windowDays).toBe(METRICS_WINDOW_DAYS);
     expect(rowsByLabel['Cowork sessions'].windowDays).toBe(30);
     expect(rowsByLabel['Chat conversations'].windowDays).toBe(30);
@@ -127,7 +127,7 @@ describe('GET /api/pulse/code/value — timeSaved', () => {
 
     const res = await route.GET(makeRequest());
     const data = await res.json();
-    const prRow = data.timeSaved.rows.find((r: { label: string }) => r.label === 'PRs');
+    const prRow = data.timeSaved.rows.find((r: { label: string }) => r.label === 'pull requests opened');
     expect(prRow.minutesEach).toBe(60);
     expect(prRow.hours).toBe(1);
   });

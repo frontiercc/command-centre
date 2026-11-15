@@ -45,7 +45,7 @@ const fmtTokensCompact = (n: number) =>
 
 const tokensTotal = (t: CodeTokens) => t.input + t.output + t.cacheWrite + t.cacheRead;
 
-const BASIS_TEXT: Record<SurfaceBasis, string> = {
+export const BASIS_TEXT: Record<SurfaceBasis, string> = {
   dormant: 'dormant',
   estimate: 'estimated at list rates',
   actual: 'actual, per request',

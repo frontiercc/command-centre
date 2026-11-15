@@ -159,9 +159,11 @@ describe('FinOps split by product', () => {
       expect(body.monthToDate).toBe(true);
       expect(body.vendors.claudeUsd).toBeCloseTo(19, 9);
       expect(body.vendors.openaiUsd).toBeCloseTo(9.5, 9);
-      // Day 20 of 31: each part at its own run rate, mtd / 20 x 31.
-      expect(body.projectionByVendor.claudeUsd).toBeCloseTo(19 / 20 * 31, 6);
-      expect(body.projectionByVendor.openaiUsd).toBeCloseTo(9.5 / 20 * 31, 6);
+      // Noon on day 20 of 31 is 19.5 days gone: each part at its own run rate, mtd / 19.5 x 31.
+      expect(body.projection.daysElapsed).toBe(20);
+      expect(body.projection.projected).toBeCloseTo(28.5 / 19.5 * 31, 6);
+      expect(body.projectionByVendor.claudeUsd).toBeCloseTo(19 / 19.5 * 31, 6);
+      expect(body.projectionByVendor.openaiUsd).toBeCloseTo(9.5 / 19.5 * 31, 6);
       expect(body.projectionByVendor.claudeUsd + body.projectionByVendor.openaiUsd).toBeCloseTo(body.projection.projected, 6);
 
       // A past month has no projection, so no split either.

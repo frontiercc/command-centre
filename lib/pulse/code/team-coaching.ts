@@ -22,6 +22,7 @@ import type { CoachingFigures, TeamFigures, WorkShare } from '@/lib/pulse/code/c
 import { TARGET_GAP_PP } from '@/lib/pulse/code/coaching-figures';
 import type { TierNames } from '@/lib/pulse/tier-names';
 import { BEYOND_QUICK } from '@/lib/pulse/code/coaching-words';
+import { formatModelLabel } from '@/lib/pulse/code/model-label';
 import {
   CHECK_AFTER_DAYS, COACHING_MIN_PEOPLE, SAME_WITHIN, DAY_S,
   compareMetric as coreCompareMetric, coachingResult as coreCoachingResult,
@@ -200,7 +201,11 @@ export function teamParts(t: TeamFigures, f: CoachingFigures): { where: string[]
     .map(w => ({ w, pp: Math.round(w.share * 100) - w.target! }))
     .sort((a, b) => Math.abs(b.pp) - Math.abs(a.pp));
   if (top) {
-    workOn.push(`Most sessions went on ${lower(top.label)}: ${pct(top.share)} of them.`);
+    // Kinds that tie for the top are named together.
+    const tied = t.work.filter(w => w.sessions === top.sessions);
+    workOn.push(tied.length > 1
+      ? `Most sessions went on ${list(tied.map(w => lower(w.label)))}: ${pct(top.share)} of them each.`
+      : `Most sessions went on ${lower(top.label)}: ${pct(top.share)} of them.`);
   }
   if (gaps.length > 0 && Math.abs(gaps[0].pp) >= TARGET_GAP_PP) {
     const g = gaps[0];
@@ -252,7 +257,7 @@ export function teamParts(t: TeamFigures, f: CoachingFigures): { where: string[]
 
   // The dearest habit, pointed at the page that owns money.
   if (t.costlyOnSimple) {
-    workOn.push(`Most single-answer sessions ran on ${t.costlyOnSimple.model}: ${plural(t.costlyOnSimple.sessions, 'session', 'sessions')}.`);
+    workOn.push(`Most single-answer sessions ran on ${formatModelLabel(t.costlyOnSimple.model).label}: ${plural(t.costlyOnSimple.sessions, 'session', 'sessions')}.`);
   }
 
   if (t.champions.length > 0) {

@@ -18,7 +18,7 @@ import { getWeeklySeries, getWeeklyDelta } from '@/lib/pulse/trends';
 import { readHumanTime } from '@/lib/pulse/human-time-summary';
 import { getAllConfig } from '@/lib/config';
 import { canViewSpendReview } from '@/lib/finance/spend-review-access';
-import { hasCodexData, readCodeMetrics, trendVendor, codeSessionVendor } from '@/lib/pulse/code/vendor-view';
+import { hasCodexData, readCodeMetrics, trendVendor, codeSessionVendor, latestRunStart } from '@/lib/pulse/code/vendor-view';
 import { codexActionCounts } from '@/lib/pulse/code/aggregator';
 import { githubRepoBasis, githubBasisColumn, type GithubRepoBasis } from '@/lib/pulse/code/github-tool-match';
 import { weeklyTiers, getCodeTierNames } from '@/lib/pulse/code/weekly-tiers';
@@ -88,7 +88,6 @@ export async function GET(request: NextRequest) {
   }
 
   const now = Math.floor(Date.now() / 1000);
-  const sevenDaysAgo = now - 7 * 24 * 3600;
   const thirtyDaysAgo = now - 30 * 24 * 3600;
 
   // Developer Pulse's All / Claude / Codex switch.
@@ -141,7 +140,11 @@ export async function GET(request: NextRequest) {
       period_start: cm.period_start, period_end: cm.period_end, computed_at: cm.computed_at,
     })
     .from(cm)
-    .where(and(eq(cm.scope_type, 'user'), eq(cm.scope_id, uid), eq(cm.granularity, 'rolling'), only))
+    .where(and(
+      eq(cm.scope_type, 'user'), eq(cm.scope_id, uid), eq(cm.granularity, 'rolling'), only,
+      // Only a row from the view's latest run: an older one is a tool this person stopped using.
+      sql`${cm.computed_at} >= ${latestRunStart(sql.raw(only ? 'code_metrics_vendor' : 'code_metrics'), only ? sql`AND ${only}` : sql``)}`,
+    ))
     .orderBy(desc(cm.computed_at))
     .limit(1);
   const toMetrics = <R extends { spend_usd: string | null }>(r: R | undefined) =>
@@ -155,20 +158,24 @@ export async function GET(request: NextRequest) {
       }
     : null;
 
+  // The 30 days before the headline window: this person's 'rolling_prior' row
+  // from the view's latest run (an older one is a window they were not active
+  // in since). Null when they did nothing in those 30 days.
   const priorMetricsRows = await readCodeMetrics(vendor, codexPresent, (cm, only) => client
     .select({
       spend_usd: cm.spend_usd, autonomy_ratio: cm.autonomy_ratio, cache_hit_ratio: cm.cache_hit_ratio,
-      session_count: cm.session_count, repo_count: cm.repo_count,
+      session_count: cm.session_count, repo_count: cm.repo_count, commit_count: cm.commit_count,
+      active_time_user_s: cm.active_time_user_s, lines_added: cm.lines_added,
     })
     .from(cm)
     .where(and(
-      eq(cm.scope_type, 'user'), eq(cm.scope_id, uid), eq(cm.granularity, 'rolling'),
-      sql`${cm.computed_at} <= ${sevenDaysAgo}`, only,
+      eq(cm.scope_type, 'user'), eq(cm.scope_id, uid), eq(cm.granularity, 'rolling_prior'), only,
+      sql`${cm.computed_at} >= ${latestRunStart(sql.raw(only ? 'code_metrics_vendor' : 'code_metrics'), only ? sql`AND ${only}` : sql``)}`,
     ))
     .orderBy(desc(cm.computed_at))
     .limit(1));
   const priorMetricsRaw = priorMetricsRows[0] ?? null;
-  const priorMetrics = priorMetricsRaw
+  const priorMetrics = priorMetricsRaw && priorMetricsRaw.session_count > 0
     ? { ...priorMetricsRaw, spend_usd: priorMetricsRaw.spend_usd !== null ? Number(priorMetricsRaw.spend_usd) : null }
     : null;
 
@@ -231,7 +238,7 @@ export async function GET(request: NextRequest) {
       delete rest.models_json;
       const actions = codexActions.get(s.session_id)?.tools ?? 0;
       return codex
-        ? { ...rest, tool_use_count: actions, input_tokens: codex.input + codex.cached, output_tokens: codex.output, cache_read_tokens: codex.cached, spend_usd: codex.spend }
+        ? { ...rest, tool_use_count: actions, input_tokens: codex.input, output_tokens: codex.output, cache_read_tokens: codex.cached, spend_usd: codex.spend }
         : { ...rest, tool_use_count: actions, spend_usd: null };
     }
     let spendUsd: number | null = null;

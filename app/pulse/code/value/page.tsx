@@ -198,7 +198,7 @@ export default function CodeValuePage() {
                       ? `Claude Code ${data.split.claudeCode.commitCount.toLocaleString('en-GB')} · Codex ${data.split.codex.commitCount === null ? 'not measured' : data.split.codex.commitCount.toLocaleString('en-GB')}`
                       : undefined,
                   },
-                  { label: 'PRs', value: me!.prCount === null ? notMeasured : String(me!.prCount) },
+                  { label: 'Pull requests opened', value: me!.prCount === null ? notMeasured : String(me!.prCount) },
                   { label: 'Engaged hours', value: me!.engagedHours === null ? notMeasured : fmtHours(me!.engagedHours) },
                 ].map(c => <Figure key={c.label} label={c.label} value={c.value} sub={c.sub} tone="measured" />)}
               </FigureGrid>
@@ -210,7 +210,7 @@ export default function CodeValuePage() {
             {/* §5c: Unit economics — the language finance speaks, fully measured (blue). */}
             <Panel title="Unit economics" right={<Tag tone="measured">Measured</Tag>} flush>
               <div className="px-4 pt-3">
-                <Muted>What each unit of shipped work costs in {codexView ? 'Codex' : 'Claude Code'} spend{me!.metricsWindowDays ? `, over the latest ${me!.metricsWindowDays}-day window` : ''}.{codexView ? ' Codex sends no pull requests or engaged time, so those two are not measured.' : ''}</Muted>
+                <Muted>What each unit of shipped work costs in {codexView ? 'Codex' : data?.split ? 'Claude Code and Codex' : 'Claude Code'} spend{me!.metricsWindowDays ? `, over the latest ${me!.metricsWindowDays}-day window` : ''}.{codexView ? ' Codex sends no pull requests or engaged time, so those two are not measured.' : data?.split ? " Cost per PR and spend per engaged hour are Claude Code's alone: Codex sends no pull requests or engaged time." : ''}</Muted>
               </div>
               <FigureGrid cols={4}>
                 {[

@@ -189,7 +189,7 @@ function DeptContent() {
 
             <CodeStatStrip metrics={detail.metrics} githubRepos={detail.githubRepos} view={codexView ? vendor : 'claude'} split={detail.metricsSplit} />
 
-            <Panel title="Members" subtitle="7 days" flush>
+            <Panel title="Members" subtitle="30 days" flush>
               <CodeUserTable users={detail.members} showDepartment={false} githubBasis={detail.githubRepos?.basis ?? 'all'} />
             </Panel>
           </>

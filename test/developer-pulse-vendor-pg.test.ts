@@ -134,6 +134,30 @@ describe('Developer Pulse by product', () => {
     }
   }, 120_000);
 
+  it('leaves Codex cached tokens out of input tokens, as Claude Code does, and in the cache-hit ratio', async () => {
+    const { sql, cleanup } = await createTestDatabase();
+    try {
+      await seed(sql);
+      await sql.run(`INSERT INTO codex_turns (id, user_id, session_id, model, started_at, uncached_input_tokens, cached_input_tokens, output_tokens, openai_cost_usd)
+        VALUES ('cx-t2', 'u-codex', 'codex:s1', 'gpt-5.5-codex', ?, 0, 500000, 0, 0)`, [NOW - 3 * 3600]);
+      const { runCodeHourlyAggregation } = await import('@/lib/pulse/code/aggregator');
+      await runCodeHourlyAggregation();
+      const rows = await sql.all<{ vendor: string; input_tokens: number; cache_hit_ratio: number }>(
+        `SELECT vendor, input_tokens, cache_hit_ratio FROM code_metrics_vendor
+          WHERE scope_type = 'organisation' AND granularity = 'rolling' ORDER BY vendor`);
+      const v = Object.fromEntries(rows.map(r => [r.vendor, r]));
+      expect(Number(v.openai.input_tokens)).toBe(1_000_000);
+      expect(v.openai.cache_hit_ratio).toBeCloseTo(500_000 / 1_500_000, 6);
+      expect(Number(v.all.input_tokens)).toBe(1000 + 1_000_000);
+      expect(v.all.cache_hit_ratio).toBeCloseTo(500_000 / (1000 + 1_500_000), 6);
+
+      const me = await get('/api/pulse/code/me?userId=u-codex&vendor=all');
+      expect(me.sessions[0]).toMatchObject({ session_id: 'codex:s1', input_tokens: 1_000_000, cache_read_tokens: 500_000 });
+    } finally {
+      await cleanup();
+    }
+  }, 120_000);
+
   it('writes no per-product rows on a Claude-only hub', async () => {
     const { sql, cleanup } = await createTestDatabase();
     try {

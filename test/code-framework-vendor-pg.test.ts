@@ -36,7 +36,7 @@ beforeEach(async () => {
   await setConfigValue('openaiShown', 'true');
   await sql.run(`INSERT INTO code_metrics (scope_type, scope_id, granularity, period_start, period_end, commit_count, pr_count,
       lines_added, lines_removed, edit_accept_count, edit_reject_count, active_time_user_s, active_time_cli_s, spend_usd, computed_at)
-    VALUES ('organisation', ?, 'rolling', ?, ?, 4, 2, 100, 10, 8, 2, 3600, 0, 5, ?)`, [ORG, NOW - 7 * 86400, NOW, NOW]);
+    VALUES ('organisation', ?, 'rolling', ?, ?, 4, 2, 100, 10, 8, 2, 3600, 0, 5, ?)`, [ORG, NOW - 30 * 86400, NOW, NOW]);
 });
 
 async function seedCodex() {
@@ -46,7 +46,7 @@ async function seedCodex() {
     `INSERT INTO code_metrics_vendor (vendor, scope_type, scope_id, granularity, period_start, period_end, commit_count, pr_count,
        lines_added, lines_removed, edit_accept_count, edit_reject_count, active_time_user_s, active_time_cli_s, spend_usd, computed_at)
      VALUES (?, 'organisation', ?, 'rolling', ?, ?, ?, ?, ?, 0, ?, 0, ?, 0, ?, ?)`,
-    [vendor, ORG, NOW - 7 * 86400, NOW, commits, prs, lines, accept, secs, spend, NOW]);
+    [vendor, ORG, NOW - 30 * 86400, NOW, commits, prs, lines, accept, secs, spend, NOW]);
   await row('all', 7, 2, 100, 8, 3600, 8);
   await row('claude', 4, 2, 100, 8, 3600, 5);
   await row('openai', 3, 0, 0, 0, 0, 3);
@@ -64,7 +64,7 @@ describe('GET /api/pulse/code/framework by vendor', () => {
     const body = await get('openai');
     expect(body.vendor).toBe('claude');
     expect(body.codexPresent).toBe(false);
-    expect(cell(body, 'AI-assisted commits (7d)').value).toBe('4');
+    expect(cell(body, 'AI-assisted commits (30d)').value).toBe('4');
     expect(cell(body, 'Claude spend (context)').value).toBe('$5');
   });
 
@@ -73,29 +73,29 @@ describe('GET /api/pulse/code/framework by vendor', () => {
     const body = await get('all');
     expect(body.vendor).toBe('all');
     expect(body.codexPresent).toBe(true);
-    expect(cell(body, 'AI-assisted commits (7d)').value).toBe('7');
+    expect(cell(body, 'AI-assisted commits (30d)').value).toBe('7');
     expect(cell(body, 'Claude and Codex spend (context)').value).toBe('$8');
-    expect(cell(body, 'Merged PRs (7d)').value).toBe('2');
+    expect(cell(body, 'Pull requests opened (30d)').value).toBe('2');
   });
 
   it('Codex reads its own row; what Codex never reports is not captured', async () => {
     await seedCodex();
     const body = await get('openai');
     expect(body.vendor).toBe('openai');
-    expect(cell(body, 'AI-assisted commits (7d)').value).toBe('3');
+    expect(cell(body, 'AI-assisted commits (30d)').value).toBe('3');
     expect(cell(body, 'Codex spend (context)').value).toBe('$3');
-    for (const label of ['Merged PRs (7d)', 'Code output (lines ±)', 'Edit acceptance rate', 'Engaged AI time (hrs, 7d)']) {
+    for (const label of ['Pull requests opened (30d)', 'Code output (lines ±)', 'Edit acceptance rate', 'Engaged AI time (hrs, 30d)']) {
       expect(cell(body, label)).toMatchObject({ value: null, fit: 'not_captured', note: 'Codex does not report this.' });
     }
   });
 
   it('Claude reads Claude Code alone; hidden ChatGPT and Codex read as Claude', async () => {
     await seedCodex();
-    expect(cell(await get('claude'), 'AI-assisted commits (7d)').value).toBe('4');
+    expect(cell(await get('claude'), 'AI-assisted commits (30d)').value).toBe('4');
     await setConfigValue('openaiShown', 'false');
     const hidden = await get('openai');
     expect(hidden.vendor).toBe('claude');
     expect(hidden.codexPresent).toBe(false);
-    expect(cell(hidden, 'AI-assisted commits (7d)').value).toBe('4');
+    expect(cell(hidden, 'AI-assisted commits (30d)').value).toBe('4');
   });
 });

@@ -16,7 +16,7 @@ export interface DeptBriefingContext {
   confirmed_capabilities: number;
   /** Measured deep-work lines for the department — never names, summaries or file names. */
   deep_work: string[];
-  /** Measured sessions and people per product (Cowork, Claude in Office and Google apps); empty when neither was used. */
+  /** Measured sessions and people per product (Claude Chat, Cowork, Claude in Office and Google apps, ChatGPT); empty when fewer than two were used. */
   work_by_product?: string[];
   concentration_risk_count: number;
   /** Per-product facts; empty on a Claude-only hub. */
@@ -36,7 +36,7 @@ Return a JSON object with exactly these fields:
   "risk_note": string,
   "recommendation": string
 }
-paragraphs: 3 narrative paragraphs covering (1) overall activity, how the work splits across the tiers and how many sessions produced something, and, when the data says where the work happened, one sentence on how it splits between Cowork and the Claude in Office and Claude in Google apps, (2) the deep work the team did (the kinds of the deepest work and new ways of working given below; never name people), (3) risks or areas for focus.
+paragraphs: 3 narrative paragraphs covering (1) overall activity, how the work splits across the tiers and how many sessions produced something, and, when the data says where the work happened, one sentence on how it splits between the products listed there (Claude Chat, Cowork, the Claude in Office and Claude in Google apps, and ChatGPT), (2) the deep work the team did (the kinds of the deepest work and new ways of working given below; never name people), (3) risks or areas for focus.
 strength: one short sentence about the team's biggest strength this month.
 risk_note: one short sentence about the main risk or gap.
 recommendation: one actionable recommendation for the manager.`;
@@ -48,7 +48,7 @@ Period: ${ctx.period_label}
 
 Data:
 - Active users: ${ctx.active_users}
-- Total tasks judged: ${ctx.total_classified}
+- Tasks Claude judged: ${ctx.total_classified}
 ${ctx.tier_lines.map(l => `- ${l}`).join('\n')}
 - ${ctx.produced_line}
 - New ways of working confirmed: ${ctx.confirmed_capabilities}

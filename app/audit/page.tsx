@@ -60,8 +60,8 @@ interface SessionEnrichment {
 }
 
 const EVENT_TYPE_LABELS: Record<string, string> = {
-  code_user_message: 'User prompt',
-  cowork_user_message: 'User message',
+  code_user_message: 'Prompt',
+  cowork_user_message: 'Prompt',
   cowork_assistant_message: 'Assistant response',
   cowork_tool_result: 'Tool result',
   cowork_session_init: 'Session start',
@@ -846,7 +846,7 @@ export default function AuditPage() {
                 <dt className="text-[#8F8F8F]">Time</dt>
                 <dd className="m-0 tabular-nums">{new Date(selectedEvent.occurred_at * 1000).toLocaleString('en-GB')}</dd>
                 <dt className="text-[#8F8F8F]">Event</dt>
-                <dd className="m-0 break-all">{selectedEvent.event_type}</dd>
+                <dd className="m-0 break-all">{formatEventType(selectedEvent.event_type)}</dd>
                 <dt className="text-[#8F8F8F]">Event ID</dt>
                 <dd className="m-0 font-mono text-[12px] text-[#4D4D4D]">{selectedEvent.id.slice(0, 12)}...</dd>
               </dl>
@@ -875,7 +875,8 @@ export default function AuditPage() {
                 const facts: ReactNode[] = [];
                 const liveCost = sessionSpend?.conversation.totalUsd ?? null;
                 const cost = liveCost ?? en.cost_usd;
-                if (cost != null) facts.push(<span key="cost" className="font-semibold text-[#0A0A0A]">Cost: ${cost.toFixed(4)}</span>);
+                const costIsEstimate = selectedEvent?._source === 'chatgpt_chat' || selectedEvent?._source === 'chatgpt_work';
+                if (cost != null) facts.push(<span key="cost" className="font-semibold text-[#0A0A0A]">{costIsEstimate ? 'Estimated cost' : 'Cost'}: ${cost.toFixed(4)}</span>);
                 if (totalTokens > 0) facts.push(<span key="tok">{(totalTokens / 1000).toFixed(1)}k tokens</span>);
                 if (en.tool_call_count != null && en.tool_call_count > 0) facts.push(<span key="tools">{en.tool_call_count} tool call{en.tool_call_count !== 1 ? 's' : ''}</span>);
                 if (en.duration_secs != null && en.duration_secs > 0) facts.push(<span key="dur">{en.duration_secs}s duration</span>);
@@ -1011,7 +1012,7 @@ export default function AuditPage() {
                   <SectionHead title={selectedEvent.event_type === 'code_user_message' ? 'Code prompt' : 'Code event'} />
                   <Bubble
                     kind={selectedEvent.event_type === 'code_user_message' ? 'user' : 'tool'}
-                    header={<>{selectedEvent.event_type === 'code_user_message' ? 'User prompt' : selectedEvent.event_type} · <span className="tabular-nums">{timeOf(selectedEvent.occurred_at)}</span>{selectedEvent.flagged ? <FlaggedMark /> : null}</>}
+                    header={<>{formatEventType(selectedEvent.event_type)} ·<span className="tabular-nums">{timeOf(selectedEvent.occurred_at)}</span>{selectedEvent.flagged ? <FlaggedMark /> : null}</>}
                   >
                     <div className="text-[14px] leading-[1.5] text-[#0A0A0A] whitespace-pre-wrap break-words">
                       {selectedEvent.content_preview || 'No content captured'}

@@ -3,8 +3,10 @@
 
 /**
  * Work Pulse figures for one period: this week, this month or this quarter, each against the
- * same length before it. One person (My Pulse, Users) or a set of people (Departments). Every window ENDS NOW, so work done today counts and someone in their first
- * week sees their own figures the day they start.
+ * same length before it. One person (My Pulse, Users) or a set of people (Departments). The week
+ * and the month END NOW, so work done today counts and someone in their first week sees their own
+ * figures the day they start. The quarter is the 13 completed Monday-UTC weeks, the overview's
+ * quarter (app/api/pulse/org-summary), so the two pages compare the same weeks.
  *
  * Trend bars follow the window: one bar a day for the week and the month, one a week for the
  * quarter. The depth chart reads a year of completed weeks separately, for its longer settings.
@@ -17,6 +19,7 @@ import { getTypedClient } from '@/lib/db/client';
 import { vendorClause, workPulseToolClause, personPerProduct } from '@/lib/dashboard/product-sql';
 import { isBuiltInTool } from '@/lib/finance/spend-review-builtins';
 import { categorizeFilePath } from '@/lib/pulse/cowork/file-categories';
+import { weekStart } from '@/lib/pulse/period';
 import type { Vendor } from '@/lib/dashboard/vendor';
 import { PERIOD_SHAPE, type MyPeriod, type PeriodTierWeek, type PulsePeriod } from '@/lib/pulse/period-shape';
 
@@ -32,6 +35,16 @@ async function rows<T>(q: SQL): Promise<T[]> {
   return (await client.execute(q)).rows as T[];
 }
 const n = (v: unknown) => Number(v ?? 0);
+
+/**
+ * The period's window. The week and the month end now; the quarter is the 13 completed
+ * Monday-UTC weeks before the current one, the same weeks as the overview's quarter.
+ */
+export function periodWindow(period: PulsePeriod, nowS: number): { start: number; end: number } {
+  const { buckets, bucketSecs } = PERIOD_SHAPE[period];
+  const end = period === 'quarter' ? weekStart(nowS) : nowS;
+  return { start: end - buckets * bucketSecs, end };
+}
 
 function mondayOf(ts: number): number {
   const d = new Date(ts * 1000);
@@ -71,8 +84,7 @@ export async function buildMyPeriod(opts: {
   // "the people this page is about": one person, or a department's members.
   const whoIn = (col: string) => sql`${sql.raw(col)} IN (${idList})`;
   const { buckets, bucketSecs } = PERIOD_SHAPE[period];
-  const end = opts.nowS;
-  const start = end - buckets * bucketSecs;
+  const { start, end } = periodWindow(period, opts.nowS);
   const priorStart = start - buckets * bucketSecs;
   const bucketOf = (ts: number) => Math.min(buckets - 1, Math.max(0, Math.floor((ts - start) / bucketSecs)));
   const msgVendor = sql.raw(vendorClause(vendor, 'cm.'));
@@ -95,7 +107,7 @@ export async function buildMyPeriod(opts: {
   }
 
   // ── A year of completed weeks for the depth chart, and six weeks counting back from today ──
-  const yearStart = mondayOf(end) - 52 * WEEK;
+  const yearStart = mondayOf(opts.nowS) - 52 * WEEK;
   const weekRows = await rows<{ wk: number | string; tier: number | string; c: number | string }>(sql`
     SELECT FLOOR((cm.occurred_at - ${yearStart}) / ${WEEK}) AS wk, pc.tier AS tier, COUNT(*) AS c
     FROM pulse_classifications pc JOIN cowork_messages cm ON cm.id = pc.cowork_message_id
@@ -110,7 +122,7 @@ export async function buildMyPeriod(opts: {
     if (t === 1) w.t1 += n(r.c); else if (t === 2) w.t2 += n(r.c); else if (t >= 3) w.t3 += n(r.c);
     byWeek.set(ws, w);
   }
-  const thisWeek = mondayOf(end);
+  const thisWeek = mondayOf(opts.nowS);
   const weeks = [...byWeek.values()].filter(w => w.weekStart < thisWeek).sort((a, b) => a.weekStart - b.weekStart);
   // The grid includes the week in progress, so a first week shows the day it starts.
   const grid = Array.from({ length: 6 }, (_, i) => {
@@ -132,14 +144,15 @@ export async function buildMyPeriod(opts: {
 
   // What to compare with: a person against their department, a department against the organisation.
   let deptAverage: number | null = null;
+  let orgShare: number | null | undefined;
   if (group) {
-    const d = await rows<{ people: number | string; real: number | string }>(sql`
-      SELECT COUNT(DISTINCT pc.user_id) AS people, SUM(CASE WHEN pc.tier >= 2 THEN 1 ELSE 0 END) AS real
+    // A department against the rest of the organisation, as shares of judged tasks.
+    const d = await rows<{ people: number | string; real: number | string; total: number | string }>(sql`
+      SELECT COUNT(DISTINCT pc.user_id) AS people, SUM(CASE WHEN pc.tier >= 2 THEN 1 ELSE 0 END) AS real, COUNT(*) AS total
       FROM pulse_classifications pc JOIN cowork_messages cm ON cm.id = pc.cowork_message_id
       WHERE pc.classifier_status = 'classified' AND NOT ${whoIn('pc.user_id')}
         AND cm.occurred_at >= ${start} AND cm.occurred_at < ${end} AND ${msgVendor}`);
-    const n2 = n(d[0]?.people);
-    deptAverage = n2 >= 3 && ownIds.size > 0 ? (n(d[0]?.real) / n2) * ownIds.size : null;
+    orgShare = n(d[0]?.people) >= 3 && n(d[0]?.total) > 0 ? n(d[0]?.real) / n(d[0]?.total) : null;
   } else if (department) {
     const d = await rows<{ people: number | string; real: number | string }>(sql`
       SELECT COUNT(DISTINCT pc.user_id) AS people, SUM(CASE WHEN pc.tier >= 2 THEN 1 ELSE 0 END) AS real
@@ -180,11 +193,22 @@ export async function buildMyPeriod(opts: {
     }
   }
 
-  // ── What was produced: files Claude saved, sent or published, and the sessions behind them ──
-  const outRows = await rows<{ session_id: string; output_name: string }>(sql`
+  // ── What was produced, and the sessions behind it: files Claude saved, sent or published in
+  // Cowork and Office, what Claude Chat's replies made (artifact titles and generated files), and
+  // the files ChatGPT's replies listed, as the Sessions list reads them (lib/pulse/cowork/work-sessions.ts).
+  const outParts: SQL[] = [sql`
     SELECT DISTINCT cm.session_id, cm.output_name FROM cowork_messages cm
     WHERE ${whoIn('cm.user_id')} AND cm.output_name IS NOT NULL
-      AND cm.occurred_at >= ${start} AND cm.occurred_at < ${end} AND ${msgVendor}`);
+      AND cm.occurred_at >= ${start} AND cm.occurred_at < ${end} AND ${msgVendor}`];
+  if (vendor !== 'openai') outParts.push(sql`
+    SELECT DISTINCT m.conversation_id AS session_id, m.output_names AS output_name FROM chat_assistant_meta m
+    WHERE ${whoIn('m.user_id')} AND m.output_names IS NOT NULL AND m.conversation_id IS NOT NULL
+      AND m.occurred_at >= ${start} AND m.occurred_at < ${end}`);
+  if (vendor !== 'claude') outParts.push(sql`
+    SELECT DISTINCT r.session_id, r.file_names AS output_name FROM openai_replies r
+    WHERE ${whoIn('r.user_id')} AND r.file_names IS NOT NULL
+      AND r.occurred_at >= ${start} AND r.occurred_at < ${end}`);
+  const outRows = await rows<{ session_id: string; output_name: string }>(sql.join(outParts, sql` UNION `));
   const kinds = new Map<string, number>();
   for (const r of outRows) {
     const k = OUTPUT_KIND[categorizeFilePath(r.output_name)] ?? 'Other';
@@ -237,7 +261,7 @@ export async function buildMyPeriod(opts: {
     weeks,
     grid,
     people,
-    realWork: { now: nowReal, all: nowAll, before: beforeReal, beforeAll, trend: realTrend, deptAverage },
+    realWork: { now: nowReal, all: nowAll, before: beforeReal, beforeAll, trend: realTrend, deptAverage, ...(group ? { orgShare } : {}) },
     share: {
       now: nowAll > 0 ? nowReal / nowAll : null,
       before: beforeAll > 0 ? beforeReal / beforeAll : null,

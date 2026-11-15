@@ -4,16 +4,23 @@
 'use client';
 
 import { Fragment, useEffect, useState } from 'react';
+import Link from 'next/link';
 import TopBar from '@/components/layout/TopBar';
 import LoadingSpinner from '@/components/shared/LoadingSpinner';
-import SurfaceTiles, { type SurfaceSummary, type SurfaceSpend } from '@/components/finance/SurfaceTiles';
-import FinopsCharts, { type SpendTrend } from '@/components/finance/FinopsCharts';
+import { type SurfaceSummary, type SurfaceSpend } from '@/components/finance/SurfaceTiles';
+import {
+  SpendTrendCard, ProjectionCard, ConcentrationCard, concentrationOfTotal, projectionShown, type SpendTrend,
+} from '@/components/finance/FinopsCharts';
 import Leaderboard, { type LeaderboardEntry } from '@/components/finance/Leaderboard';
 import InsightCard, { type InsightFacts } from '@/components/finance/InsightCard';
 import ModelEfficiencySection from '@/components/finance/ModelEfficiencySection';
 import OfficeSpendPanel, { type OfficeSpendData } from '@/components/finance/OfficeSpendPanel';
-import { PageBody, Toolbar, Panel, Tag, Pill, T, B, Notice, Empty, Bar, cx } from '@/components/precision/ui';
+import WhereItGoes from '@/components/finance/WhereItGoes';
+import FinopsFold from '@/components/finance/FinopsFold';
+import { PageBody, Toolbar, Panel, Strip, Figure, Tag, Pill, T, B, Notice, Empty, Bar, cx } from '@/components/precision/ui';
+import { MIN_PROJECTION_DAYS } from '@/lib/finance/finops-projection';
 import { useOpenAiOnly } from '@/components/shared/VendorSwitch';
+import { useAskPageNote } from '@/components/ask/useAskAvailable';
 
 interface CodeTokens {
   input: number;
@@ -125,9 +132,10 @@ function surfaceTokensTitle(surfaces: SurfaceSummary): string {
 }
 
 /** Plain-wording data-quality notes — only surfaced when there's something worth flagging. */
-function buildDataQualityNotes(report: ChargebackReport): string[] {
+function buildDataQualityNotes(report: ChargebackReport, includeUnallocated = true): string[] {
   const notes: string[] = [];
-  if (report.unallocated.totalUsd > 0) {
+  // The figure strip already shows unallocated spend, so the warning under it leaves it out.
+  if (includeUnallocated && report.unallocated.totalUsd > 0) {
     notes.push(`${fmtUsd(report.unallocated.totalUsd)} is unallocated: no department on file for those users.`);
   }
   if (report.unpricedModels.length > 0) {
@@ -156,6 +164,27 @@ const MONTH_NAMES = [
   'January', 'February', 'March', 'April', 'May', 'June',
   'July', 'August', 'September', 'October', 'November', 'December',
 ];
+
+/** The month before `period` ("2026-11" gives "October"), for the projection's comparison. */
+function priorMonthName(period: string): string {
+  const m = Number(period.split('-')[1]);
+  return m >= 1 && m <= 12 ? MONTH_NAMES[(m + 10) % 12] : 'last month';
+}
+
+/**
+ * The projection against last month, in words. The percentage is the one
+ * This month in cost already shows (insight.facts.projection.vsPriorPct),
+ * rounded the same way.
+ */
+function paceVsPrior(vsPriorPct: number | null | undefined, prior: string): string | null {
+  if (vsPriorPct == null) return null;
+  const r = Math.round(vsPriorPct);
+  if (r === 0) return `About the same as ${prior}`;
+  return `${Math.abs(r)}% ${r < 0 ? 'less' : 'more'} than ${prior}`;
+}
+
+/** Cost centre rows shown before "Show all". */
+const CENTRE_ROWS_SHOWN = 3;
 
 function buildMonthOptions(): { value: string; label: string }[] {
   const now = new Date();
@@ -254,8 +283,8 @@ function CentreRow({
             <span className="text-[#B3B3B3] inline-block w-3 font-normal" aria-hidden="true">{open ? '▾' : '▸'}</span>
             {name}
           </button>
+          {code && <span className="ml-2 font-mono text-[12px] text-[#8F8F8F]" title="GL code">{code}</span>}
         </td>
-        <td className={cx(T.tdMute, 'font-mono text-[13px]')}>{code || '—'}</td>
         <td className={cx(T.tdRight, 'text-[#666666]')}>{users.length}</td>
         <td className={cx(T.td, 'w-[30%]')}>
           <div className="flex items-center gap-2">
@@ -267,7 +296,7 @@ function CentreRow({
       </tr>
       {open && (
         <tr className="border-t border-[#F2F2F2]">
-          <td colSpan={5} className="p-0">
+          <td colSpan={4} className="p-0">
             <div className="overflow-x-auto"><UserTable users={users} openai={openai} openaiOnly={openaiOnly} /></div>
           </td>
         </tr>
@@ -279,6 +308,7 @@ function CentreRow({
 export default function CostChargebackPage() {
   const [monthOptions] = useState(() => buildMonthOptions());
   const [period, setPeriod] = useState(() => buildMonthOptions()[0].value);
+  useAskPageNote('finops', `FinOps shows the calendar month ${period}.`);
   // monthOptions[0] is always the current calendar month (buildMonthOptions'
   // i===0 case) — the seats line is a renewal-negotiation number that only
   // makes sense read against "the last 30 days" as of now, not a past period.
@@ -292,6 +322,9 @@ export default function CostChargebackPage() {
   const [closeError, setCloseError] = useState<string | null>(null);
   const [trend, setTrend] = useState<SpendTrend | null>(null);
   const [openCentres, setOpenCentres] = useState<Set<string>>(() => new Set());
+  const [allCentreRows, setAllCentreRows] = useState(false);
+  /** People with a better route this month, from Spend Review. null hides Where to save. */
+  const [peopleWithRoutes, setPeopleWithRoutes] = useState<number | null>(null);
   // Only OpenAI connected: no Claude tiles, columns or notes.
   const openaiOnly = useOpenAiOnly();
 
@@ -322,6 +355,22 @@ export default function CostChargebackPage() {
       .catch(e => { if (e.message !== 'not enabled') setError(e.message); })
       .finally(() => setLoading(false));
   }, [period, refreshKey]);
+
+  // Where to save: Spend Review's count for the same month. Any failure (off,
+  // not allowed for this role, not built) hides the panel.
+  useEffect(() => {
+    let cancelled = false;
+    setPeopleWithRoutes(null);
+    fetch(`/api/finance/spend-review?period=${encodeURIComponent(period)}`)
+      .then(r => (r.ok ? r.json() : null))
+      .then(d => {
+        if (cancelled) return;
+        const n = d?.summary?.peopleWithRoutes;
+        setPeopleWithRoutes(typeof n === 'number' ? n : null);
+      })
+      .catch(() => {});
+    return () => { cancelled = true; };
+  }, [period]);
 
   const handleClose = async () => {
     if (!window.confirm(`Close ${period}? This freezes an immutable snapshot for billing. It cannot be reopened.`)) return;
@@ -388,12 +437,15 @@ export default function CostChargebackPage() {
 
   const isEmpty = report.grandTotalUsd === 0 && report.costCentres.length === 0 && report.unallocated.users.length === 0;
   const dataQualityNotes = buildDataQualityNotes(report);
+  const warningNotes = buildDataQualityNotes(report, false);
   const centreKeys = [
     ...report.costCentres.map(c => `centre:${c.name}`),
     ...(report.unallocated.users.length > 0 ? ['unallocated'] : []),
   ];
   const allOpen = centreKeys.length > 0 && centreKeys.every(k => openCentres.has(k));
   const centreCount = report.costCentres.length;
+  // Top rows first (the report sorts centres by spend); Unallocated always shows, last.
+  const shownCentres = allCentreRows ? report.costCentres : report.costCentres.slice(0, CENTRE_ROWS_SHOWN);
   const openai = report.vendors !== undefined;
   const claudeShown = !openai || !openaiOnly;
   const basisTag = !openai
@@ -401,6 +453,33 @@ export default function CostChargebackPage() {
     : openaiOnly
       ? "ChatGPT and Codex at OpenAI's USD token rates"
       : "Claude Code estimated · Claude Cowork actual · ChatGPT and Codex at OpenAI's USD token rates";
+
+  const exportButton = (
+    <a href={`/api/finance/chargeback/export?period=${encodeURIComponent(period)}`} className={B.secondary}>
+      Export CSV
+    </a>
+  );
+  const closeButton = report.status === 'open' && isAdmin && !isEmpty && (
+    <button type="button" onClick={handleClose} className={B.primary}>
+      Close period
+    </button>
+  );
+  // Export and Close sit in the By cost centre header; with no table they stay in the toolbar.
+  const centrePanelShown = !isEmpty && centreKeys.length > 0;
+
+  // On pace for: the projection card's own figure and cases.
+  const projection = report.monthToDate ? report.projection ?? null : null;
+  const pace = projection && projection.daysElapsed >= MIN_PROJECTION_DAYS
+    ? projectionShown(projection, report.projectionByVendor ?? null, openaiOnly)
+    : null;
+  const paceWords = paceVsPrior(report.insight?.facts.projection?.vsPriorPct, priorMonthName(period));
+  const notShown = (text: string) => <span className="text-[14px] font-normal tracking-normal text-[#8F8F8F]">{text}</span>;
+
+  const unallocatedPeople = report.unallocated.users.length;
+  const seatsShown = (report.chatgptSeats != null && isCurrentMonth) || (report.seats != null && isCurrentMonth && claudeShown);
+  const officeShown = !!report.office && report.office.byProduct.length > 0;
+  const concentrationShown = concentrationOfTotal(report.costCentres, report.grandTotalUsd) !== null;
+  const estimateTag = <Tag tone="judged">Estimate</Tag>;
 
   return (
     <>
@@ -410,87 +489,73 @@ export default function CostChargebackPage() {
           left={isAdmin ? <a href="/admin/cost-centres" className={B.link}>Manage cost centres</a> : undefined}
         >
           {monthPicker}
-          <a href={`/api/finance/chargeback/export?period=${encodeURIComponent(period)}`} className={B.secondary}>
-            Export CSV
-          </a>
-          {report.status === 'open' && isAdmin && !isEmpty && (
-            <button type="button" onClick={handleClose} className={B.primary}>
-              Close period
-            </button>
-          )}
+          {!centrePanelShown && exportButton}
+          {!centrePanelShown && closeButton}
         </Toolbar>
 
-        {closeError && <Notice tone="error">{closeError}</Notice>}
+        {closeError && !centrePanelShown && <Notice tone="error">{closeError}</Notice>}
 
         {isEmpty ? (
           <Empty title={`No AI spend recorded for ${monthOptions.find(o => o.value === period)?.label ?? period}.`} />
         ) : (
           <>
-            {/* Headline */}
-            <div className="flex flex-col gap-2">
-              <div className="flex items-baseline gap-3 flex-wrap">
-                <span className="text-[36px] leading-10 font-semibold tracking-[-0.03em] tabular-nums text-[#0A0A0A]">{fmtUsd(report.grandTotalUsd)}</span>
-                {report.surfaces && tokensTotal(report.surfaces.total.tokens) > 0 && (
-                  <span
-                    className="text-[14px] text-[#8F8F8F] tabular-nums cursor-help"
-                    title={surfaceTokensTitle(report.surfaces)}
-                  >
-                    {fmtTokensCompact(tokensTotal(report.surfaces.total.tokens))} tokens
-                  </span>
-                )}
-                {report.surfaces && <Tag>{basisTag}</Tag>}
-                {report.status === 'closed' && <Pill>Closed</Pill>}
-                {report.estimated && (
-                  <Tag tone="measured">
-                    {report.status === 'closed' ? 'Estimated: closed with estimated spend' : 'Estimated, for visibility, not billing'}
-                  </Tag>
-                )}
-              </div>
-              {openai && !openaiOnly && report.vendors && (
-                <p className="m-0 text-[13px] text-[#4D4D4D] tabular-nums">
-                  Claude {fmtUsd(report.vendors.claudeUsd)} · ChatGPT and Codex {fmtUsd(report.vendors.openaiUsd)}
-                </p>
-              )}
-              {report.status === 'closed' && report.closedAt && (
-                <p className="m-0 text-[13px] text-[#8F8F8F]">
-                  Closed on {new Date(report.closedAt * 1000).toLocaleDateString()}
-                </p>
-              )}
-              {report.chatgptSeats != null && isCurrentMonth && (
-                <p className="m-0 text-[13px] text-[#4D4D4D]">
-                  {report.chatgptSeats.monthlyLicenceUsd != null ? (
-                    <>
-                      ChatGPT licence: {report.chatgptSeats.licensed} seats at {fmtUsd(report.chatgptSeats.monthlyPriceUsd ?? 0)} a month, {fmtUsd(report.chatgptSeats.monthlyLicenceUsd)}.
-                      OpenAI charges it apart from usage, so it is not in the figures above.
-                    </>
-                  ) : (
-                    <>ChatGPT: {report.chatgptSeats.licensed} seats. Add the seat price in Admin → System → FinOps to see the licence cost.</>
-                  )}
-                  {' '}{report.chatgptSeats.activeUsers30d} of {report.chatgptSeats.licensed} seats used ChatGPT in the last 30 days.
-                </p>
-              )}
-              {((report.cacheSavingsUsd != null && report.cacheSavingsUsd > 0) || (report.seats != null && isCurrentMonth && claudeShown)) && (
-                <div className="flex gap-x-5 gap-y-1 flex-wrap text-[13px]">
-                  {report.cacheSavingsUsd != null && report.cacheSavingsUsd > 0 && (
-                    <span className="text-[#1F6F8B]">
-                      Prompt caching saved about {fmtUsd(report.cacheSavingsUsd)} this month (estimate, at list rates)
+            {/* 1. The answer: four figures */}
+            <Strip cols={4}>
+              <Figure
+                label={report.monthToDate ? 'Spend so far' : 'Spend'}
+                value={fmtUsd(report.grandTotalUsd)}
+                tone="measured"
+                sub={openai && !openaiOnly && report.vendors
+                  ? `Claude ${fmtUsd(report.vendors.claudeUsd)} · ChatGPT and Codex ${fmtUsd(report.vendors.openaiUsd)}`
+                  : undefined}
+              />
+              <Figure
+                label={<span className="inline-flex items-center gap-2">On pace for {estimateTag}</span>}
+                value={pace ? fmtUsd(pace.totalUsd) : notShown('Not projected')}
+                tone="judged"
+                sub={!projection
+                  ? 'Only shown for the current, in-progress month.'
+                  : !pace
+                    ? `Too early in the month to project. Day ${projection.daysElapsed} of ${projection.daysInMonth}.`
+                    : paceWords ?? `Day ${projection.daysElapsed} of ${projection.daysInMonth}`}
+              />
+              <Figure
+                label="Unallocated"
+                value={fmtUsd(report.unallocated.totalUsd)}
+                tone="measured"
+                sub={
+                  <>
+                    {unallocatedPeople === 0
+                      ? 'Everyone has a department'
+                      : `${unallocatedPeople} ${unallocatedPeople === 1 ? 'person' : 'people'} with no department`}
+                    {isAdmin && unallocatedPeople > 0 && (
+                      <>{' · '}<Link href="/admin/users" className={B.link}>Assign</Link></>
+                    )}
+                  </>
+                }
+              />
+              <Figure
+                label={<span className="inline-flex items-center gap-2">Caching saved {estimateTag}</span>}
+                value={report.cacheSavingsUsd != null ? fmtUsd(report.cacheSavingsUsd) : notShown('Not measured')}
+                tone="judged"
+                sub={report.cacheSavingsUsd != null ? 'at list rates' : undefined}
+              />
+            </Strip>
+
+            {/* Status of the month and how spend is priced */}
+            <div className="flex flex-col gap-1.5">
+              {(report.status === 'closed' || report.estimated) && (
+                <div className="flex items-center gap-2 flex-wrap">
+                  {report.status === 'closed' && <Pill>Closed</Pill>}
+                  {report.status === 'closed' && report.closedAt && (
+                    <span className="text-[13px] text-[#8F8F8F]">
+                      Closed on {new Date(report.closedAt * 1000).toLocaleDateString()}
                     </span>
                   )}
-                  {report.seats != null && isCurrentMonth && claudeShown && (
-                    <span className="text-[#4D4D4D]">
-                      {report.seats.unused === 0 ? (
-                        openai ? 'All licensed Claude seats active in the last 30 days.' : 'All licensed seats active in the last 30 days.'
-                      ) : (
-                        <>
-                          {report.seats.unused} of {report.seats.licensed} licensed {openai ? 'Claude ' : ''}seats unused in the last 30 days
-                          {report.seats.estUnusedUsd != null && (
-                            <span className="text-[#1F6F8B]">
-                              {' '}(about {fmtUsd(report.seats.estUnusedUsd)} a month, estimate, for visibility, not billing)
-                            </span>
-                          )}
-                        </>
-                      )}
-                    </span>
+                  {report.estimated && (
+                    <Tag tone="measured">
+                      {report.status === 'closed' ? 'Estimated: closed with estimated spend' : 'Estimated, for visibility, not billing'}
+                    </Tag>
                   )}
                 </div>
               )}
@@ -516,98 +581,201 @@ export default function CostChargebackPage() {
               </details>
             </div>
 
-            {dataQualityNotes.length > 0 && (
+            {warningNotes.length > 0 && (
               <Notice tone="warn">
-                {dataQualityNotes.map((note, i) => (
+                {warningNotes.map((note, i) => (
                   <span key={i} className="block">{note}</span>
                 ))}
               </Notice>
             )}
 
-            {/* By-surface strip */}
-            {report.surfaces && <SurfaceTiles surfaces={report.surfaces} openaiOnly={openaiOnly} />}
-
-            {/* Claude in Office: an estimate beside the strip, never in its totals */}
-            <OfficeSpendPanel data={report.office} />
-
-            {/* Model efficiency — activity × model drill-down, directly below the by-surface strip. Self-gated on financeModelEfficiencyEnabled (route 404s when off, section hides). */}
-            <ModelEfficiencySection period={period} />
-
-            {/* Charts: spend trend / month-end projection / concentration */}
-            <FinopsCharts
-              trend={trend}
-              monthToDate={report.monthToDate}
-              projection={report.projection ?? null}
-              projectionByVendor={report.projectionByVendor ?? null}
-              costCentres={report.costCentres}
-              openaiOnly={openaiOnly}
-            />
-
-            {/* Top spenders + this-month insight */}
-            <div className="grid grid-cols-1 lg:grid-cols-[minmax(0,3fr)_minmax(0,2fr)] gap-4">
-              <Leaderboard leaderboard={report.leaderboard ?? []} period={period} openaiOnly={openaiOnly} />
-              <InsightCard insight={report.insight ?? null} dataQualityNotes={dataQualityNotes} />
-            </div>
-
-            {/* Cost centres, Unallocated last */}
-            {centreKeys.length > 0 && (
-              <Panel
-                title="By cost centre"
-                subtitle={`${centreCount} centre${centreCount === 1 ? '' : 's'}${report.unallocated.users.length > 0 ? ', plus unallocated' : ''}`}
+            {/* 2. Where it goes: one bar by product */}
+            {report.surfaces && (
+              <WhereItGoes
+                surfaces={report.surfaces}
+                openaiOnly={openaiOnly}
                 right={
-                  <button
-                    type="button"
-                    className={B.link}
-                    onClick={() => setOpenCentres(allOpen ? new Set() : new Set(centreKeys))}
-                  >
-                    {allOpen ? 'Hide people' : 'Show people'}
-                  </button>
+                  <>
+                    {tokensTotal(report.surfaces.total.tokens) > 0 && (
+                      <span
+                        className="text-[13px] text-[#8F8F8F] tabular-nums cursor-help"
+                        title={surfaceTokensTitle(report.surfaces)}
+                      >
+                        {fmtTokensCompact(tokensTotal(report.surfaces.total.tokens))} tokens
+                      </span>
+                    )}
+                    <Tag>{basisTag}</Tag>
+                  </>
                 }
-                flush
+              />
+            )}
+
+            {/* 3. Cost centres, Unallocated last */}
+            {centrePanelShown && (
+              <>
+                {closeError && <Notice tone="error">{closeError}</Notice>}
+                <Panel
+                  title="By cost centre"
+                  subtitle={`${centreCount} centre${centreCount === 1 ? '' : 's'}${report.unallocated.users.length > 0 ? ', plus unallocated' : ''}`}
+                  right={
+                    <>
+                      <button
+                        type="button"
+                        className={B.link}
+                        onClick={() => setOpenCentres(allOpen ? new Set() : new Set(centreKeys))}
+                      >
+                        {allOpen ? 'Hide people' : 'Show people'}
+                      </button>
+                      {exportButton}
+                      {closeButton}
+                    </>
+                  }
+                  flush
+                >
+                  <div className="overflow-x-auto">
+                    <table className={T.table}>
+                      <thead>
+                        <tr className={T.headRow}>
+                          <th scope="col" className={T.th}>Cost centre</th>
+                          <th scope="col" className={T.thRight}>People</th>
+                          <th scope="col" className={T.th}>Share</th>
+                          <th scope="col" className={T.thRight}>Spend</th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {shownCentres.map(centre => (
+                          <CentreRow
+                            key={centre.name}
+                            name={centre.name}
+                            code={centre.code}
+                            totalUsd={centre.totalUsd}
+                            users={centre.users}
+                            grandTotalUsd={report.grandTotalUsd}
+                            open={openCentres.has(`centre:${centre.name}`)}
+                            onToggle={() => toggleCentre(`centre:${centre.name}`)}
+                            openai={openai}
+                            openaiOnly={openaiOnly}
+                          />
+                        ))}
+                        {report.unallocated.users.length > 0 && (
+                          <CentreRow
+                            name="Unallocated"
+                            totalUsd={report.unallocated.totalUsd}
+                            users={report.unallocated.users}
+                            grandTotalUsd={report.grandTotalUsd}
+                            unallocated
+                            open={openCentres.has('unallocated')}
+                            onToggle={() => toggleCentre('unallocated')}
+                            openai={openai}
+                            openaiOnly={openaiOnly}
+                          />
+                        )}
+                      </tbody>
+                    </table>
+                  </div>
+                  {report.costCentres.length > CENTRE_ROWS_SHOWN && (
+                    <div className="px-4 py-2.5 border-t border-[#F2F2F2]">
+                      <button
+                        type="button"
+                        className={B.link}
+                        aria-expanded={allCentreRows}
+                        onClick={() => setAllCentreRows(v => !v)}
+                      >
+                        {allCentreRows ? `Show the top ${CENTRE_ROWS_SHOWN} only` : `Show all ${centreKeys.length} rows`}
+                      </button>
+                    </div>
+                  )}
+                </Panel>
+              </>
+            )}
+
+            {/* 4. Where to save: Spend Review's count, for the same month */}
+            {peopleWithRoutes !== null && (
+              <Panel
+                title="Where to save"
+                badge={estimateTag}
+                right={<Link href={`/finops/spend-review?period=${encodeURIComponent(period)}`} className={B.link}>Open Spend Review</Link>}
               >
-                <div className="overflow-x-auto">
-                  <table className={T.table}>
-                    <thead>
-                      <tr className={T.headRow}>
-                        <th scope="col" className={T.th}>Cost centre</th>
-                        <th scope="col" className={T.th}>GL code</th>
-                        <th scope="col" className={T.thRight}>People</th>
-                        <th scope="col" className={T.th}>Share</th>
-                        <th scope="col" className={T.thRight}>Spend</th>
-                      </tr>
-                    </thead>
-                    <tbody>
-                      {report.costCentres.map(centre => (
-                        <CentreRow
-                          key={centre.name}
-                          name={centre.name}
-                          code={centre.code}
-                          totalUsd={centre.totalUsd}
-                          users={centre.users}
-                          grandTotalUsd={report.grandTotalUsd}
-                          open={openCentres.has(`centre:${centre.name}`)}
-                          onToggle={() => toggleCentre(`centre:${centre.name}`)}
-                          openai={openai}
-                          openaiOnly={openaiOnly}
-                        />
-                      ))}
-                      {report.unallocated.users.length > 0 && (
-                        <CentreRow
-                          name="Unallocated"
-                          totalUsd={report.unallocated.totalUsd}
-                          users={report.unallocated.users}
-                          grandTotalUsd={report.grandTotalUsd}
-                          unallocated
-                          open={openCentres.has('unallocated')}
-                          onToggle={() => toggleCentre('unallocated')}
-                          openai={openai}
-                          openaiOnly={openaiOnly}
-                        />
-                      )}
-                    </tbody>
-                  </table>
-                </div>
+                <p className="m-0 text-[13px] leading-5 text-[#333333]">
+                  {peopleWithRoutes === 0
+                    ? 'No one has a better route for their work yet: no skill, connector or model colleagues use for the same work.'
+                    : `${peopleWithRoutes} ${peopleWithRoutes === 1 ? 'person has' : 'people have'} a better route for their work: a skill, connector or model colleagues use for the same work.`}
+                </p>
               </Panel>
+            )}
+
+            {/* 5. Detail, folded */}
+            <FinopsFold title="Spend trend and month-end projection">
+              <div className="grid grid-cols-1 gap-4 md:grid-cols-[minmax(0,2fr)_minmax(0,1fr)]">
+                <SpendTrendCard trend={trend} openaiOnly={openaiOnly} />
+                <ProjectionCard
+                  monthToDate={report.monthToDate}
+                  projection={report.projection ?? null}
+                  byVendor={report.projectionByVendor ?? null}
+                  openaiOnly={openaiOnly}
+                />
+              </div>
+            </FinopsFold>
+
+            {/* Self-gated on financeModelEfficiencyEnabled (route 404s when off: the section and its row hide). */}
+            <FinopsFold title="Model efficiency and cost drivers" hideWhenEmpty>
+              <ModelEfficiencySection period={period} />
+            </FinopsFold>
+
+            {/* Claude in Office and Google: an estimate, never in the totals */}
+            {officeShown && (
+              <FinopsFold title="Claude in Office and Google (estimate)">
+                <OfficeSpendPanel data={report.office} />
+              </FinopsFold>
+            )}
+
+            <FinopsFold title={concentrationShown ? 'This month in cost and spend concentration' : 'This month in cost'}>
+              <div className={cx('grid grid-cols-1 gap-4', concentrationShown && 'lg:grid-cols-[minmax(0,3fr)_minmax(0,2fr)]')}>
+                <InsightCard insight={report.insight ?? null} dataQualityNotes={dataQualityNotes} />
+                <ConcentrationCard costCentres={report.costCentres} grandTotalUsd={report.grandTotalUsd} openaiOnly={openaiOnly} />
+              </div>
+            </FinopsFold>
+
+            <FinopsFold title="Top spenders">
+              <Leaderboard leaderboard={report.leaderboard ?? []} period={period} openaiOnly={openaiOnly} />
+            </FinopsFold>
+
+            {seatsShown && (
+              <FinopsFold title="Seats and licences">
+                <Panel>
+                  <div className="flex flex-col gap-2 text-[13px]">
+                    {report.chatgptSeats != null && isCurrentMonth && (
+                      <p className="m-0 text-[#4D4D4D]">
+                        {report.chatgptSeats.monthlyLicenceUsd != null ? (
+                          <>
+                            ChatGPT licence: {report.chatgptSeats.licensed} seats at {fmtUsd(report.chatgptSeats.monthlyPriceUsd ?? 0)} a month, {fmtUsd(report.chatgptSeats.monthlyLicenceUsd)}.
+                            OpenAI charges it apart from usage, so it is not in the figures above.
+                          </>
+                        ) : (
+                          <>ChatGPT: {report.chatgptSeats.licensed} seats. Add the seat price in Admin → System → FinOps to see the licence cost.</>
+                        )}
+                        {' '}{report.chatgptSeats.activeUsers30d} of {report.chatgptSeats.licensed} seats used ChatGPT in the last 30 days.
+                      </p>
+                    )}
+                    {report.seats != null && isCurrentMonth && claudeShown && (
+                      <p className="m-0 text-[#4D4D4D]">
+                        {report.seats.unused === 0 ? (
+                          openai ? 'All licensed Claude seats active in the last 30 days.' : 'All licensed seats active in the last 30 days.'
+                        ) : (
+                          <>
+                            {report.seats.unused} of {report.seats.licensed} licensed {openai ? 'Claude ' : ''}seats unused in the last 30 days
+                            {report.seats.estUnusedUsd != null && (
+                              <span className="text-[#1F6F8B]">
+                                {' '}(about {fmtUsd(report.seats.estUnusedUsd)} a month, estimate, for visibility, not billing)
+                              </span>
+                            )}
+                          </>
+                        )}
+                      </p>
+                    )}
+                  </div>
+                </Panel>
+              </FinopsFold>
             )}
           </>
         )}

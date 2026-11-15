@@ -8,13 +8,17 @@
  *   1. rollupCodeSessionStats() — recompute per-session rollups for sessions
  *      with new activity since the last run (high-water mark on ingested_at).
  *   2. runCodeHourlyAggregation() — write code_metrics snapshots per scope
- *      (user / team / function / organisation) over a 7-day window.
+ *      (user / team / function / organisation): 'rolling' over the last 30
+ *      days, 'rolling_prior' over the 30 days before that (the comparison),
+ *      'rolling_7d' over the last 7 days (the weekly readers), and 'week' per
+ *      calendar week.
  *
  * Follows the pattern in lib/db/error-queries.ts / lib/db/queries.ts and
  * mirrors lib/pulse/aggregator.ts's writeMetric for the
- * code_metrics rolling/week write semantics: 'rolling' rows are a plain
- * insert (the partial unique index `idx_code_metrics_week` — WHERE
- * granularity='week' — can never match a rolling row, so it always appends);
+ * code_metrics rolling/week write semantics: 'rolling', 'rolling_prior' and
+ * 'rolling_7d' rows are a plain insert (the partial unique index
+ * `idx_code_metrics_week` — WHERE granularity='week' — can never match them,
+ * so they always append);
  * 'week' rows are upserted via onConflictDoUpdate with
  * `targetWhere: sql\`granularity = 'week'\`` as the partial index arbiter.
  */
@@ -28,8 +32,20 @@ import { weekStart, weekStarts } from '@/lib/pulse/period';
 import { activeSecondsFromTimestamps } from '@/lib/pulse/session-active-time';
 import { codexSpend } from '@/lib/openai/spend';
 
-const SEVEN_DAYS = 7 * 24 * 60 * 60;
+const DAY = 24 * 60 * 60;
+/** Developer Pulse's headline window: the last 30 days, compared with the 30 days before. */
+export const ROLLING_WINDOW_DAYS = 30;
+const ROLLING_WINDOW = ROLLING_WINDOW_DAYS * DAY;
+/** The weekly readers' window (the This week in Code briefing, the dashboard briefing, Person 360). */
+const SEVEN_DAYS = 7 * DAY;
 export const ORG_SCOPE_ID = 'org';
+
+/**
+ * The snapshot kinds the hourly run writes. 'rolling' is the last 30 days,
+ * 'rolling_prior' the 30 days before that, 'rolling_7d' the last 7 days; all
+ * three append a fresh row each run. 'week' is one upserted row per calendar week.
+ */
+export type CodeMetricGranularity = 'rolling' | 'rolling_prior' | 'rolling_7d' | 'week';
 
 type TypedClient = Awaited<ReturnType<typeof getTypedClient>>;
 
@@ -385,7 +401,7 @@ export type CodeVendor = 'all' | 'claude' | 'openai';
 async function writeCodeMetric(
   client: TypedClient, scopeType: string, scopeId: string, periodStart: number, periodEnd: number,
   m: ReturnType<typeof computeScopeMetrics>, skillLeverage: number | null, otel: OtelMetricAgg,
-  granularity: 'rolling' | 'week' = 'rolling',
+  granularity: CodeMetricGranularity = 'rolling',
   vendor?: CodeVendor,
 ): Promise<void> {
   if (vendor) return writeVendorMetric(client, vendor, scopeType, scopeId, periodStart, periodEnd, m, skillLeverage, otel, granularity);
@@ -420,11 +436,11 @@ async function writeCodeMetric(
     computed_at: computedAt,
   };
 
-  if (granularity === 'rolling') {
+  if (granularity !== 'week') {
     // The unique index is partial (WHERE granularity='week'), so it never
-    // applies to a 'rolling' row: a plain insert always appends a fresh
+    // applies to a rolling row: a plain insert always appends a fresh
     // time-stamped snapshot and can never collide.
-    await client.insert(t).values({ ...values, granularity: 'rolling' });
+    await client.insert(t).values({ ...values, granularity });
     return;
   }
 
@@ -466,7 +482,7 @@ async function writeCodeMetric(
 async function writeVendorMetric(
   client: TypedClient, vendor: CodeVendor, scopeType: string, scopeId: string, periodStart: number, periodEnd: number,
   m: ReturnType<typeof computeScopeMetrics>, skillLeverage: number | null, otel: OtelMetricAgg,
-  granularity: 'rolling' | 'week',
+  granularity: CodeMetricGranularity,
 ): Promise<void> {
   const t = schema.codeMetricsVendor;
   const set = {
@@ -491,7 +507,7 @@ async function writeVendorMetric(
     computed_at: Math.floor(Date.now() / 1000),
   };
   const values = { vendor, scope_type: scopeType, scope_id: scopeId, period_start: periodStart, ...set, granularity };
-  if (granularity === 'rolling') {
+  if (granularity !== 'week') {
     await client.insert(t).values(values);
     return;
   }
@@ -558,12 +574,14 @@ async function runCodeHourlyAggregationInner(client: TypedClient): Promise<void>
   const now = Math.floor(Date.now() / 1000);
   const rates = await getCodeModelRates();
 
-  // Bound the scan to the rolling 7-day window at the SQL level — the weekly
-  // (calendar-week) window is always a subset of the rolling window, since a
-  // calendar week's start is at most 7 days back from `now`, so this single
-  // query covers both writers below; the JS filters partition rolling vs
-  // weekly sessions on top of this already-bounded set.
-  const rollingPeriodStart = now - SEVEN_DAYS;
+  // Bound the scan at the SQL level to the start of the prior 30-day window
+  // (60 days back). Every window below is a subset of it: the last 30 days,
+  // the 30 before, the last 7 days, and the calendar week (whose start is at
+  // most 7 days back from `now`), so this single query covers every writer;
+  // the JS filters partition the sessions on top of this already-bounded set.
+  const rollingPeriodStart = now - ROLLING_WINDOW;
+  const priorPeriodStart = rollingPeriodStart - ROLLING_WINDOW;
+  const sevenDayPeriodStart = now - SEVEN_DAYS;
   const css = schema.codeSessionStats;
   const allSessions = await client
     .select({
@@ -582,20 +600,22 @@ async function runCodeHourlyAggregationInner(client: TypedClient): Promise<void>
       last_at: css.last_at,
     })
     .from(css)
-    .where(gte(css.last_at, rollingPeriodStart));
+    .where(gte(css.last_at, priorPeriodStart));
 
   /**
    * Write org/user/team/function scope rows for a given session window.
-   * Shared by both the rolling (7-day) and weekly (calendar-week) writes so
-   * the team/department member-resolution logic exists exactly once.
+   * Shared by the rolling (30-day, prior 30-day, 7-day) and weekly
+   * (calendar-week) writes so the team/department member-resolution logic
+   * exists exactly once. `periodEnd` bounds a window that ends before now
+   * (the prior 30 days); omitted, the window runs to now.
    */
   type ScopeWriter = (scopeType: string, scopeId: string, scopeSessions: SessionRow[], memberIds: string[], isOrg: boolean) => Promise<void>;
 
-  async function writeScopes(sessions: SessionRow[], periodStart: number, granularity: 'rolling' | 'week', writer?: ScopeWriter): Promise<void> {
+  async function writeScopes(sessions: SessionRow[], periodStart: number, granularity: CodeMetricGranularity, writer?: ScopeWriter, periodEnd?: number): Promise<void> {
     const write: ScopeWriter = writer ?? (async (scopeType, scopeId, scopeSessions, memberIds) => {
-      await writeCodeMetric(client, scopeType, scopeId, periodStart, now,
-        computeScopeMetrics(scopeSessions, rates), await skillLeverageForUsers(client, memberIds, periodStart),
-        await otelMetricsForUsers(memberIds, periodStart), granularity);
+      await writeCodeMetric(client, scopeType, scopeId, periodStart, periodEnd ?? now,
+        computeScopeMetrics(scopeSessions, rates), await skillLeverageForUsers(client, memberIds, periodStart, periodEnd),
+        await otelMetricsForUsers(memberIds, periodStart, periodEnd), granularity);
     });
 
     // Organisation scope
@@ -659,9 +679,16 @@ async function runCodeHourlyAggregationInner(client: TypedClient): Promise<void>
     }
   }
 
-  // Rolling 7-day window (existing behaviour — byte-for-byte unchanged rows)
-  const rollingSessions = allSessions.filter(s => s.last_at >= rollingPeriodStart);
-  await writeScopes(rollingSessions, rollingPeriodStart, 'rolling');
+  // A session belongs to a window by its last_at, as everywhere in Developer Pulse.
+  const inRolling = (s: { last_at: number }) => s.last_at >= rollingPeriodStart;
+  const inPrior = (s: { last_at: number }) => s.last_at >= priorPeriodStart && s.last_at < rollingPeriodStart;
+  const inSevenDays = (s: { last_at: number }) => s.last_at >= sevenDayPeriodStart;
+
+  // The last 30 days (the headline figures), the 30 days before them (what
+  // they are compared with), and the last 7 days (the weekly readers).
+  await writeScopes(allSessions.filter(inRolling), rollingPeriodStart, 'rolling');
+  await writeScopes(allSessions.filter(inPrior), priorPeriodStart, 'rolling_prior', undefined, rollingPeriodStart);
+  await writeScopes(allSessions.filter(inSevenDays), sevenDayPeriodStart, 'rolling_7d');
 
   // Calendar-week window (new) — upserted, immutable once the week rolls over.
   // Weekly rows attribute a session's FULL totals to the week containing its
@@ -688,7 +715,7 @@ async function runCodeHourlyAggregationInner(client: TypedClient): Promise<void>
         : s;
     });
     // periodEnd is now for the current windows; a past week (below) passes its end, which also bounds every query.
-    const vendorWriter = (vendor: CodeVendor, periodStart: number, granularity: 'rolling' | 'week', periodEnd?: number): ScopeWriter =>
+    const vendorWriter = (vendor: CodeVendor, periodStart: number, granularity: CodeMetricGranularity, periodEnd?: number): ScopeWriter =>
       async (scopeType, scopeId, scopeSessions, memberIds, isOrg) => {
         const end = periodEnd ?? now;
         const base = computeScopeMetrics(scopeSessions, rates);
@@ -704,7 +731,8 @@ async function runCodeHourlyAggregationInner(client: TypedClient): Promise<void>
           const m = {
             ...base,
             spendUsd: codexUsd,
-            inputTokens: codex.inputTokens + codex.cachedTokens,
+            // Input excludes cached tokens, as Claude Code's does; they count in the cache-hit ratio.
+            inputTokens: codex.inputTokens,
             outputTokens: codex.outputTokens,
             cacheHitRatio: codex.inputTokens + codex.cachedTokens > 0 ? codex.cachedTokens / (codex.inputTokens + codex.cachedTokens) : null,
           };
@@ -719,7 +747,7 @@ async function runCodeHourlyAggregationInner(client: TypedClient): Promise<void>
         const m = {
           ...base,
           spendUsd: base.spendUsd === null && codexUsd === null ? null : (base.spendUsd ?? 0) + (codexUsd ?? 0),
-          inputTokens: base.inputTokens + codex.inputTokens + codex.cachedTokens,
+          inputTokens: base.inputTokens + codex.inputTokens,
           outputTokens: base.outputTokens + codex.outputTokens,
           cacheHitRatio: cacheDen > 0 ? (claudeCr + codex.cachedTokens) / cacheDen : null,
         };
@@ -728,7 +756,9 @@ async function runCodeHourlyAggregationInner(client: TypedClient): Promise<void>
       };
     for (const vendor of ['all', 'claude', 'openai'] as const) {
       const pick = (rows: typeof augmented) => vendor === 'all' ? rows : rows.filter(s => isCodexSession(s) === (vendor === 'openai'));
-      await writeScopes(pick(augmented.filter(s => s.last_at >= rollingPeriodStart)), rollingPeriodStart, 'rolling', vendorWriter(vendor, rollingPeriodStart, 'rolling'));
+      await writeScopes(pick(augmented.filter(inRolling)), rollingPeriodStart, 'rolling', vendorWriter(vendor, rollingPeriodStart, 'rolling'));
+      await writeScopes(pick(augmented.filter(inPrior)), priorPeriodStart, 'rolling_prior', vendorWriter(vendor, priorPeriodStart, 'rolling_prior', rollingPeriodStart));
+      await writeScopes(pick(augmented.filter(inSevenDays)), sevenDayPeriodStart, 'rolling_7d', vendorWriter(vendor, sevenDayPeriodStart, 'rolling_7d'));
       await writeScopes(pick(augmented.filter(s => s.last_at >= weeklyPeriodStart)), weeklyPeriodStart, 'week', vendorWriter(vendor, weeklyPeriodStart, 'week'));
     }
 

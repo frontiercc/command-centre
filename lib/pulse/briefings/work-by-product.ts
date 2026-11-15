@@ -3,28 +3,41 @@
 
 /**
  * Where the work happened, for the CIO and department briefings: sessions and
- * people per product (Cowork and each Claude in Office and Claude in Google app) over the period.
+ * people per product (Claude Chat, Cowork, each Claude in Office and Claude in
+ * Google app, and ChatGPT) over the period, so the model can compare products.
  * Measured, from the person's own prompts in cowork_messages (Office rows carry
- * `product`, NULL = Cowork), the same rule as the Work Pulse By product panel.
+ * `product`, NULL = Cowork; Claude Chat is surface 'chat'; ChatGPT is its own
+ * sources), the same rule as the Work Pulse By product panel. A person counts
+ * once in each product they used.
  *
- * Returns no lines when there is no Office activity in the period, or when
- * Claude in Office is hidden (Admin → Work Pulse), so a hub without Office
- * monitoring reads exactly as before.
+ * Returns no lines when only one product was used in the period. Office and
+ * Google rows are left out when Claude in Office is hidden (Admin → Work Pulse),
+ * and ChatGPT when it is hidden on the OpenAI panel.
  */
 import { and, eq, gte, inArray, lt, sql } from 'drizzle-orm';
 import { getTypedClient } from '@/lib/db/client';
 import { schema } from '@/lib/db/schema';
 import { getConfigValue } from '@/lib/config';
-import { messageVendor } from '@/lib/pulse/vendor-filter';
+import { openaiShown } from '@/lib/sources/openai-visibility';
+import { OPENAI_SOURCES } from '@/lib/openai/sources';
 import { PRODUCT_ORDER, productFullName, type WorkProduct } from '@/lib/pulse/cowork/products';
 
-export interface ProductActivity { product: WorkProduct; sessions: number; people: number }
+export type ActivityProduct = 'claude_chat' | WorkProduct | 'chatgpt';
+export interface ProductActivity { product: ActivityProduct; sessions: number; people: number }
+
+const ORDER: ActivityProduct[] = ['claude_chat', ...PRODUCT_ORDER, 'chatgpt'];
+// Fixed source names as literal SQL (not parameters), so the same expression can be selected and grouped by.
+const OPENAI_LIST = sql.raw(OPENAI_SOURCES.map(s => `'${s}'`).join(', '));
 
 export async function readWorkByProduct(userIds: string[] | null, sinceS: number, untilS: number): Promise<ProductActivity[]> {
   if (userIds && userIds.length === 0) return [];
   const client = await getTypedClient();
   const cm = schema.coworkMessages;
-  const productKey = sql<string>`COALESCE(${cm.product}, 'cowork')`;
+  // ChatGPT Work prompts share the Cowork surface and a NULL product, so they are
+  // keyed by source first and never counted as Cowork.
+  const productKey = sql<string>`CASE WHEN ${cm.source} IN (${OPENAI_LIST}) THEN 'chatgpt'
+    WHEN ${cm.surface} = 'chat' THEN 'claude_chat'
+    ELSE COALESCE(${cm.product}, 'cowork') END`;
   const rows = await client
     .select({
       product: productKey,
@@ -33,10 +46,7 @@ export async function readWorkByProduct(userIds: string[] | null, sinceS: number
     })
     .from(cm)
     .where(and(
-      sql`COALESCE(${cm.surface}, 'cowork') = 'cowork'`,
-      // Claude's only: ChatGPT Work prompts share the surface and a NULL product,
-      // and must never be counted as Cowork. The briefings' product facts cover ChatGPT.
-      messageVendor('claude'),
+      sql`COALESCE(${cm.surface}, 'cowork') IN ('cowork', 'chat')`,
       eq(cm.message_type, 'cowork_user_message'),
       gte(cm.occurred_at, sinceS),
       lt(cm.occurred_at, untilS),
@@ -44,27 +54,38 @@ export async function readWorkByProduct(userIds: string[] | null, sinceS: number
     ))
     .groupBy(productKey);
   const byProduct = new Map(rows.map(r => [r.product, r]));
-  return PRODUCT_ORDER
+  return ORDER
     .filter(p => byProduct.has(p))
     .map(p => ({ product: p, sessions: Number(byProduct.get(p)!.sessions), people: Number(byProduct.get(p)!.people) }));
 }
 
-/** Pure: the briefing lines, or none when no Office or Google app was used. States the list's count. */
+function productName(p: ActivityProduct): string {
+  if (p === 'claude_chat') return 'Claude Chat';
+  if (p === 'chatgpt') return 'ChatGPT';
+  if (p === 'cowork') return 'Cowork';
+  return `Claude in ${productFullName(p)}`;
+}
+
+/** Pure: the briefing lines, or none when fewer than two products were used. States the list's count. */
 export function workByProductLines(activity: ProductActivity[]): string[] {
-  const office = activity.filter(a => a.product !== 'cowork' && a.sessions > 0);
-  if (office.length === 0) return [];
   const used = activity.filter(a => a.sessions > 0);
+  if (used.length < 2) return [];
   return [
     `Where the work happened, ${used.length} products in total (measured sessions and people):`,
-    ...used.map(a => `${a.product === 'cowork' ? 'Cowork' : `Claude in ${productFullName(a.product)}`}: ${a.sessions} sessions by ${a.people} ${a.people === 1 ? 'person' : 'people'}`),
+    ...used.map(a => `${productName(a.product)}: ${a.sessions} ${a.sessions === 1 ? 'session' : 'sessions'} by ${a.people} ${a.people === 1 ? 'person' : 'people'}`),
   ];
 }
 
-/** Lines for a briefing; empty when hidden, when Office was not used, or on any failure. */
+/** Lines for a briefing; empty when fewer than two products were used, or on any failure. */
 export async function workByProductFacts(userIds: string[] | null, sinceS: number, untilS: number): Promise<string[]> {
   try {
-    if ((await getConfigValue('claudeInOfficeShown')) === 'false') return [];
-    return workByProductLines(await readWorkByProduct(userIds, sinceS, untilS));
+    const officeShown = (await getConfigValue('claudeInOfficeShown')) !== 'false';
+    const chatgptShown = await openaiShown();
+    const activity = (await readWorkByProduct(userIds, sinceS, untilS)).filter(a =>
+      a.product === 'chatgpt' ? chatgptShown
+        : a.product === 'claude_chat' || a.product === 'cowork' ? true
+        : officeShown);
+    return workByProductLines(activity);
   } catch {
     return [];
   }

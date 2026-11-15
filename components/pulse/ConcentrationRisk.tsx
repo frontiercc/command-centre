@@ -9,7 +9,7 @@
  * a risk. Nothing is judged here beyond the tiers the classifier already set.
  */
 import { Frame } from '@/components/pulse/WorkPulseOverview';
-import { tierNamesOr, type TierNames } from '@/lib/pulse/tier-names';
+import type { TierNames } from '@/lib/pulse/tier-names';
 
 interface ConcentrationRiskEntry {
   user_id: string;
@@ -38,10 +38,10 @@ interface ConcentrationRiskProps {
 }
 
 const AMBER = '#B54708';
-const kindWords = (ts: string[]) => ts.map(t => t.replace(/_/g, ' ')).join(', ');
+// The route sends each kind already worded (kindLabel), as Team Coaching words it.
+const kindWords = (ts: string[]) => ts.join(', ');
 
-export default function ConcentrationRisk({ risks, detail, skillConcentration, names }: ConcentrationRiskProps) {
-  const t = tierNamesOr(names);
+export default function ConcentrationRisk({ risks, detail, skillConcentration }: ConcentrationRiskProps) {
   const byUser = new Map((detail ?? []).map(d => [d.user_id, d]));
   const soleSkills = (skillConcentration ?? []).filter(s => s.skills.length > 0);
   const people = risks.length;
@@ -49,14 +49,14 @@ export default function ConcentrationRisk({ risks, detail, skillConcentration, n
     ? <>Nothing: every kind of work and every skill here is used by more than one person.</>
     : people === 0
       ? <><b>{soleSkills.length === 1 ? 'One person is' : `${soleSkills.length} people are`}</b> the only user of a skill. No kind of work is down to one person.</>
-      : <><b>{people === 1 ? 'One person is' : `${people} people are`}</b> the only one doing three or more kinds of {t.t3.toLowerCase()} work. If they left, it would stop.</>;
+      : <><b>{people === 1 ? 'One person is' : `${people} people are`}</b> the only one here doing a kind of work. If they left, it would stop.</>;
   return (
     <Frame
       title="Work only one person does"
       judged
       period="Last 30 days"
       answer={answer}
-      note="Counts the kinds of work, and the skills, that exactly one person here has used."
+      note="Counts the kinds of work done often enough to matter, at any depth, and the skills, that exactly one person here has used: the same rule as Team Coaching."
     >
       {risks.map(r => {
         const d = byUser.get(r.user_id);

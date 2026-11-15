@@ -3,6 +3,7 @@
 
 // Async Drizzle on Postgres.
 import Anthropic from '@anthropic-ai/sdk';
+import { briefingPeriodLabel } from '@/lib/pulse/briefings/described-facts';
 import { personPerProduct } from '@/lib/dashboard/product-sql';
 import { createAnthropicClient } from '@/lib/anthropic/client';
 import { createGroundedJson, paragraphsShape } from '@/lib/anthropic/grounded-json';
@@ -25,10 +26,6 @@ async function getClient(): Promise<Anthropic> {
   const apiKey = await getConfigValue('anthropicAiApiKey');
   if (!apiKey) throw new Error('No AI API key configured');
   return createAnthropicClient(apiKey);
-}
-
-function periodLabel(date: Date): string {
-  return date.toLocaleDateString('en-GB', { month: 'long', year: 'numeric' });
 }
 
 export async function generateDeptBriefing(
@@ -115,7 +112,7 @@ export async function generateDeptBriefing(
   const tierNames = await getTierNames();
   const ctx: DeptBriefingContext = {
     dept_name: dept,
-    period_label: periodLabel(new Date(periodStart * 1000)),
+    period_label: briefingPeriodLabel(periodStart, periodEnd),
     active_users: activeCount,
     total_classified: totalTier,
     tier_lines: tierLines(tierNames, tierCounts),

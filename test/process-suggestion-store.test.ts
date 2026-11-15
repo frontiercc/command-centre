@@ -68,6 +68,20 @@ describe('dept process suggestion storage (migration 077/0018)', () => {
     expect(all.find(s => s.signalKey === 'k-dept-1')!.products).toBeNull();
   });
 
+  it("counts a cited session found nowhere under the suggestion's own surface, so the split adds up", async () => {
+    await store.upsertOpenSuggestion({
+      signalKey: 'k-code-lost', title: 'Release notes drafting', description: null,
+      matchingRule: { skills: [], connectors: [], taskTypes: [], departments: ['Engineering'] },
+      evidence: { distinctUsers: 2, sessionCount: 3, departments: ['Engineering'] },
+      nowS: 1000, department: 'Engineering', canvas: { ...CANVAS, sessions: 3 }, surface: 'code',
+      citedSessions: ['lost-a', 'lost-b', 'chatgpt:z'],
+    });
+    const all = await store.listOpenSuggestions();
+    const p = all.find(s => s.signalKey === 'k-code-lost')!.products!;
+    expect(p).toEqual({ cowork: 0, code: 2, chatgpt: 1, codex: 0 });
+    expect(p.cowork + p.code + p.chatgpt + p.codex).toBe(3);
+  });
+
   it('round-trips use_cases canvas fields', async () => {
     const uc = await queries.createUseCase({ title: 'T', painPoint: 'p', valueHypothesis: 'v', baselineNote: 'b', kpiNote: 'k' });
     const back = (await queries.getUseCase(uc.id))!;
