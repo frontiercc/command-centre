@@ -62,7 +62,7 @@ function healthTone(value: string): 'good' | 'warn' | 'neutral' {
 }
 
 function formatDate(epochS: number | null): string {
-  return epochS ? new Date(epochS * 1000).toLocaleDateString('en-GB') : '—';
+  return epochS ? new Date(epochS * 1000).toLocaleDateString('en-GB') : 'never';
 }
 
 export default function UsersPage() {
@@ -161,7 +161,7 @@ export default function UsersPage() {
         <span className="inline-flex items-center gap-1.5">
           Deactivated
           {deactivated.length > 0 && (
-            <span className="text-[12px] text-[#245BF3] tabular-nums">{deactivated.length}</span>
+            <span className="text-[12px] text-[#1F6F8B] tabular-nums">{deactivated.length}</span>
           )}
         </span>
       ),
@@ -184,7 +184,7 @@ export default function UsersPage() {
             </Empty>
           ) : (
             <Panel title="Active users" subtitle={`${users.length} ${users.length === 1 ? 'person' : 'people'}`} flush>
-              <div className="overflow-x-auto">
+              <div className="relative overflow-x-auto">
                 <table className={T.table}>
                   <thead>
                     <tr className={T.headRow}>
@@ -206,7 +206,7 @@ export default function UsersPage() {
                             <div className="flex items-center gap-2">
                               <Tag tone="measured" title={badge.title}>{badge.label}</Tag>
                               <div className="min-w-0">
-                                <Link href={`/admin/users/${user.id}`} className="text-[#0A0A0A] font-medium hover:text-[#245BF3] hover:underline">
+                                <Link href={`/admin/users/${user.id}`} className="text-[#0A0A0A] font-medium hover:text-[#1F6F8B] hover:underline">
                                   {user.display_name || user.email}
                                 </Link>
                                 {user.display_name && (
@@ -271,7 +271,7 @@ export default function UsersPage() {
             </Empty>
           ) : (
             <Panel title="Deactivated users" subtitle={`${deactivated.length} ${deactivated.length === 1 ? 'person' : 'people'}`} flush>
-              <div className="overflow-x-auto">
+              <div className="relative overflow-x-auto">
                 <table className={T.table}>
                   <thead>
                     <tr className={T.headRow}>
@@ -303,7 +303,7 @@ export default function UsersPage() {
                             ? 'Auto (30d inactive)'
                             : user.deactivation_reason === 'manual_admin'
                             ? 'Manual'
-                            : (user.deactivation_reason ?? '—')}
+                            : (user.deactivation_reason ?? 'Not recorded')}
                         </td>
                         <td className={T.tdRight}>
                           <div className="flex items-center justify-end gap-1">

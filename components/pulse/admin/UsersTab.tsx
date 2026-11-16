@@ -6,6 +6,7 @@
 import { useEffect, useState } from 'react';
 import Link from 'next/link';
 import GenerateBriefingButton from '@/components/pulse/GenerateBriefingButton';
+import { deepShareOf } from '@/lib/pulse/tier-names';
 import { Panel, Muted, Tag, B, T, cx } from '@/components/precision/ui';
 import { PRODUCTS } from '@/lib/dashboard/vendor';
 
@@ -29,10 +30,10 @@ interface UserRow {
   failed_count: number;
 }
 
-type SortKey = 'name' | 'dept' | 'dds' | 'oti' | 'last_active';
+type SortKey = 'name' | 'dept' | 'deep' | 'last_active';
 
 function timeAgo(ts: number | null): string {
-  if (!ts) return '—';
+  if (!ts) return 'never';
   const s = Math.floor(Date.now() / 1000) - ts;
   if (s < 3600) return `${Math.floor(s / 60)}m ago`;
   if (s < 86400) return `${Math.floor(s / 3600)}h ago`;
@@ -41,13 +42,13 @@ function timeAgo(ts: number | null): string {
 
 function TierBar({ t1, t2, t3 }: { t1: number; t2: number; t3: number }) {
   const total = t1 + t2 + t3;
-  if (total === 0) return <span className="text-[13px] text-[#B3B3B3]">—</span>;
+  if (total === 0) return <span className="text-[13px] text-[#B3B3B3]">not judged</span>;
   // Tiers are AI-judged: sky blue steps, light to dark from Tier 1 to Tier 3.
   return (
     <div className="flex h-2 w-20 rounded-full overflow-hidden gap-px bg-[#F2F2F2]" title={`T1:${t1} T2:${t2} T3:${t3}`}>
       {t1 > 0 && <div className="bg-[#CCD1DB]" style={{ width: `${(t1 / total) * 100}%` }} />}
-      {t2 > 0 && <div className="bg-[#8DB2FC]" style={{ width: `${(t2 / total) * 100}%` }} />}
-      {t3 > 0 && <div className="bg-[#3D6CE8]" style={{ width: `${(t3 / total) * 100}%` }} />}
+      {t2 > 0 && <div className="bg-[#6BA3B8]" style={{ width: `${(t2 / total) * 100}%` }} />}
+      {t3 > 0 && <div className="bg-[#1F6F8B]" style={{ width: `${(t3 / total) * 100}%` }} />}
     </div>
   );
 }
@@ -58,8 +59,7 @@ function sortUsers(users: UserRow[], key: SortKey, asc: boolean): UserRow[] {
     switch (key) {
       case 'name': va = (a.display_name ?? a.email).toLowerCase(); vb = (b.display_name ?? b.email).toLowerCase(); break;
       case 'dept': va = (a.department ?? '').toLowerCase(); vb = (b.department ?? '').toLowerCase(); break;
-      case 'dds': va = a.dds ?? -1; vb = b.dds ?? -1; break;
-      case 'oti': va = a.oti ?? -1; vb = b.oti ?? -1; break;
+      case 'deep': va = deepShareOf(a.tier_1_count, a.tier_2_count, a.tier_3_count) ?? -1; vb = deepShareOf(b.tier_1_count, b.tier_2_count, b.tier_3_count) ?? -1; break;
       case 'last_active': va = a.last_active_at ?? 0; vb = b.last_active_at ?? 0; break;
       default: return 0;
     }
@@ -72,7 +72,7 @@ function sortUsers(users: UserRow[], key: SortKey, asc: boolean): UserRow[] {
 export default function UsersTab() {
   const [users, setUsers] = useState<UserRow[]>([]);
   const [loading, setLoading] = useState(true);
-  const [sortKey, setSortKey] = useState<SortKey>('dds');
+  const [sortKey, setSortKey] = useState<SortKey>('deep');
   const [sortAsc, setSortAsc] = useState(false);
   const [search, setSearch] = useState('');
 
@@ -153,8 +153,7 @@ export default function UsersTab() {
             <tr className={T.headRow}>
               <SortHdr k="name" label="Name" />
               <SortHdr k="dept" label="Department" />
-              <SortHdr k="dds" label="Depth" right />
-              <SortHdr k="oti" label="Valuable work" right />
+              <SortHdr k="deep" label="Meaningful or frontier" right />
               <th scope="col" className={T.th}>Tier mix</th>
               <SortHdr k="last_active" label="Last active" />
               <th scope="col" className={T.th}>Briefing</th>
@@ -178,12 +177,12 @@ export default function UsersTab() {
                     )}
                   </div>
                 </td>
-                <td className={T.tdMute}>{u.department ?? '—'}</td>
-                <td className={cx(T.tdRight, 'font-medium')}>
-                  {u.dds != null ? u.dds.toFixed(2) : '—'}
-                </td>
-                <td className={T.tdRight}>
-                  {u.oti != null ? `${u.oti.toFixed(2)}×` : '—'}
+                <td className={T.tdMute}>{u.department ?? 'No department'}</td>
+                <td className={cx(T.tdRight, 'font-medium tabular-nums')}>
+                  {(() => {
+                    const share = deepShareOf(u.tier_1_count, u.tier_2_count, u.tier_3_count);
+                    return share === null ? 'Not judged' : `${Math.round(share * 100)}% of tasks`;
+                  })()}
                 </td>
                 <td className={T.td}>
                   <TierBar

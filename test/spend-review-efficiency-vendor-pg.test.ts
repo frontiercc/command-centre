@@ -122,6 +122,9 @@ describe('spend review efficiency boards by vendor (postgres)', () => {
       await setConfigValue('openaiShown', 'false');
       const hidden = await buildSpendReviewIndex(PERIOD, NOW);
       expect(hidden.efficiencyOpenai).toEqual([]);
+      // No OpenAI board, so nothing to explain about one.
+      expect(hidden.summary.efficiencyReach?.openai).toBeNull();
+      expect(index.summary.efficiencyReach?.openai).toMatchObject({ enough: 2, cheaper: 1 });
       expect(hidden.summary.vendors).toBeUndefined();
       expect(hidden.efficiency.map(e => e.userId)).toEqual(['u-ana']);
       const hiddenMd = await buildSpendReviewSection('2026-09-01T00:00:00Z', '2026-09-30T23:59:59Z');

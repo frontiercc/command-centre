@@ -13,9 +13,9 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { visibleVendor, visibleOpenAi } from '@/lib/sources/openai-visibility';
 import { sql } from 'drizzle-orm';
-import { getAdminSession, canAccessCodePulse, isDeptScoped } from '@/lib/auth/admin-auth';
+import { getAdminSession, canAccessCodePulse, isDeptScoped, canAccessPulseAdmin } from '@/lib/auth/admin-auth';
 import { getTypedClient } from '@/lib/db/client';
-import { hasCodexData, pickCodeMetricsSource } from '@/lib/pulse/code/vendor-view';
+import { hasCodexData, pickCodeMetricsSource, latestRunStart } from '@/lib/pulse/code/vendor-view';
 
 export const dynamic = 'force-dynamic';
 
@@ -71,8 +71,9 @@ export async function GET(request: NextRequest) {
   const vendor = await visibleVendor(request.nextUrl.searchParams.get('vendor'));
   const codexPresent = await visibleOpenAi(hasCodexData());
 
-  // Latest user-scope code_metrics row per user, joined to identity.
-  // Users with no Code activity are excluded — this is a Developer Pulse view.
+  // Latest user-scope code_metrics row per user from the view's latest run,
+  // joined to identity. Users with no Code activity in it are excluded — this
+  // is a Developer Pulse view.
   const { table, only } = await pickCodeMetricsSource(vendor, codexPresent);
   const rawRows = await rawAll<RawUserRow>(client, sql`
      SELECT cm.scope_id AS user_id,
@@ -84,6 +85,7 @@ export async function GET(request: NextRequest) {
      JOIN (
        SELECT scope_id, MAX(id) AS max_id
        FROM ${table} WHERE scope_type = 'user' AND granularity = 'rolling' ${only}
+         AND computed_at >= ${latestRunStart(table, only)}
        GROUP BY scope_id
      ) latest ON latest.max_id = cm.id
      LEFT JOIN users u ON u.id = cm.scope_id
@@ -121,5 +123,20 @@ export async function GET(request: NextRequest) {
     products: productsByUser.get(r.user_id) ?? [],
   }));
 
+  // Each person's spend: admins and managers see everyone's. Anyone else gets only their own, with
+  // the list in name order, so neither a figure nor the order says what a colleague spent.
+  if (!canAccessPulseAdmin(session.role)) {
+    const mine = await rawAll<{ id: string }>(client, sql`
+      SELECT COALESCE(
+        (SELECT linked_cowork_user_id FROM admin_users WHERE id = ${session.userId ?? ''} LIMIT 1),
+        (SELECT id FROM users WHERE email = ${session.email ?? ''} LIMIT 1)
+      ) AS id
+    `);
+    const me = mine[0]?.id ?? null;
+    const hidden = rows
+      .map(r => (r.user_id === me ? r : { ...r, spend_usd: null, spend_hidden: true }))
+      .sort((a, b) => (a.display_name ?? a.email ?? '').localeCompare(b.display_name ?? b.email ?? ''));
+    return NextResponse.json({ users: hidden, vendor, codexPresent });
+  }
   return NextResponse.json({ users: rows, vendor, codexPresent });
 }

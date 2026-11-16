@@ -7,6 +7,7 @@ import { useEffect, useState } from 'react';
 import Link from 'next/link';
 import TopBar from '@/components/layout/TopBar';
 import LoadingSpinner from '@/components/shared/LoadingSpinner';
+import { useSessionRole } from '@/components/shared/useSessionRole';
 import {
   PageBody, Toolbar, Panel, PanelFoot, Strip, Figure, T, Tag, Pill, Notice, Empty, Spark, cx,
 } from '@/components/precision/ui';
@@ -24,6 +25,8 @@ interface GovernanceBet {
     platformHours?: { claude: number | null; openai: number | null };
     productSessions?: ProductSessions;
     productHours?: ProductHours;
+    sessionsThisWeek?: number;
+    hiddenActivity?: boolean;
   };
   estimated: { hoursRecovered: number };
   series: Array<number | null>;
@@ -46,6 +49,8 @@ interface GovernanceWorkflow {
   distinctUsers: number;
   platformSessions?: PlatformSessions;
   productSessions?: ProductSessions;
+  sessionsThisWeek?: number;
+  hiddenActivity?: boolean;
 }
 
 interface GovernanceRollup {
@@ -137,6 +142,14 @@ function GroupRow({ lifecycle, count, colSpan }: { lifecycle: string; count: num
   );
 }
 
+/** A use case's name, linked only for those who can open a use case (admins and managers). */
+function UseCaseName({ id, title, className }: { id: string; title: string; className: string }) {
+  const role = useSessionRole();
+  return role === 'admin' || role === 'manager'
+    ? <Link href={`/use-cases/${encodeURIComponent(id)}`} className={cx(className, 'hover:underline')}>{title}</Link>
+    : <span className={className}>{title}</span>;
+}
+
 function BetsPanel({ bets, minutesPerSession }: { bets: GovernanceBet[]; minutesPerSession: number }) {
   // The per-product lines say which products did the work, so Claude Code and Codex work is visible.
   const split = (bet: GovernanceBet) => productsWithSessions(bet.measured.productSessions).length > 0;
@@ -166,13 +179,10 @@ function BetsPanel({ bets, minutesPerSession }: { bets: GovernanceBet[]; minutes
             <tbody key={group.lifecycle}>
               <GroupRow lifecycle={group.lifecycle} count={group.bets.length} colSpan={6} />
               {group.bets.map(bet => {
-                const lifecycleLabel = LIFECYCLE_LABEL[bet.lifecycle] ?? bet.lifecycle;
                 return (
                   <tr key={bet.id} className={T.row}>
                     <td className={cx(T.td, 'min-w-[220px]')}>
-                      <Link href={`/use-cases/${encodeURIComponent(bet.id)}`} className="font-semibold text-[#0A0A0A] hover:underline">
-                        {bet.title}
-                      </Link>
+                      <UseCaseName id={bet.id} title={bet.title} className="font-semibold text-[#0A0A0A]" />
                       <div className="text-[13px] text-[#8F8F8F] mt-0.5">
                         Owner: {bet.ownerDisplayName ?? 'Unassigned'}
                         {bet.departments.length > 0 && <> · {bet.departments.join(', ')}</>}
@@ -180,30 +190,45 @@ function BetsPanel({ bets, minutesPerSession }: { bets: GovernanceBet[]; minutes
                     </td>
                     <td className={T.td}>
                       <LifecyclePill lifecycle={bet.lifecycle} />
-                      <div className="text-[13px] text-[#8F8F8F] mt-1 whitespace-nowrap">
-                        in {lifecycleLabel.toLowerCase()}{bet.weeksInLifecycle !== null ? ` for ${bet.weeksInLifecycle} ${bet.weeksInLifecycle === 1 ? 'week' : 'weeks'}` : ''}
-                      </div>
+                      {bet.weeksInLifecycle !== null && (
+                        <div className="text-[13px] text-[#8F8F8F] mt-1 whitespace-nowrap">
+                          {bet.weeksInLifecycle === 0 ? 'Since this week' : `For ${bet.weeksInLifecycle} ${bet.weeksInLifecycle === 1 ? 'week' : 'weeks'}`}
+                        </div>
+                      )}
                     </td>
                     <td className={T.td}>
                       <span role="img" aria-label={`${bet.title} weekly sessions`}><Spark data={bet.series} width={96} /></span>
                     </td>
-                    <td className={cx(T.tdRight, 'text-[#05073F] whitespace-nowrap')}>
-                      {bet.measured.sessions} {bet.measured.sessions === 1 ? 'session' : 'sessions'} · {bet.measured.distinctUsers} {bet.measured.distinctUsers === 1 ? 'user' : 'users'}
+                    <td className={cx(T.tdRight, 'text-[#1F6F8B] whitespace-nowrap')}>
+                      {/* "Piloting" never sits beside a bare 0: the lifecycle counts this week's sessions,
+                          which the 13 completed weeks (sessions and users) do not include yet. */}
+                      {bet.measured.sessions === 0 && (bet.measured.sessionsThisWeek ?? 0) > 0
+                        ? `${bet.measured.sessionsThisWeek} ${bet.measured.sessionsThisWeek === 1 ? 'session' : 'sessions'} this week`
+                        : bet.measured.sessions === 0 && bet.measured.hiddenActivity
+                          ? 'Used in hidden products'
+                          : <>{bet.measured.sessions} {bet.measured.sessions === 1 ? 'session' : 'sessions'}{' · '}{bet.measured.distinctUsers} {bet.measured.distinctUsers === 1 ? 'user' : 'users'}</>}
                       {split(bet) && (
                         <div className="text-[13px] tabular-nums mt-0.5">{sessionsSplit(bet.measured.productSessions)}</div>
                       )}
                     </td>
                     <td className={cx(T.tdRight, 'whitespace-nowrap')}>
                       {bet.measured.hours != null
-                        ? <span className="text-[#05073F]">{fmtHours(bet.measured.hours)} h</span>
+                        ? <span className="text-[#1F6F8B]">{fmtHours(bet.measured.hours)} h</span>
                         : <span className="text-[#8F8F8F]">Not measured</span>}
                       {split(bet) && (
-                        <div className="text-[13px] tabular-nums text-[#05073F] mt-0.5">{hoursSplit(bet.measured.productHours, bet.measured.productSessions)}</div>
+                        <div className="text-[13px] tabular-nums text-[#1F6F8B] mt-0.5">{hoursSplit(bet.measured.productHours, bet.measured.productSessions)}</div>
                       )}
                     </td>
-                    <td className={cx(T.tdRight, 'whitespace-nowrap text-[#2451F3]')}>
-                      ≈ {fmtHours(bet.estimated.hoursRecovered)} hrs
-                      <div className="text-[13px]">est. {minutesPerSession} min × {bet.measured.sessions} sessions</div>
+                    <td className={cx(T.tdRight, 'whitespace-nowrap text-[#1F6F8B]')}>
+                      {bet.measured.sessions > 0 ? (
+                        <>
+                          ≈ {fmtHours(bet.estimated.hoursRecovered)} hrs
+                          <div className="text-[13px]">est. {minutesPerSession} min × {bet.measured.sessions} sessions</div>
+                        </>
+                      ) : (
+                        // No completed-week sessions to estimate from yet: say so, not "≈ 0 hrs".
+                        <span className="text-[#8F8F8F]">Not estimated</span>
+                      )}
                     </td>
                   </tr>
                 );
@@ -246,20 +271,22 @@ function WorkflowsByLifecycle({ workflows, total }: { workflows: GovernanceWorkf
               {group.workflows.map(wf => (
                 <tr key={wf.id} className={T.row}>
                   <td className={cx(T.td, 'max-w-[280px]')}>
-                    <Link href={`/use-cases/${encodeURIComponent(wf.id)}`} className="font-medium text-[#0A0A0A] hover:underline truncate block">
-                      {wf.title}
-                    </Link>
+                    <UseCaseName id={wf.id} title={wf.title} className="font-medium text-[#0A0A0A] truncate block" />
                   </td>
                   <td className={T.td}><LifecyclePill lifecycle={wf.lifecycle} /></td>
                   <td className={T.td}>
                     <span role="img" aria-label={`${wf.title} weekly sessions`}><Spark data={wf.series} width={96} /></span>
                   </td>
                   <td className={cx(T.td, 'text-[13px] tabular-nums whitespace-nowrap')}>
-                    {sessionsSplit(wf.productSessions) ?? <span className="text-[#8F8F8F]">—</span>}
+                    {sessionsSplit(wf.productSessions) ?? ((wf.sessionsThisWeek ?? 0) > 0
+                      ? <span className="text-[#333333]">0 · {wf.sessionsThisWeek} this week</span>
+                      : wf.hiddenActivity
+                        ? <span className="text-[#333333]">0 · used in hidden products</span>
+                        : <span className="text-[#8F8F8F]">0</span>)}
                   </td>
                   <td className={cx(T.tdRight, 'whitespace-nowrap')}>
                     {wf.measuredHours != null ? (
-                      <span className="text-[#05073F]">{fmtHours(wf.measuredHours)} h</span>
+                      <span className="text-[#1F6F8B]">{fmtHours(wf.measuredHours)} h</span>
                     ) : (
                       <span className="text-[#8F8F8F]">Not measured</span>
                     )}
@@ -334,7 +361,7 @@ export default function UseCaseGovernancePage() {
         <PageBody>
           <Empty title="No strategic bets yet.">
             Mark a use case as a board-level bet on the{' '}
-            <Link href="/use-cases" className="text-[#05073F] hover:underline">
+            <Link href="/use-cases" className="text-[#1F6F8B] hover:underline">
               Use Cases register
             </Link>.
           </Empty>

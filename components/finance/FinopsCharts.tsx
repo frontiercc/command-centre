@@ -2,22 +2,23 @@
 // SPDX-License-Identifier: Apache-2.0
 
 /**
- * FinOps "charts A" row — spend trend, month-end projection, spend
- * concentration. Spend trend + concentration are pure presentational
- * wrappers around existing deterministic helpers (lib/finance/trend,
- * lib/finance/product-split over lib/pulse/code/concentration); the month-end
- * projection is computed server-side (`lib/finance/finops-projection.ts`, an
- * honest MTD run rate) and passed straight through — no client-side
- * recomputation. The trend and concentration bars are split by product
- * (Claude Code, Claude Cowork, ChatGPT, Codex) in the product colours.
+ * FinOps cards: spend trend, month-end projection, spend concentration. Spend
+ * trend + concentration are pure presentational wrappers around existing
+ * deterministic helpers (lib/finance/trend, lib/finance/product-split over
+ * lib/pulse/code/concentration); the month-end projection is computed
+ * server-side (`lib/finance/finops-projection.ts`, an honest MTD run rate) and
+ * passed straight through — no client-side recomputation. The trend and
+ * concentration bars are split by product (Claude Code, Claude Cowork,
+ * ChatGPT, Codex) in the product colours. The FinOps page places each card in
+ * its own folded section.
  */
-import { Panel, Tag, Bar, Muted, cx } from '@/components/precision/ui';
+import { Panel, Tag, Bar, Muted } from '@/components/precision/ui';
 import type { SpendProjection } from '@/lib/pulse/code/projection';
 import { MIN_PROJECTION_DAYS } from '@/lib/finance/finops-projection';
 import {
-  concentrationByProduct, productsPresent, legendGroups, partsOfRow,
-  PRODUCT_FILL, PRODUCT_NAME, PRODUCT_SHORT,
-  type FinopsProduct, type ProductParts, type ProductRow,
+  concentrationByProduct, productsPresent, legendGroups, partsOfRow, partsOfRows,
+  FINOPS_PRODUCTS, PRODUCT_FILL, PRODUCT_NAME, PRODUCT_SHORT,
+  type FinopsProduct, type ProductConcentrationTier, type ProductParts, type ProductRow,
 } from '@/lib/finance/product-split';
 
 export interface SpendTrendPoint {
@@ -123,7 +124,7 @@ function MonthBars({ series, products }: { series: SpendTrendPoint[]; products: 
   );
 }
 
-function SpendTrendCard({ trend, openaiOnly }: { trend: SpendTrend | null; openaiOnly: boolean }) {
+export function SpendTrendCard({ trend, openaiOnly }: { trend: SpendTrend | null; openaiOnly: boolean }) {
   if (!trend || !trend.render) {
     return (
       <Panel title="Spend trend">
@@ -138,7 +139,7 @@ function SpendTrendCard({ trend, openaiOnly }: { trend: SpendTrend | null; opena
     <Panel
       title="Spend trend"
       subtitle={`${periodLabel(first.period)} to ${periodLabel(latest.period)}`}
-      right={<span className="text-[13px] text-[#666666] tabular-nums">{latest.usd != null ? fmtUsd(latest.usd) : '—'} <span className="text-[#8F8F8F]">this month</span></span>}
+      right={<span className="text-[13px] text-[#666666] tabular-nums">{latest.usd != null ? fmtUsd(latest.usd) : 'not measured'} <span className="text-[#8F8F8F]">this month</span></span>}
     >
       <div className="flex flex-col gap-3">
         <MonthBars series={trend.series} products={products} />
@@ -148,7 +149,23 @@ function SpendTrendCard({ trend, openaiOnly }: { trend: SpendTrend | null; opena
   );
 }
 
-function ProjectionCard({ monthToDate, projection, byVendor, openaiOnly }: {
+/**
+ * The month-end projection as the page shows it: with both vendors' spend this
+ * month (and Claude shown) the total is the sum of the two parts as shown, to
+ * the cent, so the three figures always add up on screen; otherwise the plain
+ * projected total.
+ */
+export function projectionShown(
+  projection: SpendProjection,
+  byVendor: { claudeUsd: number; openaiUsd: number } | null,
+  openaiOnly: boolean,
+): { totalUsd: number; split: { claudeUsd: number; openaiUsd: number } | null } {
+  const split = byVendor && !openaiOnly && byVendor.claudeUsd > 0 && byVendor.openaiUsd > 0 ? byVendor : null;
+  const cents = (n: number) => Math.round(n * 100) / 100;
+  return { totalUsd: split ? cents(split.claudeUsd) + cents(split.openaiUsd) : projection.projected, split };
+}
+
+export function ProjectionCard({ monthToDate, projection, byVendor, openaiOnly }: {
   monthToDate: boolean;
   projection: SpendProjection | null;
   byVendor: { claudeUsd: number; openaiUsd: number } | null;
@@ -174,19 +191,19 @@ function ProjectionCard({ monthToDate, projection, byVendor, openaiOnly }: {
     );
   }
   // Split only with both vendors' spend this month (and Claude shown): otherwise the plain total.
-  const split = byVendor && !openaiOnly && byVendor.claudeUsd > 0 && byVendor.openaiUsd > 0 ? byVendor : null;
+  const { totalUsd: shownTotal, split } = projectionShown(projection, byVendor, openaiOnly);
   return (
     <Panel title="Month-end projection" right={<Tag tone="judged">Estimate</Tag>}>
       <div className="flex flex-col gap-2">
         {split ? (
           <p className="m-0 flex flex-col gap-0.5 tabular-nums">
             <span className="text-[14px] text-[#4D4D4D]">
-              Projected <span className="text-[24px] leading-7 font-semibold tracking-[-0.02em] text-[#2451F3]">{fmtUsd(projection.projected)}</span>:
+              Projected <span className="text-[24px] leading-7 font-semibold tracking-[-0.02em] text-[#1F6F8B]">{fmtUsd(shownTotal)}</span>:
             </span>
             <span className="text-[13px] text-[#4D4D4D]">Claude {fmtUsd(split.claudeUsd)} · ChatGPT and Codex {fmtUsd(split.openaiUsd)}</span>
           </p>
         ) : (
-          <span className="text-[24px] leading-7 font-semibold tracking-[-0.02em] tabular-nums text-[#2451F3]">{fmtUsd(projection.projected)}</span>
+          <span className="text-[24px] leading-7 font-semibold tracking-[-0.02em] tabular-nums text-[#1F6F8B]">{fmtUsd(projection.projected)}</span>
         )}
         <span className="text-[13px] text-[#666666] tabular-nums">Day {projection.daysElapsed} of {projection.daysInMonth}</span>
         <Bar pct={(projection.daysElapsed / Math.max(1, projection.daysInMonth)) * 100} tone="measured" height={6} />
@@ -207,8 +224,30 @@ function ProductShareBar({ parts, products }: { parts: ProductParts; products: F
   );
 }
 
-function ConcentrationCard({ costCentres, openaiOnly }: { costCentres: ProductRow[]; openaiOnly: boolean }) {
-  const tiers = concentrationByProduct(costCentres);
+/**
+ * Spend concentration over ALL of the month's spend (the FinOps grand total,
+ * unallocated included), so "Top 1" is the same number, rounded the same way,
+ * as the top row's share in the By cost centre table and "The top cost centre
+ * accounts for N%" in This month in cost (lib/finance/insights.ts). The tiers
+ * and their gating (enough centres, tiers smaller than the centre count) are
+ * concentrationByProduct's, unchanged; only the denominator is the grand total.
+ */
+export function concentrationOfTotal(centres: ProductRow[], grandTotalUsd: number): ProductConcentrationTier[] | null {
+  const tiers = concentrationByProduct(centres);
+  if (!tiers || !(grandTotalUsd > 0)) return null;
+  const ranked = centres.filter(c => c.totalUsd > 0).sort((a, b) => b.totalUsd - a.totalUsd);
+  return tiers.map(t => {
+    const head = ranked.slice(0, t.topN);
+    const headUsd = head.reduce((a, c) => a + c.totalUsd, 0);
+    const raw = partsOfRows(head, headUsd);
+    const parts: ProductParts = {};
+    for (const p of FINOPS_PRODUCTS) if (raw[p]) parts[p] = raw[p]! / grandTotalUsd;
+    return { topN: t.topN, share: headUsd / grandTotalUsd, parts };
+  });
+}
+
+export function ConcentrationCard({ costCentres, grandTotalUsd, openaiOnly }: { costCentres: ProductRow[]; grandTotalUsd: number; openaiOnly: boolean }) {
+  const tiers = concentrationOfTotal(costCentres, grandTotalUsd);
   if (!tiers) return null;
   const products = productsPresent(costCentres.map(partsOfRow), { openaiOnly });
   return (
@@ -232,33 +271,5 @@ function ConcentrationCard({ costCentres, openaiOnly }: { costCentres: ProductRo
         </div>
       </div>
     </Panel>
-  );
-}
-
-export default function FinopsCharts({
-  trend,
-  monthToDate,
-  projection,
-  projectionByVendor = null,
-  costCentres,
-  openaiOnly = false,
-}: {
-  trend: SpendTrend | null;
-  monthToDate: boolean;
-  projection: SpendProjection | null;
-  /** Claude's and OpenAI's projected month-end spend; null without the vendor split. */
-  projectionByVendor?: { claudeUsd: number; openaiUsd: number } | null;
-  /** Each cost centre's total and per-product figures. */
-  costCentres: ProductRow[];
-  /** Only OpenAI connected: Claude's products are left out of the bars and keys. */
-  openaiOnly?: boolean;
-}) {
-  const concentration = concentrationByProduct(costCentres);
-  return (
-    <div className={cx('grid grid-cols-1 gap-4', concentration ? 'md:grid-cols-[minmax(0,2fr)_minmax(0,1fr)_minmax(0,1fr)]' : 'md:grid-cols-[minmax(0,2fr)_minmax(0,1fr)]')}>
-      <SpendTrendCard trend={trend} openaiOnly={openaiOnly} />
-      <ProjectionCard monthToDate={monthToDate} projection={projection} byVendor={projectionByVendor} openaiOnly={openaiOnly} />
-      <ConcentrationCard costCentres={costCentres} openaiOnly={openaiOnly} />
-    </div>
   );
 }

@@ -7,6 +7,7 @@ import { useState } from 'react';
 import Link from 'next/link';
 import { T, cx } from '@/components/precision/ui';
 import { formatTokens, formatCurrency } from '@/components/pulse/code/CodeStatStrip';
+import { useSessionRole } from '@/components/shared/useSessionRole';
 
 export interface CodeUserRow {
   user_id: string;
@@ -23,6 +24,8 @@ export interface CodeUserRow {
   input_tokens: number;
   output_tokens: number;
   github_repo_count?: number;
+  /** Set on a colleague's row for a viewer who may not see their spend: no figure is sent. */
+  spend_hidden?: boolean;
 }
 
 type SortKey = 'spend_usd' | 'autonomy_ratio' | 'session_count' | 'repo_count' | 'cache_hit_ratio' | 'commit_count' | 'github_repo_count';
@@ -40,6 +43,9 @@ const GITHUB_REPOS_HEADER: Record<'all' | 'claude' | 'openai', string> = {
 export default function CodeUserTable({ users, showDepartment = true, githubBasis = 'all' }: { users: CodeUserRow[]; showDepartment?: boolean; githubBasis?: 'all' | 'claude' | 'openai' }) {
   const [sortKey, setSortKey] = useState<SortKey>('spend_usd');
   const [asc, setAsc] = useState(false);
+  // Developer Pulse Users refuses viewers, so a viewer sees names without a link.
+  const role = useSessionRole();
+  const canOpen = role !== '' && role !== 'viewer';
 
   const sorted = [...users].sort((a, b) => {
     const av = a[sortKey] ?? -1;
@@ -81,7 +87,7 @@ export default function CodeUserTable({ users, showDepartment = true, githubBasi
           <tr className={T.headRow}>
             <th scope="col" className={T.th}>User</th>
             {showDepartment && <th scope="col" className={T.th}>Department</th>}
-            {header('Spend · 7d', 'spend_usd')}
+            {header('Spend · 30d', 'spend_usd')}
             {header('Automation', 'autonomy_ratio')}
             {header('Sessions', 'session_count')}
             {header('Commits', 'commit_count')}
@@ -104,23 +110,25 @@ export default function CodeUserTable({ users, showDepartment = true, githubBasi
           ) : sorted.map(u => (
             <tr key={u.user_id} className={T.row}>
               <td className={T.td}>
-                <Link href={`/pulse/code/users?userId=${encodeURIComponent(u.user_id)}`} className="font-medium text-[#0A0A0A] hover:text-[#245BF3] hover:underline">
-                  {u.display_name || u.email || u.user_id}
-                </Link>
+                {canOpen ? (
+                  <Link href={`/pulse/code/users?userId=${encodeURIComponent(u.user_id)}`} className="font-medium text-[#0A0A0A] hover:text-[#1F6F8B] hover:underline">
+                    {u.display_name || u.email || u.user_id}
+                  </Link>
+                ) : <span className="font-medium text-[#0A0A0A]">{u.display_name || u.email || u.user_id}</span>}
               </td>
-              {showDepartment && <td className={T.tdMute}>{u.department ?? '—'}</td>}
+              {showDepartment && <td className={T.tdMute}>{u.department ?? 'No department'}</td>}
               <td className={cx(T.tdRight, 'font-medium')}>
-                {u.spend_usd === null ? '—' : formatCurrency(u.spend_usd)}
+                {u.spend_hidden ? 'hidden' : u.spend_usd === null ? (u.input_tokens + u.output_tokens === 0 ? 'not measured' : 'not priced') : formatCurrency(u.spend_usd)}
               </td>
               <td className={T.tdRight}>
-                {u.autonomy_ratio === null ? '—' : `${u.autonomy_ratio.toFixed(1)}×`}
+                {u.autonomy_ratio === null ? 'not measured' : `${u.autonomy_ratio.toFixed(1)}×`}
               </td>
               <td className={T.tdRight}>{u.session_count}</td>
               <td className={T.tdRight}>{u.commit_count ?? 0}</td>
               {showRepos && <td className={T.tdRight}>{u.repo_count}</td>}
               {showGithubRepos && <td className={T.tdRight}>{u.github_repo_count ?? 0}</td>}
               <td className={T.tdRight}>
-                {u.cache_hit_ratio === null ? '—' : `${Math.round(u.cache_hit_ratio * 100)}%`}
+                {u.cache_hit_ratio === null ? 'not measured' : `${Math.round(u.cache_hit_ratio * 100)}%`}
               </td>
               <td className={cx(T.tdRight, 'text-[#8F8F8F]')}>{formatTokens(u.input_tokens + u.output_tokens)}</td>
             </tr>

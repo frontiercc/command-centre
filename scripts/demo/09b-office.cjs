@@ -153,6 +153,8 @@ async function clean(db) {
   await db.query(`DELETE FROM use_case_session_judgements WHERE session_id LIKE $1`, [like]);
   await db.query(`DELETE FROM cowork_session_descriptions WHERE session_id LIKE $1`, [like]);
   await db.query(`DELETE FROM cowork_session_stats WHERE session_id LIKE $1`, [like]);
+  // Alerts the Hub raised on these prompts would point at nothing once they go.
+  await db.query(`DELETE FROM alerts WHERE raw_evidence->>'message_id' IN (SELECT id FROM cowork_messages WHERE session_id LIKE $1)`, [like]);
   await db.query(`DELETE FROM cowork_messages WHERE session_id LIKE $1`, [like]);
   await db.query(`DELETE FROM cowork_sessions WHERE id LIKE $1`, [like]);
 }

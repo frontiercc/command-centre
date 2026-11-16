@@ -66,7 +66,7 @@ describe('buildDeepWorkSummary (postgres)', () => {
   it('prompt lines carry no names', async () => {
     const { buildDeepWorkSummary, deepWorkLines } = await import('@/lib/pulse/briefings/deep-work-facts');
     const lines = deepWorkLines(await buildDeepWorkSummary(null, NOW - 30 * DAY, NOW));
-    expect(lines[0]).toBe('People doing Tier 3 work: 3 (5 sessions)');
+    expect(lines[0]).toBe('People doing Frontier work (the deepest tier): 3 (5 sessions)');
     expect(lines.join('\n')).toContain('analysis (3 sessions, 2 people)');
     expect(lines.join('\n')).toContain('Capabilities awaiting review: 1');
     expect(lines.join('\n')).toContain('of which 0 confirmed by a person so far. By kind of work: structured report (1 unreviewed)');
@@ -76,6 +76,6 @@ describe('buildDeepWorkSummary (postgres)', () => {
   it('says so plainly when there is no deep work', async () => {
     const { deepWorkLines } = await import('@/lib/pulse/briefings/deep-work-facts');
     expect(deepWorkLines({ tier3People: 0, tier3Sessions: 0, topKinds: [], newCapabilities: [], newCapabilitiesConfirmed: 0, pendingCapabilities: 0 }))
-      .toEqual(['No Tier 3 (autonomous, high-consequence) work in this period.', 'New capabilities detected: none']);
+      .toEqual(['No Frontier work (the deepest tier) in this period.', 'New capabilities detected: none']);
   });
 });

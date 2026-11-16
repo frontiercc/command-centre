@@ -53,6 +53,16 @@ describe('checkGroundedJson', () => {
     expect(checkGroundedJson('not json', allowed, shape).ok).toBe(false);
   });
 
+  it('reads the object with a sentence after it, or a raw line break inside a string', () => {
+    expect(checkGroundedJson(reply(['107 features.']) + '\n\nLet me know if you want more detail.', allowed, shape).ok).toBe(true);
+    expect(checkGroundedJson('{"paragraphs":["107 features.\nAll shipped."],"suggestion":"Keep going."}', allowed, shape).ok).toBe(true);
+  });
+
+  it('says whether the reply could not be read or was missing a field', () => {
+    expect(checkGroundedJson('not json', allowed, shape)).toEqual({ ok: false, reasons: ['the reply was not a readable JSON object'] });
+    expect(checkGroundedJson('{"text":"no paragraphs"}', allowed, shape)).toEqual({ ok: false, reasons: ['the reply was missing a required field'] });
+  });
+
   it('allows a number the model is meant to author (a risk score)', () => {
     const s = { parse: (o: unknown) => o as { score: number; text: string }, texts: (v: { text: string }) => [v.text], extraAllowed: (v: { score: number }) => [v.score] };
     expect(checkGroundedJson('{"score":27,"text":"Risk is 27."}', allowed, s).ok).toBe(true);
@@ -80,6 +90,13 @@ describe('createGroundedJson', () => {
     const r = await createGroundedJson({ ...base, client });
     expect(r.attempts).toBe(1);
     expect(calls).toHaveLength(1);
+  });
+
+  it('asks for thinking off, so a model that thinks by default cannot spend the reply on it', async () => {
+    const { client } = fakeClient([reply(['107 features out of 154.'])]);
+    await createGroundedJson({ ...base, model: 'claude-haiku-5-5', client });
+    const sent = (client.messages.create as unknown as { mock: { calls: Array<[Record<string, unknown>]> } }).mock.calls[0][0];
+    expect(sent.thinking).toEqual({ type: 'disabled' });
   });
 
   it('retries once with the offending numbers, and accepts a fixed reply', async () => {

@@ -217,12 +217,19 @@ describe('built-in tools', () => {
 });
 
 describe('efficiencyRatio', () => {
-  it('compares each kind of work with colleagues doing it, weighted by spend', () => {
-    // $80 on work at half colleagues' typical cost, $20 on work at twice it: 0.8*0.5 + 0.2*2 = 0.8.
+  it('is the median of each session against colleagues\' typical session for the same kind of work', () => {
+    // Writing: four $1 sessions against colleagues' $2 (0.5 each). Analysis: two $40 sessions against $4 (10 each).
+    // Ratios 0.5, 0.5, 0.5, 0.5, 10, 10: the median is 0.5.
+    // The old score (each kind's median, weighted by spend) was (4 * 0.5 + 80 * 10) / 84 = 9.55: no longer used.
     expect(efficiencyRatio([
-      { spend: 80, personMedian: 1, peerMedian: 2 },
-      { spend: 20, personMedian: 4, peerMedian: 2 },
-    ])).toBeCloseTo(0.8, 6);
+      { spends: [1, 1, 1, 1], peerMedian: 2 },
+      { spends: [40, 40], peerMedian: 4 },
+    ])).toBeCloseTo(0.5, 6);
+    // An even count takes the middle two: 0.5, 1, 1.5, 3 gives 1.25.
+    expect(efficiencyRatio([
+      { spends: [1, 3], peerMedian: 2 },
+      { spends: [2, 6], peerMedian: 2 },
+    ])).toBeCloseTo(1.25, 6);
   });
   it("only ranks work that stayed as deep as colleagues' (cheaper because shallower does not count)", () => {
     expect(keepsDepth(0.12, 0.03)).toBe(true);
@@ -231,8 +238,9 @@ describe('efficiencyRatio', () => {
     expect(keepsDepth(null, 0.2)).toBe(false);
   });
   it('ignores work with nothing to compare, and is null when nothing compares', () => {
-    expect(efficiencyRatio([{ spend: 50, personMedian: 1, peerMedian: null }, { spend: 50, personMedian: 3, peerMedian: 2 }])).toBeCloseTo(1.5, 6);
-    expect(efficiencyRatio([{ spend: 50, personMedian: null, peerMedian: 2 }])).toBeNull();
+    expect(efficiencyRatio([{ spends: [1, 1, 1], peerMedian: null }, { spends: [3], peerMedian: 2 }])).toBeCloseTo(1.5, 6);
+    expect(efficiencyRatio([{ spends: [3], peerMedian: 0 }])).toBeNull();
+    expect(efficiencyRatio([{ spends: [], peerMedian: 2 }])).toBeNull();
   });
 });
 

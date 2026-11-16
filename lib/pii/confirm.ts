@@ -18,6 +18,7 @@
  * schema-constrained by output_config rather than free-form JSON parsed inside
  * a try/catch. Do not copy the assess.ts parsing pattern here.
  */
+import { withThinkingOff } from '@/lib/anthropic/thinking';
 import { createAnthropicClient } from '@/lib/anthropic/client';
 import { extractText } from '@/lib/anthropic/constants';
 import { redactPii } from '@/lib/pii/detect';
@@ -118,7 +119,7 @@ export async function confirmPiiMatch(
 
     const client = createAnthropicClient(apiKey);
     const model = await getCoreAiModel();
-    const message = await queueAiCall(() => client.messages.create({
+    const message = await queueAiCall(() => client.messages.create(withThinkingOff({
       model,
       max_tokens: 256,
       system: CONFIRM_SYSTEM_PROMPT,
@@ -127,7 +128,7 @@ export async function confirmPiiMatch(
         role: 'user',
         content: `Identifier kind: ${piiType}\nMatched value (masked): ${maskedValue}\n\nMessage:\n${fenceUntrusted(messageText)}`,
       }],
-    }));
+    })));
 
     return parseVerdictResult(extractText(message));
   } catch {

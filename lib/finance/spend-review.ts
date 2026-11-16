@@ -35,7 +35,7 @@ import { jsonToText } from '@/lib/db/json';
 import { monthBounds } from '@/lib/finance/period';
 import { getCodeModelRates, priceTokens, type ModelRates, type TokenUsage } from '@/lib/pulse/code/rates';
 import { rankModelsByPrice, estimateCeilingUsd, modelPrice } from '@/lib/finance/model-tiering';
-import { normalizeModelId, OPENAI_CHAT_ONLY_MODELS, OPENAI_SPECIALIST_MODELS } from '@/lib/pulse/code/rates';
+import { normalizeModelId, OPENAI_SPECIALIST_MODELS, openaiModelOffered, type OpenAiProduct } from '@/lib/pulse/code/rates';
 import { isBuiltInTool } from '@/lib/finance/spend-review-builtins';
 import { buildSessionTaskTypeMap, parseCoworkTokenUsage, computeCostByType, computeCacheEfficiency, type ModelSpend } from '@/lib/finance/model-efficiency';
 import { formatTaskType } from '@/lib/pulse/events/capability';
@@ -43,6 +43,7 @@ import { codeWorkTypeLabel, codeWorkTypeDefinition } from '@/lib/pulse/code/work
 import { getCodeWorkTypeDefinitions } from '@/lib/pulse/code/tier-config';
 import { buildChargeback, mergeUsersById } from '@/lib/finance/chargeback';
 import { SpendSplitAcc, type SpendSplit } from '@/lib/finance/where-money-went';
+import { routeRank } from '@/lib/finance/spend-review-format';
 import { chatgptSessionShares, codexSessionTurns, type OpenAiFilter } from '@/lib/finance/spend-review-openai';
 
 export const PEER_WINDOW_DAYS = 90;
@@ -386,6 +387,12 @@ export function deriveModelFit(
   rates: ModelRates,
   /** The person's spend on this kind of work this month, for the share-based saving floor. */
   workSpendUsd: number | null = null,
+  /**
+   * ChatGPT only: by the person's model, where their sessions of this work on it ran (the Chat
+   * tab, ChatGPT Work or both). Advice moves them off their current model, so it names only a
+   * model offered wherever that model's sessions ran; unknown means Chat and Work.
+   */
+  chatgptProductsByModel: Map<string, OpenAiProduct[]> = new Map(),
 ): { rows: ModelFitRow[]; advice: ModelAdvice | null; trial: ModelAdvice | null } {
   const qualifies = (t: ModelTally | undefined) => !!t && t.people.size >= MIN_PEER_USERS && t.sessions >= MIN_PEER_SESSIONS;
   const models = new Set<string>([...you.keys(), ...[...colleagues.entries()].filter(([, t]) => qualifies(t)).map(([m]) => m)]);
@@ -414,7 +421,14 @@ export function deriveModelFit(
   // Enough colleague sessions of this work on a model to trust its outcome figures.
   const evidenced = (m: string) => (colleagues.get(m)?.sessions ?? 0) >= MIN_ADVICE_SESSIONS;
   const vendor = modelVendor(current);
-  const candidates = rows.filter(r => r.model !== current && modelVendor(r.model) === vendor && r.colleagues && price(r.model) !== null && evidenced(r.model));
+  // OpenAI: only a model the person can pick where they use their current one. ChatGPT's Chat
+  // tab and ChatGPT Work offer different models (rate card), and colleagues' sessions mix the two.
+  const ranOn = chatgptProductsByModel.get(current) ?? [];
+  const products: OpenAiProduct[] = surface === 'codex' ? ['codex']
+    : surface === 'chatgpt' ? (ranOn.length ? ranOn : ['chat', 'work'])
+    : [];
+  const offered = (m: string) => vendor === 'anthropic' || products.every(p => openaiModelOffered(normalizeModelId(m), p));
+  const candidates = rows.filter(r => r.model !== current && modelVendor(r.model) === vendor && offered(r.model) && r.colleagues && price(r.model) !== null && evidenced(r.model));
   const usage = personUsageByModel.get(current);
   const savingTo = (m: string) => usage ? estimateCeilingUsd(usage, current, m, rates) : null;
   const sessionsOn = (m: string) => colleagues.get(m)?.sessions ?? 0;
@@ -480,8 +494,8 @@ export function deriveModelFit(
     const pick = Object.keys(rates)
       .filter(m => (vendor === 'anthropic'
         ? m.startsWith('claude-')
-        // OpenAI: the product must offer the model (Chat-only models are not in Codex), and never a research model.
-        : modelVendor(m) === 'openai' && !OPENAI_SPECIALIST_MODELS.has(m) && !(surface === 'codex' && OPENAI_CHAT_ONLY_MODELS.has(m)))
+        // OpenAI: offered where this work ran, and never a research, law or cyber model.
+        : modelVendor(m) === 'openai' && !OPENAI_SPECIALIST_MODELS.has(m) && offered(m))
         && (price(m) ?? 0) > 0 && !evidenced(m) && m !== current)
       .filter(m => price(m)! <= cap)
       .map(m => ({ m, saving: savingTo(m), used: colleagues.has(m) || you.has(m) }))
@@ -590,6 +604,50 @@ interface SessionAcc {
   /** Filled only for the person under review (not the colleague population). */
   split: SpendSplitAcc;
   subagents: Set<string>;
+  /** ChatGPT only: the Chat tab, ChatGPT Work, or both, from the session's replies. */
+  openaiProducts?: OpenAiProduct[];
+}
+
+/**
+ * One key per model, so a dated or provider-decorated name and its plain name are one row
+ * (`claude-haiku-4-5-20251001` and `claude-haiku-4-5` both read "Claude Haiku 4.5"): the rate
+ * table's plain name when it prices the same. A name an admin priced differently keeps its own row.
+ * Spend is priced from the name as reported, before this.
+ */
+export function modelKey(model: string, rates: ModelRates): string {
+  const n = normalizeModelId(model);
+  const plain = rates[n.replace(/-\d{8}$/, '')] ? n.replace(/-\d{8}$/, '') : rates[n] ? n : null;
+  if (!plain || plain === model) return model;
+  const own = rates[model];
+  const same = !own || (own.in === rates[plain].in && own.out === rates[plain].out && own.cacheRead === rates[plain].cacheRead && own.cacheWrite === rates[plain].cacheWrite);
+  return same ? plain : model;
+}
+
+/** ChatGPT session id → where it ran (the Chat tab, ChatGPT Work, or both), from its replies' source. */
+async function chatgptProducts(client: Client, sessionIds: string[]): Promise<Map<string, OpenAiProduct[]>> {
+  const rp = schema.openaiReplies;
+  const out = new Map<string, OpenAiProduct[]>();
+  for (const r of await inChunks(sessionIds, part => client
+    .selectDistinct({ session_id: rp.session_id, source: rp.source })
+    .from(rp).where(and(inArray(rp.session_id, part), inArray(rp.source, ['chatgpt_chat', 'chatgpt_work']))))) {
+    const list = out.get(r.session_id) ?? [];
+    list.push(r.source === 'chatgpt_work' ? 'work' : 'chat');
+    out.set(r.session_id, list);
+  }
+  return out;
+}
+
+/** For a group of ChatGPT sessions: by each session's main model, the products those sessions ran in. */
+function productsOf(accs: SessionAcc[]): Map<string, OpenAiProduct[]> {
+  const sets = new Map<string, Set<OpenAiProduct>>();
+  for (const a of accs) {
+    const main = mainModel(a.spendByModel);
+    if (!main || !a.openaiProducts?.length) continue;
+    const s = sets.get(main) ?? new Set<OpenAiProduct>();
+    for (const p of a.openaiProducts) s.add(p);
+    sets.set(main, s);
+  }
+  return new Map([...sets].map(([m, s]) => [m, [...s]]));
 }
 
 type SessionFilter = { all: true } | { userId: string } | { sessionIds: string[] };
@@ -640,23 +698,24 @@ async function codeSpendBySession(
     if (!r.model) continue;
     const usage: TokenUsage = { inputTokens: Number(r.i) || 0, outputTokens: Number(r.o) || 0, cacheCreationTokens: Number(r.cw) || 0, cacheReadTokens: Number(r.cr) || 0 };
     const usd = priceTokens(r.model, usage, rates);
+    const model = modelKey(r.model, rates);
     if (withSplit) {
       const agent = r.agent || null;
-      acc.split.add({ model: r.model, subagent: agent, skill: r.skill || null, sourceRecorded: r.recorded === true || !!agent, usd, calls: Number(r.calls) || 0 });
+      acc.split.add({ model, subagent: agent, skill: r.skill || null, sourceRecorded: r.recorded === true || !!agent, usd, calls: Number(r.calls) || 0 });
       if (agent) acc.subagents.add(agent);
     }
     if (usd === null) { acc.hasUnpriced = true; acc.unpricedModels.add(r.model); unpriced.add(r.model); continue; }
     acc.spend += usd;
     acc.priced = true;
-    addNum(acc.spendByModel, r.model, usd);
-    addUsage(acc.usageByModel, r.model, usage);
+    addNum(acc.spendByModel, model, usd);
+    addUsage(acc.usageByModel, model, usage);
   }
   return out;
 }
 
 /** Cowork spend per session (the stored, measured cost_usd). */
 async function coworkSpendBySession(
-  client: Client, start: number, end: number,
+  client: Client, rates: ModelRates, start: number, end: number,
   filter: SessionFilter,
 ): Promise<Map<string, SessionAcc>> {
   const cm = schema.coworkMessages;
@@ -677,15 +736,16 @@ async function coworkSpendBySession(
     const acc = out.get(r.session_id) ?? newAcc('cowork', r.session_id, r.user_id);
     out.set(r.session_id, acc);
     const cost = r.cost_usd === null || r.cost_usd === undefined ? null : Number(r.cost_usd);
-    acc.split.add({ model: r.model, subagent: r.agent_name, skill: r.skill_name, sourceRecorded: r.query_source !== null || r.agent_name !== null, usd: cost !== null && Number.isFinite(cost) ? cost : null, calls: 1 });
+    const model = r.model ? modelKey(r.model, rates) : r.model;
+    acc.split.add({ model, subagent: r.agent_name, skill: r.skill_name, sourceRecorded: r.query_source !== null || r.agent_name !== null, usd: cost !== null && Number.isFinite(cost) ? cost : null, calls: 1 });
     if (r.agent_name) acc.subagents.add(r.agent_name);
     if (cost !== null && Number.isFinite(cost)) {
       acc.spend += cost;
       acc.priced = true;
-      if (r.model) addNum(acc.spendByModel, r.model, cost);
+      if (model) addNum(acc.spendByModel, model, cost);
     }
     const usage = parseCoworkTokenUsage(jsonToText(r.token_usage));
-    if (usage && r.model) addUsage(acc.usageByModel, r.model, usage);
+    if (usage && model) addUsage(acc.usageByModel, model, usage);
   }
   return out;
 }
@@ -701,16 +761,19 @@ async function chatgptSpendBySession(
   // Hidden on the OpenAI panel: Spend Review reads as Claude-only.
   if (!(await openaiShown())) return { accs: new Map(), unmatchedByUser: new Map() };
   const shared = await chatgptSessionShares(client, rates, start, end, filter);
+  const products = await chatgptProducts(client, [...shared.bySession.keys()]);
   const accs = new Map<string, SessionAcc>();
   for (const [sid, e] of shared.bySession) {
     const acc = newAcc('chatgpt', sid, e.userId);
+    acc.openaiProducts = products.get(sid) ?? [];
     accs.set(sid, acc);
     for (const p of e.parts) {
-      acc.split.add({ model: p.model, subagent: null, skill: null, sourceRecorded: true, usd: p.usd, calls: p.replies });
+      const model = p.model ? modelKey(p.model, rates) : p.model;
+      acc.split.add({ model, subagent: null, skill: null, sourceRecorded: true, usd: p.usd, calls: p.replies });
       if (p.usd === null) { acc.hasUnpriced = true; if (p.model) acc.unpricedModels.add(p.model); continue; }
       acc.spend += p.usd;
       acc.priced = true;
-      if (p.model) { addNum(acc.spendByModel, p.model, p.usd); addUsage(acc.usageByModel, p.model, p.usage); }
+      if (model) { addNum(acc.spendByModel, model, p.usd); addUsage(acc.usageByModel, model, p.usage); }
     }
   }
   if (unpriced) for (const m of shared.unpricedModels) unpriced.add(m);
@@ -728,11 +791,12 @@ async function codexSpendBySession(
     const acc = newAcc('codex', sid, e.userId);
     accs.set(sid, acc);
     for (const p of e.parts) {
-      acc.split.add({ model: p.model, subagent: null, skill: null, sourceRecorded: true, usd: p.usd, calls: p.turns });
+      const model = p.model ? modelKey(p.model, rates) : p.model;
+      acc.split.add({ model, subagent: null, skill: null, sourceRecorded: true, usd: p.usd, calls: p.turns });
       if (p.usd === null) { acc.hasUnpriced = true; if (p.model) acc.unpricedModels.add(p.model); continue; }
       acc.spend += p.usd;
       acc.priced = true;
-      if (p.model) { addNum(acc.spendByModel, p.model, p.usd); addUsage(acc.usageByModel, p.model, p.usage); }
+      if (model) { addNum(acc.spendByModel, model, p.usd); addUsage(acc.usageByModel, model, p.usage); }
     }
   }
   if (unpriced) for (const m of unpricedModels) unpriced.add(m);
@@ -834,7 +898,7 @@ export async function buildSpendReview(
 
   // 1. The person's sessions and spend this month.
   const codeAcc = await codeSpendBySession(client, rates, start, end, { userId }, unpriced, true);
-  const coworkAcc = await coworkSpendBySession(client, start, end, { userId });
+  const coworkAcc = await coworkSpendBySession(client, rates, start, end, { userId });
   const chatgpt = await chatgptSpendBySession(client, rates, start, end, { userId }, unpriced);
   const chatgptAcc = chatgpt.accs;
   const codexAcc = await codexSpendBySession(client, rates, start, end, { userId }, unpriced);
@@ -992,9 +1056,9 @@ export async function buildSpendReview(
     const p = pop ? peersExcluding(pop, userId) : undefined;
     const peerOk = !!p && p.users.size >= MIN_PEER_USERS && p.sessionSpends.length >= MIN_PEER_SESSIONS;
     const fit = p && peerOk
-      ? routesFor({ share, spendUsd, surface: g.surface, byModel: personByModel, usageByModel: personUsageByModel }, p, personTools, library, person.department, rates)
+      ? routesFor({ share, spendUsd, surface: g.surface, byModel: personByModel, usageByModel: personUsageByModel, products: productsOf(g.accs) }, p, personTools, library, person.department, rates)
       // Too few colleagues: still show the person's own models for this work.
-      : { routes: [], models: deriveModelFit(g.surface, personByModel, new Map(), personUsageByModel, rates, spendUsd).rows };
+      : { routes: [], models: deriveModelFit(g.surface, personByModel, new Map(), personUsageByModel, rates, spendUsd, productsOf(g.accs)).rows };
     const models = withPersonSpend(fit.models, personSpendByModel, spendUsd, new Set(g.accs.flatMap(a => [...a.unpricedModels])));
     const context = g.workKey && share >= MIN_WORK_SHARE_FOR_ROUTES && p && peerOk ? contextAdvice(personUsageByModel, p.usageByModel, rates) : null;
     if (context) fit.routes.push(context);
@@ -1230,7 +1294,7 @@ async function buildPopulation(client: Client, rates: ModelRates, start: number,
   const codexIds = idsOf('codex');
   const accs = [
     ...(await codeSpendBySession(client, rates, start, end, { sessionIds: codeIds }, new Set())).values(),
-    ...(await coworkSpendBySession(client, start, end, { sessionIds: coworkIds })).values(),
+    ...(await coworkSpendBySession(client, rates, start, end, { sessionIds: coworkIds })).values(),
     ...(chatgptIds.length ? (await chatgptSpendBySession(client, rates, start, end, { sessionIds: chatgptIds })).accs.values() : []),
     ...(codexIds.length ? (await codexSpendBySession(client, rates, start, end, { sessionIds: codexIds })).values() : []),
   ];
@@ -1310,14 +1374,14 @@ function emptyTools(): Tools {
  * of their sessions of that work: a habit, not an occasional reach.
  */
 function routesFor(
-  person: { share: number; spendUsd: number; surface: ReviewSurface; byModel: Map<string, ModelTally>; usageByModel: Map<string, TokenUsage> },
+  person: { share: number; spendUsd: number; surface: ReviewSurface; byModel: Map<string, ModelTally>; usageByModel: Map<string, TokenUsage>; products: Map<string, OpenAiProduct[]> },
   p: PeerKind,
   personTools: Tools,
   library: Map<string, { id: number; department: string | null }>,
   department: string | null,
   rates: ModelRates,
 ): { routes: ReviewRoute[]; models: ModelFitRow[] } {
-  const fit = deriveModelFit(person.surface, person.byModel, p.byModel, person.usageByModel, rates, person.spendUsd);
+  const fit = deriveModelFit(person.surface, person.byModel, p.byModel, person.usageByModel, rates, person.spendUsd, person.products);
   if (person.share < MIN_WORK_SHARE_FOR_ROUTES) return { routes: [], models: fit.rows };
   const toolRoutes: Extract<ReviewRoute, { kind: 'tool' }>[] = [];
   for (const [key, users] of p.toolUsers) {
@@ -1386,8 +1450,56 @@ export interface SpendReviewPerson {
   mainWork: { label: string; surface: ReviewSurface; share: number } | null;
   /** Distinct better routes across their kinds of work (a tool suggested for two kinds counts once). */
   routeCount: number;
+  /**
+   * The route the index leads with: the one with the largest estimated saving, else (none has a
+   * saving) the one on the work carrying most of their spend. Null exactly when routeCount is 0.
+   */
+  topRoute: SpendReviewTopRoute | null;
   /** Working figures for the efficiency boards, one per vendor; removed before the index is returned. */
   _efficiency?: Record<EfficiencyVendor, EfficiencyFigures | null>;
+}
+
+/**
+ * One better route, as the index lists it: what to change, the work it is for, and its
+ * estimated saving. Built from the same routes the route count counts.
+ */
+export type SpendReviewTopRoute = (
+  | { kind: 'tool'; toolType: 'skill' | 'connector'; name: string }
+  | { kind: 'model'; direction: 'save' | 'step_up' | 'trial'; fromModel: string; toModel: string }
+  | { kind: 'context' }
+  /** A scheduled task running on a costly model; cheaperFamilies as on the person's page (e.g. ["Sonnet", "Haiku"]). */
+  | { kind: 'scheduled'; name: string; fromModel: string | null; cheaperFamilies: string[] }
+) & {
+  /** The kind of work the route is for; for a scheduled task, the task's name. */
+  workLabel: string;
+  surface: ReviewSurface;
+  /** That work's (or task's) share of the person's spend this month. */
+  workShare: number;
+  /** Estimate: this month's sessions repriced at list price (a ceiling). Null when the route has no saving figure. */
+  estSavingUsd: number | null;
+};
+
+/** The route to lead with: largest estimated saving, then the bigger share of spend, then the first found. */
+export { routeRank };
+
+export function pickTopRoute(candidates: SpendReviewTopRoute[]): SpendReviewTopRoute | null {
+  let best: SpendReviewTopRoute | null = null;
+  for (const c of candidates) {
+    if (!best) { best = c; continue; }
+    const rc = routeRank(c), rb = routeRank(best);
+    if (rc !== rb) { if (rc < rb) best = c; continue; }
+    const a = c.estSavingUsd ?? -1;
+    const b = best.estSavingUsd ?? -1;
+    if (a > b || (a === b && c.workShare > best.workShare)) best = c;
+  }
+  return best;
+}
+
+/** A route from routesFor (or context advice) as the index lists it. */
+function indexRoute(r: ReviewRoute, work: { workLabel: string; surface: ReviewSurface; workShare: number }): SpendReviewTopRoute {
+  if (r.kind === 'tool') return { kind: 'tool', toolType: r.toolType, name: r.name, ...work, estSavingUsd: null };
+  if (r.kind === 'context') return { kind: 'context', ...work, estSavingUsd: null };
+  return { kind: 'model', direction: r.direction, fromModel: r.fromModel, toModel: r.toModel, ...work, estSavingUsd: r.estSavingUsd };
 }
 
 /** The two efficiency boards: Claude's work (Code, Cowork) and OpenAI's (ChatGPT, Codex), never mixed. */
@@ -1419,7 +1531,7 @@ export interface EfficiencyEntry {
   userId: string;
   displayName: string;
   department: string | null;
-  /** Spend-weighted ratio of the person's typical session cost to colleagues' for the same kinds of work (0.62 = 38% below). */
+  /** Median, across their comparable sessions, of each session's cost over colleagues' typical session for that kind of work (0.62 = 38% below). */
   vsColleagues: number;
   /** Comparable sessions behind it. */
   sessions: number;
@@ -1444,7 +1556,8 @@ export function keepsDepth(deepRate: number | null, peerDeepRate: number | null)
 export const EFFICIENCY_TOP = 10;
 
 interface Comparison {
-  comparable: Array<{ spend: number; personMedian: number | null; peerMedian: number | null }>;
+  /** Per kind of work with colleagues to compare against: the person's priced session spends, and colleagues' median session spend. */
+  kinds: Array<{ spends: number[]; peerMedian: number | null }>;
   sessions: number;
   tiered: number;
   deep: number;
@@ -1452,14 +1565,14 @@ interface Comparison {
   peerDeep: number;
 }
 function newComparison(): Comparison {
-  return { comparable: [], sessions: 0, tiered: 0, deep: 0, peerTiered: 0, peerDeep: 0 };
+  return { kinds: [], sessions: 0, tiered: 0, deep: 0, peerTiered: 0, peerDeep: 0 };
 }
 
 /** A person's figures for one vendor's board; null below EFFICIENCY_MIN_SESSIONS comparable sessions. */
 function efficiencyFigures(c: Comparison): EfficiencyFigures | null {
   if (c.sessions < EFFICIENCY_MIN_SESSIONS) return null;
   return {
-    vsColleagues: efficiencyRatio(c.comparable),
+    vsColleagues: efficiencyRatio(c.kinds),
     sessions: c.sessions,
     deepRate: c.tiered >= MIN_OUTCOME_SESSIONS ? c.deep / c.tiered : null,
     peerDeepRate: c.peerTiered >= MIN_OUTCOME_SESSIONS ? c.peerDeep / c.peerTiered : null,
@@ -1467,20 +1580,57 @@ function efficiencyFigures(c: Comparison): EfficiencyFigures | null {
 }
 
 /**
- * Spend-weighted ratio of a person's typical session cost to colleagues' for
- * the same kinds of work. Comparing like with like: a person doing bigger
- * kinds of work is compared with colleagues doing those kinds, not with
- * everyone. Null with nothing comparable.
+ * How a person's session cost compares with colleagues', session by session.
+ *
+ * Every comparable session (a priced session of a classified kind of work that
+ * enough colleagues also do: MIN_PEER_USERS people and MIN_PEER_SESSIONS
+ * sessions) gives one ratio: that session's spend over colleagues' median
+ * session spend for the same kind of work. The score is the median of those
+ * ratios, across all the person's kinds of work on one vendor:
+ *
+ *   vsColleagues = median over sessions s of ( spend(s) / peerMedian(kind of s) )
+ *
+ * Comparing like with like: a person doing bigger kinds of work is compared
+ * with colleagues doing those kinds, not with everyone. Pooling sessions keeps
+ * people whose work is spread over many kinds, each with only a session or
+ * two, and the median keeps one unusually dear or cheap session from moving
+ * the score. Kinds whose colleagues' median is missing or zero are skipped.
+ * Null with nothing comparable.
  */
-export function efficiencyRatio(kinds: Array<{ spend: number; personMedian: number | null; peerMedian: number | null }>): number | null {
-  let weight = 0;
-  let sum = 0;
+export function efficiencyRatio(kinds: Array<{ spends: number[]; peerMedian: number | null }>): number | null {
+  const ratios: number[] = [];
   for (const k of kinds) {
-    if (k.personMedian === null || k.peerMedian === null || k.peerMedian <= 0 || k.spend <= 0) continue;
-    weight += k.spend;
-    sum += k.spend * (k.personMedian / k.peerMedian);
+    if (k.peerMedian === null || k.peerMedian <= 0) continue;
+    for (const spend of k.spends) ratios.push(spend / k.peerMedian);
   }
-  return weight > 0 ? sum / weight : null;
+  return median(ratios);
+}
+
+/** How far people got towards one vendor's board, so an empty board can say why. */
+export interface EfficiencyReach {
+  /** People with at least one comparable session on this vendor's work. */
+  compared: number;
+  /** The most comparable sessions any one person had. */
+  mostSessions: number;
+  /** People with at least `minSessions` comparable sessions... */
+  enough: number;
+  /** ...and of those, people whose sessions cost less than colleagues' (before the depth rule). */
+  cheaper: number;
+  /** EFFICIENCY_MIN_SESSIONS. */
+  minSessions: number;
+}
+
+function newReach(): EfficiencyReach {
+  return { compared: 0, mostSessions: 0, enough: 0, cheaper: 0, minSessions: EFFICIENCY_MIN_SESSIONS };
+}
+
+function addReach(r: EfficiencyReach, c: Comparison, f: EfficiencyFigures | null): void {
+  if (c.sessions === 0) return;
+  r.compared += 1;
+  r.mostSessions = Math.max(r.mostSessions, c.sessions);
+  if (!f) return;
+  r.enough += 1;
+  if (f.vsColleagues !== null && f.vsColleagues < 1) r.cheaper += 1;
 }
 
 export interface SpendReviewIndex {
@@ -1514,6 +1664,12 @@ export interface SpendReviewIndex {
     peopleWithRoutes: number;
     /** Share of the month's list-price cost that is Claude re-reading earlier conversation, across everyone (Claude only). */
     orgRereadShare: number | null;
+    /**
+     * How far people got towards each efficiency board this month, so an empty
+     * board can say why. OpenAI's is null while ChatGPT and Codex are hidden.
+     * Absent from indexes cached before it existed.
+     */
+    efficiencyReach?: { claude: EfficiencyReach; openai: EfficiencyReach | null };
   };
 }
 
@@ -1542,6 +1698,8 @@ interface PersonKind {
   spend: number;
   usageByModel: Map<string, TokenUsage>;
   byModel: Map<string, ModelTally>;
+  /** The ChatGPT sessions, to tell where they ran (the Chat tab or ChatGPT Work). */
+  accs: SessionAcc[];
 }
 
 /**
@@ -1569,7 +1727,7 @@ export async function buildSpendReviewIndex(period: string, nowS: number = Math.
 
   // Every session this month, grouped per person by kind of work.
   const codeAcc = await codeSpendBySession(client, rates, start, end, { all: true }, new Set());
-  const coworkAcc = await coworkSpendBySession(client, start, end, { all: true });
+  const coworkAcc = await coworkSpendBySession(client, rates, start, end, { all: true });
   const chatgptAcc = (await chatgptSpendBySession(client, rates, start, end, { all: true })).accs;
   const codexAcc = await codexSpendBySession(client, rates, start, end, { all: true });
   const codeWork = await codeWorkTypes(client, [...codeAcc.keys(), ...codexAcc.keys()]);
@@ -1590,9 +1748,10 @@ export async function buildSpendReviewIndex(period: string, nowS: number = Math.
     const key = `${acc.surface}:${workKey ?? 'unclassified'}`;
     const kinds = kindsByUser.get(acc.userId) ?? new Map<string, PersonKind>();
     kindsByUser.set(acc.userId, kinds);
-    const k: PersonKind = kinds.get(key) ?? { surface: acc.surface, workKey, spend: 0, usageByModel: new Map(), byModel: new Map() };
+    const k: PersonKind = kinds.get(key) ?? { surface: acc.surface, workKey, spend: 0, usageByModel: new Map(), byModel: new Map(), accs: [] };
     kinds.set(key, k);
     k.spend += acc.spend;
+    if (acc.openaiProducts?.length) k.accs.push(acc);
     for (const [m, u] of acc.usageByModel) { addUsage(k.usageByModel, m, u); if (!(acc.surface === 'chatgpt' || acc.surface === 'codex')) addUsage(orgUsage, m, u); }
     const main = mainModel(acc.spendByModel);
     if (main) {
@@ -1624,6 +1783,7 @@ export async function buildSpendReviewIndex(period: string, nowS: number = Math.
     accsByUser.set(a.userId, list);
   }
 
+  const reach = { claude: newReach(), openai: newReach() };
   const people: SpendReviewPerson[] = users.map(u => {
     const info = peopleInfo.get(u.userId);
     const department = info?.department ?? null;
@@ -1632,6 +1792,7 @@ export async function buildSpendReviewIndex(period: string, nowS: number = Math.
     let mainWork: SpendReviewPerson['mainWork'] = null;
     // Distinct suggestions: Slack suggested for three kinds of work is one suggestion.
     const suggestions = new Set<string>();
+    const candidates: SpendReviewTopRoute[] = [];
     // Each vendor's work is scored on its own: a Claude score never borrows OpenAI sessions, or the reverse.
     const comp = { claude: newComparison(), openai: newComparison() };
     for (const [key, k] of kinds) {
@@ -1643,22 +1804,37 @@ export async function buildSpendReviewIndex(period: string, nowS: number = Math.
       const p = peersExcluding(pop, u.userId);
       if (p.users.size < MIN_PEER_USERS || p.sessionSpends.length < MIN_PEER_SESSIONS) continue;
       const mine = [...k.byModel.values()];
+      // Each priced session's spend, scored one by one against colleagues' median (efficiencyRatio).
       const mySpends = mine.flatMap(t => t.spends);
       if (mySpends.length) {
         const c = comp[efficiencyVendorOf(k.surface)];
-        c.comparable.push({ spend: k.spend, personMedian: median(mySpends), peerMedian: median(p.sessionSpends) });
+        c.kinds.push({ spends: mySpends, peerMedian: median(p.sessionSpends) });
         c.sessions += mine.reduce((a, t) => a + t.sessions, 0);
         c.tiered += mine.reduce((a, t) => a + t.tiered, 0);
         c.deep += mine.reduce((a, t) => a + t.deep, 0);
         for (const t of p.byModel.values()) { c.peerTiered += t.tiered; c.peerDeep += t.deep; }
       }
-      if (share >= MIN_WORK_SHARE_FOR_ROUTES && contextAdvice(k.usageByModel, p.usageByModel, rates)) suggestions.add('context');
-      for (const r of routesFor({ share, spendUsd: k.spend, surface: k.surface, byModel: k.byModel, usageByModel: k.usageByModel }, p, toolsByUser.get(u.userId) ?? emptyTools(), library, department, rates).routes) suggestions.add(suggestionKey(r));
+      // Every route counted is also a candidate for the one the index leads with, so the two agree.
+      const work = { workLabel: workLabel(k.surface, k.workKey, codeDefs), surface: k.surface, workShare: share };
+      const context = share >= MIN_WORK_SHARE_FOR_ROUTES ? contextAdvice(k.usageByModel, p.usageByModel, rates) : null;
+      if (context) { suggestions.add('context'); candidates.push(indexRoute(context, work)); }
+      for (const r of routesFor({ share, spendUsd: k.spend, surface: k.surface, byModel: k.byModel, usageByModel: k.usageByModel, products: productsOf(k.accs) }, p, toolsByUser.get(u.userId) ?? emptyTools(), library, department, rates).routes) {
+        suggestions.add(suggestionKey(r));
+        candidates.push(indexRoute(r, work));
+      }
     }
     // Scheduled tasks on a costly model count as suggestions too, as the person's page shows them.
     for (const t of scheduledTasksFrom(accsByUser.get(u.userId) ?? [], allTaskNames, () => null, rates)) {
-      if (t.cheaperFamilies.length) suggestions.add(`scheduled:${t.surface}:${t.name}`);
+      if (!t.cheaperFamilies.length) continue;
+      suggestions.add(`scheduled:${t.surface}:${t.name}`);
+      candidates.push({
+        kind: 'scheduled', name: t.name, fromModel: t.costlyModel, cheaperFamilies: t.cheaperFamilies,
+        workLabel: t.name, surface: t.surface, workShare: personTotal > 0 ? t.spendUsd / personTotal : 0, estSavingUsd: null,
+      });
     }
+    const figs = { claude: efficiencyFigures(comp.claude), openai: efficiencyFigures(comp.openai) };
+    addReach(reach.claude, comp.claude, figs.claude);
+    addReach(reach.openai, comp.openai, figs.openai);
     return {
       userId: u.userId,
       displayName: info?.displayName ?? u.displayName,
@@ -1672,16 +1848,15 @@ export async function buildSpendReviewIndex(period: string, nowS: number = Math.
       unpricedOnly: u.totalUsd === 0,
       mainWork,
       routeCount: suggestions.size,
-      _efficiency: {
-        claude: efficiencyFigures(comp.claude),
-        openai: efficiencyFigures(comp.openai),
-      },
+      topRoute: pickTopRoute(candidates),
+      _efficiency: figs,
     };
   });
   people.sort((a, b) => b.totalUsd - a.totalUsd);
   const efficiency = rankEfficiency(people, 'claude');
   // ChatGPT and Codex hidden (the OpenAI panel): no OpenAI board, as every other OpenAI figure.
-  const efficiencyOpenai = (await openaiShown()) ? rankEfficiency(people, 'openai') : [];
+  const openaiOn = await openaiShown();
+  const efficiencyOpenai = openaiOn ? rankEfficiency(people, 'openai') : [];
   for (const p of people) delete p._efficiency;
 
   const topWork = [...orgKindSpend.entries()]
@@ -1714,6 +1889,7 @@ export async function buildSpendReviewIndex(period: string, nowS: number = Math.
       topWork,
       peopleWithRoutes: people.filter(p => p.routeCount > 0).length,
       orgRereadShare: rereadShare(orgUsage, rates),
+      efficiencyReach: { claude: reach.claude, openai: openaiOn ? reach.openai : null },
     },
   };
 }

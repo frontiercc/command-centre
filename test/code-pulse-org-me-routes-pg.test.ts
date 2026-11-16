@@ -138,39 +138,40 @@ async function runSpec(): Promise<void> {
       { id: 'mi2', user_id: 'u1', session_id: 's1', mcp_server: 'workspace', mcp_tool: 'x', occurred_at: NOW - 1 * DAY },
     ]);
 
-    // ── code_metrics: org + user scope, current (rolling) + prior rows.
+    // ── code_metrics: org + user scope, the last 30 days ('rolling') and the
+    // 30 days before ('rolling_prior', what priorMetrics reads).
     // spend_usd is written as a STRING — numeric on pg requires it (mirrors
     // lib/pulse/code/aggregator.ts's writeCodeMetric). ──
     await client.insert(schema.codeMetrics).values([
       {
-        scope_type: 'organisation', scope_id: ORG_SCOPE_ID, period_start: NOW - 7 * DAY, period_end: NOW,
+        scope_type: 'organisation', scope_id: ORG_SCOPE_ID, period_start: NOW - 30 * DAY, period_end: NOW,
         spend_usd: '12.0', session_count: 2, repo_count: 2, commit_count: 3, skill_leverage: 0.5,
         friction_index: 0.4, active_time_user_s: 3600, active_time_cli_s: 1800, lines_added: 100,
         lines_removed: 20, pr_count: 1, edit_accept_count: 10, edit_reject_count: 2,
         granularity: 'rolling', computed_at: NOW,
       },
       {
-        scope_type: 'organisation', scope_id: ORG_SCOPE_ID, period_start: NOW - 17 * DAY, period_end: NOW - 10 * DAY,
+        scope_type: 'organisation', scope_id: ORG_SCOPE_ID, period_start: NOW - 60 * DAY, period_end: NOW - 30 * DAY,
         spend_usd: '8.0', autonomy_ratio: 0.4, cache_hit_ratio: 0.3, session_count: 1, repo_count: 1,
-        granularity: 'rolling', computed_at: NOW - 10 * DAY,
+        granularity: 'rolling_prior', computed_at: NOW,
       },
       // Oldest-first so the newest row gets the highest id: /api/pulse/code/{users,depts}
       // pick the latest per-scope row by MAX(id) (the aggregator writes append-only,
       // so higher id == newer), unlike org-summary/me which use MAX(computed_at).
       {
-        scope_type: 'user', scope_id: 'u1', period_start: NOW - 17 * DAY, period_end: NOW - 10 * DAY,
+        scope_type: 'user', scope_id: 'u1', period_start: NOW - 60 * DAY, period_end: NOW - 30 * DAY,
         spend_usd: '5.0', session_count: 1, repo_count: 1,
-        granularity: 'rolling', computed_at: NOW - 10 * DAY,
+        granularity: 'rolling_prior', computed_at: NOW,
       },
       {
-        scope_type: 'user', scope_id: 'u1', period_start: NOW - 7 * DAY, period_end: NOW,
+        scope_type: 'user', scope_id: 'u1', period_start: NOW - 30 * DAY, period_end: NOW,
         spend_usd: '12.0', session_count: 2, repo_count: 2, commit_count: 3,
         active_time_user_s: 3600, active_time_cli_s: 1800, lines_added: 100,
         granularity: 'rolling', computed_at: NOW,
       },
       // Function (department) scope — drives /api/pulse/code/depts (A2).
       {
-        scope_type: 'function', scope_id: 'Engineering', period_start: NOW - 7 * DAY, period_end: NOW,
+        scope_type: 'function', scope_id: 'Engineering', period_start: NOW - 30 * DAY, period_end: NOW,
         spend_usd: '12.0', session_count: 2, repo_count: 2, commit_count: 3,
         input_tokens: 2_000_000, output_tokens: 500_000,
         granularity: 'rolling', computed_at: NOW,
@@ -222,9 +223,18 @@ async function runSpec(): Promise<void> {
     // Spend concentration hidden below MIN_SPENDERS_FOR_CONCENTRATION (only 1 spender).
     expect(org.spendConcentration).toBeNull();
 
-    // Spend projection — priced spend exists in the last 7 days (a1+a2, both within 3 days).
-    expect(org.spendProjection).not.toBeNull();
-    expect(org.spendProjection.projected).toBeGreaterThan(0);
+    // Spend projection: FinOps's month-to-date method (the owner's rule, 2026-11-15). The
+    // priced rows are 1 to 3 days old, so early on the 1st or 2nd of a month some may fall in
+    // the month before; the newest one being month-to-date is enough to project from.
+    const nowDate = new Date(NOW * 1000);
+    const monthStart = Date.UTC(nowDate.getUTCFullYear(), nowDate.getUTCMonth(), 1) / 1000;
+    // Before day 7 nothing is projected, as on FinOps (MIN_PROJECTION_DAYS).
+    if (nowDate.getUTCDate() < 7) {
+      expect(org.spendProjection).toBeNull();
+    } else if (NOW - 1 * DAY >= monthStart) {
+      expect(org.spendProjection).not.toBeNull();
+      expect(org.spendProjection.projected).toBeGreaterThan(0);
+    }
 
     // Language Mix — SUM(doublePrecision), ordered desc.
     expect(org.languageMix).toEqual([
@@ -358,10 +368,39 @@ async function runSpec(): Promise<void> {
 
       const usersScopedRes = await usersGET(makeRequest('/api/pulse/code/users'));
       expect(usersScopedRes.status).toBe(200);
-      expect((await usersScopedRes.json()).users).toHaveLength(1);
+      const scopedUsers = (await usersScopedRes.json()).users;
+      expect(scopedUsers).toHaveLength(1);
+      // A colleague's spend is never sent to someone who is not an admin or manager.
+      expect(scopedUsers[0].spend_usd).toBeNull();
+      expect(scopedUsers[0].spend_hidden).toBe(true);
+
+      // Nor on the colleague's own page, which says it is hidden...
+      const colleague = await (await meGET(makeRequest('/api/pulse/code/me?userId=u1'))).json();
+      expect(colleague.userId).toBe('u1');
+      expect(colleague.spendHidden).toBe(true);
+      expect(colleague.metrics.spend_usd).toBeNull();
+      expect(colleague.priorMetrics.spend_usd).toBeNull();
+      expect(colleague.sessions.every((s: { spend_usd: number | null }) => s.spend_usd === null)).toBe(true);
+      expect(colleague.periodWork?.spendUsd ?? null).toBeNull();
+
+      // ...nor in the department's member table.
+      const { GET: deptGET } = await import('../app/api/pulse/code/dept/[dept]/route');
+      const deptBody = await (await deptGET(makeRequest('/api/pulse/code/dept/Engineering'), { params: Promise.resolve({ dept: 'Engineering' }) })).json();
+      const row = deptBody.members.find((m: { user_id: string }) => m.user_id === 'u1');
+      expect(row.spend_usd).toBeNull();
+      expect(row.spend_hidden).toBe(true);
+
+      // The person themself still sees their own spend.
+      mockSession.email = 'u1@test.com';
+      const own = (await (await usersGET(makeRequest('/api/pulse/code/users'))).json()).users[0];
+      expect(own.spend_usd).toBeCloseTo(12.0, 6);
+      const ownPage = await (await meGET(makeRequest('/api/pulse/code/me'))).json();
+      expect(ownPage.spendHidden).toBe(false);
+      expect(ownPage.metrics.spend_usd).toBeCloseTo(12.0, 6);
     } finally {
       mockSession.role = 'admin';
       mockSession.department = undefined;
+      mockSession.email = 'admin@test.com';
     }
   } finally {
     await cleanup();

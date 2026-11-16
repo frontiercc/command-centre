@@ -46,7 +46,7 @@ export function MonthPicker({ value, onChange }: { value: string; onChange: (v: 
 }
 
 export function money(n: number | null | undefined, currency = 'USD'): string {
-  if (n === null || n === undefined) return '—';
+  if (n === null || n === undefined) return 'not measured';
   const digits = Math.abs(n) >= 100 ? 0 : 2;
   // "$28.89" as everywhere else in CCC; other currencies keep their own symbol.
   const locale = currency === 'USD' ? 'en-US' : 'en-GB';
@@ -58,7 +58,7 @@ export function money(n: number | null | undefined, currency = 'USD'): string {
 }
 
 export function pct(share: number | null | undefined): string {
-  if (share === null || share === undefined) return '—';
+  if (share === null || share === undefined) return 'not measured';
   return `${Math.round(share * 100)}%`;
 }
 
@@ -101,7 +101,7 @@ export function LimitsNotice({ status }: { status: LimitsStatus }) {
 /** Bar for share of a limit used. Amber at the near-limit share, red at or over the limit. */
 export function LimitBar({ share, nearShare }: { share: number | null; nearShare: number }) {
   if (share === null) return <span className="text-[13px] text-[#8F8F8F]">No limit</span>;
-  const colour = share >= 1 ? 'bg-[#D92D20]' : share >= nearShare ? 'bg-[#DC8A00]' : 'bg-[#05073F]';
+  const colour = share >= 1 ? 'bg-[#D92D20]' : share >= nearShare ? 'bg-[#DC8A00]' : 'bg-[#1F6F8B]';
   return (
     <div className="flex items-center gap-2 min-w-[120px]">
       <div className="flex-1 h-1 rounded-full bg-[#F2F2F2] overflow-hidden">

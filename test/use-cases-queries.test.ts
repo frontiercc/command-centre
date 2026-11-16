@@ -183,7 +183,7 @@ describe('use cases config flag', () => {
   it('defaults the extract and ideate model keys', async () => {
     const { getAllConfig } = await import('@/lib/config');
     const cfg = await getAllConfig();
-    expect(cfg.useCasesExtractModel).toBe('claude-haiku-4-5-20251001');
+    expect(cfg.useCasesExtractModel).toBe('claude-haiku-5-5');
     expect(cfg.useCasesIdeateModel).toBe('claude-sonnet-5');
   });
 });

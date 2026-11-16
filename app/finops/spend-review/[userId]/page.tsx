@@ -3,7 +3,7 @@
 
 'use client';
 
-import { Fragment, Suspense, createContext, useContext, useEffect, useState } from 'react';
+import { Fragment, Suspense, createContext, useContext, useEffect, useState, type ReactNode } from 'react';
 import Link from 'next/link';
 import { useParams, useSearchParams } from 'next/navigation';
 import TopBar from '@/components/layout/TopBar';
@@ -18,6 +18,10 @@ import { displayDefinition } from '@/lib/pulse/code/work-type-labels';
 import WhereMoneyWent from '@/components/finance/WhereMoneyWent';
 import OfficeSpendPanel, { type OfficeSpendData } from '@/components/finance/OfficeSpendPanel';
 import { hasBreakdown, type SpendSplit } from '@/lib/finance/where-money-went';
+import { useAskPageNote } from '@/components/ask/useAskAvailable';
+import { SURFACE_COLOR, PRODUCT_COLOR } from '@/lib/ui/chart-colours';
+import { routeRank } from '@/lib/finance/spend-review-format';
+import { tierNamesOr, tierList, type TierNames } from '@/lib/pulse/tier-names';
 
 type Surface = SpendReviewSurface;
 
@@ -134,6 +138,8 @@ interface Review {
   canSeePrompts: boolean;
   /** Claude in Office, estimated from tokens, kept out of every figure above. null without Office activity. */
   office?: OfficeSpendData | null;
+  /** The organisation's depth tier names: Work Pulse's (Cowork, ChatGPT) and Code's (Code, Codex). */
+  tierNames?: { cowork: TierNames; code: TierNames };
 }
 
 /** With OpenAI connected, products are named "Claude Code", "ChatGPT" and so on. */
@@ -141,6 +147,17 @@ const OpenAiContext = createContext(false);
 function useSurfaceName(): (s: Surface) => string {
   const openai = useContext(OpenAiContext);
   return s => surfaceName(s, openai);
+}
+
+/**
+ * The organisation's tier names, from this page's own data: Cowork and ChatGPT sessions are
+ * judged on the Work Pulse rubric, Code and Codex sessions on the Code rubric. Until the data
+ * arrives (or if a name set is missing) the shipped names show.
+ */
+const TierNamesContext = createContext<{ cowork?: TierNames | null; code?: TierNames | null } | null>(null);
+function useTierNames(surface: Surface): TierNames {
+  const names = useContext(TierNamesContext);
+  return tierNamesOr(surface === 'cowork' || surface === 'chatgpt' ? names?.cowork : names?.code);
 }
 /** Below this many sessions in the current month, offer last month instead. */
 const EARLY_MONTH_SESSIONS = 5;
@@ -204,6 +221,7 @@ function routeKind(r: Route): string {
 }
 
 function RouteText({ r, name, surface }: { r: Route; name: string; surface: Surface }) {
+  const top = useTierNames(surface).t3.toLowerCase();
   if (r.kind === 'context') {
     const reader = surface === 'chatgpt' ? 'ChatGPT' : surface === 'codex' ? 'Codex' : 'Claude';
     return (
@@ -219,16 +237,16 @@ function RouteText({ r, name, surface }: { r: Route; name: string; surface: Surf
       <span>
         <span className="font-semibold">{r.peerUsers} colleagues</span> use the{' '}
         {r.libraryEntryId
-          ? <Link href={`/library/${r.libraryEntryId}`} className="font-medium text-[#245BF3] hover:underline">{r.name}</Link>
+          ? <Link href={`/library/${r.libraryEntryId}`} className="font-medium text-[#1F6F8B] hover:underline">{r.name}</Link>
           : <span className="font-medium">{r.name}</span>}{' '}
         {thing} for this work, in {pct(r.peerSessionShare)} of their sessions. {name} hasn&apos;t used it in the last 90 days.
       </span>
     );
   }
-  const outcome = r.metric === 'produced' ? 'produce a file' : 'reach deep (Tier 3) work';
+  const outcome = r.metric === 'produced' ? 'produce a file' : `reach ${top} work`;
   const fromWho = r.from.basis === 'colleagues' ? `on ${prettyModel(r.fromModel)}` : `on ${prettyModel(r.fromModel)} (${name}'s own sessions)`;
   const saving = r.estSavingUsd !== null && (
-    <span className="text-[#2451F3]"> About {money(r.estSavingUsd)} less this month at list price{r.savingShare !== null ? `, roughly ${pct(r.savingShare)} of this work's cost` : ''} (estimate).</span>
+    <span className="text-[#1F6F8B]"> About {money(r.estSavingUsd)} less this month at list price{r.savingShare !== null ? `, roughly ${pct(r.savingShare)} of this work's cost` : ''} (estimate).</span>
   );
   if (r.direction === 'save') {
     return (
@@ -258,11 +276,12 @@ function RouteText({ r, name, surface }: { r: Route; name: string; surface: Surf
   );
 }
 
-function ModelTable({ rows, name }: { rows: ModelFitRow[]; name: string }) {
+function ModelTable({ rows, name, surface }: { rows: ModelFitRow[]; name: string; surface: Surface }) {
+  const topTier = useTierNames(surface).t3;
   if (rows.length === 0) return null;
   const withColleagues = rows.some(r => r.colleagues);
   const showProduced = withColleagues && rows.some(r => r.colleagues?.producedRate != null);
-  const rate = (v: number | null | undefined) => (v === null || v === undefined ? '—' : pct(v));
+  const rate = (v: number | null | undefined) => (v === null || v === undefined ? 'not measured' : pct(v));
   const th = 'font-medium px-3 py-1.5 whitespace-nowrap';
   const td = 'px-3 py-1.5 tabular-nums';
   return (
@@ -278,16 +297,16 @@ function ModelTable({ rows, name }: { rows: ModelFitRow[]; name: string }) {
               <th scope="col" className={cx(th, 'text-right')}>Typical session</th>
               {withColleagues && <th scope="col" className={cx(th, 'text-right border-l border-[#EAEAEA]')}>Colleagues&apos; typical</th>}
               {showProduced && <th scope="col" className={cx(th, 'text-right')}>Produced a file</th>}
-              {withColleagues && <th scope="col" className={cx(th, 'text-right')}>Deep work</th>}
+              {withColleagues && <th scope="col" className={cx(th, 'text-right')}>{topTier} work</th>}
             </tr>
           </thead>
           <tbody>
             {rows.map(r => (
               <tr key={r.model} className="border-t border-[#F2F2F2]">
                 <td className="px-3 py-1.5 text-[#0A0A0A]">{prettyModel(r.model)}</td>
-                <td className={cx(td, 'text-right')}>{r.spendUsd === null ? <span className="text-[#B54708]">Not priced</span> : r.spendUsd > 0 ? <>{money(r.spendUsd)} <span className="text-[#8F8F8F]">{pct(r.spendShare)}</span></> : '—'}</td>
+                <td className={cx(td, 'text-right')}>{r.spendUsd === null ? <span className="text-[#B54708]">Not priced</span> : r.spendUsd > 0 ? <>{money(r.spendUsd)} <span className="text-[#8F8F8F]">{pct(r.spendShare)}</span></> : 'not measured'}</td>
                 <td className={cx(td, 'text-right')}>{r.you?.sessions ?? 0}</td>
-                <td className={cx(td, 'text-right')}>{r.you ? money(r.you.typicalSessionUsd) : '—'}</td>
+                <td className={cx(td, 'text-right')}>{r.you ? money(r.you.typicalSessionUsd) : 'not measured'}</td>
                 {withColleagues && (
                   <td className={cx(td, 'text-right border-l border-[#EAEAEA]')}>
                     {r.colleagues ? <>{money(r.colleagues.typicalSessionUsd)} <span className="text-[#8F8F8F]">({r.colleagues.people} people, {r.colleagues.sessions} sessions)</span></> : <span className="text-[#B3B3B3]">too few</span>}
@@ -348,78 +367,240 @@ function ReviewChip({ w }: { w: WorkRow }) {
   );
 }
 
-/** One table across Code and Cowork: each kind of work, its model split, spend and what to review. */
-function ModelEfficiency({ data, onShowAll }: { data: Review; onShowAll: () => void }) {
-  const me = data.modelEfficiency;
-  const rows = data.work.filter(w => w.spendUsd > 0 || w.models.length > 0);
-  const open = (key: string) => {
-    onShowAll();
-    setTimeout(() => document.getElementById(`work-${key}`)?.scrollIntoView({ behavior: 'smooth', block: 'start' }), 0);
-  };
+/** A product's colour on the spend bar, as on the Spend Review list and FinOps. */
+const PRODUCT_BAR: Record<Surface, string> = {
+  cowork: SURFACE_COLOR.cowork,
+  code: SURFACE_COLOR.code,
+  chatgpt: PRODUCT_COLOR.chatgpt_chat,
+  codex: PRODUCT_COLOR.codex,
+};
+
+/** Measured spend with a thin bar split by product, and each product's amount under it. */
+function SpendFigure({ data, products }: { data: Review; products: { surface: Surface; usd: number }[] }) {
+  const sn = useSurfaceName();
+  const sum = products.reduce((a, p) => a + Math.max(0, p.usd), 0);
+  const share = (usd: number) => (data.totals.totalUsd > 0 ? `${pct(usd / data.totals.totalUsd)} of spend` : null);
+  const split = products.map(p => [sn(p.surface), money(p.usd), share(p.usd)].filter(Boolean).join(' ')).join(' · ');
+  return (
+    <div className="p-4 flex flex-col gap-1.5 min-w-0">
+      <span className="text-[13px] text-[#666666]">
+        Measured spend <span className="text-[#8F8F8F]">· {data.isCurrentMonth ? 'month to date' : 'whole month'}</span>
+      </span>
+      <span className="text-[24px] leading-7 font-semibold tracking-[-0.02em] tabular-nums text-[#1F6F8B]">{money(data.totals.totalUsd)}</span>
+      {sum > 0 && (
+        <div className="flex h-1.5 rounded-full overflow-hidden gap-px bg-[#F2F2F2]" role="img" aria-label={split} title={split}>
+          {products.filter(p => p.usd > 0).map(p => (
+            <div key={p.surface} style={{ width: `${(p.usd / sum) * 100}%`, backgroundColor: PRODUCT_BAR[p.surface] }} />
+          ))}
+        </div>
+      )}
+      <span className="flex flex-wrap gap-x-1.5 gap-y-0.5 text-[13px] text-[#8F8F8F] tabular-nums">
+        {products.map((p, i) => (
+          <span key={p.surface} className="inline-flex items-center gap-1.5" title={share(p.usd) ?? undefined}>
+            {i > 0 && <span aria-hidden="true">·</span>}
+            <span className="inline-block w-2 h-2 rounded-full" style={{ backgroundColor: PRODUCT_BAR[p.surface] }} />
+            {sn(p.surface)} {money(p.usd)}
+          </span>
+        ))}
+      </span>
+    </div>
+  );
+}
+
+interface RouteItem { w: WorkRow; r: Route; key: string }
+
+/** Every route on the page, largest estimated saving first; routes without a saving keep the work order. */
+function routesBySaving(work: WorkRow[]): RouteItem[] {
+  const saving = (r: Route) => (r.kind === 'model' && r.estSavingUsd !== null ? r.estSavingUsd : -1);
+  const rank = (r: Route) => routeRank(r.kind === 'model' ? r : { kind: r.kind, estSavingUsd: null });
+  // Proven saves first, then untested trials, each largest saving first; routes with no saving after.
+  return work
+    .flatMap(w => w.routes.map((r, i) => ({ w, r, key: `${w.key}-${i}` })))
+    .sort((a, b) => rank(a.r) - rank(b.r) || saving(b.r) - saving(a.r));
+}
+
+/** The saving of the first route in that order: a proven save if there is one, else a trial. Null when none has a saving. */
+function largestSaving(items: RouteItem[]): number | null {
+  const first = items.find(x => x.r.kind === 'model' && x.r.estSavingUsd !== null);
+  return first && first.r.kind === 'model' ? first.r.estSavingUsd : null;
+}
+
+/** The better routes first, each with the kind of work and product it applies to. */
+function DoThis({ items, name, whose, when }: { items: RouteItem[]; name: string; whose: string; when: string }) {
+  const sn = useSurfaceName();
+  return (
+    <section className="bg-white border border-[#C9DEE6] rounded-[14px] min-w-0 overflow-hidden">
+      <div className="flex items-center gap-x-3 gap-y-1 flex-wrap px-4 py-3 bg-[#F5F8FF] border-b border-[#C9DEE6]">
+        <h2 className="m-0 text-[14px] font-semibold text-[#0A0A0A] leading-5">Do this</h2>
+        {items.length > 0 && (
+          <span className="text-[13px] text-[#8F8F8F]">
+            {items.length} better route{items.length === 1 ? '' : 's'}{items.length > 1 ? ', proven savings first' : ''}
+          </span>
+        )}
+      </div>
+      {items.length === 0 ? (
+        <p className="m-0 px-4 py-3 text-[14px] text-[#666666]">No better route waiting {when}.</p>
+      ) : (
+        items.map(({ w, r, key }) => (
+          <div key={key} className="px-4 py-3 border-t border-[#EEF5F8] first:border-t-0 flex items-start gap-2.5 text-[14px] leading-5 text-[#0A0A0A]">
+            <span className="mt-0.5 shrink-0"><Tag tone="measured">{routeKind(r)}</Tag></span>
+            <span className="min-w-0">
+              <span className="text-[#666666]">For {w.label} in {sn(w.surface)} ({pct(w.share)} of {whose} spend):</span>{' '}
+              <RouteText r={r} name={name} surface={w.surface} />
+            </span>
+          </div>
+        ))
+      )}
+    </section>
+  );
+}
+
+function Chevron({ open }: { open: boolean }) {
+  return (
+    <svg width="12" height="12" viewBox="0 0 12 12" aria-hidden="true" className={cx('mt-1 shrink-0 text-[#8F8F8F] transition-transform', open && 'rotate-90')}>
+      <path d="M4.5 2.5 8 6l-3.5 3.5" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" />
+    </svg>
+  );
+}
+
+/** One kind of work in "Where the money goes"; the row opens in place on its detail. */
+function WorkTableRow({ w, open, onToggle, modelOrder, name, peerDays }: {
+  w: WorkRow; open: boolean; onToggle: () => void; modelOrder: string[]; name: string; peerDays: number;
+}) {
+  const sn = useSurfaceName();
+  const detailId = `work-${w.key}`;
+  return (
+    <>
+      <tr className={cx(T.row, 'cursor-pointer', open && 'bg-[#FAFAFA]')} onClick={onToggle}>
+        <td className={cx(T.td, 'min-w-[10rem]')}>
+          <button
+            type="button"
+            aria-expanded={open}
+            aria-controls={detailId}
+            onClick={e => { e.stopPropagation(); onToggle(); }}
+            className="flex items-start gap-1.5 text-left"
+            title={w.definition && w.definition.toLowerCase() !== w.label.toLowerCase() ? `Covers: ${displayDefinition(w.definition)}` : undefined}
+          >
+            <Chevron open={open} />
+            <span className="min-w-0">
+              <span className="block font-medium text-[#0A0A0A] hover:text-[#1F6F8B] leading-snug">{w.label}</span>
+              <span className="mt-0.5 flex items-center gap-1.5 text-[13px] text-[#8F8F8F]">
+                <span>{sn(w.surface)}</span>
+                {w.workKey && (
+                  <span className="inline-flex items-center gap-1 text-[#1F6F8B]"><span className="w-1.5 h-1.5 rounded-full bg-[#6BA3B8]" />AI-judged</span>
+                )}
+              </span>
+              {/* Phones: the typical session and route columns are hidden, so they show here. */}
+              <span className="sm:hidden mt-1 flex flex-col items-start gap-1 text-[13px] text-[#666666]">
+                <span>Typical session {w.typicalSessionUsd === null ? 'not measured' : money(w.typicalSessionUsd)}{w.peer?.typicalSessionUsd != null ? `, colleagues ${money(w.peer.typicalSessionUsd)}` : ''}</span>
+                <ReviewChip w={w} />
+              </span>
+            </span>
+          </button>
+        </td>
+        <td className={cx(T.tdRight, 'whitespace-nowrap w-[22%] min-w-[8rem]')}>
+          <span className="block font-medium text-[#1F6F8B]">{money(w.spendUsd)}</span>
+          <span className="block text-[13px] text-[#8F8F8F]">{pct(w.share)} of spend</span>
+          <span className="block mt-1"><Bar pct={Math.max(1, Math.round(w.share * 100))} tone="measured" height={4} /></span>
+        </td>
+        <td className={cx(T.tdRight, 'whitespace-nowrap hidden sm:table-cell')}>
+          <span className="block text-[#0A0A0A]">{w.typicalSessionUsd === null ? <span className="text-[#8F8F8F]">not measured</span> : money(w.typicalSessionUsd)}</span>
+          <span className="block text-[13px] text-[#8F8F8F] min-h-[1rem]">{w.peer?.typicalSessionUsd != null && `colleagues ${money(w.peer.typicalSessionUsd)}`}</span>
+        </td>
+        <td className={cx(T.tdRight, 'hidden sm:table-cell')}><ReviewChip w={w} /></td>
+      </tr>
+      {open && (
+        <tr id={detailId} className="bg-[#FAFAFA]">
+          <td colSpan={4} className="px-4 pb-4 pt-1">
+            <WorkDetail w={w} name={name} peerDays={peerDays} modelOrder={modelOrder} />
+          </td>
+        </tr>
+      )}
+    </>
+  );
+}
+
+/** Today's Model efficiency rows and per-kind cards, as one table whose rows open on the detail. */
+function WhereTheMoneyGoes({ data, name, showAll, onShowAll }: { data: Review; name: string; showAll: boolean; onShowAll: (v: boolean) => void }) {
+  const [openKey, setOpenKey] = useState<string | null>(null);
+  const sn = useSurfaceName();
+  const classified = data.work.filter(w => w.workKey).reduce((a, w) => a + w.spendUsd, 0);
+  const top = data.work.find(w => w.workKey && w.spendUsd > 0);
+  const rows = showAll ? data.work : data.work.slice(0, TOP_WORK_SHOWN);
   return (
     <Panel
-      title="Model efficiency"
-      subtitle={<>Kind of work is <span className="text-[#2451F3]">AI-judged</span>; spend and model split are <span className="text-[#05073F] font-medium">measured</span>. Click a row for the detail.</>}
+      title="Where the money goes"
+      badge={<Tag tone="judged">AI-judged kinds</Tag>}
+      subtitle={<>Kind of work is <span className="text-[#1F6F8B]">AI-judged</span>; spend and model split are <span className="text-[#1F6F8B] font-medium">measured</span>. Open a row for the detail.</>}
       flush
     >
+      {top && classified > 0 && (
+        <p className="m-0 px-4 pt-3 pb-1 text-[14px] leading-6 text-[#0A0A0A]">
+          {pct(top.share)} of {name}&apos;s spend {data.isCurrentMonth ? 'this month' : `in ${monthName(data.period)}`} went on {sn(top.surface)} sessions judged as {lowerFirst(top.label)}.
+          {data.isCurrentMonth && new Date().getUTCDate() <= EARLY_MONTH_DAYS && (
+            <span className="text-[#666666]"> Early in the month: so far {sessionsFact(top)}.</span>
+          )}
+        </p>
+      )}
       <div className="overflow-x-auto">
         <table className={T.table}>
           <thead>
             <tr className={T.headRow}>
               <th scope="col" className={T.th}>Kind of work</th>
-              <th scope="col" className={cx(T.th, 'w-[30%]')}>Model split</th>
               <th scope="col" className={T.thRight}>Spend</th>
-              <th scope="col" className={T.thRight}>Typical session</th>
-              <th scope="col" className={T.thRight}>Review</th>
+              <th scope="col" className={cx(T.thRight, 'hidden sm:table-cell')}>Typical session</th>
+              <th scope="col" className={cx(T.thRight, 'hidden sm:table-cell')}>Route</th>
             </tr>
           </thead>
           <tbody>
             {rows.map(w => (
-              <tr key={w.key} className={cx(T.row, 'cursor-pointer')} onClick={() => open(w.key)}>
-                <td className={cx(T.td, 'min-w-[11rem]')}>
-                  <button
-                    type="button"
-                    onClick={e => { e.stopPropagation(); open(w.key); }}
-                    className="block text-left font-medium text-[#0A0A0A] hover:text-[#245BF3] leading-snug"
-                    title={w.definition && w.definition.toLowerCase() !== w.label.toLowerCase() ? `Covers: ${displayDefinition(w.definition)}` : undefined}
-                  >
-                    {w.label}
-                  </button>
-                  <span className="mt-0.5 flex items-center gap-1.5 text-[13px] text-[#8F8F8F]">
-                    <span>{surfaceName(w.surface, !!data.openai)}</span>
-                    {w.workKey && (
-                      <span className="inline-flex items-center gap-1 text-[#2451F3]"><span className="w-1.5 h-1.5 rounded-full bg-[#699BFB]" />AI-judged</span>
-                    )}
-                  </span>
-                </td>
-                <td className={T.td}><SplitBar w={w} modelOrder={me.modelOrder} /></td>
-                <td className={cx(T.tdRight, 'whitespace-nowrap')}>
-                  <span className="block font-medium text-[#0A0A0A]">{money(w.spendUsd)}</span>
-                  <span className="block text-[13px] text-[#8F8F8F]">{pct(w.share)} of spend</span>
-                </td>
-                <td className={cx(T.tdRight, 'whitespace-nowrap')}>
-                  <span className="block text-[#0A0A0A]">{money(w.typicalSessionUsd)}</span>
-                  <span className="block text-[13px] text-[#8F8F8F] min-h-[1rem]">{w.peer?.typicalSessionUsd != null && `colleagues ${money(w.peer.typicalSessionUsd)}`}</span>
-                </td>
-                <td className={T.tdRight}><ReviewChip w={w} /></td>
-              </tr>
+              <WorkTableRow
+                key={w.key}
+                w={w}
+                open={openKey === w.key}
+                onToggle={() => setOpenKey(k => (k === w.key ? null : w.key))}
+                modelOrder={data.modelEfficiency.modelOrder}
+                name={name}
+                peerDays={data.peerWindowDays}
+              />
             ))}
           </tbody>
         </table>
       </div>
-      {me.modelOrder.length > 0 && (
-        <div className="px-4 py-2.5 border-t border-[#F2F2F2] flex flex-wrap items-center gap-x-4 gap-y-1 text-[13px] text-[#8F8F8F]">
-          {modelsByLabel(me.modelOrder).map(m => (
-            <span key={m} className="inline-flex items-center gap-1.5">
-              <span className="inline-block w-2.5 h-2 rounded-full" style={{ backgroundColor: shadeForModel(m, me.modelOrder) }} />
-              {prettyModel(m)}
-            </span>
-          ))}
-          <span>most expensive first</span>
-        </div>
-      )}
-      <CostDrivers report={me} />
+      <div className="px-4 py-2.5 border-t border-[#F2F2F2] flex items-center gap-x-4 gap-y-1 flex-wrap">
+        {data.work.length > TOP_WORK_SHOWN && (
+          <button type="button" onClick={() => onShowAll(!showAll)} className={B.link}>
+            {showAll ? `Show the top ${TOP_WORK_SHOWN} only` : `Show all ${data.work.length} kinds of work`}
+          </button>
+        )}
+        <span className="sm:ml-auto text-[13px] text-[#8F8F8F]">
+          Colleague figures cover other people&apos;s sessions of the same kind of work in the last {data.peerWindowDays} days, and only show when at least three people did it. Colleagues are never named.
+        </span>
+      </div>
     </Panel>
+  );
+}
+
+/** A section that starts folded: the header opens and closes it. */
+function Fold({ title, caption, children }: { title: ReactNode; caption?: ReactNode; children: ReactNode }) {
+  const [open, setOpen] = useState(false);
+  return (
+    <section className="bg-white border border-[#EAEAEA] rounded-[14px] min-w-0 overflow-hidden">
+      <button
+        type="button"
+        aria-expanded={open}
+        onClick={() => setOpen(o => !o)}
+        className="w-full flex items-start gap-2 px-4 py-3 text-left hover:bg-[#FAFAFA]"
+      >
+        <Chevron open={open} />
+        <span className="flex items-baseline gap-x-3 gap-y-1 flex-wrap min-w-0">
+          <span className="text-[14px] font-semibold text-[#0A0A0A] leading-5">{title}</span>
+          {caption && <span className="text-[13px] text-[#8F8F8F]">{caption}</span>}
+        </span>
+        <span className="ml-auto text-[13px] text-[#1F6F8B] shrink-0">{open ? 'Hide' : 'Show'}</span>
+      </button>
+      {open && children}
+    </section>
   );
 }
 
@@ -449,27 +630,43 @@ function ScheduledTasks({ tasks, isCurrentMonth }: { tasks: ScheduledTask[]; isC
   );
 }
 
-function WorkCard({ w, name, peerDays }: { w: WorkRow; name: string; peerDays: number }) {
+/** Everything today's per-kind card showed, inside an opened row of "Where the money goes". */
+function WorkDetail({ w, name, peerDays, modelOrder }: { w: WorkRow; name: string; peerDays: number; modelOrder: string[] }) {
+  const topTier = useTierNames(w.surface).t3.toLowerCase();
   const facts: string[] = [sessionsFact(w)];
   if (w.typicalSessionUsd !== null) facts.push(`typical session ${money(w.typicalSessionUsd)}`);
   if (w.peer?.typicalSessionUsd != null) facts.push(`colleagues' typical ${money(w.peer.typicalSessionUsd)} (${w.peer.users} people)`);
   const outcome: string[] = [];
   if (w.produced) outcome.push(`${w.produced.produced} of ${w.produced.measured} sessions produced a file or artifact`);
   if (w.commits !== null) outcome.push(`${w.commits} commit${w.commits === 1 ? '' : 's'}`);
-  if (w.workKey) outcome.push(`${w.deepSessions} deep (Tier 3) session${w.deepSessions === 1 ? '' : 's'}`);
+  if (w.workKey) outcome.push(`${w.deepSessions} ${topTier} session${w.deepSessions === 1 ? '' : 's'}`);
   const tooFew = w.workKey && (!w.peer || w.peer.typicalSessionUsd === null);
+  const splitModels = modelsByLabel(modelOrder).filter(m => w.models.some(r => (r.spendUsd ?? 0) > 0 && prettyModel(r.model) === prettyModel(m)));
 
   return (
-    <div id={`work-${w.key}`} className="px-4 py-4 border-t border-[#F2F2F2] first:border-t-0 scroll-mt-4 flex flex-col gap-2">
-      <div className="flex items-baseline gap-2 min-w-0">
-        <h3 className="m-0 text-[15px] font-semibold text-[#0A0A0A] truncate">{w.label}</h3>
-        <SurfacePill surface={w.surface} />
-        <span className="ml-auto text-[14px] font-semibold text-[#0A0A0A] tabular-nums shrink-0">{money(w.spendUsd)} <span className="font-normal text-[#8F8F8F]">· {pct(w.share)}</span></span>
-      </div>
-      <Bar pct={Math.max(1, Math.round(w.share * 100))} tone="measured" height={4} />
+    <div className="flex flex-col gap-2.5 pl-[18px]">
       {w.definition && w.definition.toLowerCase() !== w.label.toLowerCase() && <p className="m-0 text-[13px] text-[#8F8F8F]">Covers: {displayDefinition(w.definition)}</p>}
-      <p className="m-0 text-[13px] text-[#666666] tabular-nums">{facts.join(' · ')}</p>
-      {outcome.length > 0 && <p className="m-0 text-[13px] text-[#666666] tabular-nums">{outcome.join(' · ')}</p>}
+      <div className="flex flex-col gap-0.5">
+        <p className="m-0 text-[13px] text-[#666666] tabular-nums">{facts.join(' · ')}</p>
+        {outcome.length > 0 && <p className="m-0 text-[13px] text-[#666666] tabular-nums">{outcome.join(' · ')}</p>}
+      </div>
+      {w.models.length > 0 && (
+        <div className="flex flex-col gap-1.5">
+          <SubHead>Model split</SubHead>
+          <SplitBar w={w} modelOrder={modelOrder} />
+          {splitModels.length > 0 && (
+            <div className="flex flex-wrap items-center gap-x-4 gap-y-1 text-[12px] text-[#8F8F8F]">
+              {splitModels.map(m => (
+                <span key={m} className="inline-flex items-center gap-1.5">
+                  <span className="inline-block w-2.5 h-2 rounded-full" style={{ backgroundColor: shadeForModel(m, modelOrder) }} />
+                  {prettyModel(m)}
+                </span>
+              ))}
+              <span>most expensive first</span>
+            </div>
+          )}
+        </div>
+      )}
       {hasBreakdown(w.split) && (
         <div className="flex flex-col gap-0.5">
           <span className="text-[13px] font-medium text-[#0A0A0A]">Where it went</span>
@@ -477,12 +674,12 @@ function WorkCard({ w, name, peerDays }: { w: WorkRow; name: string; peerDays: n
         </div>
       )}
       {w.models.length > 0
-        ? <div className="mt-1"><ModelTable rows={w.models} name={name} /></div>
+        ? <ModelTable rows={w.models} name={name} surface={w.surface} />
         : w.topModel && <p className="m-0 text-[13px] text-[#666666]">{pct(w.topModel.share)} on {w.topModel.model}</p>}
 
       {w.routes.length > 0 ? (
-        <div className="mt-1 rounded-[6px] border border-[#C9D6FD] bg-[#F5F8FF] px-3.5 py-3 flex flex-col gap-2">
-          <span className="text-[13px] font-semibold text-[#245BF3]">
+        <div className="rounded-[6px] border border-[#C9DEE6] bg-[#F5F8FF] px-3.5 py-3 flex flex-col gap-2">
+          <span className="text-[13px] font-semibold text-[#1F6F8B]">
             {w.routes.length} better route{w.routes.length === 1 ? '' : 's'}
           </span>
           {w.routes.map((r, i) => (
@@ -510,6 +707,8 @@ function SessionRow({ s, userId, canSeePrompts }: { s: Session; userId: string; 
   const [prompts, setPrompts] = useState<{ id: string; occurredAt: number; text: string }[] | null>(null);
   const [loading, setLoading] = useState(false);
   const [err, setErr] = useState<string | null>(null);
+  const tiers = tierList(useTierNames(s.surface));
+  const tierName = s.tier !== null && s.tier >= 1 && s.tier <= 3 ? tiers[s.tier - 1] : null;
 
   function loadPrompts() {
     setLoading(true);
@@ -550,17 +749,17 @@ function SessionRow({ s, userId, canSeePrompts }: { s: Session; userId: string; 
           <span className="flex items-center gap-2 flex-wrap min-w-0">
             <span className="text-[14px] font-medium text-[#0A0A0A] tabular-nums">{spansDays(s.startedAt, s.endedAt) ? `${ukDate(s.startedAt)} to ${ukDate(s.endedAt)}` : ukDate(s.startedAt)}</span>
             <SurfacePill surface={s.surface} />
-            <span className="text-[14px] text-[#4D4D4D] truncate">{s.scheduledTask ? `Scheduled task: ${s.scheduledTask} · ` : ''}{s.workLabel}{s.tier ? ` · Tier ${s.tier}` : ''}</span>
+            <span className="text-[14px] text-[#4D4D4D] truncate">{s.scheduledTask ? `Scheduled task: ${s.scheduledTask} · ` : ''}{s.workLabel}{tierName ? ` · ${tierName}` : ''}</span>
           </span>
           <span className="text-[13px] text-[#8F8F8F] tabular-nums">
-            {duration(s.activeSecs)} active · {s.prompts ?? '—'} prompt{s.prompts === 1 ? '' : 's'} · {s.actions ?? '—'} action{s.actions === 1 ? '' : 's'}
+            {duration(s.activeSecs)} active · {s.prompts === null ? 'prompts not measured' : `${s.prompts} prompt${s.prompts === 1 ? '' : 's'}`} · {s.actions === null ? 'actions not measured' : `${s.actions} action${s.actions === 1 ? '' : 's'}`}
           </span>
         </span>
         <span className="text-right shrink-0">
           <span className="block text-[14px] font-medium text-[#0A0A0A] tabular-nums">{s.spendUsd === null ? 'Not priced' : money(s.spendUsd)}</span>
           {s.hasUnpriced && s.spendUsd !== null && <span className="block text-[12px] text-[#B54708]">Part not priced</span>}
         </span>
-        <span className="w-12 text-right text-[13px] text-[#245BF3] shrink-0">{open ? 'Hide' : 'Details'}</span>
+        <span className="w-12 text-right text-[13px] text-[#1F6F8B] shrink-0">{open ? 'Hide' : 'Details'}</span>
       </button>
       {open && (
         <div className="px-4 pb-3.5 flex flex-col gap-2.5">
@@ -598,6 +797,7 @@ function SpendReviewContent() {
   const search = useSearchParams();
   const userId = decodeURIComponent(params.userId);
   const [period, setPeriod] = useState(() => search.get('period') || monthOptions()[0].value);
+  useAskPageNote('spend-review-person', `This person's Spend Review shows the calendar month ${period}.`);
   const [data, setData] = useState<Review | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -620,21 +820,29 @@ function SpendReviewContent() {
   }, [userId, period, refreshKey]);
 
   const name = data?.displayName ?? 'Spend Review';
-  const firstName = data ? (data.displayName.includes('@') ? 'This person' : data.displayName.split(' ')[0]) : '';
-  const classified = data ? data.work.filter(w => w.workKey).reduce((a, w) => a + w.spendUsd, 0) : 0;
-  const top = data?.work.find(w => w.workKey && w.spendUsd > 0);
-  const share = (part: number) => (data && data.totals.totalUsd > 0 ? `${pct(part / data.totals.totalUsd)} of spend` : undefined);
+  const byEmail = !!data && data.displayName.includes('@');
+  const firstName = data ? (byEmail ? 'This person' : data.displayName.split(' ')[0]) : '';
+  // Never a guessed pronoun: the person's first name, or "their" when only an email is known.
+  const whose = byEmail ? 'their' : `${firstName}'s`;
   // Only OpenAI connected: no Claude figures.
   const openaiOnly = useOpenAiOnly();
   const openai = !!data?.openai;
   const claudeShown = !openai || !openaiOnly;
   const unmatched = data?.totals.chatgptUnmatchedUsd ?? 0;
   const hasChatgpt = !!data && data.work.some(w => w.surface === 'chatgpt');
+  const products: { surface: Surface; usd: number }[] = data ? [
+    ...(claudeShown ? [{ surface: 'cowork' as const, usd: data.totals.coworkUsd }, { surface: 'code' as const, usd: data.totals.codeUsd }] : []),
+    ...(openai ? [{ surface: 'chatgpt' as const, usd: data.totals.chatgptUsd ?? 0 }, { surface: 'codex' as const, usd: data.totals.codexUsd ?? 0 }] : []),
+  ] : [];
+  const routes = data ? routesBySaving(data.work) : [];
+  const bestSaving = largestSaving(routes);
+  const when = data && !data.isCurrentMonth ? `in ${monthName(data.period)}` : 'this month';
 
   return (
     <>
       <TopBar title={`Spend Review: ${name}`} subtitle={data?.department ?? undefined} />
       <OpenAiContext.Provider value={openai}>
+      <TierNamesContext.Provider value={data?.tierNames ?? null}>
       <PageBody>
         <Toolbar
           left={
@@ -656,13 +864,22 @@ function SpendReviewContent() {
             {data.isCurrentMonth && !openaiOnly && <AnthropicCard a={data.anthropic} nearShare={data.nearLimitShare} email={data.email} />}
 
             <div className="flex flex-col gap-2">
-              <Strip cols={!openai ? 4 : claudeShown ? 6 : 4}>
-                <Figure label="Measured spend" value={money(data.totals.totalUsd)} sub={data.isCurrentMonth ? 'Month to date' : 'Whole month'} />
-                {claudeShown && <Figure label={surfaceName('cowork', openai)} value={money(data.totals.coworkUsd)} sub={share(data.totals.coworkUsd)} />}
-                {claudeShown && <Figure label={surfaceName('code', openai)} value={money(data.totals.codeUsd)} sub={share(data.totals.codeUsd)} />}
-                {openai && <Figure label="ChatGPT" value={money(data.totals.chatgptUsd ?? 0)} sub={share(data.totals.chatgptUsd ?? 0)} />}
-                {openai && <Figure label="Codex" value={money(data.totals.codexUsd ?? 0)} sub={share(data.totals.codexUsd ?? 0)} />}
+              <Strip cols={3}>
+                <SpendFigure data={data} products={products} />
                 <Figure label="Sessions" value={String(data.totals.sessions)} />
+                {bestSaving !== null ? (
+                  <Figure
+                    label={<span className="inline-flex items-center gap-2">Better route <Tag>Estimate</Tag></span>}
+                    value={`≈ ${money(bestSaving)}`}
+                    tone="judged"
+                    sub={`less ${when}`}
+                    title="The largest estimated saving at list price among the routes below, not a total"
+                  />
+                ) : routes.length > 0 ? (
+                  <Figure label="Better route" value={`${routes.length} route${routes.length === 1 ? '' : 's'}`} sub="No saving estimated" />
+                ) : (
+                  <Figure label="Better route" value="None waiting" />
+                )}
               </Strip>
               <Muted>
                 {openaiOnly
@@ -676,9 +893,6 @@ function SpendReviewContent() {
                 {data.unpricedModels.length > 0 && ` Not priced, so left out: ${data.unpricedModels.map(m => formatModelLabel(m).label).join(', ')}.`}
               </Muted>
             </div>
-
-            {/* Claude in Office: an estimate, never part of the Cowork review */}
-            <OfficeSpendPanel data={data.office} scope="person" />
 
             {data.isCurrentMonth && data.totals.sessions < EARLY_MONTH_SESSIONS && (
               <Notice
@@ -694,56 +908,43 @@ function SpendReviewContent() {
             )}
 
             {data.totals.sessions === 0 ? (
-              <div className="border border-dashed border-[#DADADA] bg-white rounded-[14px] px-6 py-8 text-center">
-                <span className="text-[14px] font-medium text-[#0A0A0A]">No Code or Cowork spend for this month.</span>
-              </div>
+              <>
+                <div className="border border-dashed border-[#DADADA] bg-white rounded-[14px] px-6 py-8 text-center">
+                  <span className="text-[14px] font-medium text-[#0A0A0A]">No Code or Cowork spend for this month.</span>
+                </div>
+                {/* Claude in Office: an estimate, never part of the Cowork review */}
+                <OfficeSpendPanel data={data.office} scope="person" />
+              </>
             ) : (
               <>
-                <ModelEfficiency data={data} onShowAll={() => setShowAllWork(true)} />
-
-                <Panel
-                  title="Where the money goes"
-                  badge={<Tag tone="judged">Kind of work is AI-judged</Tag>}
-                  flush
-                >
-                  {top && classified > 0 && (
-                    <p className="m-0 px-4 pt-3.5 pb-1 text-[15px] leading-6 text-[#0A0A0A]">
-                      {pct(top.share)} of {firstName}&apos;s spend {data.isCurrentMonth ? 'this month' : `in ${monthName(data.period)}`} went on {surfaceName(top.surface, !!data.openai)} sessions judged as {lowerFirst(top.label)}.
-                      {data.isCurrentMonth && new Date().getUTCDate() <= EARLY_MONTH_DAYS && (
-                        <span className="text-[#666666]"> Early in the month: so far {sessionsFact(top)}.</span>
-                      )}
-                    </p>
-                  )}
-                  <div>
-                    {(showAllWork ? data.work : data.work.slice(0, TOP_WORK_SHOWN)).map(w => <WorkCard key={w.key} w={w} name={firstName} peerDays={data.peerWindowDays} />)}
-                  </div>
-                  <div className="px-4 py-2.5 border-t border-[#F2F2F2] flex items-center gap-x-4 gap-y-1 flex-wrap">
-                    {data.work.length > TOP_WORK_SHOWN && (
-                      <button type="button" onClick={() => setShowAllWork(v => !v)} className={B.link}>
-                        {showAllWork ? `Show the top ${TOP_WORK_SHOWN} only` : `Show all ${data.work.length} kinds of work`}
-                      </button>
-                    )}
-                    <span className="sm:ml-auto text-[13px] text-[#8F8F8F]">
-                      Colleague figures cover other people&apos;s sessions of the same kind of work in the last {data.peerWindowDays} days, and only show when at least three people did it. Colleagues are never named.
-                    </span>
-                  </div>
-                </Panel>
+                <DoThis items={routes} name={firstName} whose={whose} when={when} />
 
                 {data.scheduledTasks.length > 0 && <ScheduledTasks tasks={data.scheduledTasks} isCurrentMonth={data.isCurrentMonth} />}
 
-                <Panel
-                  title="Sessions"
-                  subtitle={`Most expensive first${data.sessionsTotal > data.sessions.length ? ` · top ${data.sessions.length} of ${data.sessionsTotal}` : ''}`}
-                  flush
+                <WhereTheMoneyGoes data={data} name={firstName} showAll={showAllWork} onShowAll={setShowAllWork} />
+
+                {/* Claude in Office: an estimate, never part of the Cowork review */}
+                <OfficeSpendPanel data={data.office} scope="person" />
+
+                <Fold title="Cost drivers (models, cost by type, cache)">
+                  <CostDrivers report={data.modelEfficiency} />
+                </Fold>
+
+                <Fold
+                  title={`Sessions: ${data.sessionsTotal}, most expensive first`}
+                  caption={data.sessionsTotal > data.sessions.length ? `Top ${data.sessions.length} of ${data.sessionsTotal}` : undefined}
                 >
-                  {data.sessions.map(s => <SessionRow key={s.surface + s.sessionId} s={s} userId={data.userId} canSeePrompts={data.canSeePrompts} />)}
+                  <div className="border-t border-[#EAEAEA]">
+                    {data.sessions.map(s => <SessionRow key={s.surface + s.sessionId} s={s} userId={data.userId} canSeePrompts={data.canSeePrompts} />)}
+                  </div>
                   <PanelFoot>Active time counts the gaps of 30 minutes or less between events, so a session left open overnight isn&apos;t counted as worked time.</PanelFoot>
-                </Panel>
+                </Fold>
               </>
             )}
           </>
         )}
       </PageBody>
+      </TierNamesContext.Provider>
       </OpenAiContext.Provider>
     </>
   );

@@ -8,8 +8,8 @@
  * Rules the kit encodes:
  *  - grey page (#F7F7F8), white panels with a 1px #EAEAEA border and 8px corners
  *  - 13px body text, 12px captions in #8F8F8F, panel titles 13px semibold ink
- *  - dark blue (#05073F) = measured, sky blue (#699BFB, #2451F3 text) = AI-judged or estimate;
- *    vibrant blue (#245BF3) is for links and actions only
+ *  - one colour, petrol (#1F6F8B, shades #C9DEE6 / #6BA3B8), for charts, links and actions;
+ *    AI-judged and estimate figures are told apart by a grey tag and their words, never a colour
  *  - figures use tabular numbers; never render a missing value as 0
  * Client-safe, no data fetching. Import from '@/components/precision/ui'.
  */
@@ -26,14 +26,14 @@ export const C = {
   input: '#DADADA',
   subtle: '#FAFAFA',
   page: '#F7F7F8',
-  accent: '#245BF3',
-  measured: '#05073F',
-  measuredLight: '#8C96BF',
-  accentHover: '#1A44C7',
-  accentTint: '#F2F5FF',
-  judged: '#699BFB',
-  judgedInk: '#2451F3',
-  judgedTint: '#EDF3FF',
+  accent: '#1F6F8B',
+  measured: '#1F6F8B',
+  measuredLight: '#6BA3B8',
+  accentHover: '#185A71',
+  accentTint: '#EEF5F8',
+  judged: '#6BA3B8',
+  judgedInk: '#1F6F8B',
+  judgedTint: '#EEF5F8',
   good: '#1A7F37',
   bad: '#B42318',
   warn: '#B54708',
@@ -44,16 +44,16 @@ export const C = {
 export type Tone = 'measured' | 'judged' | 'neutral' | 'good' | 'bad' | 'warn';
 
 const toneText: Record<Tone, string> = {
-  measured: 'text-[#05073F]',
-  judged: 'text-[#2451F3]',
+  measured: 'text-[#1F6F8B]',
+  judged: 'text-[#1F6F8B]',
   neutral: 'text-[#0A0A0A]',
   good: 'text-[#1A7F37]',
   bad: 'text-[#B42318]',
   warn: 'text-[#B54708]',
 };
 const toneBar: Record<Tone, string> = {
-  measured: 'bg-[#3D4451]', // percentage and share bars are charcoal (SHARE_BAR in lib/ui/chart-colours)
-  judged: 'bg-[#699BFB]',
+  measured: 'bg-[#1F6F8B]', // percentage and share bars are charcoal (SHARE_BAR in lib/ui/chart-colours)
+  judged: 'bg-[#6BA3B8]',
   neutral: 'bg-[#0A0A0A]',
   good: 'bg-[#1A7F37]',
   bad: 'bg-[#B42318]',
@@ -70,7 +70,7 @@ export function cx(...parts: Array<string | false | null | undefined>): string {
  *  a fixed cap left a wide empty band on large screens. `wide` is kept for callers and no longer changes anything. */
 export function PageBody({ children, className }: { children: ReactNode; wide?: boolean; className?: string }) {
   return (
-    <div className={cx('px-6 lg:px-8 pt-4 pb-10 flex flex-col gap-4 w-full', className)}>
+    <div className={cx('px-6 lg:px-8 pt-3 pb-10 flex flex-col gap-3 w-full', className)}>
       {children}
     </div>
   );
@@ -103,14 +103,14 @@ export function Panel({ title, subtitle, right, badge, children, className, body
   return (
     <section id={id} className={cx('bg-white border border-[#EAEAEA] rounded-[14px] min-w-0', className)}>
       {(title || right) && (
-        <div className="flex items-center gap-x-3 gap-y-1 flex-wrap px-4 py-3 border-b border-[#EAEAEA]">
+        <div className="flex items-center gap-x-3 gap-y-1 flex-wrap px-3 py-2.5 border-b border-[#EAEAEA]">
           {title && <h2 className="m-0 text-[14px] font-semibold text-[#0A0A0A] leading-5">{title}</h2>}
           {badge}
           {subtitle && <span className="text-[13px] text-[#8F8F8F]">{subtitle}</span>}
           {right && <div className="ml-auto flex items-center gap-2 flex-wrap">{right}</div>}
         </div>
       )}
-      <div className={cx(flush ? '' : 'p-4', bodyClassName)}>{children}</div>
+      <div className={cx(flush ? '' : 'p-3', bodyClassName)}>{children}</div>
     </section>
   );
 }
@@ -118,7 +118,7 @@ export function Panel({ title, subtitle, right, badge, children, className, body
 /** A footnote strip at the bottom of a panel. Put it inside a flush Panel. */
 export function PanelFoot({ children, tone = 'neutral' }: { children: ReactNode; tone?: Tone }) {
   return (
-    <div className={cx('px-4 py-2.5 border-t border-[#F2F2F2] text-[13px]', tone === 'neutral' ? 'text-[#8F8F8F]' : toneText[tone])}>
+    <div className={cx('px-3 py-2 border-t border-[#F2F2F2] text-[13px]', tone === 'neutral' ? 'text-[#8F8F8F]' : toneText[tone])}>
       {children}
     </div>
   );
@@ -164,9 +164,9 @@ export function Figure({ label, value, sub, tone = 'neutral', unit, delta, delta
   title?: string;
 }) {
   return (
-    <div className="p-4 flex flex-col gap-1.5 min-w-0" title={title}>
+    <div className="px-3 py-2.5 flex flex-col gap-1 min-w-0" title={title}>
       <span className="text-[13px] text-[#666666]">{label}</span>
-      <span className={cx('text-[24px] leading-7 font-semibold tracking-[-0.02em] tabular-nums', tone === 'judged' ? 'text-[#05073F]' : toneText[tone])}>
+      <span className={cx('text-[24px] leading-7 font-semibold tracking-[-0.02em] tabular-nums', tone === 'judged' ? 'text-[#1F6F8B]' : toneText[tone])}>
         {value}{unit && <span className="text-[14px] font-normal text-[#8F8F8F] tracking-normal"> {unit}</span>}
       </span>
       {delta && <span className={cx('text-[13px] tabular-nums', deltaTone ? toneText[deltaTone] : 'text-[#8F8F8F]')}>{delta}</span>}
@@ -191,11 +191,12 @@ export function BarRow({ label, value, pct, tone = 'measured', title, rank, colo
   color?: string;
 }) {
   return (
-    <div className="px-4 py-2 border-t border-[#F2F2F2] first:border-t-0 flex flex-col gap-1" title={title}>
-      <div className="flex items-baseline gap-2 min-w-0">
+    <div className="px-3 py-2 border-t border-[#F2F2F2] first:border-t-0 flex flex-col gap-1" title={title}>
+      <div className="flex flex-wrap items-baseline gap-x-2 min-w-0">
         {rank !== undefined && <span className="text-[12px] text-[#B3B3B3] w-4 shrink-0 tabular-nums">{rank}</span>}
         <span className="text-[14px] text-[#0A0A0A] truncate">{label}</span>
-        <span className="ml-auto text-[13px] text-[#666666] tabular-nums whitespace-nowrap">{value}</span>
+        {/* Wraps under the label on a phone rather than pushing the page wider. */}
+        <span className="ml-auto max-w-full text-right text-[13px] text-[#666666] tabular-nums sm:whitespace-nowrap">{value}</span>
       </div>
       <Bar pct={pct} tone={tone} color={color} />
     </div>
@@ -216,12 +217,12 @@ export function Bar({ pct, tone = 'measured', height = 3, color }: { pct: number
 export const T = {
   table: 'w-full border-collapse text-[14px]',
   headRow: 'text-left text-[13px] text-[#8F8F8F]',
-  th: 'font-medium px-2 py-2 first:pl-4 last:pr-4 whitespace-nowrap',
-  thRight: 'font-medium px-2 py-2 first:pl-4 last:pr-4 text-right whitespace-nowrap',
+  th: 'font-medium px-2 py-2 first:pl-3 last:pr-3 whitespace-nowrap',
+  thRight: 'font-medium px-2 py-2 first:pl-3 last:pr-3 text-right whitespace-nowrap',
   row: 'border-t border-[#F2F2F2] hover:bg-[#FAFAFA]',
-  td: 'px-2 py-2.5 first:pl-4 last:pr-4 align-middle',
-  tdRight: 'px-2 py-2.5 first:pl-4 last:pr-4 align-middle text-right tabular-nums',
-  tdMute: 'px-2 py-2.5 first:pl-4 last:pr-4 align-middle text-[#666666]',
+  td: 'px-2 py-2 first:pl-3 last:pr-3 align-middle',
+  tdRight: 'px-2 py-2 first:pl-3 last:pr-3 align-middle text-right tabular-nums',
+  tdMute: 'px-2 py-2 first:pl-3 last:pr-3 align-middle text-[#666666]',
 };
 
 /* ── Small parts ───────────────────────────────────────────────────── */
@@ -230,8 +231,8 @@ export const T = {
 export function Tag({ children, tone = 'neutral', title }: { children: ReactNode; tone?: 'neutral' | 'measured' | 'judged' | 'warn' | 'bad'; title?: string }) {
   const cls = {
     neutral: 'border border-[#EAEAEA] text-[#4D4D4D]',
-    measured: 'bg-[#E8E9F2] text-[#05073F]',
-    judged: 'bg-[#EDF3FF] text-[#2451F3]',
+    measured: 'bg-[#E4EFF3] text-[#1F6F8B]',
+    judged: 'border border-[#EAEAEA] text-[#4D4D4D]',
     warn: 'bg-[#FFF4E5] border border-[#F5D9A8] text-[#8A5300]',
     bad: 'bg-[#FFF5F4] border border-[#F3C0BB] text-[#B42318]',
   }[tone];
@@ -247,10 +248,10 @@ export function Pill({ children, tone = 'neutral' }: { children: ReactNode; tone
   const cls = {
     neutral: 'bg-[#F2F2F2] text-[#4D4D4D]',
     good: 'bg-[#E7F6EC] text-[#146C2E]',
-    info: 'bg-[#EAF0FE] text-[#1A44C7]',
+    info: 'bg-[#E4EFF3] text-[#185A71]',
     warn: 'bg-[#FFF1E0] text-[#8A5300]',
     bad: 'bg-[#FFF5F4] text-[#B42318]',
-    judged: 'bg-[#EDF3FF] text-[#2451F3]',
+    judged: 'bg-[#F2F2F2] text-[#4D4D4D]',
   }[tone];
   return <span className={cx('inline-flex items-center text-[12px] font-medium px-2 py-0.5 rounded-full whitespace-nowrap', cls)}>{children}</span>;
 }
@@ -272,12 +273,12 @@ export const SEVERITY_COLOR: Record<string, string> = {
 /** Button class names. */
 export const B = {
   primary: 'inline-flex items-center justify-center gap-1.5 text-[13px] font-medium px-3 py-1.5 rounded-[10px] bg-[#0A0A0A] text-white hover:bg-[#262626] disabled:opacity-50 disabled:cursor-not-allowed',
-  accent: 'inline-flex items-center justify-center gap-1.5 text-[13px] font-medium px-3 py-1.5 rounded-[10px] bg-[#245BF3] text-white hover:bg-[#1A44C7] disabled:opacity-50 disabled:cursor-not-allowed',
+  accent: 'inline-flex items-center justify-center gap-1.5 text-[13px] font-medium px-3 py-1.5 rounded-[10px] bg-[#1F6F8B] text-white hover:bg-[#185A71] disabled:opacity-50 disabled:cursor-not-allowed',
   secondary: 'inline-flex items-center justify-center gap-1.5 text-[13px] font-medium px-3 py-1.5 rounded-[10px] border border-[#DADADA] bg-white text-[#0A0A0A] hover:bg-[#FAFAFA] disabled:opacity-50 disabled:cursor-not-allowed',
   danger: 'inline-flex items-center justify-center gap-1.5 text-[13px] font-medium px-3 py-1.5 rounded-[10px] border border-[#F3C0BB] bg-white text-[#B42318] hover:bg-[#FFF5F4] disabled:opacity-50 disabled:cursor-not-allowed',
-  link: 'text-[13px] font-medium text-[#245BF3] hover:underline disabled:opacity-50',
-  input: 'text-[14px] px-2.5 py-1.5 rounded-[10px] border border-[#DADADA] bg-white text-[#0A0A0A] placeholder:text-[#8F8F8F] focus:outline-none focus:ring-2 focus:ring-[#245BF3]/30 focus:border-[#245BF3]',
-  select: 'text-[13px] px-2 py-1.5 rounded-[10px] border border-[#DADADA] bg-white text-[#0A0A0A] focus:outline-none focus:ring-2 focus:ring-[#245BF3]/30',
+  link: 'text-[13px] font-medium text-[#1F6F8B] hover:underline disabled:opacity-50',
+  input: 'text-[14px] px-2.5 py-1.5 rounded-[10px] border border-[#DADADA] bg-white text-[#0A0A0A] placeholder:text-[#8F8F8F] focus:outline-none focus:ring-2 focus:ring-[#1F6F8B]/30 focus:border-[#1F6F8B]',
+  select: 'text-[13px] px-2 py-1.5 rounded-[10px] border border-[#DADADA] bg-white text-[#0A0A0A] focus:outline-none focus:ring-2 focus:ring-[#1F6F8B]/30',
 };
 
 /** Segmented control (period / window / status filters). */
@@ -345,7 +346,7 @@ export function Chip({ on, onClick, children }: { on: boolean; onClick: () => vo
       aria-pressed={on}
       onClick={onClick}
       className={cx('text-[13px] px-2.5 py-1 rounded-[10px] border',
-        on ? 'border-[#245BF3] bg-[#F2F5FF] text-[#245BF3] font-medium' : 'border-[#EAEAEA] bg-white text-[#4D4D4D] hover:border-[#DADADA]')}
+        on ? 'border-[#1F6F8B] bg-[#EEF5F8] text-[#1F6F8B] font-medium' : 'border-[#EAEAEA] bg-white text-[#4D4D4D] hover:border-[#DADADA]')}
     >
       {children}
     </button>
@@ -356,7 +357,7 @@ export function Notice({ tone = 'info', title, children, action }: {
   tone?: 'info' | 'warn' | 'error' | 'success'; title?: ReactNode; children?: ReactNode; action?: ReactNode;
 }) {
   const cls = {
-    info: 'border-[#C9D6FD] bg-[#F5F8FF] text-[#333333]',
+    info: 'border-[#C9DEE6] bg-[#F5F8FF] text-[#333333]',
     warn: 'border-[#F5D9A8] bg-[#FFFAF0] text-[#5C3A00]',
     error: 'border-[#F3C0BB] bg-[#FFF5F4] text-[#7A271A]',
     success: 'border-[#B7E4C7] bg-[#F1FBF4] text-[#14532D]',
@@ -392,10 +393,10 @@ export function Spark({ data, tone = 'measured', width = 72, height = 20, fixedM
   fixedMin?: number; fixedMax?: number;
 }) {
   const vals = data.filter((v): v is number => v !== null && Number.isFinite(v));
-  if (vals.length < 2) return <span className="text-[12px] text-[#B3B3B3]">—</span>;
+  if (vals.length < 2) return <span className="text-[12px] text-[#B3B3B3]">not enough data</span>;
   const max = fixedMax ?? Math.max(...vals), min = fixedMin ?? Math.min(...vals), span = max - min || 1;
   const step = data.length > 1 ? width / (data.length - 1) : width;
-  const stroke = tone === 'judged' ? '#699BFB' : tone === 'neutral' ? '#8F8F8F' : '#05073F';
+  const stroke = tone === 'judged' ? '#6BA3B8' : tone === 'neutral' ? '#8F8F8F' : '#1F6F8B';
   const segs: string[] = [];
   let cur: string[] = [];
   data.forEach((v, i) => {

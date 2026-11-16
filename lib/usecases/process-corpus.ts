@@ -8,10 +8,10 @@
  * dominates a department's evidence and no single department dominates a
  * mining run's token budget.
  *
- * Department resolution is the dual rule used elsewhere in this codebase:
- * `users.department`, falling back to the linked `admin_users.department`
- * (via `admin_users.linked_cowork_user_id`) when the users-table value is
- * NULL/blank. A row with neither is excluded — no department, no corpus.
+ * Department resolution is the rule used everywhere else (Team Coaching, work groups):
+ * the linked login account's `admin_users.department` (via
+ * `admin_users.linked_cowork_user_id`), falling back to `users.department` when
+ * that is NULL/blank. A row with neither is excluded: no department, no corpus.
  *
  * Sampling spreads each department's sample across the whole window:
  * the window is cut into weekly buckets and each bucket may fill
@@ -128,7 +128,7 @@ export async function gatherDeptCorpora(
   const since = nowS - windowDays * 86400;
 
   const rows = await rawAll<DeptRow>(client, sql`
-    SELECT COALESCE(NULLIF(TRIM(u.department), ''), NULLIF(TRIM(au.department), '')) AS dept,
+    SELECT COALESCE(NULLIF(TRIM(au.department), ''), NULLIF(TRIM(u.department), '')) AS dept,
            cm.user_id AS user_id, cm.session_id AS session_id,
            cm.content_full AS content_full, cm.occurred_at AS occurred_at
       FROM cowork_messages cm
@@ -137,7 +137,7 @@ export async function gatherDeptCorpora(
      WHERE cm.surface = ${surface} AND cm.message_type = ${MESSAGE_TYPE[surface]}
        AND cm.occurred_at >= ${since} AND cm.session_id IS NOT NULL
        AND cm.content_full IS NOT NULL AND TRIM(cm.content_full) != ''
-       AND COALESCE(NULLIF(TRIM(u.department), ''), NULLIF(TRIM(au.department), '')) IS NOT NULL
+       AND COALESCE(NULLIF(TRIM(au.department), ''), NULLIF(TRIM(u.department), '')) IS NOT NULL
      ORDER BY cm.occurred_at DESC`);
 
   const corpora = sampleDeptCorpora(rows, nowS, windowDays, maxIdentical, opts.scaled ? readsForPrompts : () => 1);

@@ -22,6 +22,8 @@ import { isOpenAiSource, OPENAI_SOURCE_LABELS } from '@/lib/openai/sources';
 import { productLabel, productOf } from '@/lib/dashboard/vendor';
 import { useConnectedProducts } from '@/components/shared/VendorSwitch';
 import { isOpenAiOnly, openAiConnected } from '@/lib/sources/connected-shared';
+import { STRIPPED_MARKER, shownContent } from '@/lib/retention/marker';
+import { formatDuration } from '@/components/pulse/code/CodeStatStrip';
 
 interface AuditEvent {
   id: string;
@@ -60,8 +62,8 @@ interface SessionEnrichment {
 }
 
 const EVENT_TYPE_LABELS: Record<string, string> = {
-  code_user_message: 'User prompt',
-  cowork_user_message: 'User message',
+  code_user_message: 'Prompt',
+  cowork_user_message: 'Prompt',
   cowork_assistant_message: 'Assistant response',
   cowork_tool_result: 'Tool result',
   cowork_session_init: 'Session start',
@@ -70,13 +72,12 @@ const EVENT_TYPE_LABELS: Record<string, string> = {
   cowork_skill_event: 'Skill invoked',
   cowork_mcp_event: 'Connector used',
   chat_prompt: 'User prompt',
-  chat_completion: 'User prompt',
 };
 
-const RETENTION_MARKER = '[Content removed — retention policy]';
+const RETENTION_MARKER = STRIPPED_MARKER;
 
 function cleanUserName(userId: string | null | undefined): string {
-  if (!userId) return '—';
+  if (!userId) return 'not set';
   if (userId.includes('@')) return userId.split('@')[0].replace(/([a-z])([A-Z])/g, '$1 $2');
   return userId;
 }
@@ -132,7 +133,7 @@ interface ChatThreadMessage {
 /** Conversation bubble. User: blue tint, assistant: white, tool and other: grey. */
 function Bubble({ kind, header, children }: { kind: 'user' | 'assistant' | 'tool'; header: ReactNode; children: ReactNode }) {
   const cls = {
-    user: 'self-end ml-8 border-[#C9D6FD] bg-[#F5F8FF]',
+    user: 'self-end ml-8 border-[#C9DEE6] bg-[#F5F8FF]',
     assistant: 'self-start mr-8 border-[#EAEAEA] bg-white',
     tool: 'self-start mr-8 border-[#EAEAEA] bg-[#FAFAFA]',
   }[kind];
@@ -282,7 +283,7 @@ function CoworkThread({ messages }: { messages: CoworkMessage[] }) {
             if (isToolActivity) {
               return (
                 <MetaRow key={msg.id} time={msg.occurred_at} icon="⚙">
-                  <span className="font-mono">{msg.content_preview || 'Tool activity'}</span>
+                  <span className="font-mono">{shownContent(msg.content_preview) || 'Tool activity'}</span>
                 </MetaRow>
               );
             }
@@ -314,13 +315,13 @@ function CoworkThread({ messages }: { messages: CoworkMessage[] }) {
                 {/* Tool details */}
                 {isTool && msg.tool_input_preview && (
                   <details className="mt-1">
-                    <summary className="text-[13px] text-[#245BF3] cursor-pointer">Input</summary>
+                    <summary className="text-[13px] text-[#1F6F8B] cursor-pointer">Input</summary>
                     <pre className="m-0 mt-1 text-[12px] font-mono text-[#4D4D4D] bg-white border border-[#EAEAEA] rounded-[6px] p-2 overflow-x-auto">{msg.tool_input_preview}</pre>
                   </details>
                 )}
                 {isTool && msg.tool_output_preview && (
                   <details>
-                    <summary className="text-[13px] text-[#245BF3] cursor-pointer">Output</summary>
+                    <summary className="text-[13px] text-[#1F6F8B] cursor-pointer">Output</summary>
                     <pre className="m-0 mt-1 text-[12px] font-mono text-[#4D4D4D] bg-white border border-[#EAEAEA] rounded-[6px] p-2 overflow-x-auto">{msg.tool_output_preview}</pre>
                   </details>
                 )}
@@ -331,7 +332,7 @@ function CoworkThread({ messages }: { messages: CoworkMessage[] }) {
                   try { resources = JSON.parse(msg.synced_resources); } catch { return null; }
                   if (!resources.length) return null;
                   return (
-                    <div className="mt-1.5 pt-1.5 border-t border-[#C9D6FD] flex flex-wrap items-center gap-1.5">
+                    <div className="mt-1.5 pt-1.5 border-t border-[#C9DEE6] flex flex-wrap items-center gap-1.5">
                       <span className="text-[12px] text-[#666666] shrink-0"><span aria-hidden="true">📎</span> Synced:</span>
                       {resources.map((r, i) => {
                         const chip = (
@@ -621,7 +622,7 @@ export default function AuditPage() {
 
         {/* Search and filters */}
         <div className="flex flex-wrap gap-2 items-center">
-          <label className="flex-grow min-w-[240px] flex items-center gap-2 px-2.5 py-1.5 border border-[#DADADA] rounded-[10px] bg-white text-[#8F8F8F] focus-within:ring-2 focus-within:ring-[#245BF3]/30 focus-within:border-[#245BF3]">
+          <label className="flex-grow min-w-[240px] flex items-center gap-2 px-2.5 py-1.5 border border-[#DADADA] rounded-[10px] bg-white text-[#8F8F8F] focus-within:ring-2 focus-within:ring-[#1F6F8B]/30 focus-within:border-[#1F6F8B]">
             <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2} aria-hidden="true"><circle cx="11" cy="11" r="8" /><path d="m21 21-4.3-4.3" /></svg>
             <input
               type="text"
@@ -681,7 +682,7 @@ export default function AuditPage() {
               type="checkbox"
               checked={flaggedOnly}
               onChange={e => setFlaggedOnly(e.target.checked)}
-              className="rounded-[6px] border-[#DADADA] accent-[#245BF3]"
+              className="rounded-[6px] border-[#DADADA] accent-[#1F6F8B]"
             />
             Flagged only
           </label>
@@ -716,7 +717,7 @@ export default function AuditPage() {
           ) : (
             <Empty
               title="No events found"
-              action={<Link href="/settings" className="text-[13px] font-medium text-[#245BF3] hover:underline">Go to Settings</Link>}
+              action={<Link href="/settings" className="text-[13px] font-medium text-[#1F6F8B] hover:underline">Go to Settings</Link>}
             >
               No events ingested yet. Check your API key configuration in Settings.
             </Empty>
@@ -762,7 +763,7 @@ export default function AuditPage() {
                               {cleanUserName(event.user_id)}
                             </button>
                           </td>
-                          <td className={`${T.tdMute} hidden md:table-cell`}>{event.department ?? '—'}</td>
+                          <td className={`${T.tdMute} hidden md:table-cell`}>{event.department ?? 'No department'}</td>
                           <td className={`${T.td} whitespace-nowrap`}>
                             {/* An Office or Google prompt shows its app (Excel, Google Sheets...), not Cowork */}
                             <Tag>{event.product && event.product in PRODUCT_LABEL ? productFullName(event.product as WorkProduct) : productLabel(productOf(event.surface, event._source))}</Tag>
@@ -770,7 +771,7 @@ export default function AuditPage() {
                               <span className="ml-1 text-[13px] text-[#8F8F8F]">Metadata only</span>
                             )}
                           </td>
-                          <td className={`${T.td} hidden md:table-cell text-[13px] text-[#245BF3] whitespace-nowrap`}>
+                          <td className={`${T.td} hidden md:table-cell text-[13px] text-[#1F6F8B] whitespace-nowrap`}>
                             <SourceCell event={event} />
                           </td>
                           <td className={`${T.td} whitespace-nowrap`}>{formatEventType(event.event_type)}</td>
@@ -778,7 +779,7 @@ export default function AuditPage() {
                             {event.content_preview === RETENTION_MARKER ? (
                               <span className="text-[#8F8F8F]">Content removed under the retention policy</span>
                             ) : (
-                              event.content_preview || '—'
+                              event.content_preview || 'none'
                             )}
                           </td>
                           <td className={`${T.tdRight} whitespace-nowrap`}>
@@ -846,7 +847,7 @@ export default function AuditPage() {
                 <dt className="text-[#8F8F8F]">Time</dt>
                 <dd className="m-0 tabular-nums">{new Date(selectedEvent.occurred_at * 1000).toLocaleString('en-GB')}</dd>
                 <dt className="text-[#8F8F8F]">Event</dt>
-                <dd className="m-0 break-all">{selectedEvent.event_type}</dd>
+                <dd className="m-0 break-all">{formatEventType(selectedEvent.event_type)}</dd>
                 <dt className="text-[#8F8F8F]">Event ID</dt>
                 <dd className="m-0 font-mono text-[12px] text-[#4D4D4D]">{selectedEvent.id.slice(0, 12)}...</dd>
               </dl>
@@ -875,15 +876,16 @@ export default function AuditPage() {
                 const facts: ReactNode[] = [];
                 const liveCost = sessionSpend?.conversation.totalUsd ?? null;
                 const cost = liveCost ?? en.cost_usd;
-                if (cost != null) facts.push(<span key="cost" className="font-semibold text-[#0A0A0A]">Cost: ${cost.toFixed(4)}</span>);
+                const costIsEstimate = selectedEvent?._source === 'chatgpt_chat' || selectedEvent?._source === 'chatgpt_work';
+                if (cost != null) facts.push(<span key="cost" className="font-semibold text-[#0A0A0A]">{costIsEstimate ? 'Estimated cost' : 'Cost'}: ${cost.toFixed(4)}</span>);
                 if (totalTokens > 0) facts.push(<span key="tok">{(totalTokens / 1000).toFixed(1)}k tokens</span>);
                 if (en.tool_call_count != null && en.tool_call_count > 0) facts.push(<span key="tools">{en.tool_call_count} tool call{en.tool_call_count !== 1 ? 's' : ''}</span>);
-                if (en.duration_secs != null && en.duration_secs > 0) facts.push(<span key="dur">{en.duration_secs}s duration</span>);
+                if (en.duration_secs != null && en.duration_secs > 0) facts.push(<span key="dur">{formatDuration(en.duration_secs)} duration</span>);
                 if (en.total_commits != null && en.total_commits > 0) facts.push(<span key="commits" className="text-[#1A7F37] font-medium">{en.total_commits} commit{en.total_commits !== 1 ? 's' : ''}</span>);
                 if (en.total_errors != null && en.total_errors > 0) facts.push(<span key="err" className="text-[#B42318]">{en.total_errors} error{en.total_errors !== 1 ? 's' : ''}</span>);
                 return (
                   <div className="border border-[#EAEAEA] rounded-[10px] px-3 py-2.5 flex flex-col gap-1.5 text-[13px]">
-                    <span className="font-semibold text-[#245BF3]">
+                    <span className="font-semibold text-[#1F6F8B]">
                       {isCodeEvent || isOpenAiSource(selectedEvent?._source) ? 'Session stats' : 'Session stats (OTel)'}
                     </span>
                     {facts.length > 0 && (
@@ -964,7 +966,7 @@ export default function AuditPage() {
                     header={<>User · <span className="tabular-nums">{timeOf(selectedEvent.occurred_at)}</span>{selectedEvent.flagged ? <FlaggedMark /> : null}</>}
                   >
                     <div className="text-[14px] leading-[1.5] text-[#0A0A0A] whitespace-pre-wrap break-words">
-                      {selectedEvent.content_preview || 'No content captured'}
+                      {shownContent(selectedEvent.content_preview) || 'No content captured'}
                     </div>
                   </Bubble>
 
@@ -1011,10 +1013,10 @@ export default function AuditPage() {
                   <SectionHead title={selectedEvent.event_type === 'code_user_message' ? 'Code prompt' : 'Code event'} />
                   <Bubble
                     kind={selectedEvent.event_type === 'code_user_message' ? 'user' : 'tool'}
-                    header={<>{selectedEvent.event_type === 'code_user_message' ? 'User prompt' : selectedEvent.event_type} · <span className="tabular-nums">{timeOf(selectedEvent.occurred_at)}</span>{selectedEvent.flagged ? <FlaggedMark /> : null}</>}
+                    header={<>{formatEventType(selectedEvent.event_type)} ·<span className="tabular-nums">{timeOf(selectedEvent.occurred_at)}</span>{selectedEvent.flagged ? <FlaggedMark /> : null}</>}
                   >
                     <div className="text-[14px] leading-[1.5] text-[#0A0A0A] whitespace-pre-wrap break-words">
-                      {selectedEvent.content_preview || 'No content captured'}
+                      {shownContent(selectedEvent.content_preview) || 'No content captured'}
                     </div>
                   </Bubble>
 
@@ -1055,7 +1057,7 @@ export default function AuditPage() {
                 return (
                   <div className="border border-[#EAEAEA] rounded-[10px] px-3 py-2.5 flex flex-col gap-1.5">
                     <span className="text-[13px] font-semibold text-[#0A0A0A]">Skill invoked</span>
-                    <span className="font-mono text-[14px] text-[#0A0A0A] break-all">{meta.skill_name || selectedEvent.content_preview || '—'}</span>
+                    <span className="font-mono text-[14px] text-[#0A0A0A] break-all">{meta.skill_name || selectedEvent.content_preview || 'not recorded'}</span>
                     {meta.invocation_type && (
                       <span>
                         <Tag tone={meta.invocation_type === 'agent_chained' ? 'neutral' : 'measured'}>
@@ -1075,7 +1077,7 @@ export default function AuditPage() {
                   <div className="border border-[#EAEAEA] rounded-[10px] px-3 py-2.5 flex flex-col gap-1.5">
                     <span className="text-[13px] font-semibold text-[#0A0A0A]">Connector used</span>
                     <div className="flex items-center gap-2 flex-wrap">
-                      <span className="font-mono text-[14px] text-[#0A0A0A]">{meta.mcp_server || '—'}</span>
+                      <span className="font-mono text-[14px] text-[#0A0A0A]">{meta.mcp_server || 'not recorded'}</span>
                       {meta.mcp_tool && (
                         <>
                           <span className="text-[#B3B3B3]" aria-hidden="true">→</span>
@@ -1133,7 +1135,7 @@ export default function AuditPage() {
                     <div className="flex flex-col gap-1">
                       <SectionHead title="Content preview" />
                       <div className="border border-[#EAEAEA] bg-[#FAFAFA] rounded-[10px] p-3 text-[14px] text-[#333333] whitespace-pre-wrap break-words">
-                        {selectedEvent.content_preview}
+                        {shownContent(selectedEvent.content_preview)}
                       </div>
                     </div>
                   )}

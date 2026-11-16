@@ -17,6 +17,8 @@ import { buildSpendReview } from '@/lib/finance/spend-review';
 import { canViewSpendReview } from '@/lib/finance/spend-review-access';
 import { cached, FRESH_MS, PAST_MONTH_FRESH_MS } from '@/lib/finance/spend-review-cache';
 import { getSpendLimits, indexByEmail, primaryRow, shareUsed, NEAR_LIMIT_SHARE } from '@/lib/anthropic/spend-limits';
+import { getTierNames } from '@/lib/pulse/tier-config';
+import { getCodeTierNames } from '@/lib/pulse/code/weekly-tiers';
 
 export const dynamic = 'force-dynamic';
 
@@ -74,6 +76,9 @@ export async function GET(
         pendingRequestAt: email ? requests.get(email)?.createdAt ?? null : null,
       },
       nearLimitShare: NEAR_LIMIT_SHARE,
+      // The organisation's depth tier names, so the page names tiers as every other page does:
+      // Cowork and ChatGPT work on the Work Pulse rubric, Code and Codex on the Code rubric.
+      tierNames: { cowork: await getTierNames(), code: await getCodeTierNames() },
       // The session click-through shows prompts, which follow the Audit Log
       // rule: admins for anyone, managers for their own department.
       canSeePrompts: canAccessPulseAdmin(session.role) && (await promptTextVisibleFor(session, [userId])).has(userId),

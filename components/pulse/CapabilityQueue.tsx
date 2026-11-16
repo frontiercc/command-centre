@@ -5,6 +5,10 @@
 
 import { useEffect, useState } from 'react';
 import { Panel, Tabs, Tag, B, Muted, cx } from '@/components/precision/ui';
+import { cleanTitle } from '@/components/pulse/CapabilityLog';
+import { tierNamesOr, withTierNames, type TierNames } from '@/lib/pulse/tier-names';
+
+const tierList = (names: TierNames | null) => { const t = tierNamesOr(names); return [t.t1, t.t2, t.t3]; };
 
 interface Candidate {
   id: number;
@@ -24,9 +28,9 @@ function formatDate(ts: number): string {
   });
 }
 
-function TierBadge({ tier }: { tier: number | null }) {
+function TierBadge({ tier, names }: { tier: number | null; names: TierNames | null }) {
   if (!tier) return null;
-  return <Tag tone="judged">Tier {tier}</Tag>;
+  return <Tag tone="judged">{tierList(names)[tier - 1] ?? `Tier ${tier}`}</Tag>;
 }
 
 interface CapabilityQueueProps {
@@ -37,6 +41,7 @@ export default function CapabilityQueue({ onCountChange }: CapabilityQueueProps)
   const [queueTab, setQueueTab] = useState<'pending' | 'dismissed'>('pending');
   const [candidates, setCandidates] = useState<Candidate[]>([]);
   const [dismissed, setDismissed] = useState<Candidate[]>([]);
+  const [tierNames, setTierNames] = useState<TierNames | null>(null);
   const [loading, setLoading] = useState(true);
   const [actioning, setActioning] = useState<number | null>(null);
   const [msg, setMsg] = useState<string | null>(null);
@@ -57,6 +62,7 @@ export default function CapabilityQueue({ onCountChange }: CapabilityQueueProps)
       .then(r => r.ok ? r.json() : Promise.reject())
       .then(d => {
         setCandidates(d.candidates ?? []);
+        setTierNames(d.tierNames ?? null);
         onCountChange?.(d.pendingCount ?? 0);
       })
       .catch(() => setCandidates([]))
@@ -165,11 +171,11 @@ export default function CapabilityQueue({ onCountChange }: CapabilityQueueProps)
                     <p className="m-0 text-[14px] font-medium text-[#0A0A0A] truncate">
                       {c.display_name ?? c.email}
                     </p>
-                    <TierBadge tier={c.tier} />
+                    <TierBadge tier={c.tier} names={tierNames} />
                   </div>
-                  <p className="m-0 text-[14px] text-[#333333] mb-0.5">{c.title}</p>
+                  <p className="m-0 text-[14px] text-[#333333] mb-0.5">{cleanTitle(c.title)}</p>
                   {c.body && (
-                    <p className="m-0 text-[13px] text-[#8F8F8F] line-clamp-2 mb-0.5">&ldquo;{c.body}&rdquo;</p>
+                    <p className="m-0 text-[13px] text-[#8F8F8F] line-clamp-2 mb-0.5">{withTierNames(c.body, tierNames)}</p>
                   )}
                   {c.task_type && (
                     <p className="m-0 text-[13px] text-[#8F8F8F]">Task: {c.task_type.replace(/_/g, ' ')}</p>

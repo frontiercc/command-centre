@@ -15,6 +15,7 @@
  * Never persists — the caller (API route) returns candidates for review;
  * the UI persists on user confirmation via POST /api/use-cases.
  */
+import { withThinkingOff } from '@/lib/anthropic/thinking';
 import Anthropic from '@anthropic-ai/sdk';
 import { createAnthropicClient } from '@/lib/anthropic/client';
 import { getConfigValue } from '@/lib/config';
@@ -96,16 +97,16 @@ function toExtractedUseCase(item: unknown): ExtractedUseCase | null {
  * useCasesExtractModel.
  */
 async function runExtraction(content: Anthropic.MessageParam['content']): Promise<ExtractedUseCase[]> {
-  const model = (await getConfigValue('useCasesExtractModel')) || 'claude-haiku-4-5-20251001';
+  const model = (await getConfigValue('useCasesExtractModel')) || 'claude-haiku-5-5';
   const client = await getClient();
 
   const message = await queueAiCall(() =>
-    client.messages.create({
+    client.messages.create(withThinkingOff({
       model,
       max_tokens: 4096,
       system: SYSTEM_PROMPT,
       messages: [{ role: 'user', content }],
-    })
+    }))
   );
 
   const rawText = extractText(message);

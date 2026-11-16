@@ -28,7 +28,7 @@ interface Conflict {
   decidedAt: number | null;
 }
 
-const fmt = (s: number | null) => (s ? new Date(s * 1000).toLocaleString('en-GB', { day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit' }) : '—');
+const fmt = (s: number | null) => (s ? new Date(s * 1000).toLocaleString('en-GB', { day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit' }) : 'not recorded');
 const surfaceLabel = (s: string) => (
   s === 'code' ? 'Claude Code' : s === 'cowork' ? 'Cowork' : s === 'chatgpt' ? 'ChatGPT' : s === 'codex' ? 'Codex' : s
 );
@@ -126,7 +126,7 @@ export default function IdentityConflictsCard() {
                   <span className="font-mono text-[13px]">{c.newEmail}</span>
                   {c.status === 'merged' ? ' merged into ' : ' kept separate from '}
                   <span className="font-mono text-[13px]">{c.existingEmail ?? 'another user'}</span>
-                  <span className="text-[#8F8F8F]"> · {c.decidedBy ?? '—'}, {fmt(c.decidedAt)}</span>
+                  <span className="text-[#8F8F8F]"> · {c.decidedBy ?? 'not recorded'}, {fmt(c.decidedAt)}</span>
                 </span>
                 <button type="button" disabled={busy === c.id} onClick={() => act(c.id, 'undo')} className={cx(B.link, 'shrink-0')}>Undo</button>
               </li>

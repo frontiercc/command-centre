@@ -20,6 +20,9 @@ import { currentPeriod } from '@/lib/finance/period';
 import { gapPct, surfaceName } from '@/lib/finance/spend-review-format';
 import { getConnectedProducts } from '@/lib/sources/connected';
 import { isOpenAiOnly, type ConnectedProducts } from '@/lib/sources/connected-shared';
+import { topTierName } from '@/lib/pulse/tier-names';
+import { getTierNames } from '@/lib/pulse/tier-config';
+import { getCodeTierNames } from '@/lib/pulse/code/weekly-tiers';
 
 /** The biggest spenders whose advice is spelled out person by person. */
 export const REPORT_PEOPLE = 10;
@@ -94,6 +97,8 @@ export interface SpendReviewSectionInput {
   boards?: EfficiencyBoard[];
   /** Claude in Office this month: an estimate, never in the totals. Null when none or hidden. */
   office?: OfficeSpendSummary | null;
+  /** What this customer calls the top tier (topTierName). Absent: the shipped name. */
+  topTier?: string;
 }
 
 export type BoardVendor = 'claude' | 'openai';
@@ -173,7 +178,7 @@ export function renderSpendReviewSection(input: SpendReviewSectionInput): string
   out.push('#### Biggest spenders');
   const top = [...index.people].sort((a, b) => b.totalUsd - a.totalUsd).slice(0, REPORT_PEOPLE);
   out.push(['| Person | Department | Spend | Main kind of work | Change | Suggestions |', '|---|---|---|---|---|---|',
-    ...top.map(p => `| ${p.displayName} | ${p.department ?? '—'} | ${p.unpricedOnly ? 'not priced' : usd(p.totalUsd)} | ${p.mainWork ? `${p.mainWork.label} (${pct(p.mainWork.share)})` : '—'} | ${change(p.totalUsd, p.priorTotalUsd, pace)} | ${p.routeCount} |`),
+    ...top.map(p => `| ${p.displayName} | ${p.department ?? 'no department'} | ${p.unpricedOnly ? 'not priced' : usd(p.totalUsd)} | ${p.mainWork ? `${p.mainWork.label} (${pct(p.mainWork.share)})` : p.totalUsd > 0 ? 'not classified yet' : 'not measured'} | ${change(p.totalUsd, p.priorTotalUsd, pace)} | ${p.routeCount} |`),
   ].join('\n'));
 
   // Advice person by person, for the biggest spenders.
@@ -203,14 +208,15 @@ export function renderSpendReviewSection(input: SpendReviewSectionInput): string
   }
 
   // One board per vendor, Claude's then OpenAI's; a board with nobody ranked is left out.
+  const topTier = input.topTier ?? topTierName(null, null);
   for (const board of boards) {
     if (!board.rows.length) continue;
     const name = BOARD_NAME[board.vendor];
     out.push(`#### Most efficient on ${name} in ${monthName(board.period)}`);
     if (board.period !== period) out.push(`Showing ${monthName(board.period)}: nobody has ${EFFICIENCY_MIN_SESSIONS} sessions of ${name} work in ${monthName(period)} yet, which the comparison needs to be fair.`);
-    out.push(`Scored on ${BOARD_WORK[board.vendor]} work only. Typical session cost against colleagues doing the same kinds of work, weighted by where each person's money goes; ranked only when their share of Tier 3 work is no more than 10 points below colleagues'.`);
-    out.push(['| | Person | Department | Cost vs colleagues | Sessions | Tier 3 (vs colleagues) |', '|---|---|---|---|---|---|',
-      ...board.rows.map((e, i) => `| ${i + 1} | ${e.displayName} | ${e.department ?? '—'} | ${gapPct(e.vsColleagues)} below | ${e.sessions} | ${pct(e.deepRate)} vs ${pct(e.peerDeepRate)} |`),
+    out.push(`Scored on ${BOARD_WORK[board.vendor]} work only. Each session's cost against colleagues' typical session for the same kind of work, and the middle of those comparisons for each person; ranked only when their share of ${topTier} work is no more than 10 points below colleagues'.`);
+    out.push([`| | Person | Department | Cost vs colleagues | Sessions | ${topTier} (vs colleagues) |`, '|---|---|---|---|---|---|',
+      ...board.rows.map((e, i) => `| ${i + 1} | ${e.displayName} | ${e.department ?? 'no department'} | ${gapPct(e.vsColleagues)} below | ${e.sessions} | ${pct(e.deepRate)} vs ${pct(e.peerDeepRate)} |`),
     ].join('\n'));
   }
 
@@ -251,5 +257,6 @@ export async function buildSpendReviewSection(periodStart: string, periodEnd: st
   }
   const boards = chooseEfficiencyBoards({ period, index, prior, connected });
   const office = await reportOfficeSpend(period);
-  return renderSpendReviewSection({ period, periodStart, periodEnd, index, reviews, limits, pace: isCurrent ? monthElapsed(period, nowMs) : 1, boards, office });
+  const topTier = topTierName(await getTierNames(), await getCodeTierNames());
+  return renderSpendReviewSection({ period, periodStart, periodEnd, index, reviews, limits, pace: isCurrent ? monthElapsed(period, nowMs) : 1, boards, office, topTier });
 }

@@ -196,7 +196,7 @@ export default function ImportTranscriptPage() {
     <>
       <TopBar title="Import Transcript" subtitle="Extract candidate use cases from a transcript" />
       <PageBody>
-        <Toolbar left={<Link href="/use-cases" className="text-[#245BF3] hover:underline">Back to Use Cases</Link>} />
+        <Toolbar left={<Link href="/use-cases" className="text-[#1F6F8B] hover:underline">Back to Use Cases</Link>} />
 
         <div className="max-w-[860px] w-full flex flex-col gap-4">
           <Panel title="Transcript" flush>

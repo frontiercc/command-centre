@@ -29,3 +29,17 @@ export function thinkingOff(model: string): ThinkingOff {
   if (/sonnet-5-5/.test(id)) return { thinking: { type: 'between_tools' } as unknown as Anthropic.ThinkingConfigParam };
   return { thinking: { type: 'disabled' } };
 }
+
+/**
+ * A messages.create request with thinking turned off for its model, merging any effort into the
+ * output_config the request already sets. Models that think by default (Haiku 5.5 among them)
+ * otherwise spend max_tokens on thinking and can return no text at all; a short reply limit, such
+ * as a one-sentence description, then fails nearly every time.
+ */
+export function withThinkingOff<P extends { model: string }>(params: P): P {
+  const off = thinkingOff(params.model);
+  const out: Record<string, unknown> = { ...params };
+  if (off.thinking) out.thinking = off.thinking;
+  if (off.effort) out.output_config = { ...((params as { output_config?: object }).output_config ?? {}), effort: off.effort };
+  return out as P;
+}

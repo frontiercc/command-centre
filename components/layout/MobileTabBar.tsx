@@ -7,7 +7,7 @@ import Link from 'next/link';
 import { usePathname } from 'next/navigation';
 import { useEffect, useState } from 'react';
 import NavIcon from './NavIcon';
-import { visibleMobileNavItems, type NavFlags } from '@/lib/nav/items';
+import { visibleMobileNavItems, isCorePlatformRole, type NavFlags } from '@/lib/nav/items';
 
 export default function MobileTabBar() {
   const pathname = usePathname();
@@ -28,7 +28,11 @@ export default function MobileTabBar() {
         chargebackEnabled: data.chargebackEnabled === true,
       }))
       .catch(() => {});
+  }, []);
 
+  // The open-alert count, only for roles that can see Alerts: anyone else would be refused.
+  useEffect(() => {
+    if (!isCorePlatformRole(role)) return;
     const refreshAlertCount = () => {
       fetch('/api/alerts/count')
         .then(r => (r.ok ? r.json() : Promise.reject()))
@@ -38,7 +42,7 @@ export default function MobileTabBar() {
     refreshAlertCount();
     window.addEventListener('alertsChanged', refreshAlertCount);
     return () => window.removeEventListener('alertsChanged', refreshAlertCount);
-  }, []);
+  }, [role]);
 
   const items = visibleMobileNavItems(role, flags);
   if (items.length === 0) return null;

@@ -21,6 +21,7 @@
 // Claude Cowork's sessions in the same run, into chatgpt_session_time: their
 // working time is measured from prompt and reply times
 // (lib/pulse/chatgpt-session-time.ts). The export names no output files.
+import { withThinkingOff } from '@/lib/anthropic/thinking';
 import { createAnthropicClient } from '@/lib/anthropic/client';
 import { and, eq, gt, gte, inArray, isNull, lt, sql } from 'drizzle-orm';
 import { getTypedClient } from '@/lib/db/client';
@@ -87,7 +88,7 @@ async function callRealModel(prompt: string): Promise<{ text: string }> {
   const model = await getCoreAiModel();
   const client = createAnthropicClient(apiKey);
   const message = await queueAiCall(() =>
-    client.messages.create({ model, max_tokens: 100, messages: [{ role: 'user', content: prompt }] }));
+    client.messages.create(withThinkingOff({ model, max_tokens: 100, messages: [{ role: 'user', content: prompt }] })));
   return { text: extractText(message) };
 }
 

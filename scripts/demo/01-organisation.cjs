@@ -41,7 +41,7 @@ const N_COMPLETED_WEEKS = 8;
 
 const rand = (min, max) => Math.floor(Math.random() * (max - min + 1)) + min;
 const pick = (arr) => arr[Math.floor(Math.random() * arr.length)];
-const uid = (prefix) => `${MARKER}${prefix}-${Math.random().toString(36).slice(2, 10)}-${Math.random().toString(36).slice(2, 10)}`;
+const uid = (prefix) => `${MARKER}${prefix}-${require('crypto').randomBytes(8).toString('hex')}`;
 
 // Deterministic per-user "has this person gone quiet recently" decision —
 // same formula duplicated in 01b-follow-up-2.cjs/-v5.cjs so all three
@@ -104,7 +104,9 @@ const CODE_PROMPTS_LIGHT = {
 };
 
 const TASK_TYPES = ['analysis', 'structured_report', 'synthesis', 'summarisation', 'basic_drafting', 'template_population', 'process_substitution'];
-const CODE_TASK_TYPES = ['bug_investigation', 'feature_build', 'code_review', 'documentation', 'refactor'];
+// Kinds of Code work from the classifier's rubric (lib/pulse/code/classifier-prompt.ts); a review is exploration.
+// Testing is left to the Team Coaching people (13-team-coaching.cjs), whose story is tests repeated with no skill.
+const CODE_TASK_TYPES = ['bugfix', 'feature', 'exploration', 'documentation', 'refactor'];
 const MODELS_WEIGHTED = [['claude-opus-4-8', 2], ['claude-sonnet-4-6', 6], ['claude-haiku-4-5', 3]];
 const weightedModel = () => pick(MODELS_WEIGHTED.flatMap(([m, w]) => Array(w).fill(m)));
 const LANGUAGES = ['TypeScript', 'Python', 'SQL', 'TSX', 'Markdown'];
@@ -146,6 +148,8 @@ async function main() {
     // Scoped to this script's own marker only, like v2/v3/v5.
     await c.query(`DELETE FROM pulse_events WHERE cowork_message_id LIKE $1`, [`${MARKER}%`]);
     await c.query(`DELETE FROM pulse_skill_runs WHERE cowork_message_id LIKE $1`, [`${MARKER}%`]);
+    // Alerts the Hub raised on these prompts would point at nothing once they go.
+    await c.query(`DELETE FROM alerts WHERE raw_evidence->>'message_id' LIKE $1`, [`${MARKER}%`]);
     const delCw = await c.query(`DELETE FROM cowork_messages WHERE id LIKE $1`, [`${MARKER}%`]);
     await c.query(`DELETE FROM code_otel_metrics WHERE id LIKE $1`, [`${MARKER}%`]);
     await c.query(`DELETE FROM code_session_stats WHERE session_id LIKE $1`, [`${MARKER}%`]);
@@ -298,7 +302,7 @@ async function main() {
                 [uid('meta'), u.id, sessionId, model, ti, to, tcw, tcr, Math.random() < 0.7 ? 'end_turn' : 'tool_use', tu, te, `/repos/${repo}`, dayBase + t * rand(30, 400), tc]);
               codeMetaN++;
             }
-            const lastAt = dayBase + turns * rand(60, 500);
+            const lastAt = Math.min(dayBase + turns * rand(60, 500), now);
             const modelsJson = JSON.stringify({ [model]: { input: inp, output: outp, cache_creation: cw, cache_read: cr } });
             await c.query(
               `INSERT INTO code_session_stats (session_id, user_id, repo, git_branch, first_at, last_at, user_msg_count, assistant_turns, tool_use_count, error_count, input_tokens, output_tokens, cache_creation_tokens, cache_read_tokens, models_json, skills_json, mcp_json, commit_count, computed_at)

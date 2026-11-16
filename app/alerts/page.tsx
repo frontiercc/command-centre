@@ -7,8 +7,9 @@ import { useCallback, useEffect, useState } from 'react';
 import Link from 'next/link';
 import TopBar from '@/components/layout/TopBar';
 import LoadingSpinner from '@/components/shared/LoadingSpinner';
-import { ALL_CATEGORIES, CATEGORY_LABELS, categoryForType } from '@/lib/alerts/categories';
+import { ALL_CATEGORIES, CATEGORY_LABELS, alertTypeLabel, categoryForType } from '@/lib/alerts/categories';
 import { useCorePlatformGuard } from '@/components/shared/useCorePlatformGuard';
+import { useSessionRole } from '@/components/shared/useSessionRole';
 import { PageBody, Panel, Segmented, Chip, Dot, Pill, Empty, B, SEVERITY_COLOR } from '@/components/precision/ui';
 
 interface Alert {
@@ -46,6 +47,8 @@ const ALERT_LIST_CAP = 500;
 
 export default function AlertsPage() {
   useCorePlatformGuard();
+  // Only admins change an alert's status (the API refuses everyone else), so only they see the buttons.
+  const isAdmin = useSessionRole() === 'admin';
   const [alerts, setAlerts] = useState<Alert[]>([]);
   const [loading, setLoading] = useState(true);
   const [filter, setFilter] = useState('');
@@ -128,7 +131,7 @@ export default function AlertsPage() {
 
   const actionableAlerts = alerts.filter(a => a.status === 'open' || a.status === 'acknowledged');
   const closedAlerts = alerts.filter(a => a.status === 'resolved' || a.status === 'dismissed');
-  const showBulkActions = actionableAlerts.length > 1;
+  const showBulkActions = isAdmin && actionableAlerts.length > 1;
 
   const clearClosed = async () => {
     await fetch('/api/alerts', { method: 'DELETE' });
@@ -171,7 +174,7 @@ export default function AlertsPage() {
             </select>
           </label>
 
-          {!loading && (showBulkActions || closedAlerts.length > 0) && (
+          {!loading && (showBulkActions || (isAdmin && closedAlerts.length > 0)) && (
             <div className="hidden lg:flex ml-auto items-center gap-2 text-[13px] text-[#666666]">
               {showBulkActions && (
                 <>
@@ -184,7 +187,7 @@ export default function AlertsPage() {
                   </button>
                 </>
               )}
-              {closedAlerts.length > 0 && (
+              {isAdmin && closedAlerts.length > 0 && (
                 <>
                   {showBulkActions && <span className="w-px h-4 bg-[#EAEAEA]" aria-hidden="true" />}
                   <span className="tabular-nums">{closedAlerts.length} closed</span>
@@ -217,7 +220,7 @@ export default function AlertsPage() {
             <ul className="m-0 p-0 list-none">
               {alerts.map(alert => {
                 const open = expandedId === alert.id;
-                const actionable = alert.status === 'open' || alert.status === 'acknowledged';
+                const actionable = isAdmin && (alert.status === 'open' || alert.status === 'acknowledged');
                 return (
                   <li key={alert.id} className="border-t border-[#F2F2F2] first:border-t-0">
                     <div className="flex gap-3.5 px-4 py-3.5 items-start">
@@ -239,7 +242,7 @@ export default function AlertsPage() {
                           {[
                             alert.user_id ? `User: ${alert.user_display_name || alert.user_id}` : null,
                             new Date(alert.generated_at * 1000).toLocaleString('en-GB'),
-                            alert.alert_type,
+                            alertTypeLabel(alert.alert_type),
                             CATEGORY_LABELS[categoryForType(alert.alert_type)],
                           ].filter(Boolean).join(' · ')}
                         </p>
@@ -247,7 +250,7 @@ export default function AlertsPage() {
                           type="button"
                           onClick={() => setExpandedId(open ? null : alert.id)}
                           aria-expanded={open}
-                          className="self-start text-[13px] text-[#245BF3] hover:underline py-1"
+                          className="self-start text-[13px] text-[#1F6F8B] hover:underline py-1"
                         >
                           {open ? 'Hide detail' : 'Detail'}
                         </button>
@@ -292,7 +295,7 @@ export default function AlertsPage() {
                                 {evidence.message_id && (
                                   <Link
                                     href={`/audit?q=${encodeURIComponent(evidence.message_id)}`}
-                                    className="self-start text-[13px] font-medium text-[#245BF3] hover:underline"
+                                    className="self-start text-[13px] font-medium text-[#1F6F8B] hover:underline"
                                   >
                                     View in Audit Log
                                   </Link>

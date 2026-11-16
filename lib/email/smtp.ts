@@ -59,7 +59,7 @@ export async function sendPasswordResetEmail(
         <p style="color:#444">Click the button below to set a new password. This link expires in <strong>1 hour</strong>.</p>
         <p style="margin:28px 0">
           <a href="${resetUrl}"
-             style="background:#6366f1;color:#fff;text-decoration:none;padding:12px 24px;border-radius:8px;font-size:14px;font-weight:600">
+             style="background:#1F6F8B;color:#fff;text-decoration:none;padding:12px 24px;border-radius:8px;font-size:14px;font-weight:600">
             Reset password
           </a>
         </p>

@@ -19,6 +19,7 @@
  * these queries uses an explicit transaction, so writes are per-statement
  * autocommit.
  */
+import { withThinkingOff } from '@/lib/anthropic/thinking';
 import { createAnthropicClient } from '@/lib/anthropic/client';
 import { and, asc, desc, eq, gt, gte, inArray, isNull, lt, or, sql } from 'drizzle-orm';
 import { getTypedClient } from '@/lib/db/client';
@@ -300,7 +301,7 @@ export async function runCodeClassifierJob(): Promise<{ selected: number; classi
 
   const client = await getTypedClient();
   const now = Math.floor(Date.now() / 1000);
-  const model = (await getConfigValue('codeClassifierModel')) || 'claude-haiku-4-5-20251001';
+  const model = (await getConfigValue('codeClassifierModel')) || 'claude-haiku-5-5';
   const includePrompt = (await getConfigValue('codeClassifierIncludePrompt')) !== 'false';
   const humanTime = await humanTimeOn('code');
 
@@ -438,12 +439,12 @@ export async function runCodeClassifierJob(): Promise<{ selected: number; classi
   let batchError: string | null = null;
   let apiError: string | undefined;
   try {
-    const response = await anthropicClient.messages.create({
+    const response = await anthropicClient.messages.create(withThinkingOff({
       model,
       max_tokens: 4096,
       system: buildCodeClassifierSystemMessage(classifierConfig, { humanTime }),
       messages: [{ role: 'user', content: `Classify these ${rows.length} sessions:\n\n${digests.join('\n\n---\n\n')}` }],
-    });
+    }));
     const textBlock = response.content.find(b => b.type === 'text');
     items = parseClassifierResponse(textBlock?.type === 'text' ? textBlock.text : '');
     if (items.length === 0) batchError = 'Empty or unparseable classifier response';
@@ -612,10 +613,10 @@ export async function estimateClassifiedCodeSessions(
     } else {
       const apiKey = await getConfigValue('anthropicAiApiKey');
       if (!apiKey) throw new Error('No AI API key configured');
-      const model = (await getConfigValue('codeClassifierModel')) || 'claude-haiku-4-5-20251001';
-      const response = await createAnthropicClient(apiKey).messages.create({
+      const model = (await getConfigValue('codeClassifierModel')) || 'claude-haiku-5-5';
+      const response = await createAnthropicClient(apiKey).messages.create(withThinkingOff({
         model, max_tokens: 4096, system: CODE_ESTIMATE_ONLY_SYSTEM, messages: [{ role: 'user', content: user }],
-      });
+      }));
       const block = response.content.find(b => b.type === 'text');
       text = block?.type === 'text' ? block.text : '';
     }

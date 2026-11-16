@@ -182,6 +182,8 @@ export default function SystemPage() {
   const [ingestIntervalSeconds, setIngestIntervalSeconds] = useState('60');
   const [acceptableUsePolicy, setAcceptableUsePolicy] = useState('');
   const [licensedSeats, setLicensedSeats] = useState('');
+  const [targetDeptAdoptionPct, setTargetDeptAdoptionPct] = useState('');
+  const [targetDeptRealWorkPct, setTargetDeptRealWorkPct] = useState('');
   const [dbStats, setDbStats] = useState<Record<string, unknown> | null>(null);
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
@@ -198,7 +200,7 @@ export default function SystemPage() {
   const [seatPriceSaving, setSeatPriceSaving] = useState(false);
 
   // Core AI model state
-  const [coreAiModel, setCoreAiModel] = useState('claude-haiku-4-5-20251001');
+  const [coreAiModel, setCoreAiModel] = useState('claude-haiku-5-5');
   const [coreAiSaving, setCoreAiSaving] = useState(false);
   const [aiModels, setAiModels] = useState<{ id: string; display_name: string }[]>([]);
   const [aiModelsLoading, setAiModelsLoading] = useState(true);
@@ -270,6 +272,8 @@ export default function SystemPage() {
         if (configData.ingestIntervalSeconds) setIngestIntervalSeconds(String(configData.ingestIntervalSeconds));
         if (configData.acceptableUsePolicy) setAcceptableUsePolicy(String(configData.acceptableUsePolicy));
         if (configData.licensedSeats) setLicensedSeats(String(configData.licensedSeats));
+        if (configData.targetDeptAdoptionPct) setTargetDeptAdoptionPct(String(configData.targetDeptAdoptionPct));
+        if (configData.targetDeptRealWorkPct) setTargetDeptRealWorkPct(String(configData.targetDeptRealWorkPct));
         setFinanceModelEfficiencyEnabled(
           configData.financeModelEfficiencyEnabled === true || configData.financeModelEfficiencyEnabled === 'true'
         );
@@ -407,7 +411,7 @@ export default function SystemPage() {
       const res = await fetch('/api/config', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ organisationName, ingestIntervalSeconds, acceptableUsePolicy, licensedSeats }),
+        body: JSON.stringify({ organisationName, ingestIntervalSeconds, acceptableUsePolicy, licensedSeats, targetDeptAdoptionPct, targetDeptRealWorkPct }),
       });
       if (res.ok) {
         showToast('Settings saved successfully', 'success');
@@ -589,8 +593,8 @@ export default function SystemPage() {
   };
 
   const statusBadge = (status: CheckStatus) => {
-    if (status === 'idle') return <span className="text-[#B3B3B3] text-[13px]">—</span>;
-    if (status === 'running') return <span className="text-[#245BF3] text-[13px] animate-pulse">Running…</span>;
+    if (status === 'idle') return <span className="text-[#B3B3B3] text-[13px]">not run</span>;
+    if (status === 'running') return <span className="text-[#1F6F8B] text-[13px] animate-pulse">Running…</span>;
     if (status === 'pass') return <Pill tone="good">Pass</Pill>;
     if (status === 'info') return <Pill tone="neutral">Info</Pill>;
     return <Pill tone="bad">Fail</Pill>;
@@ -646,6 +650,28 @@ export default function SystemPage() {
                 className={cx(B.input, 'w-full')}
                 min={1}
                 placeholder="e.g. 150"
+              />
+            </Field>
+            <Field label="Department adoption target (%)" hint="The share of each department active in the last 30 days. On the dashboard, departments below it are marked. Blank for 50; 0 for no target.">
+              <input
+                type="number"
+                value={targetDeptAdoptionPct}
+                onChange={e => setTargetDeptAdoptionPct(e.target.value)}
+                className={cx(B.input, 'w-full')}
+                min={0}
+                max={100}
+                placeholder="50"
+              />
+            </Field>
+            <Field label="Department depth floor (%)" hint="On Work Pulse, departments where fewer tasks than this reach the top two tiers (meaningful or frontier, as named on Admin → Work Pulse → Tier config) are marked. Blank for 33; 0 for no floor.">
+              <input
+                type="number"
+                value={targetDeptRealWorkPct}
+                onChange={e => setTargetDeptRealWorkPct(e.target.value)}
+                className={cx(B.input, 'w-full')}
+                min={0}
+                max={100}
+                placeholder="33"
               />
             </Field>
             <Field label="Acceptable use policy" className="md:col-span-3">
@@ -704,7 +730,7 @@ export default function SystemPage() {
             disabled={financeSaving}
           />
           <div className="px-4 py-3 border-t border-[#F2F2F2]">
-            <Field label="Claude seat price (USD/month)" hint="With Claude licensed seats under General, used only for the unused Claude seats estimate on FinOps." className="max-w-xs">
+            <Field label="Claude seat price (USD/month)" hint="With Claude licensed seats under General, used for the unused Claude seats estimate on FinOps, and for the monthly cost estimate of people who rarely use Claude on Work Pulse and Developer Pulse So What." className="max-w-xs">
               <input
                 type="number"
                 min={0}
@@ -826,7 +852,7 @@ export default function SystemPage() {
 
           <div className="px-4 py-3 border-t border-[#F2F2F2] flex flex-wrap gap-x-6 gap-y-1 text-[13px] text-[#666666]">
             <span>Last sent: <span className="text-[#0A0A0A]">{digestLastSentWeek ? new Date(Number(digestLastSentWeek) * 1000).toLocaleDateString() : 'Never'}</span></span>
-            <span>Status: <span className="text-[#0A0A0A]">{digestNextSendPreview || '—'}</span></span>
+            <span>Status: <span className="text-[#0A0A0A]">{digestNextSendPreview || 'not available'}</span></span>
           </div>
 
           {digestTestResult && (
@@ -1113,9 +1139,9 @@ export default function SystemPage() {
                     <td className={cx(T.td, 'font-medium text-[#0A0A0A]')}>{check.name}</td>
                     <td className={T.td}>{statusBadge(check.status)}</td>
                     <td className={cx(T.tdRight, 'text-[#666666]')}>
-                      {check.ms !== null ? `${check.ms}ms` : '—'}
+                      {check.ms !== null ? `${check.ms}ms` : 'not run'}
                     </td>
-                    <td className={cx(T.td, 'text-[13px] text-[#8F8F8F]')}>{check.detail || '—'}</td>
+                    <td className={cx(T.td, 'text-[13px] text-[#8F8F8F]')}>{check.detail || 'none'}</td>
                   </tr>
                 ))}
               </tbody>

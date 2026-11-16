@@ -3,15 +3,19 @@
 
 // Async Drizzle on Postgres.
 import Anthropic from '@anthropic-ai/sdk';
+import { briefingPeriodLabel } from '@/lib/pulse/briefings/described-facts';
+import { personPerProduct } from '@/lib/dashboard/product-sql';
 import { createAnthropicClient } from '@/lib/anthropic/client';
 import { createGroundedJson, paragraphsShape } from '@/lib/anthropic/grounded-json';
-import { and, eq, gte, inArray, isNotNull, lt, sql } from 'drizzle-orm';
+import { and, eq, gte, inArray, lt, sql } from 'drizzle-orm';
 import { getTypedClient } from '@/lib/db/client';
 import { schema } from '@/lib/db/schema';
 import { buildProductFacts } from '@/lib/pulse/briefings/product-facts';
 import { buildDeepWorkSummary, deepWorkLines } from '@/lib/pulse/briefings/deep-work-facts';
 import { workByProductFacts } from '@/lib/pulse/briefings/work-by-product';
 import { getConfigValue } from '@/lib/config';
+import { getTierNames } from '@/lib/pulse/tier-config';
+import { tierLines, producedLine } from '@/lib/pulse/briefings/described-facts';
 import {
   DEPT_BRIEFING_SYSTEM,
   buildDeptBriefingUserMessage,
@@ -24,10 +28,6 @@ async function getClient(): Promise<Anthropic> {
   return createAnthropicClient(apiKey);
 }
 
-function periodLabel(date: Date): string {
-  return date.toLocaleDateString('en-GB', { month: 'long', year: 'numeric' });
-}
-
 export async function generateDeptBriefing(
   dept: string,
   periodStart: number,
@@ -37,7 +37,6 @@ export async function generateDeptBriefing(
   const client = await getTypedClient();
   const u = schema.users;
   const pc = schema.pulseClassifications;
-  const pm = schema.pulseMetrics;
   const pe = schema.pulseEvents;
 
   const memberRows = await client.select({ id: u.id }).from(u).where(eq(u.department, dept));
@@ -48,8 +47,10 @@ export async function generateDeptBriefing(
   }
 
   const activeRows = await client
-    .select({ cnt: sql<number | string>`count(distinct ${pc.user_id})` })
+    // A person once for each product they used, as the pages' All view counts them.
+    .select({ cnt: sql<number | string>`count(distinct ${sql.raw(personPerProduct('cowork_messages.'))})` })
     .from(pc)
+    .innerJoin(schema.coworkMessages, eq(schema.coworkMessages.id, pc.cowork_message_id))
     .where(and(
       inArray(pc.user_id, memberIds),
       gte(pc.classified_at, periodStart), lt(pc.classified_at, periodEnd),
@@ -73,26 +74,6 @@ export async function generateDeptBriefing(
   }
   const totalTier = tierCounts[1] + tierCounts[2] + tierCounts[3];
 
-  const ddsRows = await client
-    .select({ v: sql<number | string | null>`avg(${pm.dds})` })
-    .from(pm)
-    .where(and(
-      eq(pm.scope_type, 'user'), inArray(pm.scope_id, memberIds), isNotNull(pm.dds),
-      eq(pm.granularity, 'rolling'),
-      gte(pm.computed_at, periodStart), lt(pm.computed_at, periodEnd),
-    ));
-  const ddsValue = ddsRows[0]?.v !== null && ddsRows[0]?.v !== undefined ? Number(ddsRows[0].v) : null;
-
-  const otiRows = await client
-    .select({ v: sql<number | string | null>`avg(${pm.oti})` })
-    .from(pm)
-    .where(and(
-      eq(pm.scope_type, 'user'), inArray(pm.scope_id, memberIds), isNotNull(pm.oti),
-      eq(pm.granularity, 'rolling'),
-      gte(pm.computed_at, periodStart), lt(pm.computed_at, periodEnd),
-    ));
-  const otiValue = otiRows[0]?.v !== null && otiRows[0]?.v !== undefined ? Number(otiRows[0].v) : null;
-
   const capRows = await client
     .select({ cnt: sql<number | string>`count(*)` })
     .from(pe)
@@ -102,7 +83,7 @@ export async function generateDeptBriefing(
     ));
   const capCount = Number(capRows[0]?.cnt ?? 0);
 
-  const deepWork = deepWorkLines(await buildDeepWorkSummary(memberIds, periodStart, periodEnd));
+  const deepWork = deepWorkLines(await buildDeepWorkSummary(memberIds, periodStart, periodEnd), (await getTierNames()).t3);
 
   const tier3ByType = await client
     .select({ user_id: pc.user_id, task_type: pc.task_type })
@@ -128,16 +109,14 @@ export async function generateDeptBriefing(
   }
   const concentrationCount = [...soleUserCounts.values()].filter(c => c >= 3).length;
 
+  const tierNames = await getTierNames();
   const ctx: DeptBriefingContext = {
     dept_name: dept,
-    period_label: periodLabel(new Date(periodStart * 1000)),
+    period_label: briefingPeriodLabel(periodStart, periodEnd),
     active_users: activeCount,
     total_classified: totalTier,
-    tier_1_pct: totalTier > 0 ? Math.round((tierCounts[1] / totalTier) * 100) : 0,
-    tier_2_pct: totalTier > 0 ? Math.round((tierCounts[2] / totalTier) * 100) : 0,
-    tier_3_pct: totalTier > 0 ? Math.round((tierCounts[3] / totalTier) * 100) : 0,
-    avg_dds: ddsValue !== null ? Math.round(ddsValue * 100) / 100 : null,
-    avg_oti: otiValue !== null ? Math.round(otiValue * 100) / 100 : null,
+    tier_lines: tierLines(tierNames, tierCounts),
+    produced_line: await producedLine(memberIds, periodStart, periodEnd),
     confirmed_capabilities: capCount,
     deep_work: deepWork,
     work_by_product: await workByProductFacts(memberIds, periodStart, periodEnd),

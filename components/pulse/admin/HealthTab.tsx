@@ -7,6 +7,8 @@ import { useEffect, useState } from 'react';
 import { Panel, Strip, Figure, Muted, Notice, Tag, Pill, B, T, cx } from '@/components/precision/ui';
 import { PRODUCTS } from '@/lib/dashboard/vendor';
 import { SaveMsg } from '@/components/admin/precision-admin';
+import { shownContent } from '@/lib/retention/marker';
+import { tierNamesOr, type TierNames } from '@/lib/pulse/tier-names';
 
 interface TierDay { day: string; tier: number; cnt: number }
 interface ConfBucket { bucket: number; cnt: number }
@@ -24,6 +26,8 @@ interface ProductRow { product: string; classified: number; waiting: number; fai
 interface HealthData {
   byProduct?: ProductRow[];
   classifyChatgpt?: boolean;
+  /** What this customer calls each tier (Admin → Work Pulse → Tier config). */
+  tierNames?: TierNames;
   queueDepth: number;
   tierDist: TierDay[];
   confidenceHist: ConfBucket[];
@@ -55,7 +59,7 @@ function ConfHistogram({ data }: { data: ConfBucket[] }) {
           <div
             title={`${b.bucket * 10}%–${b.bucket * 10 + 10}%: ${b.cnt}`}
             style={{ height: `${Math.round((b.cnt / maxCnt) * 52)}px` }}
-            className={`w-full rounded-full ${b.bucket >= 7 ? 'bg-[#3D6CE8]' : b.bucket >= 4 ? 'bg-[#8DB2FC]' : 'bg-[#CCD1DB]'}`}
+            className={`w-full rounded-full ${b.bucket >= 7 ? 'bg-[#1F6F8B]' : b.bucket >= 4 ? 'bg-[#6BA3B8]' : 'bg-[#CCD1DB]'}`}
           />
           <span className="text-[11px] text-[#8F8F8F] tabular-nums">{b.bucket * 10}</span>
         </div>
@@ -213,9 +217,10 @@ export default function HealthTab() {
               {[1, 2, 3].map(tier => {
                 const cnt = tierTotals[tier] ?? 0;
                 const pct = Math.round((cnt / totalClassified) * 100);
-                // AI-judged: sky blue steps, light to dark from Tier 1 to Tier 3.
-                const colours: Record<number, string> = { 1: '#CCD1DB', 2: '#8DB2FC', 3: '#3D6CE8' };
-                const labels: Record<number, string> = { 1: 'Tier 1: Administrative', 2: 'Tier 2: Meaningful', 3: 'Tier 3: Frontier' };
+                // AI-judged: petrol shades, light to dark from Tier 1 to Tier 3.
+                const colours: Record<number, string> = { 1: '#CCD1DB', 2: '#6BA3B8', 3: '#1F6F8B' };
+                const names = tierNamesOr(data.tierNames);
+                const labels: Record<number, string> = { 1: `Tier 1: ${names.t1}`, 2: `Tier 2: ${names.t2}`, 3: `Tier 3: ${names.t3}` };
                 return (
                   <div key={tier} className="flex flex-col gap-1">
                     <div className="flex items-baseline justify-between gap-2">
@@ -285,7 +290,7 @@ export default function HealthTab() {
                     <td className={cx(T.tdMute, 'whitespace-nowrap tabular-nums')}>{timeAgo(f.classified_at)}</td>
                     <td className={T.td}>{f.display_name ?? f.email}</td>
                     <td className={cx(T.tdMute, 'max-w-xs')}>
-                      {(f.content_preview ?? '').slice(0, 60)}{(f.content_preview ?? '').length > 60 ? '…' : ''}
+                      {shownContent(f.content_preview ?? '').slice(0, 60)}{shownContent(f.content_preview ?? '').length > 60 ? '…' : ''}
                     </td>
                     <td className={cx(T.td, 'max-w-xs text-[#B42318]')}>
                       {(f.classifier_error ?? '').slice(0, 80)}

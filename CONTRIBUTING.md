@@ -74,7 +74,7 @@ CI runs lint, the full test suite and the build (which includes the type check) 
 
 Command Centre is only useful if people can trust its figures. Four rules protect that, and a pull request that breaks one will not be merged.
 
-1. **Measured and judged are never mixed.** A figure read from telemetry is measured. A figure produced by a model, or by an assumption such as minutes saved per task, is judged or estimated. They are labelled differently in the interface (dark blue for measured, sky blue for AI-judged or estimated, as the colour key at the top of pages that show both says) and are never added together.
+1. **Measured and judged are never mixed.** A figure read from telemetry is measured. A figure produced by a model, or by an assumption such as minutes saved per task, is judged or estimated. They are labelled differently in the interface (a grey "AI-judged" or "Estimate" tag and their wording, with the lighter petrol shade for their bars) and are never added together.
 2. **Not measured is never zero.** When a value cannot be measured, return `null` and show "not measured". An unpriced model has no cost, not a cost of $0.
 3. **A model never writes a number that is stored or shown.** Figures are computed in code and passed to the model. Model-written text is checked against those figures: a sentence with a number of its own is removed, and a briefing that cannot be repaired is withheld.
 4. **No person-level data leaves through the Metrics Connector.** The export API and the MCP server carry organisation-wide figures only.

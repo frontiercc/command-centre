@@ -17,11 +17,12 @@
  *   people / sessions   measured, from each product's prompts
  *   meaningfulPct       AI-judged, share of classified prompts at Tier 2 or 3,
  *                       held back below MIN_JUDGED_FOR_RATE judged prompts
- *   producedPct         measured, share of those sessions that produced
- *                       something (cowork_session_stats.produced_output), held back
+ *   producedPct         measured, share of the sessions started in the window
+ *                       that produced something (cowork_session_stats.produced_output),
+ *                       every session counted, held back
  *                       below MIN_SESSIONS_FOR_RATE sessions like the Session
- *                       Output card. Only Claude's telemetry builds session
- *                       stats, so Claude Chat and ChatGPT stay not measured.
+ *                       Output card. Claude Chat's comes from what its replies
+ *                       made (chat_assistant_meta); ChatGPT stays not measured.
  *   spendUsd            Cowork: the reported cost Claude sends. Office and
  *                       Google send tokens and no cost, so theirs is priced
  *                       from the rates table and marked an estimate. ChatGPT:
@@ -33,7 +34,7 @@
  * OpenAI shows the ChatGPT row, All shows both, and All products always
  * covers the rows of that view. Null always means "not measured", never zero.
  */
-import { and, eq, gte, inArray, isNotNull, isNull, sql, type SQL } from 'drizzle-orm';
+import { and, eq, gte, isNotNull, isNull, lte, sql, type SQL } from 'drizzle-orm';
 import { getTypedClient } from '@/lib/db/client';
 import { schema } from '@/lib/db/schema';
 import { officeSpendByUser, summariseOfficeSpend } from '@/lib/finance/office-spend';
@@ -189,20 +190,21 @@ export async function buildByProduct(
     if (row && total >= MIN_JUDGED_FOR_RATE) row.meaningfulPct = Math.round((Number(t.meaningful) / total) * 100);
   }
 
-  // Produced something: of the sessions in the Sessions column (a prompt in the
-  // window), the share with a measured answer that produced something. Reading
-  // every stats row started in the window instead also counted sessions with no
-  // prompt at all, which on a demo hub outnumbered the real ones 18 to 1 and
-  // pulled Cowork and All products to near zero. Session stats are built from
-  // Claude's telemetry only, so Claude Chat and ChatGPT sessions have none.
+  // Produced something: every Claude session started in the window with a
+  // measured answer (cowork_session_stats.produced_output), the same sessions
+  // the Session Output card counts. A session is counted whether or not its
+  // prompts are still stored: purge-mode retention deletes old prompts but
+  // keeps the session rows. Session stats are built from Claude's telemetry
+  // only, so Claude Chat and ChatGPT sessions have none and are read below.
   const cs = schema.coworkSessions;
   const css = schema.coworkSessionStats;
-  const promptedSessions = client
-    .selectDistinct({ id: cm.session_id })
-    .from(cm)
-    .where(and(inView, eq(cm.message_type, 'cowork_user_message')));
+  const statsInWindow = and(
+    isNotNull(css.produced_output),
+    gte(css.first_event_at, since),
+    lte(css.first_event_at, nowS),
+  );
   const sessionProduct = sql<string>`COALESCE(${cs.product}, 'cowork')`;
-  const produced = await client
+  const produced = !showClaude ? [] : await client
     .select({
       product: sessionProduct,
       measured: sql<number | string>`COUNT(*)`,
@@ -210,12 +212,50 @@ export async function buildByProduct(
     })
     .from(css)
     .innerJoin(cs, eq(cs.id, css.session_id))
-    .where(and(inArray(css.session_id, promptedSessions), isNotNull(css.produced_output)))
+    .where(statsInWindow)
     .groupBy(sessionProduct);
   for (const r of produced) {
     const row = isPanelProduct(r.product, order) ? rows.get(r.product) : undefined;
     const measured = Number(r.measured);
     if (row && measured >= MIN_SESSIONS_FOR_RATE) row.producedPct = Math.round((Number(r.yes) / measured) * 100);
+  }
+  // Claude Chat: a conversation produced something when a reply made an artifact or a file
+  // (chat_assistant_meta). One with no reply on record is not measured and is left out.
+  let chatProduced = { measured: 0, yes: 0 };
+  const chatRow = rows.get('claude_chat');
+  if (chatRow) {
+    const r = (await (client as unknown as { execute: (q: unknown) => Promise<{ rows: unknown[] }> }).execute(sql`
+      SELECT COUNT(*) AS measured, COUNT(*) FILTER (WHERE q.p = 1) AS yes
+      FROM (
+        SELECT (SELECT CASE WHEN COUNT(*) = 0 THEN NULL
+                            WHEN SUM(m.artifacts_count + m.generated_files_count) > 0 THEN 1 ELSE 0 END
+                FROM chat_assistant_meta m WHERE m.conversation_id = c.session_id) AS p
+        FROM (SELECT DISTINCT session_id FROM cowork_messages
+              WHERE surface = 'chat' AND message_type = 'cowork_user_message'
+                AND session_id IS NOT NULL AND occurred_at >= ${since}) c
+      ) q WHERE q.p IS NOT NULL
+    `)).rows[0] as { measured: number | string; yes: number | string } | undefined;
+    chatProduced = { measured: Number(r?.measured ?? 0), yes: Number(r?.yes ?? 0) };
+    if (chatProduced.measured >= MIN_SESSIONS_FOR_RATE) chatRow.producedPct = Math.round((chatProduced.yes / chatProduced.measured) * 100);
+  }
+  // ChatGPT: a conversation produced something when a reply listed a file (openai_replies.files_count).
+  // Replies stored before the count was kept are not measured and are left out.
+  let gptProduced = { measured: 0, yes: 0 };
+  const gptRow = rows.get('chatgpt');
+  if (gptRow) {
+    const r = (await (client as unknown as { execute: (q: unknown) => Promise<{ rows: unknown[] }> }).execute(sql`
+      SELECT COUNT(*) AS measured, COUNT(*) FILTER (WHERE q.p = 1) AS yes
+      FROM (
+        SELECT (SELECT CASE WHEN COUNT(r.files_count) = 0 THEN NULL
+                            WHEN SUM(r.files_count) > 0 THEN 1 ELSE 0 END
+                FROM openai_replies r WHERE r.session_id = c.session_id) AS p
+        FROM (SELECT DISTINCT session_id FROM cowork_messages
+              WHERE source IN ('chatgpt_chat', 'chatgpt_work') AND message_type = 'cowork_user_message'
+                AND session_id IS NOT NULL AND occurred_at >= ${since}) c
+      ) q WHERE q.p IS NOT NULL
+    `)).rows[0] as { measured: number | string; yes: number | string } | undefined;
+    gptProduced = { measured: Number(r?.measured ?? 0), yes: Number(r?.yes ?? 0) };
+    if (gptProduced.measured >= MIN_SESSIONS_FOR_RATE) gptRow.producedPct = Math.round((gptProduced.yes / gptProduced.measured) * 100);
   }
 
   // Spend. Cowork: the reported cost, Claude's own (ChatGPT rows carry none).
@@ -264,15 +304,9 @@ export async function buildByProduct(
     .from(pc)
     .innerJoin(cm, eq(cm.id, pc.cowork_message_id))
     .where(and(classifiedInWindow, viewVendor === 'all' ? undefined : messageVendor(viewVendor)));
-  const [allProduced] = await client
-    .select({
-      measured: sql<number | string>`COUNT(*)`,
-      yes: sql<number | string>`COUNT(*) FILTER (WHERE ${css.produced_output} = 1)`,
-    })
-    .from(css)
-    .where(and(inArray(css.session_id, promptedSessions), isNotNull(css.produced_output)));
   const tierTotal = Number(allTiers?.total ?? 0);
-  const producedTotal = Number(allProduced?.measured ?? 0);
+  const producedTotal = produced.reduce((n, r) => n + Number(r.measured), 0) + chatProduced.measured + gptProduced.measured;
+  const producedYes = produced.reduce((n, r) => n + Number(r.yes), 0) + chatProduced.yes + gptProduced.yes;
   const spendRows = [...rows.values()].filter(r => r.spendUsd !== null);
   const total: ProductRow = {
     product: 'all',
@@ -280,7 +314,7 @@ export async function buildByProduct(
     people: [...rows.values()].reduce((n, r) => n + r.people, 0),
     sessions: Number(all?.sessions ?? 0),
     meaningfulPct: tierTotal > 0 ? Math.round((Number(allTiers.meaningful) / tierTotal) * 100) : null,
-    producedPct: producedTotal >= MIN_SESSIONS_FOR_RATE ? Math.round((Number(allProduced.yes) / producedTotal) * 100) : null,
+    producedPct: producedTotal >= MIN_SESSIONS_FOR_RATE ? Math.round((producedYes / producedTotal) * 100) : null,
     spendUsd: spendRows.length > 0 ? spendRows.reduce((n, r) => n + (r.spendUsd ?? 0), 0) : null,
     spendEstimated: spendRows.some(r => r.spendEstimated),
     unpricedModels: [],

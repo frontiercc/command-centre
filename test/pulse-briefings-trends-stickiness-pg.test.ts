@@ -193,7 +193,7 @@ async function runSpec(): Promise<void> {
 
     // generateCioBriefing doesn't return the raw ctx, but
     // buildCioBriefingUserMessage embeds the exact concentration_risk_count
-    // in the RESILIENCE section of the prompt sent to the (mocked)
+    // in the WHERE ATTENTION IS NEEDED section of the prompt sent to the (mocked)
     // Anthropic call -- inspecting that captured prompt locks the SQL
     // result without needing any production-code change.
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -201,12 +201,12 @@ async function runSpec(): Promise<void> {
     const userPrompt: string = cioCallArgs.messages[0].content;
     // Positive case: exactly 'conc-sole-owner' counted (count === 1).
     expect(userPrompt).toContain(
-      '1 user(s) are sole runners of 3 or more Tier 3 workflows, so concentration risk is present.'
+      '1 person is the only one doing three or more kinds of the deepest work, so that work rests on them.'
     );
     // Negative/boundary case: 'conc-partial-owner' must NOT also be
     // counted -- a naive GROUP BY that defeats the sole-owner HAVING
     // filter would inflate this to 2.
-    expect(userPrompt).not.toContain('2 user(s) are sole runners');
+    expect(userPrompt).not.toContain('2 people are the only one');
 
     // ── (4b) Negative case: no Tier-3 activity in period -> count is 0 ───────
     const emptyPeriodStart = NOW - 400 * DAY;
@@ -215,7 +215,7 @@ async function runSpec(): Promise<void> {
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     const cioCallArgs2 = mockCreate.mock.calls.at(-1)?.[0] as any;
     const userPrompt2: string = cioCallArgs2.messages[0].content;
-    expect(userPrompt2).toContain('No concentration risk detected.');
+    expect(userPrompt2).toContain('No kind of the deepest work rests on one person alone.');
 
     const briefingRowsAfterSecondCall = await db.select().from(schema.pulseBriefings);
     expect(briefingRowsAfterSecondCall).toHaveLength(2);

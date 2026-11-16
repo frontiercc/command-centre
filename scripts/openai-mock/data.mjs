@@ -73,7 +73,7 @@ const iso = (ms) => new Date(ms).toISOString().replace(/\.(\d{3})Z$/, '.$1000Z')
 const isoSec = (ms) => new Date(Math.floor(ms / 1000) * 1000).toISOString().replace('.000Z', 'Z');
 
 // ── People ──────────────────────────────────────────────────────────────────
-function loadPeople(rng) {
+function loadPeople(rng, teamRng) {
   const all = JSON.parse(readFileSync(path.join(here, '..', 'demo', 'acme-people.json'), 'utf8'));
   const byDept = {};
   for (const p of all) (byDept[p.department] ??= []).push(p);
@@ -93,7 +93,18 @@ function loadPeople(rng) {
   // Two people Command Centre has never seen, to exercise creating a person.
   chatgpt.push({ email: 'nadia.okafor@acmecorp.example', name: 'Nadia Okafor', department: 'Finance', userId: rng.id('user-', 24) });
   codex.push({ email: 'tom.brennan@acmecorp.example', name: 'Tom Brennan', department: 'Engineering', userId: rng.id('user-', 24) });
-  return { chatgpt, codex };
+  // Two people in every other team code with Codex too, so each team's Developer Pulse pages have
+  // Codex work to show: the last two listed. Their ids come from their own stream, so every id the
+  // rest of the export has had stays exactly as it was.
+  const codexTeams = [];
+  for (const [dept, people] of Object.entries(byDept)) {
+    if (dept === 'Engineering') continue;
+    for (const p of people.slice(-2)) {
+      if (codex.some(a => a.email === p.email)) continue;
+      codexTeams.push({ email: p.email, name: p.display_name, department: p.department, userId: teamRng.id('user-', 24) });
+    }
+  }
+  return { chatgpt, codex, codexTeams };
 }
 
 // ── Prompt banks ────────────────────────────────────────────────────────────
@@ -288,7 +299,10 @@ export function buildEvents({ nowMs, days = 14, horizonHours = 24, seed = 42 }) 
   // other generated id and time exactly as before.
   const sensitiveRng = makeRng(seed + 7);
   const codexSensitiveLeft = [...CODEX_SENSITIVE_PROMPTS];
-  const { chatgpt, codex } = loadPeople(rng);
+  // A separate stream for the Codex people in teams other than Engineering, generated last, so
+  // adding them leaves every other generated id and time exactly as before.
+  const teamRng = makeRng(seed + 11);
+  const { chatgpt, codex, codexTeams } = loadPeople(rng, teamRng);
   const startMs = nowMs - days * 86_400_000;
   const endMs = nowMs + horizonHours * 3_600_000;
   const events = [];
@@ -452,7 +466,9 @@ export function buildEvents({ nowMs, days = 14, horizonHours = 24, seed = 42 }) 
 
   // ── Codex ────────────────────────────────────────────────────────────────
   const turnRecords = [];
-  for (const actor of codex) {
+  // One person's Codex sessions, on the stream, usage, push and records given: the people in other
+  // teams use their own, generated last.
+  const codexFor = (actor, rng, addUsage, push, turnRecords) => {
     for (const day of allDays) {
       if (isWeekend(day) ? !rng.chance(0.15) : rng.chance(0.15)) continue; // a day off Codex
       const sessions = rng.weighted([[1, 35], [2, 40], [3, 20], [4, 5]]);
@@ -552,7 +568,8 @@ export function buildEvents({ nowMs, days = 14, horizonHours = 24, seed = 42 }) 
         }
       }
     }
-  }
+  };
+  for (const actor of codex) codexFor(actor, rng, addUsage, push, turnRecords);
 
   // One engineer runs a daily Codex automation at 07:00 UTC.
   const automator = codex[0];
@@ -600,6 +617,7 @@ export function buildEvents({ nowMs, days = 14, horizonHours = 24, seed = 42 }) 
 
   // ── CODEX_TURN: one per turn, ~2 hours after its UTC hour ────────────────
   const CLASSES = [['code_implementation', 'feature_development'], ['code_implementation', 'bug_fixing'], ['code_review', 'security_review'], ['testing', 'unit_tests'], ['code_understanding', 'explanation'], ['maintenance', 'dependency_upgrade']];
+  const emitTurns = (turnRecords, rng) => {
   for (const tr of turnRecords) {
     const hour = Math.floor(tr.started / 3_600_000) * 3_600_000;
     const hourEnd = hour + 3_600_000 - 1_000;
@@ -628,11 +646,14 @@ export function buildEvents({ nowMs, days = 14, horizonHours = 24, seed = 42 }) 
       },
     });
   }
+  };
+  emitTurns(turnRecords, rng);
 
   // ── COSTS: hourly, per person, model, product and client, 3-5 h late ─────
   const groupIds = {};
   const groupFor = (dept) => ({ id: (groupIds[dept] ??= createHash('md5').update(dept).digest('hex')), name: dept });
-  let noEmailDone = false;
+  const emitCosts = (usage, rng, mayDropEmail) => {
+  let noEmailDone = !mayDropEmail;
   for (const u of usage.values()) {
     const hourEnd = u.hour + 3_600_000 - 1_000;
     const rate = CREDITS_PER_MTOK[u.model];
@@ -670,6 +691,8 @@ export function buildEvents({ nowMs, days = 14, horizonHours = 24, seed = 42 }) 
       },
     });
   }
+  };
+  emitCosts(usage, rng, true);
   // A Workspace Agent's usage: no person attached.
   if (weekdays.length) {
     const hour = weekdays[weekdays.length - 2] + 11 * 3_600_000;
@@ -691,7 +714,24 @@ export function buildEvents({ nowMs, days = 14, horizonHours = 24, seed = 42 }) 
     });
   }
 
-  return { events, people: { chatgpt, codex } };
+  // Codex for two people in every team other than Engineering, last and on their own stream, so
+  // every event above keeps the id and time it has always had.
+  const teamUsage = new Map();
+  const addTeamUsage = (ms, actor, model, product, client, inTok, cachedTok, outTok, usd) => {
+    const hour = Math.floor(ms / 3_600_000) * 3_600_000;
+    const key = `${hour}|${actor.email}|${model}|${product}|${client}`;
+    const u = teamUsage.get(key) ?? { hour, actor, model, product, client, in: 0, cached: 0, out: 0, usd: !!usd };
+    u.in += inTok; u.cached += cachedTok; u.out += outTok;
+    teamUsage.set(key, u);
+  };
+  const teamPush = (eventType, eventMs, record, extraDelay = 0) =>
+    events.push({ eventType, availableAt: eventMs + teamRng.int(60_000, 25 * 60_000) + extraDelay, record });
+  const teamTurns = [];
+  for (const actor of codexTeams) codexFor(actor, teamRng, addTeamUsage, teamPush, teamTurns);
+  emitTurns(teamTurns, teamRng);
+  emitCosts(teamUsage, teamRng, false);
+
+  return { events, people: { chatgpt, codex: [...codex, ...codexTeams] } };
 }
 
 /**

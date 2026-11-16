@@ -18,8 +18,8 @@
  * `numeric` column on Postgres) is also Number()-coerced at the read site.
  * The "repos gone quiet" subquery needed an explicit alias on its derived
  * table (`AS quiet_repos`) — Postgres requires one.
- * The 7-day-ago date param compared against `github_repo_stats.date` is a
- * plain TEXT column (YYYY-MM-DD), so the JS-computed date string param is a
+ * The 7-day window's first date compared against `github_repo_stats.date` is
+ * a plain TEXT column (YYYY-MM-DD), so the JS-computed date string param is a
  * lexicographic comparison.
  */
 import { getCodeWorkTypeLabeller } from '@/lib/pulse/code/tier-config';
@@ -33,6 +33,7 @@ import { getConfigValue } from '@/lib/config';
 import { ORG_SCOPE_ID } from '@/lib/pulse/code/aggregator';
 import { createGroundedJson, paragraphsShape, pctChange, pctOf } from '@/lib/anthropic/grounded-json';
 import { hasCodexData, pickCodeMetricsSource } from '@/lib/pulse/code/vendor-view';
+import { buildDailyWindow } from '@/lib/pulse/code/shipping-alignment';
 
 export const CODE_BRIEFING_SCOPE_ID = 'code-org';
 
@@ -41,13 +42,14 @@ const SYSTEM_BASE = `You write a short weekly briefing about how an engineering 
 Rules:
 - Plain language only. Never use acronyms or metric names (no "OTI", "DDS", "autonomy ratio"; describe what the numbers mean instead).
 - Use ONLY the numbers provided, exactly as written. Never invent, extrapolate, or estimate figures, and never calculate new ones (no sums, differences or percentages of your own): every change and share you may need is already given.
-- Spend is context, not a verdict: interpret it alongside delegation depth and shipping.
+- Spend is context, not a verdict: interpret it alongside how much AI does for each prompt and what ships.
+- Say tool actions per prompt as what it is, for example "AI took about 4.7 actions for each prompt". Never call it delegation depth, a depth, a score, an index or a ratio.
 - The work-type mix is an AI judgement. When you reference it, attribute it ("sessions Claude judged to be…"). Everything else is measured telemetry.
 - Be direct about weak signals; no cheerleading.
 
 Respond with ONLY JSON, no markdown fences:
 {"paragraphs": ["...", "...", "..."], "suggestion": "one concrete, grounded action"}
-Exactly 3 paragraphs: (1) cost and scale of the week, (2) how deeply work is being delegated and what kind of work it is, (3) shipping and codebase reach. The suggestion must follow from the data given.`;
+Exactly 3 paragraphs: (1) cost and scale of the week, (2) how much of the work AI carries out for each prompt and what kind of work it is, (3) shipping and codebase reach. The suggestion must follow from the data given.`;
 
 /** Once Codex data exists the briefing covers both coding tools and names each. */
 const PRODUCT_RULE = `
@@ -85,7 +87,8 @@ async function buildDataSummary(codexPresent: boolean): Promise<string> {
   const client = await getTypedClient();
   const now = Math.floor(Date.now() / 1000);
   const lines: string[] = [];
-  // All products once Codex data exists (lib/pulse/code/vendor-view.ts).
+  // All products once Codex data exists (lib/pulse/code/vendor-view.ts). A weekly briefing, so it
+  // reads the aggregator's 7-day rows ('rolling_7d'), not Developer Pulse's 30-day headline rows.
   const src = await pickCodeMetricsSource('all', codexPresent);
 
   const m = await rawGet<{
@@ -101,7 +104,7 @@ async function buildDataSummary(codexPresent: boolean): Promise<string> {
   }>(client, sql`
     SELECT spend_usd, input_tokens, output_tokens, cache_hit_ratio, autonomy_ratio,
            session_count, repo_count, commit_count, skill_leverage
-    FROM ${src.table} WHERE scope_type = 'organisation' AND scope_id = ${ORG_SCOPE_ID} AND granularity = 'rolling' ${src.only}
+    FROM ${src.table} WHERE scope_type = 'organisation' AND scope_id = ${ORG_SCOPE_ID} AND granularity = 'rolling_7d' ${src.only}
     ORDER BY computed_at DESC LIMIT 1
   `);
   const prior = await rawGet<{
@@ -111,16 +114,16 @@ async function buildDataSummary(codexPresent: boolean): Promise<string> {
     commit_count: number | string;
   }>(client, sql`
     SELECT spend_usd, autonomy_ratio, session_count, commit_count
-    FROM ${src.table} WHERE scope_type = 'organisation' AND scope_id = ${ORG_SCOPE_ID} AND granularity = 'rolling' AND computed_at <= ${now - 7 * 24 * 3600} ${src.only}
+    FROM ${src.table} WHERE scope_type = 'organisation' AND scope_id = ${ORG_SCOPE_ID} AND granularity = 'rolling_7d' AND computed_at <= ${now - 7 * 24 * 3600} ${src.only}
     ORDER BY computed_at DESC LIMIT 1
   `);
 
   if (!m) return '';
   const spendUsd = m.spend_usd !== null && m.spend_usd !== undefined ? Math.round(Number(m.spend_usd) * 100) / 100 : null; // pence, so the briefing never quotes $8.18486
-  lines.push(`this_week: spend_usd=${spendUsd ?? 'unpriced'}, sessions=${Number(m.session_count)}, active_repos=${Number(m.repo_count)}, ${codexPresent ? 'commits_in_ai_coding_sessions' : 'commits_in_claude_sessions'}=${Number(m.commit_count)}, tool_actions_per_human_prompt=${m.autonomy_ratio?.toFixed(2) ?? 'n/a'}, context_served_from_cache=${m.cache_hit_ratio !== null && m.cache_hit_ratio !== undefined ? Math.round(m.cache_hit_ratio * 100) + '%' : 'n/a'}`);
+  lines.push(`this_week: spend_usd=${spendUsd ?? 'unpriced'}, sessions=${Number(m.session_count)}, active_repos=${Number(m.repo_count)}, ${codexPresent ? 'commits_in_ai_coding_sessions' : 'commits_in_claude_sessions'}=${Number(m.commit_count)}, tool_actions_per_human_prompt=${m.autonomy_ratio?.toFixed(1) ?? 'n/a'}, context_served_from_cache=${m.cache_hit_ratio !== null && m.cache_hit_ratio !== undefined ? Math.round(m.cache_hit_ratio * 100) + '%' : 'n/a'}`);
   if (prior) {
     const priorSpend = prior.spend_usd !== null && prior.spend_usd !== undefined ? Math.round(Number(prior.spend_usd) * 100) / 100 : null;
-    lines.push(`prior_week: spend_usd=${priorSpend ?? 'unpriced'}, sessions=${Number(prior.session_count)}, commits=${Number(prior.commit_count)}, tool_actions_per_prompt=${prior.autonomy_ratio?.toFixed(2) ?? 'n/a'}`);
+    lines.push(`prior_week: spend_usd=${priorSpend ?? 'unpriced'}, sessions=${Number(prior.session_count)}, commits=${Number(prior.commit_count)}, tool_actions_per_prompt=${prior.autonomy_ratio?.toFixed(1) ?? 'n/a'}`);
     // Changes worked out here, so the model never has to calculate them.
     const changes = ([
       ['spend', pctChange(spendUsd, priorSpend)],
@@ -139,7 +142,7 @@ async function buildDataSummary(codexPresent: boolean): Promise<string> {
         spend_usd: string | number | null; session_count: number | string; commit_count: number | string; autonomy_ratio: number | null;
       }>(client, sql`
         SELECT spend_usd, session_count, commit_count, autonomy_ratio
-        FROM ${table} WHERE scope_type = 'organisation' AND scope_id = ${ORG_SCOPE_ID} AND granularity = 'rolling' ${only}
+        FROM ${table} WHERE scope_type = 'organisation' AND scope_id = ${ORG_SCOPE_ID} AND granularity = 'rolling_7d' ${only}
         ORDER BY computed_at DESC LIMIT 1
       `);
     };
@@ -152,21 +155,30 @@ async function buildDataSummary(codexPresent: boolean): Promise<string> {
       const spend = p.spend_usd !== null && p.spend_usd !== undefined ? Math.round(Number(p.spend_usd) * 100) / 100 : null;
       const sessionShare = pctOf(Number(p.session_count), totalSessions);
       const spendShare = spend !== null && totalSpend !== null ? pctOf(spend, totalSpend) : null;
-      lines.push(`${name}: spend_usd=${spend ?? 'unpriced'}${spendShare !== null ? ` (${spendShare}% of spend)` : ''}, sessions=${Number(p.session_count)}${sessionShare !== null ? ` (${sessionShare}% of sessions)` : ''}, commits=${Number(p.commit_count)}, tool_actions_per_human_prompt=${p.autonomy_ratio?.toFixed(2) ?? 'n/a'}`);
+      lines.push(`${name}: spend_usd=${spend ?? 'unpriced'}${spendShare !== null ? ` (${spendShare}% of spend)` : ''}, sessions=${Number(p.session_count)}${sessionShare !== null ? ` (${sessionShare}% of sessions)` : ''}, commits=${Number(p.commit_count)}, tool_actions_per_human_prompt=${p.autonomy_ratio?.toFixed(1) ?? 'n/a'}`);
     }
   }
 
-  // github_repo_stats.date is TEXT (YYYY-MM-DD) — a JS-computed date-string
-  // param compared with >= is a lexicographic comparison.
-  const overlaySince = new Date((now - 7 * 24 * 3600) * 1000).toISOString().slice(0, 10);
-  const overlayTotal = await rawGet<{ c: number | string }>(client, sql`
-    SELECT COALESCE(SUM(commit_count), 0) AS c FROM github_repo_stats WHERE date >= ${overlaySince}
+  // The Shipping alignment card's basis: the last 7 days (today and the six
+  // before), tracked (mapped) repos only, and the GitHub commits a sync matched
+  // to Claude Code or Codex. github_repo_stats.date is TEXT (YYYY-MM-DD), so the
+  // date-string param compares lexicographically. While Codex is hidden (or has
+  // no data), commits matched to Codex count as no AI tool recorded, as there.
+  const overlaySince = buildDailyWindow(new Date(now * 1000).toISOString().slice(0, 10), 7)[0];
+  const splitKnown = sql`claude_commit_count IS NOT NULL AND codex_commit_count IS NOT NULL AND no_tool_commit_count IS NOT NULL`;
+  const overlay = await rawGet<{ total: number | string; split_total: number | string; matched: number | string }>(client, sql`
+    SELECT COALESCE(SUM(commit_count), 0) AS total,
+           COALESCE(SUM(commit_count) FILTER (WHERE ${splitKnown}), 0) AS split_total,
+           COALESCE(SUM(claude_commit_count${codexPresent ? sql` + codex_commit_count` : sql``}) FILTER (WHERE ${splitKnown}), 0) AS matched
+    FROM github_repo_stats
+    WHERE date >= ${overlaySince} AND repo IN (SELECT repo FROM github_repo_map)
   `);
-  const overlayCount = Number(overlayTotal?.c ?? 0);
+  const overlayCount = Number(overlay?.total ?? 0);
   if (overlayCount > 0) {
-    const share = pctOf(Number(m.commit_count), overlayCount);
-    // A share over 100% means the two counts cover different repos; say nothing rather than mislead.
-    lines.push(`github_overlay: total_commits_shipped_in_mapped_repos=${overlayCount}${share !== null && share <= 100 ? `, ai_assisted_share_of_shipped_commits=${share}%` : ''}`);
+    // Only when every commit in the window has been matched to a tool or none; otherwise no share.
+    const share = Number(overlay?.split_total ?? 0) === overlayCount ? pctOf(Number(overlay?.matched ?? 0), overlayCount) : null;
+    const shareKey = codexPresent ? 'share_of_shipped_commits_matched_to_claude_code_or_codex' : 'share_of_shipped_commits_matched_to_claude_code';
+    lines.push(`github_overlay: total_commits_shipped_in_mapped_repos=${overlayCount}${share !== null ? `, ${shareKey}=${share}%` : ''}`);
   }
 
   if ((await getConfigValue('codeClassifierEnabled')) !== 'false') {
@@ -198,7 +210,17 @@ async function buildDataSummary(codexPresent: boolean): Promise<string> {
     WHERE last_at >= ${now - 7 * 24 * 3600} AND tool_use_count >= 5
       AND CAST(error_count AS REAL) / tool_use_count > 0.25
   `);
-  const frictionCount = Number(friction?.c ?? 0);
+  // Codex sessions' actions live in codex_actions, not Claude Code's telemetry: the same rule over
+  // them, as the Overview's friction panel reads it.
+  const codexFriction = codexPresent ? await rawGet<{ c: number | string }>(client, sql`
+    SELECT COUNT(*) AS c FROM (
+      SELECT session_id FROM codex_actions
+      WHERE occurred_at >= ${now - 7 * 24 * 3600}
+      GROUP BY session_id
+      HAVING COUNT(*) >= 5 AND CAST(SUM(failed) AS REAL) / COUNT(*) > 0.25
+    ) AS codex_friction
+  `) : undefined;
+  const frictionCount = Number(friction?.c ?? 0) + Number(codexFriction?.c ?? 0);
   if (frictionCount > 0) lines.push(`high_friction_sessions_this_week: ${frictionCount} (over a quarter of tool actions failed)`);
 
   return lines.join('\n');

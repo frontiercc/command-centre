@@ -85,7 +85,7 @@ export default function WorkDetail({ item, showName, canOpenUseCases, compact = 
 
   // The one AI-written sentence: violet, labelled as an AI summary.
   const description = item.description && (
-    <p className="m-0 mb-1 text-[13px] leading-5 text-[#2451F3]">
+    <p className="m-0 mb-1 text-[13px] leading-5 text-[#1F6F8B]">
       <span className="mr-1.5 align-middle"><Tag tone="judged">AI summary</Tag></span>
       {item.description}
     </p>
@@ -144,7 +144,7 @@ export default function WorkDetail({ item, showName, canOpenUseCases, compact = 
         <p className="m-0">
           <span className="text-[#8F8F8F]">Matches use case: </span>
           {canOpenUseCases
-            ? <Link href={`/use-cases/${encodeURIComponent(item.useCase.id)}`} className="text-[#245BF3] hover:underline">{item.useCase.title}</Link>
+            ? <Link href={`/use-cases/${encodeURIComponent(item.useCase.id)}`} className="text-[#1F6F8B] hover:underline">{item.useCase.title}</Link>
             : <span>{item.useCase.title}</span>}
         </p>
       )}

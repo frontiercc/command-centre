@@ -273,12 +273,12 @@ export default function IngestionPage() {
                     <tbody>
                       {otelStatus!.recentOtelUsers.map(u => (
                         <tr key={u.id} className={T.row}>
-                          <td className={T.td}>{u.display_name || '—'}</td>
-                          <td className={cx(T.tdMute, 'font-mono text-[13px]')}>{u.email || '—'}</td>
-                          <td className={T.tdMute}>{u.department || '—'}</td>
+                          <td className={T.td}>{u.display_name || 'not set'}</td>
+                          <td className={cx(T.tdMute, 'font-mono text-[13px]')}>{u.email || 'not set'}</td>
+                          <td className={T.tdMute}>{u.department || 'No department'}</td>
                           <td className={cx(T.tdMute, 'whitespace-nowrap')}>{u.first_seen_in ?? firstSeenLabel(null, null, u.source)}</td>
                           <td className={cx(T.tdMute, 'tabular-nums whitespace-nowrap')}>
-                            {u.last_seen_at ? new Date(u.last_seen_at * 1000).toLocaleString('en-GB') : '—'}
+                            {u.last_seen_at ? new Date(u.last_seen_at * 1000).toLocaleString('en-GB') : 'never'}
                           </td>
                         </tr>
                       ))}

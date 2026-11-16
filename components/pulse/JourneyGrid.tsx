@@ -26,24 +26,24 @@ const WEEK_LABELS = ['Wk 1', 'Wk 2', 'Wk 3', 'Wk 4', 'Wk 5', 'Wk 6'];
 
 // Tiers are AI-judged, so the grid uses the judged (sky blue) scale.
 const TIER_COLOURS = {
-  3: 'bg-[#3D6CE8]',
-  2: 'bg-[#8DB2FC]',
+  3: 'bg-[#1F6F8B]',
+  2: 'bg-[#6BA3B8]',
   1: 'bg-[#CCD1DB]',
 };
 
 const TIER_TEXT_COLOURS = {
   3: 'text-white',
-  2: 'text-[#1F1466]',
-  1: 'text-[#05073F]',
+  2: 'text-[#134A5E]',
+  1: 'text-[#1F6F8B]',
 };
 
 // Each step clearly darker than the last (lightness about 97 / 89 / 80 / 66 / 49).
 const HEATMAP_COLOURS = [
   'bg-[#F7F7F7] text-[#0A0A0A]',
-  'bg-[#D3E1FE] text-[#05073F]',
-  'bg-[#A9C6FD] text-[#05073F]',
-  'bg-[#6E9EFB] text-[#05073F]',
-  'bg-[#3D6CE8] text-white',
+  'bg-[#E4EFF3] text-[#1F6F8B]',
+  'bg-[#A6C8D5] text-[#1F6F8B]',
+  'bg-[#6BA3B8] text-[#1F6F8B]',
+  'bg-[#1F6F8B] text-white',
 ];
 
 function heatmapBg(count: number, max: number): string {

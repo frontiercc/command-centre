@@ -249,6 +249,10 @@ export const openaiReplies = pgTable('openai_replies', {
     model: text(),
     occurred_at: bigint({ mode: 'number' }).notNull(),
     ingested_at: bigint({ mode: 'number' }).notNull().default(sql`extract(epoch from now())`),
+    /** Files OpenAI's export lists on the reply (a count only); a reply with no files field made none, 0. NULL on rows stored before the count was kept (migration 0053): not measured. */
+    files_count: integer(),
+    /** The names of the files OpenAI lists on the reply, masked (migration 0054). Never the reply's text. */
+    file_names: text(),
 }, (t) => [
     index('idx_openai_replies_user_time').on(t.user_id, t.occurred_at),
     index('idx_openai_replies_session').on(t.session_id),
@@ -314,6 +318,8 @@ export const chatAssistantMeta = pgTable('chat_assistant_meta', {
     model: text(),
     artifacts_count: integer().notNull().default(0),
     generated_files_count: integer().notNull().default(0),
+    /** The titles of the reply's artifacts and the names of its generated files, masked (migration 0054). Never the reply's text. */
+    output_names: text(),
     occurred_at: bigint({ mode: 'number' }).notNull(),
     ingested_at: bigint({ mode: 'number' }).default(sql`extract(epoch from now())`),
 }, (t) => [
@@ -1174,6 +1180,68 @@ export const totpConsumedSteps = pgTable('totp_consumed_steps', {
     consumed_at: bigint({ mode: 'number' }).notNull(),
 });
 
+/**
+ * Team coaching: an action a team lead marked done, with the figure it is meant to move as it
+ * stood that day (the team's and the organisation's), so the page can say later whether it moved.
+ * Keyed by department, which is how teams are identified everywhere on these pages.
+ */
+export const decisionLog = pgTable('decision_log', {
+    card: text().notNull(),
+    department: text().notNull(),
+    recommended: text().notNull(),
+    chosen: text().notNull(),
+    headline: text().notNull(),
+    /** The card's figures as they stood the day it was decided. */
+    figures_json: text().notNull(),
+    note: text(),
+    decided_by: text().notNull(),
+    decided_at: bigint({ mode: 'number' }).notNull(),
+    look_again_at: bigint({ mode: 'number' }).notNull(),
+}, (t) => [
+    primaryKey({ columns: [t.card, t.department] }),
+]);
+
+/**
+ * Ask the data (admin only): one row per question, with the lookups that ran, the outcome and
+ * the measured cost. The answer text is never stored. Pruned to the admin's retention setting.
+ */
+export const askLog = pgTable('ask_log', {
+    id: text().primaryKey().notNull(),
+    asked_at: bigint({ mode: 'number' }).notNull(),
+    asked_by: text().notNull(),
+    question: text().notNull(),
+    page: text(),
+    /** JSON array of {name, input} for each lookup the model ran. */
+    lookups_json: text().notNull(),
+    /** answered | not_answerable | refused | capped | error */
+    outcome: text().notNull(),
+    model: text().notNull(),
+    input_tokens: integer().default(0).notNull(),
+    output_tokens: integer().default(0).notNull(),
+    cache_read_tokens: integer().default(0).notNull(),
+    cache_write_tokens: integer().default(0).notNull(),
+    cost_usd: numeric(),
+    duration_ms: integer(),
+}, (t) => [
+    index('idx_ask_log_asked_at').on(t.asked_at),
+]);
+
+export const coachingActions = pgTable('coaching_actions', {
+    // 'code' or 'cowork': the same department has a plan on both, with overlapping action keys.
+    surface: text().notNull().default('code'),
+    department: text().notNull(),
+    action_key: text().notNull(),
+    action_text: text().notNull(),
+    metric: text(),
+    baseline: doublePrecision(),
+    org_baseline: doublePrecision(),
+    note: text(),
+    done_by: text().notNull(),
+    done_at: bigint({ mode: 'number' }).notNull(),
+}, (t) => [
+    primaryKey({ columns: [t.surface, t.department, t.action_key] }),
+]);
+
 export const coachingAcks = pgTable('coaching_acks', {
     user_id: text().notNull(),
     use_case_id: text().notNull(),
@@ -1403,6 +1471,9 @@ export const pgSchema = {
   chargebackPeriods,
   chatAssistantMeta,
   coachingAcks,
+  coachingActions,
+  decisionLog,
+  askLog,
   codeAssistantMeta,
   codeMetrics,
   codeOtelMetrics,

@@ -9,9 +9,11 @@ import TopBar from '@/components/layout/TopBar';
 import LoadingSpinner from '@/components/shared/LoadingSpinner';
 import CodeStatStrip, { type CodeMetricsRow } from '@/components/pulse/code/CodeStatStrip';
 import CodeUserTable, { type CodeUserRow } from '@/components/pulse/code/CodeUserTable';
-import JourneyGrid from '@/components/pulse/JourneyGrid';
-import HumanTimeCard, { type HumanTimeSummary } from '@/components/pulse/HumanTimeCard';
-import { PageBody, Toolbar, Panel, Tag, Notice, Empty, B, cx } from '@/components/precision/ui';
+import { DepthPanel, ByHandPanel, type ByHand, type Who } from '@/components/pulse/MyPulsePanels';
+import { CodeWorkPanel, CodeWorkMix, type CodePeriodWork, type CodeWorkMixRow } from '@/components/pulse/code/CodePulsePanels';
+import type { PulsePeriod } from '@/lib/pulse/period-shape';
+import type { TierNames } from '@/lib/pulse/tier-names';
+import { PageBody, Toolbar, Panel, Notice, Empty, B, cx } from '@/components/precision/ui';
 import { useVendor, useOpenAiOnly, VendorSwitch } from '@/components/shared/VendorSwitch';
 import { DEVELOPER_PULSE_VENDOR_LABELS } from '@/lib/dashboard/vendor';
 
@@ -21,14 +23,19 @@ interface DeptListRow {
 }
 
 interface DeptDetail {
+  periodWork?: CodePeriodWork | null;
+  tierWeeks?: Array<{ weekStart: number; t1: number; t2: number; t3: number }>;
+  tierGrid?: Array<{ weekStart: number; t1: number; t2: number; t3: number }>;
+  tierNames?: TierNames | null;
+  workMix?: CodeWorkMixRow[];
   codexPresent?: boolean;
   metricsSplit?: { claude: CodeMetricsRow | null; openai: CodeMetricsRow | null } | null;
-  humanTime?: HumanTimeSummary | null;
+  humanTime?: ByHand | null;
   dept: string;
   metrics: CodeMetricsRow | null;
   members: CodeUserRow[];
   journeyGrid: Array<{ week: number; tier: number; count: number; provisionalCount?: number }>;
-  githubRepos: { count7d: number; names7d: string[]; basis?: 'all' | 'claude' | 'openai' } | null;
+  githubRepos: { count30d: number; names30d: string[]; basis?: 'all' | 'claude' | 'openai' } | null;
 }
 
 function DeptContent() {
@@ -40,6 +47,9 @@ function DeptContent() {
   const [detail, setDetail] = useState<DeptDetail | null>(null);
   const [detailLoading, setDetailLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  // One period for the page, as on Work Pulse.
+  const [period, setPeriod] = useState<PulsePeriod>('quarter');
+
   const [vendor, setVendor, vendorReady] = useVendor();
   const [codexPresent, setCodexPresent] = useState(false);
   const openaiOnly = useOpenAiOnly();
@@ -73,7 +83,7 @@ function DeptContent() {
       })
       .catch(e => setError(e.message))
       .finally(() => setDeptsLoading(false));
-  }, [vendor, vendorReady]); // eslint-disable-line react-hooks/exhaustive-deps
+  }, [vendor, vendorReady, period]); // eslint-disable-line react-hooks/exhaustive-deps
 
   const loadDept = useCallback((dept: string) => {
     if (!vendorReady) return; // the saved view is read after the page loads
@@ -82,7 +92,7 @@ function DeptContent() {
     // A refusal (no department assigned, or another department) shows the
     // server's message; storing it as the department's data would crash the
     // page.
-    fetch(`/api/pulse/code/dept/${encodeURIComponent(dept)}?vendor=${vendor}`)
+    fetch(`/api/pulse/code/dept/${encodeURIComponent(dept)}?vendor=${vendor}&period=${period}`)
       .then(async r => {
         const d = await r.json().catch(() => ({}));
         if (!r.ok) throw new Error(d.message || (r.status === 403 ? 'You can only view your own department.' : d.error) || "Couldn't load this page. Try again.");
@@ -91,11 +101,13 @@ function DeptContent() {
       .then(d => { setError(null); setDetail(d); })
       .catch(e => { setDetail(null); setError(e.message); })
       .finally(() => setDetailLoading(false));
-  }, [vendor, vendorReady]);
+  }, [vendor, vendorReady, period]);
 
   useEffect(() => {
     if (selectedDept) loadDept(selectedDept);
   }, [selectedDept, loadDept]);
+
+  const who = (dept: string): Who => ({ you: false, name: dept });
 
   const handleSelect = (dept: string) => {
     const params = new URLSearchParams(searchParams.toString());
@@ -109,7 +121,7 @@ function DeptContent() {
         title="Developer Pulse: Departments"
         subtitle={selectedDept ? `Department ${openaiOnly ? 'Codex' : codexPresent ? 'coding' : 'Claude Code'} activity · ${selectedDept}` : 'Select a department'}
       />
-      <PageBody>
+      <PageBody className="dash-compact">
         {/* Department picker (top-left) */}
         <Toolbar
           left={
@@ -147,21 +159,37 @@ function DeptContent() {
 
         {!detailLoading && !notInView && detail && (
           <>
-            <CodeStatStrip metrics={detail.metrics} githubRepos={detail.githubRepos} view={codexView ? vendor : 'claude'} split={detail.metricsSplit} />
-
-            <HumanTimeCard summary={detail.humanTime} surface="code" scope={detail.dept} view={codexView ? vendor : 'claude'} />
-
-            {(detail.journeyGrid?.length ?? 0) > 0 && (
-              <div className="flex flex-col gap-2">
-                <div className="flex items-center gap-2 flex-wrap">
-                  <Tag tone="judged">AI-judged</Tag>
-                  <span className="text-[13px] text-[#8F8F8F]">Department delegation journey, 6 weeks</span>
-                </div>
-                <JourneyGrid data={detail.journeyGrid} heatmap />
-              </div>
+            {detail.periodWork && (
+              <CodeWorkPanel
+                w={detail.periodWork}
+                who={who(detail.dept)}
+                period={period}
+                onPeriod={setPeriod}
+                product={openaiOnly ? 'Codex' : codexPresent && vendor === 'all' ? 'Claude Code and Codex' : vendor === 'openai' ? 'Codex' : 'Claude Code'}
+              />
             )}
 
-            <Panel title="Members" subtitle="7 days" flush>
+            {(detail.tierGrid?.length ?? 0) > 0 && (
+              <DepthPanel
+                weeks={detail.tierWeeks ?? []}
+                grid={detail.tierGrid ?? []}
+                end={Math.floor(Date.now() / 1000)}
+                names={detail.tierNames ?? undefined}
+                title={`Is ${detail.dept}'s work getting deeper?`}
+                subject={`${detail.dept} ran`}
+                whose={`${detail.dept}'s`}
+                unit="session"
+              />
+            )}
+
+            <div className="grid grid-cols-1 xl:grid-cols-2 gap-4">
+              <CodeWorkMix rows={detail.workMix ?? []} who={who(detail.dept)} names={detail.tierNames ?? undefined} />
+              <ByHandPanel h={detail.humanTime} who={who(detail.dept)} tool={openaiOnly || vendor === 'openai' ? 'Codex' : codexPresent && vendor === 'all' ? 'AI' : 'Claude Code'} />
+            </div>
+
+            <CodeStatStrip metrics={detail.metrics} githubRepos={detail.githubRepos} view={codexView ? vendor : 'claude'} split={detail.metricsSplit} />
+
+            <Panel title="Members" subtitle="30 days" flush>
               <CodeUserTable users={detail.members} showDepartment={false} githubBasis={detail.githubRepos?.basis ?? 'all'} />
             </Panel>
           </>

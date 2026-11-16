@@ -11,6 +11,7 @@ import { buildUseCaseImpact } from '@/lib/usecases/impact';
 import { activateUseCase, type ActivateEvidence } from '@/lib/usecases/match';
 import type { UseCase } from '@/lib/usecases/queries';
 import { bootstrapUseCase } from '@/lib/usecases/tracker';
+import { shownLifecycle } from '@/lib/usecases/lifecycle';
 import { buildSkillDraftView } from '@/lib/usecases/skill-draft-service';
 
 export const dynamic = 'force-dynamic';
@@ -78,7 +79,8 @@ export async function GET(
     ? await buildSkillDraftView(uc, nowS).catch(err => { console.error('[UseCases] skillDraft view failed:', err instanceof Error ? err.message : err); return null; })
     : null;
 
-  return NextResponse.json({ ...uc, weeks, spread, impact, impactSummary, liveEvidence, skillDraft });
+  // An archived use case is no longer tracked, so it shows no stage (lib/usecases/lifecycle.ts).
+  return NextResponse.json({ ...uc, lifecycle: shownLifecycle(uc), weeks, spread, impact, impactSummary, liveEvidence, skillDraft });
 }
 
 export async function PATCH(

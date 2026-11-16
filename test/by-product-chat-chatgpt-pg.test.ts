@@ -73,9 +73,23 @@ async function runSpec(): Promise<void> {
     const noOffice = (await buildByProduct(nowS, { chatgpt: true, officeShown: false }))!;
     expect(noOffice.rows.map(r => r.product)).toEqual(['claude_chat', 'cowork', 'chatgpt']);
 
-    // The briefings' "where the work happened" never counts ChatGPT as Cowork.
-    const { readWorkByProduct } = await import('@/lib/pulse/briefings/work-by-product');
-    expect(await readWorkByProduct(null, nowS - 30 * 86400, nowS + 1)).toEqual([{ product: 'cowork', sessions: 1, people: 1 }]);
+    // The briefings' "where the work happened" gives Claude Chat and ChatGPT their own lines,
+    // and never counts ChatGPT as Cowork.
+    const { readWorkByProduct, workByProductFacts } = await import('@/lib/pulse/briefings/work-by-product');
+    expect(await readWorkByProduct(null, nowS - 30 * 86400, nowS + 1)).toEqual([
+      { product: 'claude_chat', sessions: 2, people: 1 },
+      { product: 'cowork', sessions: 1, people: 1 },
+      { product: 'chatgpt', sessions: 2, people: 1 },
+    ]);
+    expect(await workByProductFacts(null, nowS - 30 * 86400, nowS + 1)).toEqual([
+      'Where the work happened, 3 products in total (measured sessions and people):',
+      'Claude Chat: 2 sessions by 1 person',
+      'Cowork: 1 session by 1 person',
+      'ChatGPT: 2 sessions by 1 person',
+    ]);
+    // ChatGPT hidden on the OpenAI panel: the briefings leave it out.
+    await sql.run(`INSERT INTO config (key, value) VALUES ('openai_shown', 'false') ON CONFLICT (key) DO UPDATE SET value = excluded.value`);
+    expect(await workByProductFacts(null, nowS - 30 * 86400, nowS + 1)).toHaveLength(3);
   } finally {
     await cleanup();
   }

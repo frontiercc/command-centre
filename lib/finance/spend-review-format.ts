@@ -24,9 +24,9 @@ export function surfaceName(surface: SpendReviewSurface, openai: boolean): strin
 
 /** "1 Oct": day and short month, as the Spend Review pages show dates. */
 export function ukDate(value: string | number | null | undefined): string {
-  if (value === null || value === undefined || value === '') return '—';
+  if (value === null || value === undefined || value === '') return 'not recorded';
   const d = typeof value === 'number' ? new Date(value * 1000) : new Date(value);
-  if (Number.isNaN(d.getTime())) return '—';
+  if (Number.isNaN(d.getTime())) return 'not recorded';
   return d.toLocaleDateString('en-GB', { day: 'numeric', month: 'short' });
 }
 
@@ -57,4 +57,15 @@ export function sessionsFact(w: { sessions: number; activeSecs: number | null; f
     return `${count} running ${ukDate(w.firstAt)} to ${ukDate(w.lastAt)}${work ? `, ${work}` : ''}`;
   }
   return work ? `${count}, ${work}` : count;
+}
+
+/**
+ * How sure a route is, best first: a save colleagues' results back up, then an untested trial
+ * (price alone), then routes with no saving figure (a step up, a tool, long conversations).
+ * A proven save always outranks a trial, whatever the trial's (bigger, untested) saving.
+ */
+export function routeRank(r: { kind: string; direction?: string; estSavingUsd: number | null }): number {
+  if (r.kind === 'model' && r.direction === 'save' && r.estSavingUsd !== null) return 0;
+  if (r.kind === 'model' && r.direction === 'trial' && r.estSavingUsd !== null) return 1;
+  return 2;
 }

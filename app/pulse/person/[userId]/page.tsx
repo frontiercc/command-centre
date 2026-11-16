@@ -3,6 +3,7 @@
 
 'use client';
 
+import { deepShareOf, DeepWords, tierList, type TierNames } from '@/lib/pulse/tier-names';
 import { useEffect, useState, type ReactNode } from 'react';
 import { useParams, useRouter } from 'next/navigation';
 import Link from 'next/link';
@@ -19,7 +20,11 @@ interface Person360Data {
   userId: string;
   displayName: string | null;
   department: string | null;
-  cowork: { tierCounts: { t1: number; t2: number; t3: number }; dds: number | null; oti: number | null } | null;
+  cowork: {
+    tierCounts: { t1: number; t2: number; t3: number };
+    tierNames: TierNames;
+    produced: { produced: number; measured: number } | null;
+  } | null;
   code: {
     spendUsd: number | null; sessions: number; commits: number; autonomy: number | null;
     engagedHours: number | null; linesAdded: number; editAcceptRate: number | null;
@@ -41,7 +46,7 @@ function FigureGrid({ children, cols }: { children: ReactNode; cols: 2 | 3 | 4 }
   );
 }
 
-const TIER_SWATCH = ['bg-[#CCD1DB]', 'bg-[#8DB2FC]', 'bg-[#3D6CE8]'];
+const TIER_SWATCH = ['bg-[#CCD1DB]', 'bg-[#6BA3B8]', 'bg-[#1F6F8B]'];
 
 function SparkBlock({ label, children }: { label: string; children: ReactNode }) {
   return (
@@ -53,7 +58,7 @@ function SparkBlock({ label, children }: { label: string; children: ReactNode })
 }
 
 function fig(label: string, value: string, sub?: string, tone: Tone = 'neutral') {
-  return <Figure label={label} value={value} sub={sub} tone={value === '—' ? 'neutral' : tone} />;
+  return <Figure label={label} value={value} sub={sub} tone={value === 'Not measured' || value === 'Not priced' ? 'neutral' : tone} />;
 }
 
 export default function Person360Page() {
@@ -137,8 +142,8 @@ export default function Person360Page() {
         {/* Combined AI Spend — measured, blue */}
         <Panel title="Combined AI spend" subtitle="7 days" right={<Tag tone="measured">Measured</Tag>} flush>
           <FigureGrid cols={combinedSpend.chatgptUsd != null ? 4 : 3}>
-            {fig('Total', combinedSpend.totalUsd === null ? '—' : formatCurrency(combinedSpend.totalUsd), undefined, 'measured')}
-            {fig(combinedSpend.codeIncludesCodex ? 'Claude Code and Codex' : 'Code', combinedSpend.codeUsd === null ? '—' : formatCurrency(combinedSpend.codeUsd))}
+            {fig('Total', combinedSpend.totalUsd === null ? 'Not measured' : formatCurrency(combinedSpend.totalUsd), undefined, 'measured')}
+            {fig(combinedSpend.codeIncludesCodex ? 'Claude Code and Codex' : 'Code', combinedSpend.codeUsd === null ? (code ? 'Not priced' : 'Not measured') : formatCurrency(combinedSpend.codeUsd))}
             {fig('Claude Cowork', formatCurrency(combinedSpend.coworkUsd))}
             {combinedSpend.chatgptUsd != null && fig('ChatGPT', formatCurrency(combinedSpend.chatgptUsd))}
           </FigureGrid>
@@ -155,17 +160,22 @@ export default function Person360Page() {
             ) : (
               <>
                 <FigureGrid cols={2}>
-                  {fig('Delegation depth', cowork.dds == null ? '—' : cowork.dds.toFixed(2), 'Average tier, 14 days', 'judged')}
-                  {fig('More valuable work', cowork.oti == null ? '—' : `${cowork.oti.toFixed(2)}×`, 'Output against their own start', 'judged')}
+                  {(() => {
+                    const share = deepShareOf(cowork.tierCounts.t1, cowork.tierCounts.t2, cowork.tierCounts.t3);
+                    const tasks = cowork.tierCounts.t1 + cowork.tierCounts.t2 + cowork.tierCounts.t3;
+                    return fig(DeepWords(cowork.tierNames), share === null ? 'Not judged' : `${Math.round(share * 100)}%`, `Of ${tasks.toLocaleString('en-GB')} judged tasks`, 'judged');
+                  })()}
+                  {fig('Produced something', cowork.produced === null ? 'Not measured' : `${Math.round((cowork.produced.produced / cowork.produced.measured) * 100)}%`,
+                    cowork.produced === null ? 'No session could be read, last 30 days' : `${cowork.produced.produced} of ${cowork.produced.measured} sessions, last 30 days`, 'measured')}
                 </FigureGrid>
                 <div className="px-4 py-3 border-t border-[#EAEAEA]">
                   <SubHead>Tier mix</SubHead>
-                  <div className="flex gap-5 text-[14px] tabular-nums">
+                  <div className="flex flex-wrap gap-x-5 gap-y-1 text-[14px] tabular-nums">
                     {[cowork.tierCounts.t1, cowork.tierCounts.t2, cowork.tierCounts.t3].map((n, i) => (
                       <span key={i} className="flex items-center gap-1.5">
                         <span className={`w-2.5 h-2 rounded-full inline-block ${TIER_SWATCH[i]}`} />
                         <span className="font-semibold text-[#0A0A0A]">{n}</span>
-                        <span className="text-[13px] text-[#8F8F8F]">T{i + 1}</span>
+                        <span className="text-[13px] text-[#8F8F8F]">{tierList(cowork.tierNames)[i]}</span>
                       </span>
                     ))}
                   </div>
@@ -188,13 +198,13 @@ export default function Person360Page() {
             ) : (
               <>
                 <FigureGrid cols={2}>
-                  {fig('Spend, 7 days', code.spendUsd === null ? '—' : formatCurrency(code.spendUsd), code.spendUsd === null ? 'Unpriced model' : undefined, 'measured')}
+                  {fig('Spend, 7 days', code.spendUsd === null ? 'Not priced' : formatCurrency(code.spendUsd), code.spendUsd === null ? 'Unpriced model' : undefined, 'measured')}
                   {fig('Sessions', String(code.sessions), `${code.commits} AI-assisted commits`)}
                 </FigureGrid>
                 <div className="border-t border-[#EAEAEA]">
                   <FigureGrid cols={2}>
-                    {fig('Autonomy', code.autonomy == null ? '—' : `${code.autonomy.toFixed(1)}×`, 'Actions per instruction')}
-                    {fig('Engaged time', code.engagedHours == null ? '—' : formatDuration(Math.round(code.engagedHours * 3600)), `${formatTokens(code.linesAdded)} lines added`)}
+                    {fig('Autonomy', code.autonomy == null ? 'Not measured' : `${code.autonomy.toFixed(1)}×`, 'Actions per instruction')}
+                    {fig('Engaged time', code.engagedHours == null ? 'Not measured' : formatDuration(Math.round(code.engagedHours * 3600)), `${formatTokens(code.linesAdded)} lines added`)}
                   </FigureGrid>
                 </div>
                 {code.editAcceptRate !== null && (

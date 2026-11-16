@@ -63,7 +63,7 @@ describe('runSystemHealthAlerts (postgres)', () => {
       { title: 'OpenAI Admin API key rejected', severity: 'high', user_id: null, rule: 'key_rejected', subject: 'openai_sync' },
     ]);
     const [row] = await run(`SELECT explanation FROM alerts WHERE alert_type = 'system_health'`);
-    expect(String(row.explanation)).toContain('/admin/security');
+    expect(String(row.explanation)).toContain('Admin → Access & Keys');
   });
 
   it('raises again only after the job has succeeded and then failed again', async () => {

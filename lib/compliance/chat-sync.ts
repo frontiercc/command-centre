@@ -10,11 +10,13 @@
 // conversation (cowork_sessions), the same way ChatGPT Chat is stored, so
 // Work Pulse classifies Claude Chat like every other prompt.
 import { sql, eq } from 'drizzle-orm';
+import { isBoardHiddenConnector } from '@/lib/library/built-in-connectors';
 import { v4 as uuidv4 } from 'uuid';
 import { getTypedClient } from '@/lib/db/client';
 import { schema } from '@/lib/db/schema';
 import { withTx } from '@/lib/db/with-tx';
 import { detectPii } from '@/lib/pii/detect';
+import { replyOutputNames } from '@/lib/otel/output-name';
 import { createPiiAlerts } from '@/lib/alerts/pii-alerts';
 import { detectIntent } from '@/lib/intent/detect';
 import { createIntentAlerts } from '@/lib/alerts/intent-alerts';
@@ -98,7 +100,7 @@ async function extractConnectorInvocations(
     }).onConflictDoNothing();
     count++;
 
-    if (!SYSTEM_CONNECTOR_NAMES.has(mcpServer)) {
+    if (!SYSTEM_CONNECTOR_NAMES.has(mcpServer) && !isBoardHiddenConnector(mcpServer)) {
       await tx.insert(schema.skillLibraryEntries).values({
         name: mcpServer, type: 'connector', surface: 'chat',
         source: 'org', is_published: 0, created_at: nowS, updated_at: nowS,
@@ -200,6 +202,11 @@ export async function syncChat(
             model: chat.model, // chat-level field — approximate per-message
             artifacts_count: (msg.artifacts || []).length,
             generated_files_count: (msg.generated_files || []).length,
+            // What the reply made, by name only: its artifacts' titles and its files' names.
+            output_names: replyOutputNames([
+              ...(msg.artifacts || []).map(a => a.title),
+              ...(msg.generated_files || []).map(f => f.filename),
+            ]),
             occurred_at: occurredAt, ingested_at: nowS,
           }).onConflictDoNothing();
           assistantMeta++;

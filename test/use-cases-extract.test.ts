@@ -20,7 +20,7 @@ vi.mock('@anthropic-ai/sdk', () => {
 vi.mock('@/lib/config', () => ({
   getConfigValue: vi.fn((key: string) => {
     if (key === 'anthropicAiApiKey') return 'sk-test-key';
-    if (key === 'useCasesExtractModel') return 'claude-haiku-4-5-20251001';
+    if (key === 'useCasesExtractModel') return 'claude-haiku-5-5';
     return '';
   }),
   getAllConfig: vi.fn(() => ({ useCasesEnabled: true })),
@@ -102,7 +102,7 @@ describe('extractUseCases', () => {
 
     expect(mockCreate).toHaveBeenCalledTimes(1);
     expect(mockCreate.mock.calls[0][0]).toMatchObject({
-      model: 'claude-haiku-4-5-20251001',
+      model: 'claude-haiku-5-5',
     });
     // No temperature — newer models reject it with a 400 (extract model is configurable).
     expect(mockCreate.mock.calls[0][0].temperature).toBeUndefined();
@@ -202,7 +202,7 @@ describe('extractUseCases', () => {
     await extractUseCases('some transcript text');
 
     expect(mockCreate.mock.calls[0][0]).toMatchObject({
-      model: 'claude-haiku-4-5-20251001',
+      model: 'claude-haiku-5-5',
     });
   });
 });

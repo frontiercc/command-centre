@@ -21,7 +21,7 @@ import {
 import { getWindowDistinctUsers, type WeekActivity } from '@/lib/usecases/weeks';
 import {
   getUseCasePlatformSessions, getUseCasePlatformHours, type PlatformSessions, type PlatformHours,
-  getUseCaseProductSessions, getUseCaseProductHours, type ProductSessions, type ProductHours,
+  getUseCaseProductSessions, getUseCaseProductHours, getUseCaseSessionsThisWeek, getUseCasesWithHiddenActivity, type ProductSessions, type ProductHours,
 } from '@/lib/usecases/platform-sessions';
 import { openaiShown } from '@/lib/sources/openai-visibility';
 
@@ -47,6 +47,10 @@ export interface GovernanceBet {
     /** The same sessions and hours per product (Claude Cowork, Claude Code, ChatGPT, Codex), which the page shows. */
     productSessions: ProductSessions;
     productHours: ProductHours;
+    /** Sessions this week, not yet in the 13 weeks; the lifecycle counts them, so the page says so beside a 0. */
+    sessionsThisWeek: number;
+    /** ChatGPT and Codex are hidden and this use case had work there, which the stage counts. */
+    hiddenActivity: boolean;
   };
   estimated: { hoursRecovered: number };
   series: Array<number | null>;
@@ -70,6 +74,10 @@ export interface GovernanceWorkflow {
   platformSessions: PlatformSessions;
   /** The same sessions per product, which the page shows. */
   productSessions: ProductSessions;
+  /** Sessions this week, not yet in the 13 weeks (see GovernanceBet). */
+  sessionsThisWeek: number;
+  /** Work in hidden ChatGPT or Codex (see GovernanceBet). */
+  hiddenActivity: boolean;
 }
 
 export interface GovernanceRollup {
@@ -162,12 +170,21 @@ export function buildGovernanceNarrative(bets: GovernanceBet[]): string {
   const atRisk = bets.filter(b => b.lifecycle === 'at_risk');
   const parts: string[] = [];
 
-  // Adoption concentration by department (top 2 depts among adopted bets).
+  // Adoption concentration by department among adopted bets. "Concentrated"
+  // only when the top one or two departments strictly lead the next; a tie
+  // at the cut-off is a spread, not a concentration.
   const deptCounts = new Map<string, number>();
   for (const b of adopted) for (const d of b.departments) deptCounts.set(d, (deptCounts.get(d) ?? 0) + 1);
-  const topDepts = [...deptCounts.entries()].sort((a, b) => b[1] - a[1]).slice(0, 2).map(e => e[0]);
-  if (adopted.length > 0 && topDepts.length > 0) {
-    parts.push(`Adoption is concentrated in ${topDepts.join(' and ')}.`);
+  const ranked = [...deptCounts.entries()].sort((a, b) => b[1] - a[1] || a[0].localeCompare(b[0]));
+  const count = (i: number) => ranked[i]?.[1] ?? 0;
+  if (adopted.length > 0 && ranked.length > 0) {
+    if (ranked.length >= 3 && count(1) > count(2)) {
+      parts.push(`Adoption is concentrated in ${ranked[0][0]} and ${ranked[1][0]}.`);
+    } else if (ranked.length === 1 || count(0) > count(1)) {
+      parts.push(`Adoption is concentrated in ${ranked[0][0]}.`);
+    } else {
+      parts.push(`Adoption spans ${ranked.length} departments.`);
+    }
   } else if (adopted.length > 0) {
     parts.push(`${adopted.length} of ${bets.length} declared ${bets.length === 1 ? 'bet is' : 'bets are'} adopted.`);
   }
@@ -206,11 +223,13 @@ export async function buildGovernanceRollup(
   // Per-vendor split (Claude / OpenAI), same window and session rules as the
   // register column and the use case page's Workflow Impact panel.
   const shown = opts.openaiShown ?? await openaiShown();
-  const [platformSessions, platformHours, productSessions, productHours] = await Promise.all([
+  const [platformSessions, platformHours, productSessions, productHours, thisWeek, hidden] = await Promise.all([
     getUseCasePlatformSessions(nowS, { openaiShown: shown }),
     getUseCasePlatformHours(nowS, { openaiShown: shown }),
     getUseCaseProductSessions(nowS, { openaiShown: shown }),
     getUseCaseProductHours(nowS, { openaiShown: shown }),
+    getUseCaseSessionsThisWeek(nowS, { openaiShown: shown }),
+    shown ? Promise.resolve(new Set<string>()) : getUseCasesWithHiddenActivity(nowS),
   ]);
   const productSessionsFor = (id: string): ProductSessions =>
     productSessions.get(id) ?? { cowork: 0, code: 0, chatgpt: shown ? 0 : null, codex: shown ? 0 : null };
@@ -244,6 +263,8 @@ export async function buildGovernanceRollup(
       measured: {
         distinctUsers, sessions, hours, platformSessions: sessionsFor(uc.id), platformHours: hoursFor(uc.id),
         productSessions: productSessionsFor(uc.id), productHours: productHoursFor(uc.id),
+        sessionsThisWeek: thisWeek.get(uc.id) ?? 0,
+        hiddenActivity: hidden.has(uc.id),
       },
       estimated: { hoursRecovered },
       series,
@@ -261,6 +282,8 @@ export async function buildGovernanceRollup(
       id: uc.id, title: uc.title, lifecycle: uc.lifecycle, series, measuredHours, distinctUsers,
       platformSessions: sessionsFor(uc.id),
       productSessions: productSessionsFor(uc.id),
+      sessionsThisWeek: thisWeek.get(uc.id) ?? 0,
+      hiddenActivity: hidden.has(uc.id),
     };
   }));
 

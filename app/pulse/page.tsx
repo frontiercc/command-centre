@@ -1,11 +1,12 @@
 // Copyright 2026 Lee James
 // SPDX-License-Identifier: Apache-2.0
 
-// Redirect: viewer → /pulse/me, admin → /pulse/cio
+// Redirect: admin, manager and viewer → Overview (/pulse/cio), as in the menu; code → My Developer Pulse; everyone else → My Pulse
 import { redirect } from 'next/navigation';
 import { cookies } from 'next/headers';
 import { findValidSession } from '@/lib/db/admin-queries';
-import { SESSION_COOKIE_NAME } from '@/lib/auth/admin-auth';
+import { SESSION_COOKIE_NAME, canAccessOrgOverview } from '@/lib/auth/admin-auth';
+import type { UserRole } from '@/lib/auth/admin-auth';
 
 export default async function PulseIndexPage() {
   const cookieStore = await cookies();
@@ -13,9 +14,11 @@ export default async function PulseIndexPage() {
 
   if (sessionId) {
     const session = await findValidSession(sessionId);
-    if (session?.user?.role === 'admin') {
+    if (canAccessOrgOverview(session?.user?.role as UserRole | undefined)) {
       redirect('/pulse/cio');
     }
+    // The code role has Developer Pulse only, so its own page is there.
+    if (session?.user?.role === 'code') redirect('/pulse/code/me');
   }
 
   redirect('/pulse/me');

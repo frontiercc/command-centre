@@ -98,7 +98,7 @@ export default function ModelMixBar({ items, title = 'Model mix' }: { items: Mod
                           className={cx(T.tdRight, 'text-[#8F8F8F]')}
                           title="Cache tokens for this model: billed (at a discount), not counted in the % or bar above"
                         >
-                          {modelCache > 0 ? `+${formatTokens(modelCache)}` : '—'}
+                          {modelCache > 0 ? `+${formatTokens(modelCache)}` : 'none'}
                         </td>
                       )}
                     </tr>

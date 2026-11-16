@@ -164,7 +164,11 @@ function durationMs(span: OtlpSpan): number | null {
   return Number.isFinite(ms) && ms >= 0 ? ms : null;
 }
 
-type Pending = { pii: { matches: PiiMatch[]; prompt: string; messageId: string } | null };
+type Pending = {
+  pii: { matches: PiiMatch[]; prompt: string; messageId: string } | null;
+  /** Raised after the span's transaction commits, like PII, so a rolled-back record never leaves an alert. */
+  intent: { matches: Parameters<typeof createIntentAlerts>[4]; prompt: string; messageId: string; label: string } | null;
+};
 
 /**
  * Process an OTLP traces payload whose resources are all `office-agent`
@@ -266,7 +270,7 @@ export async function processOfficeSpans(payload: unknown): Promise<ProcessResul
     const promptId = span.traceId ?? null;
     const product = officeProduct(getAttr(attrs, 'agent.surface'), getAttr(attrs, 'agent.vendor'));
     const occurredAt = toSeconds(span.startTimeUnixNano);
-    const pending: Pending = { pii: null };
+    const pending: Pending = { pii: null, intent: null };
 
     try {
       await withTx(client, async (tx) => {
@@ -346,9 +350,7 @@ export async function processOfficeSpans(payload: unknown): Promise<ProcessResul
           }
 
           if (intentMatches.length) {
-            createIntentAlerts(userId, 'cowork', messageId, prompt, intentMatches, officeProductLabel(product)).catch((e: Error) => {
-              console.error('[office-receiver] intent alert error:', e.message);
-            });
+            pending.intent = { matches: intentMatches, prompt, messageId, label: officeProductLabel(product) };
           }
           return;
         }
@@ -410,6 +412,12 @@ export async function processOfficeSpans(payload: unknown): Promise<ProcessResul
         createPiiAlertsWithDedup(userId, pii.matches, pii.prompt, pii.messageId, 'cowork').catch((e: Error) => {
           console.error('[office-receiver] pii alert error:', e.message);
           void recordPiiAlertFailure('cowork', pii.messageId, e);
+        });
+      }
+      if (pending.intent) {
+        const it = pending.intent;
+        createIntentAlerts(userId, 'cowork', it.messageId, it.prompt, it.matches, it.label).catch((e: Error) => {
+          console.error('[office-receiver] intent alert error:', e.message);
         });
       }
     } catch (e) {

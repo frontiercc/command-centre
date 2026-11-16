@@ -281,7 +281,7 @@ export default function HighlightsCard() {
               />
               {weekRange && (
                 <p className="m-0 text-[13px] text-[#8F8F8F] leading-5">
-                  Draft covers {fmtDate(weekRange.start)}–{fmtDate(weekRange.end)}. Edit freely: what you copy or send is exactly what is in this box. Model-written sentences are <span className="text-[#2451F3]">judged</span>; every number is <span className="text-[#245BF3]">measured</span>.
+                  Draft covers {fmtDate(weekRange.start)}–{fmtDate(weekRange.end)}. Edit freely: what you copy or send is exactly what is in this box. Model-written sentences are <span className="text-[#1F6F8B]">judged</span>; every number is <span className="text-[#1F6F8B]">measured</span>.
                 </p>
               )}
 

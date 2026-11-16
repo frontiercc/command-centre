@@ -30,7 +30,7 @@ function Switch({ checked, onChange, disabled, label }: {
       disabled={disabled}
       onClick={() => onChange(!checked)}
       className={cx(
-        'relative inline-flex h-5 w-[34px] shrink-0 rounded-full transition-colors focus:outline-none focus-visible:ring-2 focus-visible:ring-[#245BF3]/30 disabled:opacity-50 disabled:cursor-not-allowed',
+        'relative inline-flex h-5 w-[34px] shrink-0 rounded-full transition-colors focus:outline-none focus-visible:ring-2 focus-visible:ring-[#1F6F8B]/30 disabled:opacity-50 disabled:cursor-not-allowed',
         checked ? 'bg-[#0A0A0A]' : 'bg-[#DADADA]',
       )}
     >

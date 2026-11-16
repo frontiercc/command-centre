@@ -63,6 +63,23 @@ function humaniseCanonical(canonical: string): string | null {
 }
 
 /**
+ * OpenAI's GPT model IDs as OpenAI's rate card writes them:
+ *   gpt-6.1-sol      -> GPT-6.1 Sol
+ *   gpt-6-pro        -> GPT-6 Pro
+ *   gpt-6            -> GPT-6
+ *   gpt-5.3-codex    -> GPT-5.3-Codex
+ * Other shapes (o4-mini-deep-research) return null and show as reported, as the card writes them.
+ */
+function humaniseOpenAi(canonical: string): string | null {
+  const match = canonical.match(/^gpt-(\d+(?:\.\d+)?)(?:-([a-z][a-z0-9-]*))?$/i);
+  if (!match) return null;
+  const [, version, rest] = match;
+  if (!rest) return `GPT-${version}`;
+  if (rest.toLowerCase() === 'codex') return `GPT-${version}-Codex`;
+  return `GPT-${version} ${rest.split('-').map(capitalise).join(' ')}`;
+}
+
+/**
  * Format any Claude Code model ID shape into a pretty label, which provider
  * routed it, and whether that routing means the label/spend should be read
  * as an estimate.
@@ -77,7 +94,7 @@ export function formatModelLabel(model: string): ModelLabel {
   }
 
   const canonical = normalizeModelId(model);
-  const humanised = humaniseCanonical(canonical);
+  const humanised = humaniseCanonical(canonical) ?? humaniseOpenAi(canonical);
 
   if (humanised === null) {
     return { label: model, provider: 'anthropic', estimated: false };

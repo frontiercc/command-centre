@@ -94,7 +94,7 @@ function CapabilityCard({ view, canReview, canOpenUseCases, className = '' }: { 
         <PanelFoot>
           {pending} awaiting review{view.scope === 'dept' ? ' in this department' : ''}
           {canReview && (
-            <> · <Link href="/admin/pulse?tab=overview" className="font-medium text-[#245BF3] hover:underline">Review</Link></>
+            <> · <Link href="/admin/pulse?tab=overview" className="font-medium text-[#1F6F8B] hover:underline">Review</Link></>
           )}
         </PanelFoot>
       )}

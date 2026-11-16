@@ -12,7 +12,7 @@ import { getCodeWorkTypeDefinitions } from '@/lib/pulse/code/tier-config';
 import { codeWorkTypeLabel, codeWorkTypeDefinition } from '@/lib/pulse/code/work-type-labels';
 import { NextRequest, NextResponse } from 'next/server';
 import { visibleVendor, visibleOpenAi } from '@/lib/sources/openai-visibility';
-import { and, desc, eq, gte, inArray, isNotNull, lte, ne, notInArray, or, sql } from 'drizzle-orm';
+import { and, desc, eq, gte, inArray, isNotNull, ne, notInArray, or, sql } from 'drizzle-orm';
 import { getAdminSession, canAccessOrgOverview } from '@/lib/auth/admin-auth';
 import { getTypedClient } from '@/lib/db/client';
 import { schema } from '@/lib/db/schema';
@@ -21,8 +21,9 @@ import { getCodeModelRates, priceTokens, spendIsPartlyEstimated, isEstimatedPric
 import { ORG_SCOPE_ID } from '@/lib/pulse/code/aggregator';
 import { computeSpendConcentration } from '@/lib/pulse/code/concentration';
 import { getWeeklySeries, getWeeklyDelta } from '@/lib/pulse/trends';
-import { projectMonthEndSpend, type SpendProjection } from '@/lib/pulse/code/projection';
-import { buildDailyWindow, buildShippingSeries, buildRepoCards, countReposActive7d, hasToolSplit, buildCodexRepoReach, type GhDailyRow, type ShippingDay, type RepoShippingCard, type CodexRepoReach } from '@/lib/pulse/code/shipping-alignment';
+import { type SpendProjection } from '@/lib/pulse/code/projection';
+import { buildFinopsProjection, MIN_PROJECTION_DAYS } from '@/lib/finance/finops-projection';
+import { buildDailyWindow, buildShippingSeries, buildRepoCards, countReposActive7d, countReposActive30d, hasToolSplit, buildCodexRepoReach, type GhDailyRow, type ShippingDay, type RepoShippingCard, type CodexRepoReach } from '@/lib/pulse/code/shipping-alignment';
 import { readHumanTime } from '@/lib/pulse/human-time-summary';
 import { hasCodexData, readCodeMetrics, trendVendor, codeSessionVendor } from '@/lib/pulse/code/vendor-view';
 import { codexSpend } from '@/lib/openai/spend';
@@ -107,6 +108,9 @@ export async function GET(request: NextRequest) {
       }
     : null;
 
+  // The 30 days before the headline window: the aggregator's latest
+  // 'rolling_prior' row. Null when nothing happened in those 30 days, so no
+  // change is ever worked out against an empty window.
   const priorMetricsRows = await readCodeMetrics(vendor, codexPresent, (t, only) => client
     .select({
       spend_usd: t.spend_usd,
@@ -114,16 +118,14 @@ export async function GET(request: NextRequest) {
       cache_hit_ratio: t.cache_hit_ratio,
       session_count: t.session_count,
       repo_count: t.repo_count,
+      commit_count: t.commit_count,
     })
     .from(t)
-    .where(and(
-      eq(t.scope_type, 'organisation'), eq(t.scope_id, ORG_SCOPE_ID), eq(t.granularity, 'rolling'),
-      lte(t.computed_at, sevenDaysAgo), only,
-    ))
+    .where(and(eq(t.scope_type, 'organisation'), eq(t.scope_id, ORG_SCOPE_ID), eq(t.granularity, 'rolling_prior'), only))
     .orderBy(desc(t.computed_at))
     .limit(1));
   const priorMetricsRaw = priorMetricsRows[0] ?? null;
-  const priorMetrics = priorMetricsRaw
+  const priorMetrics = priorMetricsRaw && priorMetricsRaw.session_count > 0
     ? { ...priorMetricsRaw, spend_usd: priorMetricsRaw.spend_usd !== null ? Number(priorMetricsRaw.spend_usd) : null }
     : null;
 
@@ -334,11 +336,11 @@ export async function GET(request: NextRequest) {
   }
   const spendConcentration = computeSpendConcentration([...spendByUser.values()]);
 
-  // Month-end spend projection: month-to-date priced spend (UTC calendar
-  // month) plus the last-7-day priced run rate extended to month end. Same
-  // pricing path as everything else — unpriced models contribute nothing to
-  // either sum (null-never-zero), never presented as measured (see the
-  // violet estimate badge on the UI side).
+  // Month-end spend projection: FinOps's method, reused so the two pages never project
+  // differently (the owner chose this on 2026-11-15, replacing the trailing 7-day run rate):
+  // month-to-date priced spend (UTC calendar month) divided by the exact share of the month
+  // gone by. Same pricing path as everything else — unpriced models contribute nothing
+  // (null-never-zero), never presented as measured (see the estimate styling on the UI side).
   const monthStart = Math.floor(Date.UTC(
     new Date(now * 1000).getUTCFullYear(),
     new Date(now * 1000).getUTCMonth(),
@@ -369,10 +371,10 @@ export async function GET(request: NextRequest) {
 
   const codexPriced = async (since: number) => withCodex ? ((await codexSpend({ since }, rates)).usd ?? 0) : 0;
   const mtdSpend = (withClaude ? await sumPricedSpend(monthStart) : 0) + await codexPriced(monthStart);
-  const last7dSpend = (withClaude ? await sumPricedSpend(sevenDaysAgo) : 0) + await codexPriced(sevenDaysAgo);
-  const spendProjection: SpendProjection | null = last7dSpend > 0
-    ? projectMonthEndSpend(mtdSpend, last7dSpend, now)
-    : null;
+  // No priced spend yet this month: nothing to project from, so null rather than $0. Before day 7
+  // the projection is mostly noise, so, as FinOps does, none is shown (MIN_PROJECTION_DAYS).
+  const projected = mtdSpend > 0 ? buildFinopsProjection(mtdSpend, true, now) : null;
+  const spendProjection: SpendProjection | null = projected && projected.daysElapsed >= MIN_PROJECTION_DAYS ? projected : null;
 
   // Language Mix: edit-decision counts by language (from the OTel metrics stream).
   // The repo-free "what are people working on" axis.
@@ -395,8 +397,6 @@ export async function GET(request: NextRequest) {
   // context for the tracked repos, read alongside the OTel commit/PR metrics.
   const mappedRepoRows = await client.select({ repo: grm.repo }).from(grm);
   const mappedRepos = mappedRepoRows.map(r => r.repo);
-  const sevenDayDate = new Date((now - 7 * 24 * 3600) * 1000).toISOString().slice(0, 10);
-  const thirtyDayDate = new Date(thirtyDaysAgo * 1000).toISOString().slice(0, 10);
 
   let githubOverlay: {
     trackedRepoCount: number;
@@ -404,6 +404,8 @@ export async function GET(request: NextRequest) {
     totalPrs7d: number;
     totalCommits30dByRepo: Record<string, number>;
     reposActive7d: number;
+    /** Tracked repos with a GitHub commit in the last 30 days: the page's window. All commits, like reposActive7d. */
+    reposActive30d: number;
     shippingSeries: ShippingDay[];
     repoCards: RepoShippingCard[];
     /** A sync has written the tool split (made with Claude Code / Codex / no AI tool recorded). */
@@ -421,28 +423,29 @@ export async function GET(request: NextRequest) {
     const coveredRepos = coveredRepoRows.map(r => r.repo);
 
     if (coveredRepos.length > 0) {
+      // The exact 30-entry window buildDailyWindow produces (today back 29
+      // days inclusive), and its last 7 days: the same days, and the same
+      // tracked repos, as the repo cards and the shipping series below.
+      const windowDays = buildDailyWindow(new Date(now * 1000).toISOString().slice(0, 10), 30);
+      const sevenDayDate = windowDays[windowDays.length - 7];
       const vol7Rows = await client
         .select({
           commits: sql<number | string>`COALESCE(SUM(${grs.commit_count}), 0)`,
           prs: sql<number | string>`COALESCE(SUM(${grs.prs_merged}), 0)`,
         })
         .from(grs)
-        .where(gte(grs.date, sevenDayDate));
+        .where(and(gte(grs.date, sevenDayDate), inArray(grs.repo, mappedRepos)));
       const vol7 = vol7Rows[0];
       const perRepo30Rows = await client
         .select({ repo: grs.repo, c: sql<number | string>`SUM(${grs.commit_count})` })
         .from(grs)
-        .where(gte(grs.date, thirtyDayDate))
+        .where(and(gte(grs.date, windowDays[0]), inArray(grs.repo, mappedRepos)))
         .groupBy(grs.repo);
 
-      // Shipping alignment series/cards need day-grain rows over the exact
-      // 30-entry window buildDailyWindow produces (today back 29 days
-      // inclusive). thirtyDayDate above (today - 30 days) is one day earlier
-      // than that window's first day — filtering ghDailyRows on it would let
-      // a boundary-day row (dated windowDays[0] minus 1) through even though
-      // no day in the window maps to it, surfacing a phantom all-zero repo
-      // card. Compute windowDays first and filter on its first entry instead.
-      const windowDays = buildDailyWindow(new Date(now * 1000).toISOString().slice(0, 10), 30);
+      // Shipping alignment series/cards need day-grain rows over the same
+      // window: filtering on a day before windowDays[0] would let a
+      // boundary-day row through even though no day in the window maps to
+      // it, surfacing a phantom all-zero repo card.
 
       // Day-grain AI-assisted commits — same rows the aggregator sums into
       // code_metrics.commit_count, re-bucketed by UTC day for the alignment
@@ -489,6 +492,7 @@ export async function GET(request: NextRequest) {
         totalPrs7d: Number(vol7?.prs ?? 0),
         totalCommits30dByRepo: Object.fromEntries(perRepo30Rows.map(r => [r.repo, Number(r.c)])),
         reposActive7d: countReposActive7d(windowDays, ghDailyRows),
+        reposActive30d: countReposActive30d(windowDays, ghDailyRows),
         shippingSeries: buildShippingSeries(windowDays, aiByDay, ghDailyRows),
         repoCards: buildRepoCards(windowDays, ghDailyRows),
         toolSplit: hasToolSplit(ghDailyRows),
@@ -583,7 +587,8 @@ export async function GET(request: NextRequest) {
 
   // 8-week calendar-aligned trends for the verdict cards, org scope. The
   // current (partial) week is included and flagged — never presented as a
-  // completed week. Deltas compare the two most recent COMPLETED weeks.
+  // completed week. Deltas compare the two most recent COMPLETED weeks; the
+  // page's change badges compare metrics with priorMetrics (30 days on 30) instead.
   const trendSeries = async (column: 'spend_usd' | 'autonomy_ratio' | 'commit_count' | 'session_count') => ({
     series: await getWeeklySeries('code_metrics', 'organisation', ORG_SCOPE_ID, column, 8, now, tv),
     delta: await getWeeklyDelta('code_metrics', 'organisation', ORG_SCOPE_ID, column, 8, now, tv),

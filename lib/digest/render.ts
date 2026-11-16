@@ -46,7 +46,7 @@ export function escapeMrkdwn(input: string): string {
 }
 
 function formatUsd(value: number | null): string {
-  if (value === null) return '—';
+  if (value === null) return 'not priced';
   return `$${value.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
 }
 
@@ -93,7 +93,7 @@ function estimateCaveatLines(code: NonNullable<DigestData['code']>): string[] {
 const COLOR_HEADER_BG = '#0B1220';
 const COLOR_TEXT = '#1A1A1A';
 const COLOR_MUTED = '#6B7280';
-const COLOR_BLUE = '#2563EB';
+const COLOR_BLUE = '#1F6F8B';
 const COLOR_AMBER_BG = '#FFFBEB';
 const COLOR_AMBER_BORDER = '#F59E0B';
 const COLOR_AMBER_TEXT = '#92400E';
@@ -103,7 +103,7 @@ function renderCodeRowHtml(code: DigestData['code']): string {
   if (!code) return '';
 
   const spendLine = `${formatUsd(code.spendUsd)}${formatDeltaPhrase(code.spendDeltaPct)}`;
-  const engagedHoursText = code.engagedHours === null ? '—' : `${code.engagedHours.toLocaleString('en-US')} hrs`;
+  const engagedHoursText = code.engagedHours === null ? 'not measured' : `${code.engagedHours.toLocaleString('en-US')} hrs`;
   const split = spendSplitText(code);
   const splitHtml = split ? `
         <p style="margin:0 0 4px 0;font-size:13px;color:${COLOR_MUTED};">${escapeHtml(split)}</p>` : '';
@@ -235,7 +235,7 @@ export function renderDigestHtml(data: DigestData, hubUrl: string): string {
       <table role="presentation" width="600" cellpadding="0" cellspacing="0" style="max-width:600px;width:100%;background-color:#FFFFFF;border-radius:8px;overflow:hidden;font-family:Arial,Helvetica,sans-serif;">
         <tr>
           <td style="background-color:${COLOR_HEADER_BG};padding:24px;">
-            <p style="margin:0;font-size:12px;color:#93C5FD;text-transform:uppercase;letter-spacing:0.08em;">Frontier Command Centre</p>
+            <p style="margin:0;font-size:12px;color:#6BA3B8;text-transform:uppercase;letter-spacing:0.08em;">Frontier Command Centre</p>
             <p style="margin:4px 0 0 0;font-size:20px;font-weight:bold;color:#FFFFFF;">Your AI week &mdash; ${dateRange}</p>
           </td>
         </tr>
@@ -278,7 +278,7 @@ function slackCodeFields(code: DigestData['code']): SlackBlock[] {
 
   const split = spendSplitText(code);
   const spendLine = `*Spend:*\n${escapeMrkdwn(formatUsd(code.spendUsd))}${escapeMrkdwn(formatDeltaPhrase(code.spendDeltaPct))}${split ? `\n${escapeMrkdwn(split)}` : ''}`;
-  const engagedHoursText = code.engagedHours === null ? '—' : `${code.engagedHours.toLocaleString('en-US')} hrs`;
+  const engagedHoursText = code.engagedHours === null ? 'not measured' : `${code.engagedHours.toLocaleString('en-US')} hrs`;
 
   return [
     { type: 'section', text: { type: 'mrkdwn', text: '*Developer Pulse*' } },

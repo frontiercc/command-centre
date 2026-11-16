@@ -136,6 +136,21 @@ describe('OpenAI sync against the stand-in export', () => {
         `SELECT source, COUNT(*) AS n FROM openai_replies GROUP BY source ORDER BY source`,
       );
       expect(replies.map(r => r.source)).toEqual(['chatgpt_chat', 'chatgpt_work']);
+      // The stand-in's Work replies end with a file: the count is kept, and a reply with no files field made none.
+      const files = await sql.all<{ with_files: number | string; none: number | string; unset: number | string }>(
+        `SELECT COUNT(*) FILTER (WHERE files_count > 0) AS with_files, COUNT(*) FILTER (WHERE files_count = 0) AS none,
+                COUNT(*) FILTER (WHERE files_count IS NULL) AS unset FROM openai_replies`,
+      );
+      expect(Number(files[0].with_files)).toBeGreaterThan(0);
+      expect(Number(files[0].none)).toBeGreaterThan(0);
+      expect(Number(files[0].unset)).toBe(0);
+      // ...and the files' names are kept with the count, names only.
+      const named = await sql.all<{ named: number | string; bad: number | string }>(
+        `SELECT COUNT(*) FILTER (WHERE files_count > 0 AND file_names IS NOT NULL) AS named,
+                COUNT(*) FILTER (WHERE files_count = 0 AND file_names IS NOT NULL OR file_names LIKE '%/%') AS bad FROM openai_replies`,
+      );
+      expect(Number(named[0].named)).toBe(Number(files[0].with_files));
+      expect(Number(named[0].bad)).toBe(0);
       // Codex turns only: ChatGPT Work's spend arrives in COSTS under ChatGPT.
       const turns = await sql.all<{ bad: number; models: string }>(
         `SELECT COUNT(*) FILTER (WHERE session_id NOT LIKE 'codex:%' OR openai_cost_usd IS NULL) AS bad,
@@ -307,7 +322,7 @@ describe('OpenAI sync against the stand-in export', () => {
     } finally {
       await cleanup();
     }
-  }, 300_000);
+  }, 600_000); // a full 5-day sync: about 100s alone, over 300s when the whole suite runs at once
 
   it('drops everything for people on the exclusion list', async () => {
     const { createTestDatabase } = await import('./helpers/db');
@@ -348,7 +363,7 @@ describe('OpenAI sync against the stand-in export', () => {
     } finally {
       await cleanup();
     }
-  }, 300_000);
+  }, 600_000);
 
   it('stops between files when the key is removed mid-run, and keeps no sync position', async () => {
     const { createTestDatabase } = await import('./helpers/db');

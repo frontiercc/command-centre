@@ -50,3 +50,36 @@ export const KNOWN_ANTHROPIC_SKILLS = new Set([
 export function isKnownAnthropicSkill(skillName: string): boolean {
   return KNOWN_ANTHROPIC_SKILLS.has(skillName);
 }
+
+/**
+ * A short description for each Anthropic skill above that Anthropic publishes, so the S&C Board
+ * shows what it does as soon as it first appears. Written from each skill's own description in
+ * Anthropic's public skills repository (github.com/anthropics/skills, read 2026-11-14). A skill
+ * with no published source (consolidate-memory, humanize, meeting-notes, senior-pitch-writing,
+ * setup-cowork) has none, rather than a guess. Filled only where an entry has no description,
+ * so an admin's own wording always wins.
+ */
+const ANTHROPIC_SKILL_DESCRIPTIONS: Record<string, string> = {
+  docx: 'Creates, reads and edits Word documents and templates, including their formatting.',
+  xlsx: 'Reads, edits, creates and converts spreadsheets, such as Excel and CSV files.',
+  pptx: 'Creates, reads and edits PowerPoint decks and templates, including speaker notes.',
+  pdf: 'Works with PDFs: extracts text, merges or splits files, fills forms, adds watermarks and reads scanned pages.',
+  'brand-guidelines': "Applies Anthropic's brand colours and typography to documents and pages.",
+  'doc-coauthoring': 'A step-by-step way to co-write documents such as proposals, specs and decision papers, refining the draft so others can follow it.',
+  'internal-comms': "Writes internal communications in your company's usual formats: status reports, leadership updates, newsletters, FAQs and incident reports.",
+  'skill-creator': 'Builds new skills, improves existing ones and tests them so they trigger reliably.',
+  'slack-gif-creator': 'Makes animated GIFs that work well in Slack.',
+  'theme-factory': 'Applies a colour and font theme to slides, documents, reports and web pages, from a preset or a new custom theme.',
+};
+
+/** The built-in description for an Anthropic skill, bare or 'anthropic-skills:' named; null when there is none. */
+export function anthropicSkillDescription(skillName: string): string | null {
+  const bare = skillName.startsWith('anthropic-skills:') ? skillName.slice('anthropic-skills:'.length) : skillName;
+  return ANTHROPIC_SKILL_DESCRIPTIONS[bare] ?? null;
+}
+
+/** Every name, bare and 'anthropic-skills:', that has a built-in description, with it. */
+export function anthropicSkillDescriptionEntries(): Array<[string, string]> {
+  return Object.entries(ANTHROPIC_SKILL_DESCRIPTIONS)
+    .flatMap(([name, d]): Array<[string, string]> => [[name, d], [`anthropic-skills:${name}`, d]]);
+}

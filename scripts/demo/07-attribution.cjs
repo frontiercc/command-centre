@@ -109,7 +109,8 @@ const WORK = [
 ];
 
 // Drawn from the vocabulary already on this instance — never a fresh set that
-// would read as a different product's data.
+// would read as a different product's data. Anthropic's connectors go by the
+// names Claude reports them under (lib/otel/cowork-receiver.ts).
 const CODE_SKILLS = [
   { name: 'code-review',          weight: 6, agentChained: 0.35 },
   { name: 'systematic-debugging', weight: 5, agentChained: 0.55 },
@@ -122,7 +123,7 @@ const CODE_SKILLS = [
 const CODE_CONNECTORS = [
   { server: 'github', tools: ['create_pull_request', 'get_file_contents', 'list_commits'], weight: 7 },
   { server: 'linear', tools: ['get_issue', 'update_issue', 'create_comment'], weight: 5 },
-  { server: 'slack',  tools: ['post_message', 'read_channel'], weight: 3 },
+  { server: 'Slack',  tools: ['post_message', 'read_channel'], weight: 3 },
 ];
 
 const expand = (list, key) => list.flatMap((x) => Array(x[key ?? 'weight']).fill(x));
@@ -141,6 +142,8 @@ async function clean(c) {
   await c.query(`DELETE FROM pulse_events WHERE cowork_message_id LIKE $1`, like);
   await c.query(`DELETE FROM pulse_skill_runs WHERE cowork_message_id LIKE $1`, like);
   await c.query(`DELETE FROM pulse_classifications WHERE cowork_message_id LIKE $1`, like);
+  // Alerts the Hub raised on these prompts would point at nothing once they go.
+  await c.query(`DELETE FROM alerts WHERE raw_evidence->>'message_id' LIKE $1`, like);
   await c.query(`DELETE FROM cowork_messages WHERE id LIKE $1`, like);
   await c.query(`DELETE FROM cowork_skill_invocations WHERE id LIKE $1`, like);
   await c.query(`DELETE FROM cowork_mcp_invocations WHERE id LIKE $1`, like);
@@ -167,7 +170,11 @@ async function clean(c) {
   if (total !== 0) throw new Error('clean did not remove every marker row');
 }
 
-/** Phase A — attribute Cowork spend to kinds of work. */
+/**
+ * Phase A — attribute Cowork spend to kinds of work. 01b-follow-up-2.cjs now
+ * opens every spend session with a graded prompt, so this normally finds
+ * nothing; it stays for spend sessions any other step leaves without one.
+ */
 async function seedSpendAttribution(c) {
   // Current calendar month, which is the window the Model Efficiency section
   // reports on (lib/finance/model-efficiency.ts uses monthBounds).
@@ -316,8 +323,8 @@ const COWORK_SKILLS = ['doc-coauthoring', 'anthropic-skills:xlsx', 'meeting-note
 const COWORK_CONNECTORS = [
   { server: 'Google Drive', tools: ['search_files', 'read_file'] },
   { server: 'Gmail', tools: ['search_threads', 'read_thread'] },
-  { server: 'slack', tools: ['read_channel', 'post_message'] },
-  { server: 'salesforce', tools: ['soql_query', 'get_record'] },
+  { server: 'Slack', tools: ['read_channel', 'post_message'] },
+  { server: 'Salesforce', tools: ['soql_query', 'get_record'] },
 ];
 
 async function seedDrilldown(c) {

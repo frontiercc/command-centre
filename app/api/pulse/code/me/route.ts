@@ -18,9 +18,14 @@ import { getWeeklySeries, getWeeklyDelta } from '@/lib/pulse/trends';
 import { readHumanTime } from '@/lib/pulse/human-time-summary';
 import { getAllConfig } from '@/lib/config';
 import { canViewSpendReview } from '@/lib/finance/spend-review-access';
-import { hasCodexData, readCodeMetrics, trendVendor, codeSessionVendor } from '@/lib/pulse/code/vendor-view';
+import { hasCodexData, readCodeMetrics, trendVendor, codeSessionVendor, latestRunStart } from '@/lib/pulse/code/vendor-view';
 import { codexActionCounts } from '@/lib/pulse/code/aggregator';
 import { githubRepoBasis, githubBasisColumn, type GithubRepoBasis } from '@/lib/pulse/code/github-tool-match';
+import { weeklyTiers, getCodeTierNames } from '@/lib/pulse/code/weekly-tiers';
+import { getCodeWorkTypeDefinitions } from '@/lib/pulse/code/tier-config';
+import { codeWorkTypeLabel } from '@/lib/pulse/code/work-type-labels';
+import { buildCodePeriodWork } from '@/lib/pulse/code/period-work';
+import type { PulsePeriod } from '@/lib/pulse/period-shape';
 
 export const dynamic = 'force-dynamic';
 
@@ -62,12 +67,19 @@ export async function GET(request: NextRequest) {
     if (session.role === 'admin' || session.role === 'manager') {
       userId = queryUserId;
     } else if (isDeptScoped(session.role) && session.department) {
+      // Same department: the sign-in account's, else the person's own record's (as Person 360
+      // and the Users list do), so a colleague with no sign-in account can be opened too.
       const targetAdminRows = await client
         .select({ department: au.department })
         .from(au)
         .where(eq(au.linked_cowork_user_id, queryUserId))
         .limit(1);
-      if (targetAdminRows[0]?.department === session.department) {
+      const targetUserRows = targetAdminRows[0] ? [] : await client
+        .select({ department: schema.users.department })
+        .from(schema.users)
+        .where(eq(schema.users.id, queryUserId))
+        .limit(1);
+      if ((targetAdminRows[0]?.department ?? targetUserRows[0]?.department ?? null) === session.department) {
         userId = queryUserId;
       } else {
         return NextResponse.json({ error: 'Forbidden' }, { status: 403 });
@@ -83,7 +95,6 @@ export async function GET(request: NextRequest) {
   }
 
   const now = Math.floor(Date.now() / 1000);
-  const sevenDaysAgo = now - 7 * 24 * 3600;
   const thirtyDaysAgo = now - 30 * 24 * 3600;
 
   // Developer Pulse's All / Claude / Codex switch.
@@ -96,11 +107,11 @@ export async function GET(request: NextRequest) {
 
   // Per-user GitHub repos: 35d window rows scoped to
   // currently-mapped repos. null = no window rows at all ("Not captured"
-  // rendering); count7d: 0 = window rows exist but none in the last 7 days.
+  // rendering); count30d: 0 = window rows exist but none in the last 30 days.
   // Claude and Codex tabs count only repos with commits matched to that tool;
   // All (and a hub without Codex, which has no tabs) counts every repo.
   const githubBasis = githubRepoBasis(vendor, codexPresent);
-  let githubRepos: { count7d: number; names7d: string[]; basis: GithubRepoBasis } | null = null;
+  let githubRepos: { count30d: number; names30d: string[]; basis: GithubRepoBasis } | null = null;
   if (userId) {
     const grm = schema.githubRepoMap;
     const gurs = schema.githubUserRepoStats;
@@ -108,18 +119,18 @@ export async function GET(request: NextRequest) {
     const mappedRepos = mappedRepoRows.map(r => r.repo);
     if (mappedRepos.length > 0) {
       const since35 = new Date((now - 35 * 24 * 3600) * 1000).toISOString().slice(0, 10);
-      const since7 = new Date((now - 7 * 24 * 3600) * 1000).toISOString().slice(0, 10);
+      const since30 = new Date((now - 30 * 24 * 3600) * 1000).toISOString().slice(0, 10);
       const rows = await client
         .select({ repo: gurs.repo, date: gurs.date, c: githubBasisColumn(gurs, githubBasis) })
         .from(gurs)
         .where(and(eq(gurs.user_id, userId), gte(gurs.date, since35), inArray(gurs.repo, mappedRepos)));
       // A tool's count is not measured on days synced before commits were
-      // matched to tools (null), so with no matched day in the last 7 the card
+      // matched to tools (null), so with no matched day in the last 30 the card
       // stays empty rather than reading 0.
-      const measured7 = rows.some(r => r.date >= since7 && r.c != null);
-      if (rows.length > 0 && (githubBasis === 'all' || measured7)) {
-        const repos7 = [...new Set(rows.filter(r => r.date >= since7 && Number(r.c ?? 0) > 0).map(r => r.repo))].sort();
-        githubRepos = { count7d: repos7.length, names7d: repos7.slice(0, 3), basis: githubBasis };
+      const measured30 = rows.some(r => r.date >= since30 && r.c != null);
+      if (rows.length > 0 && (githubBasis === 'all' || measured30)) {
+        const repos30 = [...new Set(rows.filter(r => r.date >= since30 && Number(r.c ?? 0) > 0).map(r => r.repo))].sort();
+        githubRepos = { count30d: repos30.length, names30d: repos30.slice(0, 3), basis: githubBasis };
       }
     }
   }
@@ -136,7 +147,11 @@ export async function GET(request: NextRequest) {
       period_start: cm.period_start, period_end: cm.period_end, computed_at: cm.computed_at,
     })
     .from(cm)
-    .where(and(eq(cm.scope_type, 'user'), eq(cm.scope_id, uid), eq(cm.granularity, 'rolling'), only))
+    .where(and(
+      eq(cm.scope_type, 'user'), eq(cm.scope_id, uid), eq(cm.granularity, 'rolling'), only,
+      // Only a row from the view's latest run: an older one is a tool this person stopped using.
+      sql`${cm.computed_at} >= ${latestRunStart(sql.raw(only ? 'code_metrics_vendor' : 'code_metrics'), only ? sql`AND ${only}` : sql``)}`,
+    ))
     .orderBy(desc(cm.computed_at))
     .limit(1);
   const toMetrics = <R extends { spend_usd: string | null }>(r: R | undefined) =>
@@ -150,20 +165,24 @@ export async function GET(request: NextRequest) {
       }
     : null;
 
+  // The 30 days before the headline window: this person's 'rolling_prior' row
+  // from the view's latest run (an older one is a window they were not active
+  // in since). Null when they did nothing in those 30 days.
   const priorMetricsRows = await readCodeMetrics(vendor, codexPresent, (cm, only) => client
     .select({
       spend_usd: cm.spend_usd, autonomy_ratio: cm.autonomy_ratio, cache_hit_ratio: cm.cache_hit_ratio,
-      session_count: cm.session_count, repo_count: cm.repo_count,
+      session_count: cm.session_count, repo_count: cm.repo_count, commit_count: cm.commit_count,
+      active_time_user_s: cm.active_time_user_s, lines_added: cm.lines_added,
     })
     .from(cm)
     .where(and(
-      eq(cm.scope_type, 'user'), eq(cm.scope_id, uid), eq(cm.granularity, 'rolling'),
-      sql`${cm.computed_at} <= ${sevenDaysAgo}`, only,
+      eq(cm.scope_type, 'user'), eq(cm.scope_id, uid), eq(cm.granularity, 'rolling_prior'), only,
+      sql`${cm.computed_at} >= ${latestRunStart(sql.raw(only ? 'code_metrics_vendor' : 'code_metrics'), only ? sql`AND ${only}` : sql``)}`,
     ))
     .orderBy(desc(cm.computed_at))
     .limit(1));
   const priorMetricsRaw = priorMetricsRows[0] ?? null;
-  const priorMetrics = priorMetricsRaw
+  const priorMetrics = priorMetricsRaw && priorMetricsRaw.session_count > 0
     ? { ...priorMetricsRaw, spend_usd: priorMetricsRaw.spend_usd !== null ? Number(priorMetricsRaw.spend_usd) : null }
     : null;
 
@@ -226,7 +245,7 @@ export async function GET(request: NextRequest) {
       delete rest.models_json;
       const actions = codexActions.get(s.session_id)?.tools ?? 0;
       return codex
-        ? { ...rest, tool_use_count: actions, input_tokens: codex.input + codex.cached, output_tokens: codex.output, cache_read_tokens: codex.cached, spend_usd: codex.spend }
+        ? { ...rest, tool_use_count: actions, input_tokens: codex.input, output_tokens: codex.output, cache_read_tokens: codex.cached, spend_usd: codex.spend }
         : { ...rest, tool_use_count: actions, spend_usd: null };
     }
     let spendUsd: number | null = null;
@@ -291,14 +310,53 @@ export async function GET(request: NextRequest) {
     modelMix.sort((a, b) => (b.input_tokens + b.output_tokens) - (a.input_tokens + a.output_tokens));
   }
 
-  // Journey grid (judged layer): weekly session-tier counts over 6 weeks.
-  // Bucketed by when the work HAPPENED (session last_at), not when classified.
+  // The judged layer by week: a year of completed weeks for the longer views, and six weeks
+  // counting back from today for the grid, so the week in progress is always in it. Bucketed by
+  // when the work HAPPENED (session last_at), not when it was classified.
   const sixWeeksAgo = now - 42 * 24 * 3600;
+  const yearAgo = now - 53 * 7 * 24 * 3600;
   const tierRows = await client
     .select({ tier: csc.tier, provisional: csc.provisional, last_at: css.last_at })
     .from(csc)
     .innerJoin(css, eq(css.session_id, csc.session_id))
     .where(and(eq(csc.user_id, userId), eq(csc.status, 'classified'), gte(css.last_at, sixWeeksAgo), sessionVendor));
+
+  const yearTierRows = await client
+    .select({ tier: csc.tier, work_type: csc.work_type, last_at: css.last_at })
+    .from(csc)
+    .innerJoin(css, eq(css.session_id, csc.session_id))
+    .where(and(eq(csc.user_id, userId), eq(csc.status, 'classified'), gte(css.last_at, yearAgo), sessionVendor));
+  const { weeks: tierWeeks, grid: tierGrid } = weeklyTiers(yearTierRows, now);
+  const tierNames = await getCodeTierNames();
+
+  // The page's one period: this week, this month or this quarter.
+  const askedPeriod = request.nextUrl.searchParams.get('period');
+  const periodName: PulsePeriod = askedPeriod === 'week' || askedPeriod === 'month' || askedPeriod === 'quarter' ? askedPeriod : 'quarter';
+  let periodWork = null;
+  try {
+    periodWork = await buildCodePeriodWork({ scopeType: 'user', scopeId: userId, period: periodName, vendor, nowS: now });
+  } catch (err) {
+    console.error('[pulse/code] period work failed', err);
+  }
+
+  // What kinds of coding work this person delegates, over the last 30 days.
+  const workDefs = await getCodeWorkTypeDefinitions();
+  const workCounts = new Map<string, { sessions: number; deep: number }>();
+  for (const r of yearTierRows) {
+    if (r.last_at < thirtyDaysAgo) continue;
+    const e = workCounts.get(r.work_type) ?? { sessions: 0, deep: 0 };
+    e.sessions++;
+    if (r.tier >= 2) e.deep++;
+    workCounts.set(r.work_type, e);
+  }
+  const workMix = [...workCounts.entries()]
+    .map(([work_type, v]) => ({
+      work_type,
+      label: codeWorkTypeLabel(work_type, workDefs.get(work_type)),
+      sessions: v.sessions,
+      deep: v.deep,
+    }))
+    .sort((a, b) => b.sessions - a.sessions);
 
   const journeyCounts = new Map<string, number>();
   const journeyProvisional = new Map<string, number>();
@@ -341,5 +399,58 @@ export async function GET(request: NextRequest) {
   // (lib/finance/spend-review-access.ts); it lives under FinOps and is hidden with it.
   const canSeeSpendReview = (await getAllConfig()).chargebackEnabled === true
     && await canViewSpendReview(session, userId);
-  return NextResponse.json({ userId, displayName, vendor, codexPresent, metricsSplit, metrics, priorMetrics, trends, sessions, modelMix, journeyGrid, githubRepos, humanTime, canSeeSpendReview });
+  // Best work this week: the deepest classified session of the last 7 days, with what it was.
+  const sevenDaysAgoBest = now - 7 * 24 * 3600;
+  const bestRows = await client
+    .select({
+      session_id: css.session_id, repo: css.repo, branch: css.git_branch,
+      tier: csc.tier, work_type: csc.work_type,
+      last_at: css.last_at, active_secs: css.active_secs,
+      prompts: css.user_msg_count, actions: css.tool_use_count, commits: css.commit_count,
+    })
+    .from(csc)
+    .innerJoin(css, eq(css.session_id, csc.session_id))
+    .where(and(eq(csc.user_id, userId), eq(csc.status, 'classified'), gte(css.last_at, sevenDaysAgoBest), sessionVendor))
+    .orderBy(desc(csc.tier), desc(css.active_secs))
+    .limit(1);
+  const b = bestRows[0];
+  // A Codex session's actions and commits are in codex_actions, not Claude Code's telemetry.
+  if (b && b.session_id.startsWith('codex:')) {
+    const c = (await codexActionCounts(client, [b.session_id])).get(b.session_id);
+    b.actions = c?.tools ?? 0;
+    b.commits = c?.commits ?? 0;
+  }
+  const bestSession = b
+    ? {
+        sessionId: b.session_id,
+        repo: b.repo ?? null,
+        branch: b.branch ?? null,
+        tier: Number(b.tier),
+        workType: b.work_type,
+        label: codeWorkTypeLabel(b.work_type, workDefs.get(b.work_type)),
+        occurredAt: Number(b.last_at),
+        activeSecs: b.active_secs === null ? null : Number(b.active_secs),
+        prompts: Number(b.prompts ?? 0),
+        actions: Number(b.actions ?? 0),
+        commits: Number(b.commits ?? 0),
+      }
+    : null;
+
+  // A person's spend: admins and managers for anyone, everyone else only their own. A colleague's
+  // page is sent without any spend figure, and says it is hidden.
+  const spendHidden = !seesPerson;
+  if (spendHidden) {
+    if (metrics) metrics.spend_usd = null;
+    if (priorMetrics) priorMetrics.spend_usd = null;
+    if (metricsSplit) {
+      if (metricsSplit.claude) metricsSplit.claude.spend_usd = null;
+      if (metricsSplit.openai) metricsSplit.openai.spend_usd = null;
+    }
+    for (const s of sessions) s.spend_usd = null;
+  }
+  const periodWorkOut = spendHidden && periodWork
+    ? { ...periodWork, spendUsd: null, trend: { ...periodWork.trend, spendUsd: [] } }
+    : periodWork;
+
+  return NextResponse.json({ userId, displayName, vendor, codexPresent, metricsSplit, metrics, priorMetrics, trends, sessions, modelMix, journeyGrid, tierWeeks, tierGrid, tierNames, periodWork: periodWorkOut, workMix, bestSession, githubRepos, humanTime, canSeeSpendReview, spendHidden });
 }

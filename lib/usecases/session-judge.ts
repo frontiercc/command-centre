@@ -214,7 +214,7 @@ async function loadReadySessions(nowS: number): Promise<ReadySession[]> {
        WHERE last_at >= ${since} AND last_at < ${idleBefore}
     )
     SELECT s.surface, s.session_id, s.user_id, COALESCE(s.first_at, s.last_at) AS first_at, s.last_at,
-           COALESCE(NULLIF(TRIM(u.department), ''), NULLIF(TRIM(au.department), '')) AS dept,
+           COALESCE(NULLIF(TRIM(au.department), ''), NULLIF(TRIM(u.department), '')) AS dept,
            j.last_event_at AS j_last, j.candidate_key AS j_key, j.use_case_ids AS j_ids, j.skill_matched_ids AS j_skill,
            j.model AS j_model, j.prompt_count AS j_prompts
       FROM s

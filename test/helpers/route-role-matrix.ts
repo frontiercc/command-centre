@@ -48,6 +48,7 @@ export const ROUTE_ROLE_MATRIX: Record<string, MatrixEntry> = {
   'admin/connector-tokens POST': ADMIN,
   'admin/connector-tokens DELETE': ADMIN,
   'admin/digest/preview GET': ADMIN_MANAGER,
+  'admin/ask GET': ADMIN,
   'admin/digest GET': ADMIN,
   'admin/digest PUT': ADMIN,
   'admin/digest/test POST': ADMIN,
@@ -91,6 +92,9 @@ export const ROUTE_ROLE_MATRIX: Record<string, MatrixEntry> = {
   'ai/report POST': CORE,
   'alerts/count GET': CORE,
   'alerts GET': CORE,
+  // Ask the data: anyone may ask whether it is available (only an admin gets a yes); only an admin may ask.
+  'ask GET': EVERY_ROLE,
+  'ask POST': ADMIN,
   'alerts PATCH': ADMIN,
   'alerts DELETE': ADMIN,
   'anthropic/models GET': ADMIN,
@@ -158,6 +162,7 @@ export const ROUTE_ROLE_MATRIX: Record<string, MatrixEntry> = {
   'pulse/admin/tiers POST': ADMIN,
   'pulse/admin/users/[userId] GET': ADMIN_MANAGER,
   'pulse/admin/users GET': COWORK_PULSE, // + dept scoping for contributor roles
+  'pulse/people GET': COWORK_PULSE, // + dept scoping for contributor roles, as the Users page
   'pulse/briefing POST': ADMIN_MANAGER,
   'pulse/capabilities GET': 'SELF_OR_DATA', // non-admins see their own events only
   'pulse/capabilities PATCH': 'SELF_OR_DATA', // non-admins may action their own events only
@@ -170,6 +175,18 @@ export const ROUTE_ROLE_MATRIX: Record<string, MatrixEntry> = {
   'pulse/code/classifier GET': ADMIN_MANAGER,
   'pulse/code/classifier POST': ADMIN,
   'pulse/code/dept/[dept] GET': CODE_PULSE, // + own-department check for contributor roles
+  'pulse/code/so-what GET': ADMIN_MANAGER, // + own-team check for a manager
+  'pulse/so-what GET': ADMIN_MANAGER, // + own-team check for a manager
+  'pulse/so-what/decisions POST': ADMIN_MANAGER,
+  'pulse/so-what/decisions DELETE': ADMIN_MANAGER,
+  'pulse/code/so-what/decisions POST': ADMIN_MANAGER,
+  'pulse/code/so-what/decisions DELETE': ADMIN_MANAGER,
+  'pulse/code/coaching GET': ADMIN_MANAGER, // + own-department check for a manager
+  'pulse/code/coaching/actions POST': ADMIN_MANAGER,
+  'pulse/code/coaching/actions DELETE': ADMIN_MANAGER,
+  'pulse/coaching GET': ADMIN_MANAGER, // + own-department check for a manager
+  'pulse/coaching/actions POST': ADMIN_MANAGER,
+  'pulse/coaching/actions DELETE': ADMIN_MANAGER,
   'pulse/code/depts GET': CODE_PULSE,
   'pulse/code/framework GET': ORG,
   'pulse/code/github/identity GET': ADMIN_MANAGER,
@@ -190,14 +207,13 @@ export const ROUTE_ROLE_MATRIX: Record<string, MatrixEntry> = {
   'pulse/depts GET': COWORK_PULSE,
   'pulse/governance-health GET': ADMIN_MANAGER,
   'pulse/me GET': COWORK_PULSE,
+  'pulse/me/tasks GET': COWORK_PULSE, // + same-department check for contributor roles
   'pulse/org-summary GET': ORG,
   'pulse/person/[userId] GET': COWORK_PULSE, // + same-department check for contributor roles
   // Role check now runs before the ?dept/?userId input check (fixed),
   // so the plain request must be refused for roles outside the set.
   'pulse/skill-exchange GET': COWORK_PULSE,
-  'pulse/skills-discover GET': COWORK_PULSE,
-  'pulse/skills-discover POST': COWORK_PULSE,
-  'pulse/skills-overview GET': 'SELF_OR_DATA', // the caller's own skills
+  'pulse/skills-overview GET': 'SELF_OR_DATA', // S&C Board figures for every role, department-only entries filtered
   'pulse/stickiness GET': ORG,
   'pulse/team/[teamId] GET': ADMIN,
   'pulse/teams GET': ADMIN,

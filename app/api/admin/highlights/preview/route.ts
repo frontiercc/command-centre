@@ -41,7 +41,7 @@ export async function GET(request: NextRequest) {
     const composed = await composeHighlights(input);
     if (!composed) {
       await logAccess({ actorId: session.userId!, actorEmail: session.email!, resource: 'highlights', action: 'READ', outcome: 'failure', detail: 'compose failed after outbound model call' });
-      return NextResponse.json({ error: 'compose_failed', message: 'The model call failed or produced nothing that could be traced back to real work items. Try again, or check the AI API key on /admin/security.' }, { status: 502 });
+      return NextResponse.json({ error: 'compose_failed', message: 'The model call failed or produced nothing that could be traced back to real work items. Try again, or check the Claude API key under Admin → Access & Keys.' }, { status: 502 });
     }
 
     const post = renderHighlightsPost(input, composed);

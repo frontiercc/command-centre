@@ -185,6 +185,33 @@ describe('GET /api/pulse/skills-overview', () => {
     expect(body.mySkills.map((s: { skill_name: string }) => s.skill_name)).toContain('brand-review');
     expect(body.skillGap.find((s: { skill_name: string }) => s.skill_name === 'brand-review')).toBeUndefined();
   });
+
+  it('keeps a department-only Board entry out of "used by nobody" for other departments, as the Board does', async () => {
+    await client.insert(schema.skillLibraryEntries).values([
+      { name: 'finance-only-skill', is_published: 1, department: 'Finance' },
+      { name: 'engineering-only-skill', is_published: 1, department: 'Engineering' },
+      { name: 'everyone-skill', is_published: 1, department: null },
+    ]);
+    const { GET } = await import('../app/api/pulse/skills-overview/route');
+    const unusedNames = async () => ((await (await GET(makeRequest('/api/pulse/skills-overview'))).json()).unused as Array<{ name: string }>).map(e => e.name);
+    const saved = { ...mockSession };
+    try {
+      // A member whose account and activity record are both Engineering (admin1 is linked to u1).
+      Object.assign(mockSession, { role: 'pulse', department: 'Engineering' });
+      const member = await unusedNames();
+      expect(member).toContain('everyone-skill');
+      expect(member).toContain('engineering-only-skill');
+      expect(member).not.toContain('finance-only-skill');
+
+      // Admins, managers and viewers see every entry, as on the Board.
+      for (const role of ['admin', 'manager', 'viewer']) {
+        Object.assign(mockSession, { role, department: 'Engineering' });
+        expect(await unusedNames()).toContain('finance-only-skill');
+      }
+    } finally {
+      Object.assign(mockSession, saved);
+    }
+  });
 });
 
 describe('GET /api/pulse/skill-exchange', () => {

@@ -103,7 +103,7 @@ async function runSpec(): Promise<void> {
     const health = await getClassifierHealth(NOW);
     expect(health.classified).toBe(1);
     expect(health.failed).toBe(1);
-    expect(health.model).toBe('claude-haiku-4-5-20251001'); // default, unset config
+    expect(health.model).toBe('claude-haiku-5-5'); // default, unset config
     expect(health.enabled).toBe(true); // default, unset config
     expect(health.lastRunAt).toBeNull();
     expect(health.queue).toEqual({ final: 0, provisional: 0, finalise: 0, total: 0 });

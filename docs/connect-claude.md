@@ -53,7 +53,7 @@ Set delta explicitly, even where it is already the client's default, so that no 
 
 ## Optional and privacy-relevant settings
 
-`OTEL_LOG_USER_PROMPTS` is the single most consequential choice. Without it, prompts arrive redacted: Command Centre still counts them, but the Audit Log, PII and intent detection, use case judging and process suggestions cannot work on them, and the Code session classifier works from metadata alone. Decide it with your data protection officer, alongside the retention periods and the switches that control which features read prompt text.
+`OTEL_LOG_USER_PROMPTS` is the most important choice here. Without it, prompts arrive redacted: Command Centre still counts them, but the Audit Log, PII and intent detection, use case judging and process suggestions cannot work on them, and the Code session classifier works from metadata alone. Decide it with your data protection officer, alongside the retention periods and the switches that control which features read prompt text.
 
 `OTEL_LOG_TOOL_DETAILS` sends tool parameters and the names of your organisation's own skills. Command Centre keeps from the parameters only a connector's name and the name of the connector tool used, and the fact of a commit (never its identifier); it never stores the content of tool inputs. You can leave it unset at the cost of connector and organisation skill names in Claude Code and AI-assisted commit counts.
 
@@ -71,7 +71,7 @@ Distribute the settings centrally, so that a token change reaches everyone. Clau
 
 ## Claude Code inside the Claude desktop app
 
-Code tab sessions that run on the person's computer read the same managed settings as the terminal client. Put `CLAUDE_CODE_ENABLE_TELEMETRY` and the `OTEL_*` variables in the `env` block of the managed settings file shown above; a local Code tab session applies the file deployed to the machine, and settings pushed from Claude's Organization settings also reach it when the person signs in with an eligible account. Code tab sessions in Anthropic's cloud receive only the Organization settings' managed settings, and SSH sessions read the managed settings file on the remote host. No separate per-machine step is needed for local Code tab sessions.
+Code tab sessions that run on the person's computer read the same managed settings as the terminal client. Put `CLAUDE_CODE_ENABLE_TELEMETRY` and the `OTEL_*` variables in the `env` block of the managed settings file shown above. A local Code tab session applies the file deployed to the machine. Settings pushed from Claude's Organization settings also reach it when the person signs in with an eligible account. Code tab sessions in Anthropic's cloud receive only the Organization settings' managed settings, and SSH sessions read the managed settings file on the remote host. No separate per-machine step is needed for local Code tab sessions.
 
 ## Claude Cowork
 
@@ -110,7 +110,7 @@ Claude in Office/Google sends its activity from each person's browser, so the co
 
 Command Centre stores each prompt, the model and tokens of each model call, and the name and outcome of each tool call, beside Claude Cowork on Work Pulse, marked with the app it came from. It never stores the tool input or output, which hold document content, or the document's address: only the file name, on calls that changed the document. Claude in Office/Google sends no cost, so its spend is priced from the model rates on **Admin → Developer Pulse** and shown as an estimate, never added to any Cowork total. To hide the Office panels on an installation that does not use Claude in Office/Google, switch off **Show Claude in Office and Google** under **Admin → Work Pulse**.
 
-**Check:** open a document, ask Claude something in the add-in, and within a few minutes the **By product** panel on the Work Pulse overview shows the app.
+**Check:** open a document, ask Claude something in the add-in, and within a few minutes the **Which products are people using?** panel on the Work Pulse overview shows the app.
 
 ## Claude Chat
 

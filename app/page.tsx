@@ -6,10 +6,9 @@
 import { useEffect, useState } from 'react';
 import TopBar from '@/components/layout/TopBar';
 import StatCard from '@/components/dashboard/StatCard';
-import AdoptionChart from '@/components/dashboard/AdoptionChart';
+import PeopleByDay from '@/components/dashboard/PeopleByDay';
 import StickinessCard from '@/components/dashboard/StickinessCard';
 import DepartmentHeatmap from '@/components/dashboard/DepartmentHeatmap';
-import TopUsers from '@/components/dashboard/TopUsers';
 import LoadingSpinner from '@/components/shared/LoadingSpinner';
 import AiBriefing from '@/components/dashboard/AiBriefing';
 import { DataSourceIndicator } from '@/components/dashboard/DataSourceIndicator';
@@ -92,6 +91,10 @@ interface DashboardData {
     mode: 'max' | 'enterprise';
   };
   licensedSeats: number | null;
+  /** People a day per product, last 30 days, oldest first. */
+  peopleByDay: Array<{ date: string; products: ProductCounts }>;
+  /** Department adoption target, a percentage; null when switched off. */
+  adoptionTargetPct: number | null;
 }
 
 function formatTimeAgo(date: Date): string {
@@ -208,7 +211,7 @@ export default function DashboardPage() {
   return (
     <>
       <TopBar title="Dashboard" subtitle="How AI is changing the work across your organisation" />
-      <PageBody>
+      <PageBody className="dash-compact">
         {/* Last refreshed + data source status */}
         <Toolbar
           left={
@@ -298,28 +301,24 @@ export default function DashboardPage() {
           />
         </Strip>
 
-        {/* 14-day adoption trend (2/3) + product stickiness (1/3) */}
+        {/* People a day over the last 30 days (2/3) + product stickiness (1/3) */}
         <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
           <div className="lg:col-span-2 min-w-0">
-            {data.adoptionTrend.length === 0 ? (
-              <Panel title="Adoption trend" className="h-full">
-                <PanelEmpty
-                  title="No adoption data yet"
-                  description="Connect Claude Code or Cowork, or add Anthropic's Compliance or Analytics key, to see adoption trends."
-                  actionLabel="Go to Access & Keys"
-                  actionHref="/admin/security"
-                />
-              </Panel>
-            ) : (
-              <AdoptionChart data={data.adoptionTrend} products={shownProducts} />
-            )}
+            <PeopleByDay
+              days={data.peopleByDay}
+              products={shownProducts}
+              activeThisWeek={stats.activeUsersThisWeek}
+              activeLastWeek={stats.activeUsersLastWeek}
+              productNames={vendor === 'openai' ? 'ChatGPT or Codex' : vendor === 'claude' || !data.openaiPresent ? 'Claude' : 'Claude, ChatGPT or Codex'}
+              split={split ? data.products.activeUsers : undefined}
+            />
           </div>
           <StickinessCard vendor={vendor} openaiPresent={data.openaiPresent} officeShown={data.officeShown !== false} />
         </div>
 
-        {/* Department adoption (2/3) + top users this week (1/3) */}
-        <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
-          <div className="lg:col-span-2 min-w-0">
+        {/* Department adoption, full width */}
+        <div>
+          <div className="min-w-0">
             {data.departmentBreakdown.length === 0 ? (
               <Panel title="Department breakdown" className="h-full">
                 <PanelEmpty
@@ -330,10 +329,9 @@ export default function DashboardPage() {
                 />
               </Panel>
             ) : (
-              <DepartmentHeatmap data={data.departmentBreakdown} products={shownProducts} />
+              <DepartmentHeatmap data={data.departmentBreakdown} products={shownProducts} targetPct={data.adoptionTargetPct} productNames={vendor === 'openai' ? 'ChatGPT and Codex' : vendor === 'claude' || !data.openaiPresent ? 'Claude' : 'Claude and ChatGPT'} />
             )}
           </div>
-          <TopUsers users={data.topUsers} products={shownProducts} />
         </div>
 
         {/* Work Pulse band with the Developer Pulse strip nested directly below its signal strip */}
@@ -358,7 +356,7 @@ function PanelEmpty({ title, description, actionLabel, actionHref }: {
       <span className="text-[14px] font-medium text-[#0A0A0A]">{title}</span>
       <span className="text-[13px] text-[#8F8F8F] max-w-xs">{description}</span>
       {actionLabel && actionHref && (
-        <Link href={actionHref} className="text-[13px] font-medium text-[#245BF3] hover:underline">{actionLabel}</Link>
+        <Link href={actionHref} className="text-[13px] font-medium text-[#1F6F8B] hover:underline">{actionLabel}</Link>
       )}
     </div>
   );

@@ -25,6 +25,32 @@ export function categoryForType(type: string): AlertCategory {
   return 'other';
 }
 
+/** Plain-English name for each alert type, shown beside its category. */
+export const ALERT_TYPE_LABELS: Record<string, string> = {
+  policy: 'Sensitive data',
+  intent: 'Risky request',
+  anomaly: 'Unusual usage',
+  risk: 'Risk',
+  adoption: 'Adoption',
+  code_repo_exposure: 'Repository exposure',
+  code_model_policy: 'Model policy',
+  code_cost_spike: 'Claude Code spend',
+  codex_cost_spike: 'Codex spend',
+  code_friction: 'Coding friction',
+  finance_reconciliation_drift: 'Cost reconciliation',
+  pulse_capability: 'New capability',
+  use_case_at_risk: 'Use case at risk',
+  system_health: 'System health',
+  identity_conflict: 'Identity conflict',
+};
+
+export function alertTypeLabel(type: string): string {
+  const label = ALERT_TYPE_LABELS[type];
+  if (label) return label;
+  const text = type.replace(/_/g, ' ');
+  return text.charAt(0).toUpperCase() + text.slice(1);
+}
+
 export function typesForCategory(cat: string): string[] {
   return (ALERT_CATEGORIES as Record<string, string[]>)[cat] ?? [];
 }

@@ -83,20 +83,34 @@ export interface CodeMetricsRow {
   edit_reject_count?: number;
 }
 
-/** "1h 23m" / "45m" / "30s" from a seconds count. */
-export function formatDuration(seconds: number): string {
-  if (seconds <= 0) return '0m';
-  const h = Math.floor(seconds / 3600);
-  const m = Math.floor((seconds % 3600) / 60);
-  if (h > 0) return m > 0 ? `${h}h ${m}m` : `${h}h`;
-  if (m > 0) return `${m}m`;
-  return `${seconds}s`;
+/**
+ * A seconds count rounded as formatDuration shows it: to the nearest minute, or
+ * to the second under a minute. A total of parts adds these, so it reads as the
+ * sum of the parts shown beside it.
+ */
+export function roundDurationSeconds(seconds: number): number {
+  if (seconds <= 0) return 0;
+  return seconds < 60 ? Math.round(seconds) : Math.round(seconds / 60) * 60;
 }
 
-export default function CodeStatStrip({ metrics, githubRepos, view = 'claude', split }: {
+/** "1h 23m" / "45m" / "30s" from a seconds count, rounded to the nearest minute. */
+export function formatDuration(seconds: number): string {
+  const s = roundDurationSeconds(seconds);
+  if (s <= 0) return '0m';
+  if (s < 60) return `${s}s`;
+  const mins = s / 60;
+  const h = Math.floor(mins / 60);
+  const m = mins % 60;
+  if (h > 0) return m > 0 ? `${h}h ${m}m` : `${h}h`;
+  return `${m}m`;
+}
+
+export default function CodeStatStrip({ metrics, githubRepos, view = 'claude', split, spendHidden = false }: {
   metrics: CodeMetricsRow | null;
+  /** A colleague's page: their spend is not sent, so the figure reads Hidden, not Unpriced. */
+  spendHidden?: boolean;
   /** basis: which commits were counted (Claude and Codex tabs: commits matched to that tool). */
-  githubRepos?: { count7d: number; names7d: string[]; basis?: 'all' | 'claude' | 'openai' } | null;
+  githubRepos?: { count30d: number; names30d: string[]; basis?: 'all' | 'claude' | 'openai' } | null;
   /** Developer Pulse's switch, 'claude' until Codex data exists. */
   view?: 'all' | 'claude' | 'openai';
   /** All view: Claude Code's and Codex's own figures, for the line under each value. */
@@ -126,15 +140,17 @@ export default function CodeStatStrip({ metrics, githubRepos, view = 'claude', s
   };
   const signals: CodeSignal[] = [
     {
-      label: view === 'openai' ? 'Codex spend · 7 days' : view === 'all' ? 'Spend · 7 days' : 'Claude Code spend · 7 days',
+      label: view === 'openai' ? 'Codex spend · 30 days' : view === 'all' ? 'Spend · 30 days' : 'Claude Code spend · 30 days',
       value: metrics === null ? null : metrics.spend_usd === null
         ? null
         : formatCurrency(metrics.spend_usd),
       sublabel: part(r => r.spend_usd, formatCurrency) ?? spendCaption(),
-      hint: metrics?.spend_usd === null && (metrics.input_tokens + metrics.output_tokens) > 0
-        ? 'Models seen have no price set, see rates config'
-        : `${formatTokens(metrics?.input_tokens ?? 0)} in · ${formatTokens(metrics?.output_tokens ?? 0)} out`,
-      pending: metrics && metrics.spend_usd === null ? 'Unpriced' : undefined,
+      hint: spendHidden
+        ? 'Shown only to the person, admins and managers'
+        : metrics?.spend_usd === null && (metrics.input_tokens + metrics.output_tokens) > 0
+          ? 'Models seen have no price set, see rates config'
+          : `${formatTokens(metrics?.input_tokens ?? 0)} in · ${formatTokens(metrics?.output_tokens ?? 0)} out`,
+      pending: spendHidden ? 'Hidden' : metrics && metrics.spend_usd === null ? 'Unpriced' : undefined,
     },
     {
       label: 'Automation',
@@ -146,12 +162,12 @@ export default function CodeStatStrip({ metrics, githubRepos, view = 'claude', s
     // exists — deliberate; no current instance has both data sources at once.
     githubRepos != null
       ? {
-          label: 'Repos active · 7 days (GitHub)',
-          value: String(githubRepos.count7d),
-          sublabel: githubRepos.names7d.length > 0
-            ? (githubRepos.count7d > githubRepos.names7d.length
-                ? `${githubRepos.names7d.join(' · ')} · +${githubRepos.count7d - githubRepos.names7d.length} more`
-                : githubRepos.names7d.join(' · '))
+          label: 'Repos active · 30 days (GitHub)',
+          value: String(githubRepos.count30d),
+          sublabel: githubRepos.names30d.length > 0
+            ? (githubRepos.count30d > githubRepos.names30d.length
+                ? `${githubRepos.names30d.join(' · ')} · +${githubRepos.count30d - githubRepos.names30d.length} more`
+                : githubRepos.names30d.join(' · '))
             : githubRepos.basis === 'claude' ? 'Repos with GitHub commits made with Claude Code'
               : githubRepos.basis === 'openai' ? 'Repos with GitHub commits made with Codex'
                 : 'Repos with your GitHub commits',
@@ -160,18 +176,18 @@ export default function CodeStatStrip({ metrics, githubRepos, view = 'claude', s
             : githubRepos.basis === 'openai'
               ? 'Counts GitHub commits matched to Codex by author and time'
               : 'Counts all GitHub commits, from commit-author matching')
-            + (githubRepos.count7d === 0 ? '; a zero can also mean unmapped commits' : ''),
+            + (githubRepos.count30d === 0 ? '; a zero can also mean unmapped commits' : ''),
         }
       : metrics !== null && metrics.repo_count === 0
         ? {
-            label: 'Repos active · 7 days',
+            label: 'Repos active · 30 days',
             value: null,
             pending: 'Not captured',
             sublabel: 'Codebases with coding activity',
             hint: `${metrics.session_count} session${metrics.session_count === 1 ? '' : 's'} · no repo attribution in these sessions`,
           }
         : {
-            label: 'Repos active · 7 days',
+            label: 'Repos active · 30 days',
             value: metrics == null ? null : String(metrics.repo_count),
             sublabel: 'Codebases with coding activity',
             hint: `${metrics?.session_count ?? 0} session${(metrics?.session_count ?? 0) === 1 ? '' : 's'} · ${metrics?.commit_count ?? 0} AI-assisted commit${(metrics?.commit_count ?? 0) === 1 ? '' : 's'}`,

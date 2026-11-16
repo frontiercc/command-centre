@@ -57,6 +57,7 @@ import { createPiiAlertsWithDedup } from '@/lib/alerts/pii-alerts';
 import { recordPiiAlertFailure } from '@/lib/alerts/pii-alert-failure';
 import { createFileUploadAlerts } from '@/lib/alerts/file-upload-alerts';
 import { CONTENT_PREVIEW_CHARS, CONTENT_FULL_CHARS } from '@/lib/otel/content-limits';
+import { replyOutputNames } from '@/lib/otel/output-name';
 import { resolveOtelUser } from '@/lib/otel/resolve-user';
 import { openAiAccountOf, noteOpenAiAccount, type NewConflict } from '@/lib/openai/identity';
 import { raiseIdentityConflictAlert } from '@/lib/otel/resolve-user';
@@ -396,6 +397,10 @@ export type SpendRow =
   | {
       kind: 'reply';
       id: string; sessionId: string; source: OpenAiSource; email: string; model: string | null; occurredAt: number;
+      /** Files the export lists on the reply. No files field is 0. */
+      filesCount: number;
+      /** Their names, masked (lib/otel/output-name.ts). Never the reply's text. Null when none. */
+      fileNames: string | null;
     }
   | {
       kind: 'turn';
@@ -450,6 +455,11 @@ export function interpretSpend(raw: unknown, floors: { cowork: number; code: num
       kind: 'reply', id: `chatgpt-reply:${m.id}`, sessionId: `chatgpt:${r.conversation.id}`,
       source: r.conversation.mode === 'work' ? 'chatgpt_work' : 'chatgpt_chat',
       email, model: m.author.model ?? null, occurredAt,
+      // OpenAI lists files on a reply only when it made some, so a reply with no files field made
+      // none. NULL stays for rows stored before the count was kept.
+      filesCount: Array.isArray(m.files) ? m.files.length : 0,
+      // What the reply made, by name only, as for a Claude Cowork output.
+      fileNames: replyOutputNames((m.files ?? []).map(f => f.name)),
     };
   }
 
@@ -752,6 +762,8 @@ async function storeSpend(tx: TypedClient, s: SpendRow, userId: string | null, s
     if (!userId) return;
     const inserted = await tx.insert(schema.openaiReplies).values({
       id: s.id, user_id: userId, session_id: s.sessionId, source: s.source, model: s.model, occurred_at: s.occurredAt,
+      files_count: s.filesCount,
+      file_names: s.fileNames,
     }).onConflictDoNothing().returning({ id: schema.openaiReplies.id });
     if (inserted.length > 0) stats.replies++;
     return;

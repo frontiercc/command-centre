@@ -4,9 +4,10 @@
 // Work Pulse's "Document sessions": sessions with at least one uploaded file,
 // and how many files, over a window. Claude Cowork sessions are counted from
 // cowork_session_stats.upload_count (the session aggregator's parse of
-// cowork_sessions.files_uploaded); ChatGPT sessions get no stats row, so their
-// cowork_sessions.files_uploaded list is counted the same way here. One rule
-// for the Executive View and the department page.
+// cowork_sessions.files_uploaded); Claude Chat conversations (source
+// 'compliance', lib/compliance/chat-sync.ts) and ChatGPT sessions get no stats
+// row, so their cowork_sessions.files_uploaded list is counted the same way
+// here. One rule for the Executive View and the department page.
 import { and, eq, gt, gte, inArray, isNotNull, sql } from 'drizzle-orm';
 import { getTypedClient } from '@/lib/db/client';
 import { schema } from '@/lib/db/schema';
@@ -45,11 +46,16 @@ export async function getDocSessions(opts: {
     result.total_uploads += Number(rows[0]?.files ?? 0);
   }
 
-  if (vendor !== 'claude') {
+  // Sessions that carry their uploads as a list: Claude Chat's on the Claude side, ChatGPT's on OpenAI's.
+  const listSources: string[] = [
+    ...(vendor !== 'openai' ? ['compliance'] : []),
+    ...(vendor !== 'claude' ? [...OPENAI_SOURCES] : []),
+  ];
+  if (listSources.length > 0) {
     const rows = await client
       .select({ files: cs.files_uploaded })
       .from(cs)
-      .where(and(inArray(cs.source, [...OPENAI_SOURCES]), isNotNull(cs.files_uploaded), gte(cs.started_at, since),
+      .where(and(inArray(cs.source, listSources), isNotNull(cs.files_uploaded), gte(cs.started_at, since),
         memberIds ? inArray(cs.user_id, memberIds) : undefined));
     for (const r of rows) {
       let n = 0;

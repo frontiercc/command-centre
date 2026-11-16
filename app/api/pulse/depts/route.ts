@@ -34,6 +34,8 @@ interface RawDeptRow {
   avg_dds: number | string | null;
   avg_oti: number | string | null;
   avg_ors: number | string | null;
+  deep_tasks: number | string | null;
+  all_tasks: number | string | null;
 }
 
 export async function GET(request: NextRequest) {
@@ -68,11 +70,13 @@ export async function GET(request: NextRequest) {
        COUNT(DISTINCT u.id)           AS member_count,
        AVG(pm.dds)                    AS avg_dds,
        AVG(pm.oti)                    AS avg_oti,
-       AVG(tm.ors)                    AS avg_ors
+       AVG(tm.ors)                    AS avg_ors,
+       SUM(pm.tier_2_count + pm.tier_3_count) AS deep_tasks,
+       SUM(pm.tier_1_count + pm.tier_2_count + pm.tier_3_count) AS all_tasks
      FROM users u
      LEFT JOIN (
        -- Most recent user-level metric per user (for DDS/OTI)
-       SELECT scope_id AS user_id, dds, oti
+       SELECT scope_id AS user_id, dds, oti, tier_1_count, tier_2_count, tier_3_count
        FROM ${metrics}
        WHERE scope_type = 'user' AND granularity = 'rolling' ${only}
          AND (scope_id, computed_at) IN (
@@ -109,6 +113,10 @@ export async function GET(request: NextRequest) {
     avg_dds: r.avg_dds !== null && r.avg_dds !== undefined ? Number(r.avg_dds) : null,
     avg_oti: r.avg_oti !== null && r.avg_oti !== undefined ? Number(r.avg_oti) : null,
     avg_ors: r.avg_ors !== null && r.avg_ors !== undefined ? Number(r.avg_ors) : null,
+    // The share of the department's judged tasks that were meaningful or frontier: what the
+    // pages describe a department with. Null when nothing was judged.
+    deep_share: Number(r.all_tasks ?? 0) > 0 ? Number(r.deep_tasks ?? 0) / Number(r.all_tasks) : null,
+    tasks: Number(r.all_tasks ?? 0),
   }));
 
   return NextResponse.json({ depts });

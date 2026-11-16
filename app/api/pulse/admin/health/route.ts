@@ -18,6 +18,7 @@ import { getTypedClient } from '@/lib/db/client';
 import { schema } from '@/lib/db/schema';
 import { isWorkPulseSurface, classifiableSource, classifyChatgptOn } from '@/lib/pulse/work-surfaces';
 import { productExpr } from '@/lib/dashboard/product-sql';
+import { getTierNames } from '@/lib/pulse/tier-config';
 
 export const dynamic = 'force-dynamic';
 
@@ -159,7 +160,7 @@ export async function GET(request: NextRequest) {
     total_classified: Number(r.total_classified),
   }));
 
-  return NextResponse.json({ queueDepth, tierDist, confidenceHist, failures, modelLog, byProduct, classifyChatgpt });
+  return NextResponse.json({ queueDepth, tierDist, confidenceHist, failures, modelLog, byProduct, classifyChatgpt, tierNames: await getTierNames() });
 }
 
 export async function POST(request: NextRequest) {

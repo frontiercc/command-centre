@@ -6,7 +6,7 @@ import type Anthropic from '@anthropic-ai/sdk';
 /**
  * Shared Claude model identifier used across all API calls.
  */
-export const CLAUDE_MODEL = 'claude-haiku-4-5-20251001';
+export const CLAUDE_MODEL = 'claude-haiku-5-5';
 
 /**
  * Default model for the briefings and grounded summaries people read and act
@@ -21,12 +21,14 @@ export const BRIEFING_DEFAULT_MODEL = 'claude-sonnet-5';
 /**
  * Replace em dashes and en dashes with neutral punctuation.
  * Done post-extraction because prompt instructions alone are unreliable.
+ * Commas, not colons: dashes usually come in pairs around an aside, and two colons in one sentence
+ * read as broken ("320 were Administrative: routine tasks: 45%").
  */
 function stripDashes(text: string): string {
   return text
-    .replace(/ — /g, ': ')
+    .replace(/ — /g, ', ')
     .replace(/ – /g, ', ')
-    .replace(/—/g, ': ')
+    .replace(/—/g, ', ')
     .replace(/–/g, '-');
 }
 

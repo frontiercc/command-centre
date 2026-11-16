@@ -87,7 +87,8 @@ async function seed(c) {
     const cacheRead = ((h >> 7) % 3 === 0) ? 0 : 8000 + ((h >> 9) % 40000);
     const [ri, ro, rc] = RATES[model];
     const cost = (input * ri + output * ro + cacheRead * rc) / 1e6;
-    const usage = { input_tokens: input, output_tokens: output, cache_read_input_tokens: cacheRead, cache_creation_input_tokens: 0 };
+    // Token counts in the receiver's own shape (lib/otel/cowork-receiver.ts), which the session aggregator reads.
+    const usage = { inputTokens: input, outputTokens: output, cacheReadTokens: cacheRead, cacheCreationTokens: 0 };
     // Never future-dated (the seeders' standing rule): the row sits 30s after
     // the last prompt, capped at now.
     const at = Math.min(Number(r.last_at) + 30, nowS);

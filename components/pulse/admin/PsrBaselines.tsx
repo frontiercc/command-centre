@@ -15,14 +15,15 @@ interface TeamBaseline {
   confirmedCapabilities: number;
 }
 
-export default function PsrBaselines() {
+export default function PsrBaselines({ isAdmin = true }: { isAdmin?: boolean }) {
   const [teams, setTeams] = useState<TeamBaseline[]>([]);
-  const [loading, setLoading] = useState(true);
+  const [loading, setLoading] = useState(isAdmin);
   const [drafts, setDrafts] = useState<Record<string, string>>({});
   const [saving, setSaving] = useState<string | null>(null);
   const [msg, setMsg] = useState<Record<string, string>>({});
-  // The baselines route is admin-only; a manager sees why, not "No departments".
-  const [forbidden, setForbidden] = useState(false);
+  // The baselines route is admin-only; a manager sees why, not "No departments",
+  // and the page doesn't ask for what it would be refused.
+  const [forbidden, setForbidden] = useState(!isAdmin);
 
   function load() {
     setLoading(true);
@@ -44,7 +45,11 @@ export default function PsrBaselines() {
       .finally(() => setLoading(false));
   }
 
-  useEffect(() => { load(); }, []);
+  // The page learns the role after it loads, so follow it rather than read it once.
+  useEffect(() => {
+    setForbidden(!isAdmin);
+    if (isAdmin) load(); else setLoading(false);
+  }, [isAdmin]); // eslint-disable-line react-hooks/exhaustive-deps
 
   async function handleSave(teamId: string) {
     setSaving(teamId);

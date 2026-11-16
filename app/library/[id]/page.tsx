@@ -47,7 +47,8 @@ interface EntryDetail {
     distinct_users: number;
     vote_count: number;
     user_voted: boolean;
-    agent_chained_pct: number;
+    /** Null for a connector: how it was invoked is recorded for skills only. */
+    agent_chained_pct: number | null;
   };
   daily_counts: DayCount[];
   top_users: TopUser[];
@@ -212,6 +213,7 @@ export default function LibraryDetailPage({ params }: { params: Promise<{ id: st
 
   const isTrending = entry.stats.trend_pct >= 20;
   const maxDay = Math.max(...entry.daily_counts.map(d => d.cnt), 1);
+  const agentPct = entry.stats.agent_chained_pct;
 
   // Build last-7-days labels even if no data for some days
   const last7: DayCount[] = Array.from({ length: 7 }).map((_, i) => {
@@ -248,7 +250,7 @@ export default function LibraryDetailPage({ params }: { params: Promise<{ id: st
             Upload the zip in Organisation settings → Plugins &amp; skills.
           </p>
           <p className="m-0 text-[13px] text-[#8F8F8F]">
-            Drafted from the use case <Link href={`/use-cases/${encodeURIComponent(entry.codified.useCaseId)}`} className="text-[#245BF3] hover:underline">{entry.codified.useCaseTitle}</Link>.
+            Drafted from the use case <Link href={`/use-cases/${encodeURIComponent(entry.codified.useCaseId)}`} className="text-[#1F6F8B] hover:underline">{entry.codified.useCaseTitle}</Link>.
           </p>
         </div>
       );
@@ -309,7 +311,7 @@ export default function LibraryDetailPage({ params }: { params: Promise<{ id: st
         <Toolbar
           left={
             <span className="flex flex-wrap items-center gap-2">
-              <Link href="/library" className="inline-flex items-center gap-1 text-[#245BF3] hover:underline">
+              <Link href="/library" className="inline-flex items-center gap-1 text-[#1F6F8B] hover:underline">
                 <LineIcon d={ICON.back} />
                 Back to the S&amp;C Board
               </Link>
@@ -332,7 +334,7 @@ export default function LibraryDetailPage({ params }: { params: Promise<{ id: st
             type="button"
             onClick={handleVote}
             aria-pressed={!!entry.stats.user_voted}
-            className={cx(B.secondary, entry.stats.user_voted && '!border-[#245BF3] !text-[#245BF3] !bg-[#F2F5FF]')}
+            className={cx(B.secondary, entry.stats.user_voted && '!border-[#1F6F8B] !text-[#1F6F8B] !bg-[#EEF5F8]')}
           >
             <svg className="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2} aria-hidden="true">
               <path strokeLinecap="round" strokeLinejoin="round" d="M4.5 15.75l7.5-7.5 7.5 7.5" />
@@ -527,14 +529,14 @@ export default function LibraryDetailPage({ params }: { params: Promise<{ id: st
             </Panel>
 
             {/* Invocation type */}
-            {entry.stats.total_invocations > 0 && (
+            {entry.stats.total_invocations > 0 && agentPct !== null && (
               <Panel
                 title="How it's invoked"
-                subtitle={entry.stats.agent_chained_pct > 50 ? `${triggeredBy(entry.products)} triggers this more than users do` : undefined}
+                subtitle={agentPct > 50 ? `${triggeredBy(entry.products)} triggers this more than users do` : undefined}
                 flush
               >
-                <BarRow label={<><LineIcon d={ICON.agent} className="inline-block align-[-2px] mr-1.5 text-[#8F8F8F]" />Agent-chained</>} value={`${entry.stats.agent_chained_pct}%`} pct={entry.stats.agent_chained_pct} tone="measured" />
-                <BarRow label={<><LineIcon d={ICON.user} className="inline-block align-[-2px] mr-1.5 text-[#8F8F8F]" />User-typed</>} value={`${100 - entry.stats.agent_chained_pct}%`} pct={100 - entry.stats.agent_chained_pct} tone="measured" />
+                <BarRow label={<><LineIcon d={ICON.agent} className="inline-block align-[-2px] mr-1.5 text-[#8F8F8F]" />Agent-chained</>} value={`${agentPct}%`} pct={agentPct} tone="measured" />
+                <BarRow label={<><LineIcon d={ICON.user} className="inline-block align-[-2px] mr-1.5 text-[#8F8F8F]" />User-typed</>} value={`${100 - agentPct}%`} pct={100 - agentPct} tone="measured" />
               </Panel>
             )}
           </div>

@@ -2,7 +2,7 @@
 // SPDX-License-Identifier: Apache-2.0
 
 import { describe, it, expect } from 'vitest';
-import { buildCrosswalk, type CodeSignals } from '@/lib/pulse/code/framework';
+import { buildCrosswalk, frameworkCoverage, type CodeSignals } from '@/lib/pulse/code/framework';
 
 const full: CodeSignals = {
   spendUsd: 1234.5, autonomyRatio: 3.2, commitCount: 87, prCount: 12,
@@ -29,7 +29,7 @@ describe('buildCrosswalk', () => {
     expect(spend.fit).toBe('ai_specific');
   });
 
-  it('renders null signals as "—" and never as 0', () => {
+  it('renders null signals as null or "not measured" and never as 0', () => {
     const empty: CodeSignals = {
       spendUsd: null, autonomyRatio: null, commitCount: null, prCount: null,
       linesAdded: null, linesRemoved: null, editAcceptCount: null, editRejectCount: null,
@@ -38,7 +38,7 @@ describe('buildCrosswalk', () => {
     const boxes = buildCrosswalk(empty);
     const allCells = boxes.flatMap(b => b.cells);
     for (const c of allCells) {
-      expect(c.value === null || c.value === '—').toBe(true);
+      expect(c.value === null || c.value === 'not measured').toBe(true);
       expect(c.value).not.toBe('0');
       expect(c.value).not.toBe('$0');
     }
@@ -51,17 +51,47 @@ describe('buildCrosswalk', () => {
     expect(mix.fit).toBe('not_captured');
   });
 
+  it('marks the work mix AI-judged, not a proxy', () => {
+    const impact = buildCrosswalk(full).find(b => b.dimension === 'impact')!;
+    const mix = impact.cells.find(c => c.label.toLowerCase().includes('work mix'))!;
+    expect(mix.fit).toBe('ai_judged');
+  });
+
+  it('names the configured classifier model on the work mix, or the classifier with none', () => {
+    const note = (s: CodeSignals) => buildCrosswalk(s).find(b => b.dimension === 'impact')!
+      .cells.find(c => c.label.toLowerCase().includes('work mix'))!.note;
+    expect(note({ ...full, classifierModel: 'claude-sonnet-4-5-20250929' })).toBe('Judged by Claude Sonnet 4.5: the one non-measured signal here.');
+    expect(note(full)).toBe('Judged by the classifier: the one non-measured signal here.');
+  });
+
+  it('labels pull requests from telemetry as opened, not merged', () => {
+    const labels = buildCrosswalk(full).flatMap(b => b.cells).map(c => c.label);
+    expect(labels).toContain('Pull requests opened (30d)');
+    expect(labels.some(l => /merged/i.test(l))).toBe(false);
+  });
+
+  it('counts coverage from framework cells only: AI-specific cells count on neither side', () => {
+    const cover = Object.fromEntries(buildCrosswalk(full).map(b => [b.dimension, frameworkCoverage(b)]));
+    expect(cover.speed).toEqual({ covered: 3, total: 5 });
+    expect(cover.quality).toEqual({ covered: 2, total: 4 });
+    expect(cover.effectiveness).toEqual({ covered: 1, total: 2 });
+    expect(cover.impact).toEqual({ covered: 1, total: 2 });
+    // A cell with no figure is not covered.
+    const offMix = buildCrosswalk({ ...full, hasWorkMix: false }).find(b => b.dimension === 'impact')!;
+    expect(frameworkCoverage(offMix)).toEqual({ covered: 0, total: 2 });
+  });
+
   it('every box carries an externalNote pointing at the data that would fill it', () => {
     for (const b of buildCrosswalk(full)) {
       expect(b.externalNote.length).toBeGreaterThan(0);
     }
   });
 
-  it('partial-null lines: renders em-dash for unmeasured side, never 0', () => {
+  it('partial-null lines: says "not measured" for the unmeasured side, never 0', () => {
     const partialLines = { ...full, linesRemoved: null };
     const speed = buildCrosswalk(partialLines).find(b => b.dimension === 'speed')!;
     const codeOutput = speed.cells.find(c => c.label.includes('Code output'))!;
-    expect(codeOutput.value).toContain('—');
+    expect(codeOutput.value).toContain('removed not measured');
     expect(codeOutput.value).not.toMatch(/−0\b/);
   });
 

@@ -2,7 +2,7 @@
 // SPDX-License-Identifier: Apache-2.0
 
 import { describe, it, expect } from 'vitest';
-import { categoryForType, typesForCategory, ALERT_CATEGORIES } from '@/lib/alerts/categories';
+import { categoryForType, typesForCategory, ALERT_CATEGORIES, ALERT_TYPE_LABELS, alertTypeLabel } from '@/lib/alerts/categories';
 
 const KNOWN = ['policy','intent','code_repo_exposure','code_model_policy','code_cost_spike','code_friction','adoption','anomaly','pulse_capability','risk','use_case_at_risk','finance_reconciliation_drift'];
 
@@ -51,5 +51,14 @@ describe('alert categories', () => {
     expect(typesForCategory('adoption-usage').sort()).toEqual(
       ['adoption', 'pulse_capability', 'use_case_at_risk']
     );
+  });
+
+  it('names every categorised type in plain English, never the raw type', () => {
+    for (const t of Object.values(ALERT_CATEGORIES).flat()) {
+      expect(ALERT_TYPE_LABELS[t]).toBeTruthy();
+      expect(alertTypeLabel(t)).not.toMatch(/_/);
+    }
+    expect(alertTypeLabel('intent')).toBe('Risky request');
+    expect(alertTypeLabel('made_up_type')).toBe('Made up type');
   });
 });

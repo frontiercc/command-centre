@@ -59,7 +59,32 @@ describe('interpretSpend', () => {
       message: { id: 'm1', created_at: '2026-10-30T14:10:00Z', author: { type: 'assistant', model: 'gpt-5.5' }, content: { type: 'text', value: 'secret reply' } },
       conversation: { id: 'c1', mode: 'work' },
     }, floors);
-    expect(s).toEqual({ kind: 'reply', id: 'chatgpt-reply:m1', sessionId: 'chatgpt:c1', source: 'chatgpt_work', email: 'sam@example.com', model: 'gpt-5.5', occurredAt: hour + 600 });
+    expect(s).toEqual({ kind: 'reply', id: 'chatgpt-reply:m1', sessionId: 'chatgpt:c1', source: 'chatgpt_work', email: 'sam@example.com', model: 'gpt-5.5', occurredAt: hour + 600, filesCount: 0, fileNames: null });
+  });
+
+  it('counts and names the files listed on a ChatGPT reply, names only; no files field means none', () => {
+    const reply = (files?: Array<{ id: string; name: string }>) => interpretSpend({
+      type: 'CONVERSATION_MESSAGE', actor: { user_email: 'sam@example.com' },
+      message: {
+        id: 'm2', created_at: '2026-10-30T14:10:00Z', author: { type: 'assistant', model: 'gpt-5.5' }, content: { type: 'text', value: 'r' },
+        ...(files ? { files } : {}),
+      },
+      conversation: { id: 'c1', mode: 'work' },
+    }, floors);
+    const two = reply([{ id: 'f1', name: 'report.xlsx' }, { id: 'f2', name: 'notes.docx' }]);
+    expect(two && two.kind === 'reply' ? two.filesCount : undefined).toBe(2);
+    expect(two && two.kind === 'reply' ? two.fileNames : undefined).toBe('report.xlsx, notes.docx');
+    // A name only: never a folder, and personal data is masked.
+    const pathed = reply([{ id: 'f3', name: '/Users/sam.jones/Board/Q3 pack for sam.jones@example.com.pptx' }]);
+    const named = pathed && pathed.kind === 'reply' ? pathed.fileNames : null;
+    expect(named).not.toContain('/');
+    expect(named).not.toContain('sam.jones@example.com');
+    expect(named).toMatch(/^Q3 pack for .*\.pptx$/);
+    const none = reply([]);
+    expect(none && none.kind === 'reply' ? none.filesCount : undefined).toBe(0);
+    expect(none && none.kind === 'reply' ? none.fileNames : undefined).toBeNull();
+    const absent = reply();
+    expect(absent && absent.kind === 'reply' ? absent.filesCount : undefined).toBe(0);
   });
 
   it('reads a Codex turn and skips a ChatGPT Work turn', () => {

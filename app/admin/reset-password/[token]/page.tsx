@@ -82,7 +82,7 @@ export default function ResetPasswordPage() {
                 autoFocus
                 value={password}
                 onChange={e => setPassword(e.target.value)}
-                className="w-full text-[14px] px-2.5 py-2 rounded-[10px] border border-[#DADADA] bg-white text-[#0A0A0A] placeholder:text-[#8F8F8F] focus:outline-none focus:ring-2 focus:ring-[#245BF3]/30 focus:border-[#245BF3]"
+                className="w-full text-[14px] px-2.5 py-2 rounded-[10px] border border-[#DADADA] bg-white text-[#0A0A0A] placeholder:text-[#8F8F8F] focus:outline-none focus:ring-2 focus:ring-[#1F6F8B]/30 focus:border-[#1F6F8B]"
                 placeholder={`Min ${MIN_PASSWORD_LENGTH} characters`}
               />
             </div>
@@ -98,7 +98,7 @@ export default function ResetPasswordPage() {
                 required
                 value={confirm}
                 onChange={e => setConfirm(e.target.value)}
-                className="w-full text-[14px] px-2.5 py-2 rounded-[10px] border border-[#DADADA] bg-white text-[#0A0A0A] placeholder:text-[#8F8F8F] focus:outline-none focus:ring-2 focus:ring-[#245BF3]/30 focus:border-[#245BF3]"
+                className="w-full text-[14px] px-2.5 py-2 rounded-[10px] border border-[#DADADA] bg-white text-[#0A0A0A] placeholder:text-[#8F8F8F] focus:outline-none focus:ring-2 focus:ring-[#1F6F8B]/30 focus:border-[#1F6F8B]"
                 placeholder="••••••••"
               />
             </div>
@@ -116,7 +116,7 @@ export default function ResetPasswordPage() {
             )}
 
             <div className="pt-1">
-              <a href="/admin/login" className="text-[13px] text-[#245BF3] hover:underline">
+              <a href="/admin/login" className="text-[13px] text-[#1F6F8B] hover:underline">
                 Back to sign in
               </a>
             </div>

@@ -58,7 +58,7 @@ function int(n: number): string {
 }
 
 function share(part: number, total: number): string {
-  if (total <= 0) return '—';
+  if (total <= 0) return 'not judged';
   return `${Math.round((part / total) * 100)}%`;
 }
 

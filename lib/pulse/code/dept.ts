@@ -11,6 +11,7 @@
 // needed.
 import { sql, type SQL } from 'drizzle-orm';
 import { getTypedClient } from '@/lib/db/client';
+import { latestRunStart } from '@/lib/pulse/code/vendor-view';
 
 export interface CodeDeptMember {
   user_id: string;
@@ -28,7 +29,7 @@ export interface CodeDeptMember {
   output_tokens: number;
   // Populated by the dept route (app/api/pulse/code/dept/[dept]/route.ts),
   // not by the query in this file. Repos with this person's GitHub commits in
-  // the last 7 days: on the Claude and Codex tabs only commits matched to that
+  // the last 30 days: on the Claude and Codex tabs only commits matched to that
   // tool (the route's githubRepos.basis), on the All tab every commit.
   github_repo_count?: number;
 }
@@ -96,7 +97,9 @@ export async function getCodeDeptMembers(
      ) roster
      LEFT JOIN (
        SELECT scope_id, MAX(id) AS max_id FROM ${source.table}
-       WHERE scope_type = 'user' AND granularity = 'rolling' ${source.only} GROUP BY scope_id
+       WHERE scope_type = 'user' AND granularity = 'rolling' ${source.only}
+         AND computed_at >= ${latestRunStart(source.table, source.only)}
+       GROUP BY scope_id
      ) latest ON latest.scope_id = roster.id
      LEFT JOIN ${source.table} cm ON cm.id = latest.max_id AND cm.granularity = 'rolling'
      ORDER BY cm.spend_usd DESC NULLS LAST, roster.display_name

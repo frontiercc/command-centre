@@ -171,28 +171,21 @@ async function runSpec(): Promise<void> {
     expect(deptBody.priorMetrics.oti).toBeCloseTo(1.0, 6);
     expect(deptBody.priorMetrics.dds).toBeCloseTo(1.5, 6);
 
-    // Per-member "latest row" dedup: u1's STALE dds=1.0 row must NOT win —
-    // the current dds=2.8 row does. Ordered DESC NULLS LAST by dds, so u1
-    // (2.8) sorts before u2 (2.2).
-    expect(deptBody.memberMetrics).toHaveLength(2);
-    expect(deptBody.memberMetrics[0].id).toBe('u1');
-    expect(deptBody.memberMetrics[0].dds).toBeCloseTo(2.8, 6);
-    expect(deptBody.memberMetrics[0].oti).toBeCloseTo(1.9, 6);
-    expect(deptBody.memberMetrics[0].last_active).toBe(NOW - 2 * DAY);
-    expect(deptBody.memberMetrics[1].id).toBe('u2');
-    expect(deptBody.memberMetrics[1].dds).toBeCloseTo(2.2, 6);
+    // Each member once, from the per-member "latest row" read: the people table.
+    expect(deptBody.memberRows.map((r: { id: string }) => r.id).sort()).toEqual(['u1', 'u2']);
 
-    // Journey heatmap — 3 classified rows within the 6-week window.
-    expect(deptBody.journeyHeatmap).toHaveLength(3);
-    expect(deptBody.journeyHeatmap).toContainEqual({ week: 0, tier: 2, count: 1 });
-    expect(deptBody.journeyHeatmap).toContainEqual({ week: 0, tier: 3, count: 1 });
-    expect(deptBody.journeyHeatmap).toContainEqual({ week: 0, tier: 1, count: 1 });
+    // These figures were worked out but never shown on any page, so the route no longer sends them.
+    for (const gone of ['memberMetrics', 'journeyHeatmap', 'toolsUsed', 'coworkCostUsd', 'chatgptCostUsd', 'coworkFrictionIndex']) {
+      expect(deptBody).not.toHaveProperty(gone);
+    }
 
     // Concentration: u1 is the sole runner of 1 tier-3 task type ('coding')
     // in the past 2 weeks — below the >=3 risk threshold, so risk is empty
     // but the detail list still surfaces it.
     expect(deptBody.concentrationRisk).toEqual([]);
-    expect(deptBody.concentrationDetail).toContainEqual({ user_id: 'u1', display_name: 'Ada Lovelace', task_types: ['coding'] });
+    // Team Coaching's rule: one member's kind of work needs at least 8 prompts in 30 days to
+    // count, and this fixture has fewer, so nobody is named (test/sole-work.test.ts covers the rule).
+    expect(deptBody.concentrationDetail).toEqual([]);
 
     // Skill concentration: u1 is the sole user of 'brand-review'.
     expect(deptBody.skillConcentration).toContainEqual({ user_id: 'u1', display_name: 'Ada Lovelace', skills: ['brand-review'] });
@@ -213,11 +206,6 @@ async function runSpec(): Promise<void> {
     expect(JSON.stringify(deptBody.frontier)).not.toContain('body');
     expect(deptBody.frontier.mainstay).toBeNull();
 
-    // GROUP BY count coercion — tools used in the last 7 days.
-    expect(deptBody.toolsUsed).toHaveLength(2);
-    expect(deptBody.toolsUsed).toContainEqual({ name: 'brand-review', type: 'skill', count: 1 });
-    expect(deptBody.toolsUsed).toContainEqual({ name: 'slack', type: 'connector', count: 1 });
-
     // Feed — new capabilities, last 30 days.
     expect(deptBody.frontier.feed).toHaveLength(1);
     expect(deptBody.frontier.feed[0].displayName).toBe('Ada Lovelace');
@@ -227,13 +215,6 @@ async function runSpec(): Promise<void> {
     // COUNT + SUM coercion — doc-upload sessions.
     expect(deptBody.docSessions).toEqual({ sessions_with_uploads: 1, total_uploads: 2 });
     expect(typeof deptBody.docSessions.total_uploads).toBe('number');
-
-    // Mocked getCoworkCostUsd summed across 2 members.
-    expect(deptBody.coworkCostUsd).toBeCloseTo(5.0, 6);
-
-    // COUNT(*) FILTER friction coercion, summed across members:
-    // u1 → 1 failed / 2 total; u2 → 0 failed / 1 total. Combined 1/3.
-    expect(deptBody.coworkFrictionIndex).toBeCloseTo(1 / 3, 6);
 
     // ═══════════════════════════ /api/pulse/capabilities ═══════════════════════════
     const { GET: capGET, PATCH: capPATCH } = await import('../app/api/pulse/capabilities/route');

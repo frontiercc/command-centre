@@ -2,19 +2,12 @@
 // SPDX-License-Identifier: Apache-2.0
 
 /**
- * FinOps month-end spend projection — an honest month-to-date run rate.
- *
- * Reuses `projectMonthEndSpend` (Developer Pulse's projection math) but feeds it
- * a real run-rate input instead of double-passing month-to-date spend as
- * both the MTD figure AND the trailing-7-day figure (that bug made the
- * client-side projection materially wrong, especially early in the month).
- *
- * Here we don't have a true trailing-7-day spend figure either, so we
- * derive an honest 7-day-equivalent from the MTD average-per-day
- * (`mtd / daysElapsed * 7`). Fed back into `projectMonthEndSpend`, this
- * collapses to the correct run-rate: `projected = mtd / daysElapsed * daysInMonth`.
+ * FinOps month-end spend projection — an honest month-to-date run rate:
+ * `projected = mtd / (share of the month gone by)`, the share measured to the
+ * second (Spend Review's pace), so today is not counted as a full day.
+ * Developer Pulse projects the same way, through this function.
  */
-import { projectMonthEndSpend, type SpendProjection } from '@/lib/pulse/code/projection';
+import { monthDayCount, type SpendProjection } from '@/lib/pulse/code/projection';
 
 /**
  * Days of the month that must have passed before a projection is shown. Earlier, a run rate
@@ -35,7 +28,13 @@ export function buildFinopsProjection(
   nowEpochS: number
 ): SpendProjection | null {
   if (!monthToDate) return null;
-  const daysElapsed = new Date(nowEpochS * 1000).getUTCDate(); // 1-indexed, always >= 1
-  const last7dEquivalent = daysElapsed > 0 ? (mtdSpend / daysElapsed) * 7 : 0;
-  return projectMonthEndSpend(mtdSpend, last7dEquivalent, nowEpochS);
+  // The day count ("Day N of M", and the seven-day floor) is the calendar day.
+  const { daysElapsed, daysInMonth } = monthDayCount(nowEpochS);
+  // The run rate uses the exact share of the month gone by, as Spend Review
+  // does, so today counts as the part of a day that has passed, not a full day.
+  const now = new Date(nowEpochS * 1000);
+  const start = Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), 1);
+  const end = Date.UTC(now.getUTCFullYear(), now.getUTCMonth() + 1, 1);
+  const elapsed = Math.min(1, Math.max(0.01, (nowEpochS * 1000 - start) / (end - start)));
+  return { projected: mtdSpend / elapsed, daysElapsed, daysInMonth };
 }

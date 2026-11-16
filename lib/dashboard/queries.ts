@@ -23,6 +23,8 @@ async function rawAll<T>(query: unknown): Promise<T[]> {
 }
 
 const DAY = 86400;
+/** The window of the dashboard's "Who is using it each day?" and "Which departments are using it?" panels. */
+export const DASHBOARD_PANEL_DAYS = 30;
 const KINDS: WorkKind[] = ['chat', 'work', 'code'];
 const nowS = () => Math.floor(Date.now() / 1000);
 
@@ -101,11 +103,21 @@ export async function getSessionsPerWeekByProduct(now = nowS()): Promise<Record<
   return out;
 }
 
-/** Prompts flagged for personal data, all time, by kind of work and vendor. */
-export async function getFlaggedByProduct(): Promise<Record<WorkKind, VendorSplit>> {
+/**
+ * Prompts flagged for personal data in the last 4 weeks (the window of the cards they sit under),
+ * by kind of work and vendor. Risky-intent flags are not personal data, so they are left out, and
+ * so is a flag whose every personal-data type the confirmation check dismissed (isFullyDismissed
+ * in lib/pii/flag-severity.ts).
+ */
+export async function getFlaggedByProduct(now = nowS()): Promise<Record<WorkKind, VendorSplit>> {
   const rows = await rawAll<{ kind: string; vendor: string; n: number | string }>(sql`
     SELECT ${sql.raw(kindExpr())} AS kind, ${sql.raw(vendorExpr())} AS vendor, COUNT(*) AS n
-    FROM cowork_messages WHERE flagged = 1
+    FROM cowork_messages
+    WHERE flagged = 1 AND occurred_at >= ${now - 28 * DAY} AND occurred_at < ${now}
+      AND flag_reason LIKE '%PII detected:%'
+      AND EXISTS (
+        SELECT 1 FROM unnest(string_to_array(substring(flag_reason from 'PII detected:\\s*([^|]+)'), ',')) AS t(type)
+        WHERE trim(t.type) <> '' AND trim(t.type) NOT LIKE '%(dismissed)')
     GROUP BY 1, 2
   `);
   const out = Object.fromEntries(KINDS.map((k) => [k, { total: 0, claude: 0, openai: 0 }])) as Record<WorkKind, VendorSplit>;
@@ -177,34 +189,35 @@ export interface DepartmentRow {
   department: string;
   user_count: number;
   active_users: number;
-  /** People in the department who used each product in the last 7 days. */
+  /** People in the department who used each product in the last 30 days. */
   products: ProductCounts;
 }
 
 /**
- * People per department who used each product in the last 7 days. In the
- * Claude or OpenAI view, active people are those who used that vendor's
- * products this week, so Users and Adoption follow the switch like the cells.
+ * People per department who used each product in the last 30 days
+ * (DASHBOARD_PANEL_DAYS). In the Claude or OpenAI view, active people are
+ * those who used that vendor's products in those 30 days, so Users and
+ * Adoption follow the switch like the cells.
  */
-export async function getDepartmentBreakdownByProduct(vendor: Vendor = 'all'): Promise<DepartmentRow[]> {
-  const weekAgo = nowS() - 7 * DAY;
+export async function getDepartmentBreakdownByProduct(vendor: Vendor = 'all', endS = nowS()): Promise<DepartmentRow[]> {
+  const since = endS - DASHBOARD_PANEL_DAYS * DAY;
   const [depts, used, vendorActive] = await Promise.all([
     rawAll<{ department: string; user_count: number | string; active_users: number | string }>(sql`
       SELECT u.department, COUNT(*) AS user_count,
-             COUNT(CASE WHEN u.last_seen_at >= ${weekAgo} THEN 1 END) AS active_users
+             COUNT(CASE WHEN u.last_seen_at >= ${since} THEN 1 END) AS active_users
       FROM users u WHERE u.department IS NOT NULL
       GROUP BY u.department
     `),
     rawAll<{ department: string; product: string; n: number | string }>(sql`
       SELECT u.department, ${sql.raw(productExpr('cm.'))} AS product, COUNT(DISTINCT cm.user_id) AS n
       FROM cowork_messages cm JOIN users u ON u.id = cm.user_id
-      WHERE u.department IS NOT NULL AND cm.occurred_at >= ${weekAgo}
+      WHERE u.department IS NOT NULL AND cm.occurred_at >= ${since}
       GROUP BY 1, 2
     `),
     vendor === 'all' ? Promise.resolve(null) : rawAll<{ department: string; n: number | string }>(sql`
       SELECT u.department, COUNT(DISTINCT cm.user_id) AS n
       FROM cowork_messages cm JOIN users u ON u.id = cm.user_id
-      WHERE u.department IS NOT NULL AND cm.occurred_at >= ${weekAgo} AND ${sql.raw(vendorClause(vendor, 'cm.'))}
+      WHERE u.department IS NOT NULL AND cm.occurred_at >= ${since} AND ${sql.raw(vendorClause(vendor, 'cm.'))}
       GROUP BY 1
     `),
   ]);
@@ -342,5 +355,44 @@ export async function getTierMixThisWeekByVendor(endS = nowS()): Promise<Record<
   `);
   const out = { claude: { tier1: 0, tier2: 0, tier3: 0 }, openai: { tier1: 0, tier2: 0, tier3: 0 } };
   for (const r of rows) out[r.vendor as 'claude' | 'openai'] = { tier1: Number(r.t1), tier2: Number(r.t2), tier3: Number(r.t3) };
+  return out;
+}
+
+/**
+ * A tier mix as whole-number shares of its classified prompts, worked out here so the
+ * briefing never sees prompt counts it could set beside session counts. Null when no
+ * prompt was classified: not measured, not 0%.
+ */
+export function tierMixShares(mix: { tier1: number; tier2: number; tier3: number }): { tier1: string; tier2: string; tier3: string } | null {
+  const total = mix.tier1 + mix.tier2 + mix.tier3;
+  if (total <= 0) return null;
+  const pct = (n: number) => `${Math.round((n / total) * 100)}%`;
+  return { tier1: pct(mix.tier1), tier2: pct(mix.tier2), tier3: pct(mix.tier3) };
+}
+
+/**
+ * People a day for each product over the last `days` UTC days, oldest first: the dashboard's
+ * "Who is using it each day?" lines. Every figure counts people, never prompts, so the products
+ * can be read against one another. A day with no activity reads 0 (nobody used it).
+ */
+export async function getPeopleByDayByProduct(days: number, endS = nowS()): Promise<Array<{ date: string; products: ProductCounts }>> {
+  const todayStart = Math.floor(endS / DAY) * DAY;
+  const startS = todayStart - (days - 1) * DAY;
+  const rows = await rawAll<{ date: string; product: string; people: number | string }>(sql`
+    SELECT to_char(to_timestamp(occurred_at) AT TIME ZONE 'UTC', 'YYYY-MM-DD') AS date,
+           ${sql.raw(productExpr())} AS product, COUNT(DISTINCT user_id) AS people
+    FROM cowork_messages
+    WHERE user_id IS NOT NULL AND occurred_at >= ${startS} AND occurred_at < ${endS}
+    GROUP BY 1, 2
+  `);
+  const out = Array.from({ length: days }, (_, i) => ({
+    date: new Date((startS + i * DAY) * 1000).toISOString().slice(0, 10),
+    products: zeroCounts(),
+  }));
+  const byDate = new Map(out.map(d => [d.date, d.products]));
+  for (const r of rows) {
+    const c = byDate.get(r.date);
+    if (c && r.product in c) c[r.product as ProductId] = Number(r.people);
+  }
   return out;
 }

@@ -145,6 +145,8 @@ async function main() {
   try {
     // ── 0. Remove this script's own rows (children first) ──
     const delC = await c.query(`DELETE FROM pulse_classifications WHERE cowork_message_id LIKE $1`, [`${MARKER}%`]);
+    // Alerts the Hub raised on these prompts would point at nothing once they go.
+    await c.query(`DELETE FROM alerts WHERE raw_evidence->>'message_id' LIKE $1`, [`${MARKER}%`]);
     const delM = await c.query(`DELETE FROM cowork_messages WHERE id LIKE $1`, [`${MARKER}%`]);
     console.log(`[conversations] cleared ${delM.rowCount} added prompts, ${delC.rowCount} classifications.`);
     if (CLEAN_ONLY) {

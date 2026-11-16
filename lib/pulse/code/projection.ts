@@ -2,14 +2,12 @@
 // SPDX-License-Identifier: Apache-2.0
 
 /**
- * Developer Pulse — month-end spend projection.
+ * Month-end spend projection: the shared shape and the UTC day count.
  *
- * Pure math, no DB: extends the last-7-day priced spend run rate out to the
- * end of the current UTC calendar month, added to month-to-date priced
- * spend already incurred. This is a projection ON TOP OF the existing
- * measured/estimated spend numbers — it inherits their caveats (unpriced
- * models contribute nothing; the `spendIsPartlyEstimated` badge already
- * covers Bedrock/Vertex list-rate estimates) rather than adding new ones.
+ * Developer Pulse and FinOps project the same way (the owner chose this on 2026-11-15):
+ * month-to-date priced spend divided by the exact share of the month gone by, in
+ * `buildFinopsProjection` (lib/finance/finops-projection.ts). Neither uses a trailing
+ * 7-day run rate any more.
  */
 
 export interface SpendProjection {
@@ -18,25 +16,10 @@ export interface SpendProjection {
   daysInMonth: number;
 }
 
-/**
- * @param mtdSpend Priced spend so far this UTC calendar month.
- * @param last7dSpend Priced spend in the trailing 7 days (used as the run rate).
- * @param nowEpochS Current time, unix seconds — the "now" the month is measured against.
- */
-export function projectMonthEndSpend(
-  mtdSpend: number,
-  last7dSpend: number,
-  nowEpochS: number
-): SpendProjection {
+/** The UTC calendar day of the month ("Day N of M") at `nowEpochS`, unix seconds. */
+export function monthDayCount(nowEpochS: number): { daysElapsed: number; daysInMonth: number } {
   const now = new Date(nowEpochS * 1000);
-  const year = now.getUTCFullYear();
-  const month = now.getUTCMonth(); // 0-indexed
   const daysElapsed = now.getUTCDate(); // 1-indexed day of month = days elapsed so far
-  const daysInMonth = new Date(Date.UTC(year, month + 1, 0)).getUTCDate();
-  const daysRemaining = daysInMonth - daysElapsed;
-
-  const dailyRunRate = last7dSpend / 7;
-  const projected = mtdSpend + dailyRunRate * daysRemaining;
-
-  return { projected, daysElapsed, daysInMonth };
+  const daysInMonth = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth() + 1, 0)).getUTCDate();
+  return { daysElapsed, daysInMonth };
 }

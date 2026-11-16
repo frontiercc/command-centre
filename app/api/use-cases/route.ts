@@ -9,7 +9,8 @@ import { eq } from 'drizzle-orm';
 import { getAllConfig } from '@/lib/config';
 import { getAdminSession, canAccessPulseAdmin } from '@/lib/auth/admin-auth';
 import { createUseCase, listUseCases } from '@/lib/usecases/queries';
-import { getUseCasePlatformSessions, getUseCaseProductSessions } from '@/lib/usecases/platform-sessions';
+import { getUseCasePlatformSessions, getUseCaseProductSessions, getUseCaseSessionsThisWeek, getUseCasesWithHiddenActivity } from '@/lib/usecases/platform-sessions';
+import { shownLifecycle } from '@/lib/usecases/lifecycle';
 import { openaiShown } from '@/lib/sources/openai-visibility';
 import { getTypedClient } from '@/lib/db/client';
 import { schema } from '@/lib/db/schema';
@@ -42,14 +43,22 @@ export async function GET(request: NextRequest) {
   const shown = await openaiShown();
   // The same sessions per product (Claude Cowork, Claude Code, ChatGPT, Codex), which the column shows.
   const nowS = Math.floor(Date.now() / 1000);
-  const [platforms, products] = await Promise.all([
+  // This week's sessions too: the lifecycle counts them, the 13 weeks do not.
+  // With ChatGPT and Codex hidden, which use cases had work there: the stage counts it, the figures don't.
+  const [platforms, products, thisWeek, hidden] = await Promise.all([
     getUseCasePlatformSessions(nowS, { openaiShown: shown }),
     getUseCaseProductSessions(nowS, { openaiShown: shown }),
+    getUseCaseSessionsThisWeek(nowS, { openaiShown: shown }),
+    shown ? Promise.resolve(new Set<string>()) : getUseCasesWithHiddenActivity(nowS),
   ]);
   const res = NextResponse.json(rows.map(uc => ({
     ...uc,
+    // An archived use case is no longer tracked: no stage (null), not the stale one.
+    lifecycle: shownLifecycle(uc),
     platformSessions: platforms.get(uc.id) ?? { claude: 0, openai: shown ? 0 : null },
     productSessions: products.get(uc.id) ?? { cowork: 0, code: 0, chatgpt: shown ? 0 : null, codex: shown ? 0 : null },
+    sessionsThisWeek: thisWeek.get(uc.id) ?? 0,
+    hiddenActivity: hidden.has(uc.id),
   })));
 
   // Surface the viewer's linked cowork user id via a response header (not the

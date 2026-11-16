@@ -72,6 +72,16 @@ describe('Model Efficiency for OpenAI', () => {
     expect(r.cacheEfficiency.cacheReadTokens).toBe(2_000_000);
   });
 
+  it('Codex friction: not measured (null) with no actions, then failed actions over actions from codex_actions', async () => {
+    const before = await buildModelEfficiency('codex', '2026-03', NOW);
+    expect(before.activities.find(a => a.key === 'feature')!.friction).toBeNull();
+    for (let i = 0; i < 4; i++) {
+      await sql.run(`INSERT INTO codex_actions (id, user_id, session_id, tool_name, failed, occurred_at) VALUES (?, 'u1', 'codex:a', 'shell', ?, ?)`, [`ca${i}`, i === 0 ? 1 : 0, MARCH + i]);
+    }
+    const after = await buildModelEfficiency('codex', '2026-03', NOW);
+    expect(after.activities.find(a => a.key === 'feature')!.friction).toBeCloseTo(0.25, 6);
+  });
+
   it('Claude tabs see none of it', async () => {
     expect((await buildModelEfficiency('code', '2026-03', NOW)).hasData).toBe(false);
     expect((await buildModelEfficiency('cowork', '2026-03', NOW)).hasData).toBe(false);

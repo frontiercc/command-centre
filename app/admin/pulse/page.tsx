@@ -62,7 +62,7 @@ export default function AdminPulsePage() {
   const [userRole, setUserRole] = useState('');
   const [config, setConfig] = useState<ModuleConfig>({
     pulseEnabled: 'false',
-    pulseClassifierModel: 'claude-haiku-4-5-20251001',
+    pulseClassifierModel: 'claude-haiku-5-5',
     pulseBriefingModel: BRIEFING_DEFAULT_MODEL,
     pulseUserBriefingModel: '',
     pulseSessionDescriptionsEnabled: 'true',
@@ -81,8 +81,9 @@ export default function AdminPulsePage() {
   useEffect(() => {
     fetch('/api/admin/session')
       .then(r => r.json())
-      .then(data => { if (data.authenticated) setUserRole(data.user?.role ?? ''); })
-      .catch(() => {});
+      // A failed check still ends the wait, with the non-admin view.
+      .then(data => setUserRole(data.authenticated ? (data.user?.role || 'unknown') : 'unknown'))
+      .catch(() => setUserRole('unknown'));
   }, []);
 
   useEffect(() => {
@@ -92,7 +93,7 @@ export default function AdminPulsePage() {
     ]).then(([configData, statsData]) => {
       setConfig({
         pulseEnabled: String(configData.pulseEnabled ?? 'false'),
-        pulseClassifierModel: String(configData.pulseClassifierModel ?? 'claude-haiku-4-5-20251001'),
+        pulseClassifierModel: String(configData.pulseClassifierModel ?? 'claude-haiku-5-5'),
         pulseBriefingModel: String(configData.pulseBriefingModel ?? BRIEFING_DEFAULT_MODEL),
         pulseUserBriefingModel: String(configData.pulseUserBriefingModel ?? ''),
         pulseSessionDescriptionsEnabled: String(configData.pulseSessionDescriptionsEnabled ?? 'true'),
@@ -152,7 +153,8 @@ export default function AdminPulsePage() {
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [userRole, activeTab]);
 
-  if (loading) return (
+  // Wait for the role too: the Overview tab loads admin-only parts only for an admin.
+  if (loading || !userRole) return (
     <>
       <TopBar title="Work Pulse admin" subtitle="Configuration, drill-downs, tier settings, and classifier health" />
       <LoadingSpinner />
@@ -182,6 +184,7 @@ export default function AdminPulsePage() {
             onSave={saveConfig}
             onConfigChange={patch => setConfig(c => ({ ...c, ...patch }))}
             onPendingCountChange={setPendingCount}
+            isAdmin={userRole === 'admin'}
           />
         )}
 

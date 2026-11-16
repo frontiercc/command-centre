@@ -90,7 +90,7 @@ export default function LibrarySubmitPage() {
       />
       <PageBody>
         <Toolbar left={
-          <Link href="/library" className="inline-flex items-center gap-1 text-[#245BF3] hover:underline">
+          <Link href="/library" className="inline-flex items-center gap-1 text-[#1F6F8B] hover:underline">
             <svg aria-hidden="true" width={14} height={14} fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.75} strokeLinecap="round" strokeLinejoin="round">
               <path d="M10.5 19.5L3 12m0 0l7.5-7.5M3 12h18" />
             </svg>

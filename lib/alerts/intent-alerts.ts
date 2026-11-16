@@ -12,7 +12,7 @@
  * AI-assessed severity so the audit log shows severity in one view.
  */
 import { v4 as uuidv4 } from 'uuid';
-import { eq, sql } from 'drizzle-orm';
+import { and, eq, sql } from 'drizzle-orm';
 import { getTypedClient } from '@/lib/db/client';
 import { schema } from '@/lib/db/schema';
 import { insertAlert } from '@/lib/db/queries';
@@ -34,6 +34,18 @@ export function intentProductLabel(surface: string, product?: string | null): st
   return 'Claude Cowork';
 }
 
+/** The intent categories that already have an alert for this message. */
+async function intentCategoriesAlerted(messageId: string): Promise<Set<string>> {
+  const client = await getTypedClient();
+  const a = schema.alerts;
+  // Exact field reads: raw_evidence is jsonb, whose text form reorders keys.
+  const rows = await client
+    .select({ category: sql<string | null>`${a.raw_evidence}->>'intent_category'` })
+    .from(a)
+    .where(and(eq(a.alert_type, 'intent'), sql`${a.raw_evidence}->>'message_id' = ${messageId}`));
+  return new Set(rows.map(r => r.category).filter((c): c is string => !!c));
+}
+
 export async function createIntentAlerts(
   userId: string | null,
   surface: string,
@@ -43,11 +55,17 @@ export async function createIntentAlerts(
   /** The product the prompt was typed in; defaults to the Claude product of its surface. */
   product?: string | null,
 ): Promise<void> {
+  // A message and category that already has an alert gets no second one (a
+  // re-run or a repeated call), and a message with nothing new needs no model call.
+  const raised = await intentCategoriesAlerted(messageId);
+  const fresh = matches.filter(m => !raised.has(m.categoryId));
+  if (fresh.length === 0) return;
+
   // Get a single AI assessment for all matches (one API call for the whole message)
   const assessment = await assessIntent(messageText, matches);
   const productLabel = intentProductLabel(surface, product);
 
-  for (const match of matches) {
+  for (const match of fresh) {
     await insertAlert({
       id: uuidv4(),
       user_id: userId || 'unknown',

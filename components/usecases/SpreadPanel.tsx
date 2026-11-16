@@ -81,7 +81,7 @@ export default function SpreadPanel({ spread }: { spread: SpreadData }) {
                   <li key={u.userId} className="px-4 py-2 flex items-center gap-3 min-w-0 border-t border-[#F2F2F2] first:border-t-0">
                     <span className="text-[14px] text-[#0A0A0A] truncate min-w-0" title={u.displayName}>{u.displayName}</span>
                     <span
-                      className="text-[13px] text-[#05073F] tabular-nums truncate shrink-0 max-w-[60%] text-right ml-auto"
+                      className="text-[13px] text-[#1F6F8B] tabular-nums truncate shrink-0 max-w-[60%] text-right ml-auto"
                       title={evidence}
                     >
                       {evidence}

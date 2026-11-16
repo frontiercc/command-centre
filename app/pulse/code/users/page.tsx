@@ -10,11 +10,17 @@ import TopBar from '@/components/layout/TopBar';
 import LoadingSpinner from '@/components/shared/LoadingSpinner';
 import CodeStatStrip, { type CodeMetricsRow, formatTokens, formatCurrency } from '@/components/pulse/code/CodeStatStrip';
 import ModelMixBar, { type ModelMixItem } from '@/components/pulse/code/ModelMixBar';
-import JourneyGrid from '@/components/pulse/JourneyGrid';
-import HumanTimeCard, { type HumanTimeSummary } from '@/components/pulse/HumanTimeCard';
+import { DepthPanel, ByHandPanel, type ByHand, type Who } from '@/components/pulse/MyPulsePanels';
+import {
+  CodeWorkPanel, CodeBestWork, CodeWorkMix,
+  type CodePeriodWork, type CodeWorkMixRow, type BestSession,
+} from '@/components/pulse/code/CodePulsePanels';
+import type { PulsePeriod } from '@/lib/pulse/period-shape';
+import type { TierNames } from '@/lib/pulse/tier-names';
 import { PageBody, Toolbar, Panel, Tag, Empty, Muted, B, cx } from '@/components/precision/ui';
 import { useVendor, useOpenAiOnly, VendorSwitch } from '@/components/shared/VendorSwitch';
 import { DEVELOPER_PULSE_VENDOR_LABELS, type Vendor } from '@/lib/dashboard/vendor';
+import { useSessionRole } from '@/components/shared/useSessionRole';
 
 interface SessionRow {
   session_id: string;
@@ -32,6 +38,14 @@ interface SessionRow {
 }
 
 interface UserData {
+  /** Set when the viewer may not see this person's spend (a colleague): no spend figure is sent. */
+  spendHidden?: boolean;
+  periodWork?: CodePeriodWork | null;
+  tierWeeks?: Array<{ weekStart: number; t1: number; t2: number; t3: number }>;
+  tierGrid?: Array<{ weekStart: number; t1: number; t2: number; t3: number }>;
+  tierNames?: TierNames | null;
+  workMix?: CodeWorkMixRow[];
+  bestSession?: BestSession | null;
   vendor?: Vendor;
   codexPresent?: boolean;
   metricsSplit?: { claude: CodeMetricsRow | null; openai: CodeMetricsRow | null } | null;
@@ -41,8 +55,8 @@ interface UserData {
   sessions: SessionRow[];
   modelMix: ModelMixItem[];
   journeyGrid: Array<{ week: number; tier: number; count: number }>;
-  githubRepos: { count7d: number; names7d: string[] } | null;
-  humanTime?: HumanTimeSummary | null;
+  githubRepos: { count30d: number; names30d: string[] } | null;
+  humanTime?: ByHand | null;
 }
 
 interface UserListRow {
@@ -72,10 +86,18 @@ function CodeUsersContent() {
   const [usersLoading, setUsersLoading] = useState(true);
   const [data, setData] = useState<UserData | null>(null);
   const [dataLoading, setDataLoading] = useState(false);
+  // One period for the page, as on Work Pulse.
+  const [period, setPeriod] = useState<PulsePeriod>('quarter');
+
   const [vendor, setVendor, vendorReady] = useVendor();
   const [codexPresent, setCodexPresent] = useState(false);
   const openaiOnly = useOpenAiOnly();
   const codexView = codexPresent || openaiOnly;
+
+  // As on Work Pulse Users: a viewer cannot open another person's page (the API returns their own),
+  // so they go to their own.
+  const role = useSessionRole();
+  useEffect(() => { if (role === 'viewer') router.replace('/pulse/code/me'); }, [role, router]);
 
   const selectedUserId = searchParams.get('userId') ?? '';
   // What the switch's view covers, for the empty states.
@@ -110,12 +132,12 @@ function CodeUsersContent() {
     if (!vendorReady) return; // the saved view is read after the page loads
     if (!userId) return;
     setDataLoading(true);
-    fetch(`/api/pulse/code/me?userId=${encodeURIComponent(userId)}&vendor=${vendor}`)
+    fetch(`/api/pulse/code/me?userId=${encodeURIComponent(userId)}&vendor=${vendor}&period=${period}`)
       .then(r => r.json())
       .then(setData)
       .catch(() => {})
       .finally(() => setDataLoading(false));
-  }, [vendor, vendorReady]);
+  }, [vendor, vendorReady, period]);
 
   useEffect(() => {
     if (selectedUserId) loadUser(selectedUserId);
@@ -130,13 +152,15 @@ function CodeUsersContent() {
   const selectedUser = users.find(u => u.user_id === selectedUserId);
   const displayName = selectedUser?.display_name ?? selectedUser?.email ?? '';
 
+  const who: Who = { you: false, name: data?.displayName ?? 'This person' };
+
   return (
     <>
       <TopBar
         title="Developer Pulse: Users"
         subtitle={displayName ? `Per-user ${openaiOnly ? 'Codex' : codexPresent ? 'coding' : 'Claude Code'} activity · ${displayName}` : 'Select a user'}
       />
-      <PageBody>
+      <PageBody className="dash-compact">
         {/* User picker (top-left) */}
         <Toolbar
           left={
@@ -148,7 +172,7 @@ function CodeUsersContent() {
                   aria-label="User"
                   value={selectedUserId}
                   onChange={e => handleSelect(e.target.value)}
-                  className={cx(B.select, 'min-w-[240px] text-[14px]')}
+                  className={cx(B.select, 'w-full max-w-full sm:w-auto sm:min-w-[240px] text-[14px]')}
                 >
                   {users.length === 0 && !notInView && <option value="">No users with {viewLabel} activity</option>}
                   {notInView && <option value={selectedUserId}>{data?.displayName ?? 'This person'} · no {viewLabel} activity</option>}
@@ -160,7 +184,8 @@ function CodeUsersContent() {
                   ))}
                 </select>
               )}
-              {selectedUserId && (
+              {/* Person 360 is a Work Pulse page: the Developer Pulse role cannot open it. */}
+              {selectedUserId && role !== '' && role !== 'code' && (
                 <Link href={`/pulse/person/${encodeURIComponent(selectedUserId)}`} className={B.link}>
                   Person 360
                 </Link>
@@ -186,19 +211,37 @@ function CodeUsersContent() {
             </Empty>
           ) : (
             <>
-              <CodeStatStrip metrics={data.metrics} githubRepos={data.githubRepos} view={codexView ? vendor : 'claude'} split={data.metricsSplit} />
-
-              <HumanTimeCard summary={data.humanTime} surface="code" scope="Personal" view={codexView ? vendor : 'claude'} />
-
-              {(data.journeyGrid?.length ?? 0) > 0 && (
-                <div className="flex flex-col gap-2">
-                  <div className="flex items-center gap-2 flex-wrap">
-                    <Tag tone="judged">AI-judged</Tag>
-                    <span className="text-[13px] text-[#8F8F8F]">Delegation journey, 6 weeks</span>
-                  </div>
-                  <JourneyGrid data={data.journeyGrid} />
-                </div>
+              {data.periodWork && (
+                <CodeWorkPanel
+                  w={data.periodWork}
+                  who={who}
+                  period={period}
+                  onPeriod={setPeriod}
+                  product={openaiOnly ? 'Codex' : codexPresent && vendor === 'all' ? 'Claude Code and Codex' : vendor === 'openai' ? 'Codex' : 'Claude Code'}
+                />
               )}
+
+              <CodeBestWork s={data.bestSession ?? null} who={who} names={data.tierNames ?? undefined} />
+
+              {(data.tierGrid?.length ?? 0) > 0 && (
+                <DepthPanel
+                  weeks={data.tierWeeks ?? []}
+                  grid={data.tierGrid ?? []}
+                  end={Math.floor(Date.now() / 1000)}
+                  names={data.tierNames ?? undefined}
+                  title={`Is ${who.name}'s work getting deeper?`}
+                  subject={`${who.name} ran`}
+                  whose={`${who.name}'s`}
+                  unit="session"
+                />
+              )}
+
+              <div className="grid grid-cols-1 xl:grid-cols-2 gap-4">
+                <CodeWorkMix rows={data.workMix ?? []} who={who} names={data.tierNames ?? undefined} />
+                <ByHandPanel h={data.humanTime} who={who} tool={openaiOnly || vendor === 'openai' ? 'Codex' : codexPresent && vendor === 'all' ? 'AI' : 'Claude Code'} />
+              </div>
+
+              <CodeStatStrip metrics={data.metrics} githubRepos={data.githubRepos} view={codexView ? vendor : 'claude'} split={data.metricsSplit} spendHidden={data.spendHidden === true} />
 
               <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                 <ModelMixBar items={data.modelMix} title="Model mix" />
@@ -222,7 +265,7 @@ function CodeUsersContent() {
                           </div>
                           <div className="shrink-0 text-right flex flex-col items-end gap-0.5">
                             <span className="text-[14px] font-medium text-[#0A0A0A] tabular-nums">
-                              {s.spend_usd === null ? '—' : formatCurrency(s.spend_usd)}
+                              {data.spendHidden ? 'hidden' : s.spend_usd === null ? (s.input_tokens + s.output_tokens === 0 ? 'not measured' : 'not priced') : formatCurrency(s.spend_usd)}
                             </span>
                             <span className="text-[13px] text-[#8F8F8F] tabular-nums">{formatTokens(s.input_tokens + s.output_tokens)} tokens</span>
                             <Tag>{s.source === 'codex' ? 'Codex' : s.source === 'otel' ? 'OTel' : 'Agent'}</Tag>

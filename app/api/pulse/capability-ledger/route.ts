@@ -13,6 +13,7 @@ import { getAdminSession, canAccessPulseAdmin } from '@/lib/auth/admin-auth';
 import { getTypedClient } from '@/lib/db/client';
 import { schema } from '@/lib/db/schema';
 import { rollupCapabilityValue, type ValuedCapability } from '@/lib/pulse/capability-value';
+import { cleanTitle } from '@/lib/pulse/capability-title';
 
 export const dynamic = 'force-dynamic';
 
@@ -53,7 +54,7 @@ export async function GET(request: NextRequest) {
     const lines = [header.map(csvCell).join(',')];
     for (const r of valued) {
       const date = r.confirmed_at ? new Date(Number(r.confirmed_at) * 1000).toISOString().slice(0, 10) : '';
-      lines.push([date, r.title, r.team_id, r.tier, r.value_type, r.value_amount, r.value_period, r.value_basis, r.attributed_by].map(csvCell).join(','));
+      lines.push([date, cleanTitle(r.title), r.team_id, r.tier, r.value_type, r.value_amount, r.value_period, r.value_basis, r.attributed_by].map(csvCell).join(','));
     }
     return new NextResponse(lines.join('\n'), {
       status: 200,
@@ -64,7 +65,7 @@ export async function GET(request: NextRequest) {
   return NextResponse.json({
     rollup,
     entries: valued.map(r => ({
-      title: r.title,
+      title: cleanTitle(r.title),
       team: r.team_id,
       tier: r.tier,
       confirmedAt: r.confirmed_at === null ? null : Number(r.confirmed_at),

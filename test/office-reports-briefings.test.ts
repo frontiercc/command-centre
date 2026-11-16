@@ -55,7 +55,7 @@ describe('Spend Review report: Claude in Office line', () => {
 });
 
 describe('briefings: where the work happened', () => {
-  it('lists every product used, with its count, when Office was used', () => {
+  it('lists every product used, with its count', () => {
     const lines = workByProductLines([
       { product: 'cowork', sessions: 120, people: 30 },
       { product: 'excel', sessions: 8, people: 1 },
@@ -70,5 +70,17 @@ describe('briefings: where the work happened', () => {
   });
   it('adds nothing when only Cowork was used', () => {
     expect(workByProductLines([{ product: 'cowork', sessions: 120, people: 30 }])).toEqual([]);
+  });
+  it('lists Claude Chat and ChatGPT beside Cowork, so the products can be compared', () => {
+    expect(workByProductLines([
+      { product: 'claude_chat', sessions: 40, people: 12 },
+      { product: 'cowork', sessions: 120, people: 30 },
+      { product: 'chatgpt', sessions: 25, people: 1 },
+    ])).toEqual([
+      'Where the work happened, 3 products in total (measured sessions and people):',
+      'Claude Chat: 40 sessions by 12 people',
+      'Cowork: 120 sessions by 30 people',
+      'ChatGPT: 25 sessions by 1 person',
+    ]);
   });
 });

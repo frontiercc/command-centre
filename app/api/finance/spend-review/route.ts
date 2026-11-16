@@ -14,6 +14,9 @@ import { currentPeriod } from '@/lib/finance/period';
 import { getTypedClient } from '@/lib/db/client';
 import { cached, FRESH_MS, PAST_MONTH_FRESH_MS } from '@/lib/finance/spend-review-cache';
 import { buildSpendReviewIndex, userIdsByEmail, peopleById, priorPeriod, type SpendReviewPerson } from '@/lib/finance/spend-review';
+import { topTierName } from '@/lib/pulse/tier-names';
+import { getTierNames } from '@/lib/pulse/tier-config';
+import { getCodeTierNames } from '@/lib/pulse/code/weekly-tiers';
 import { getSpendLimits, indexByEmail, primaryRow, shareUsed, NEAR_LIMIT_SHARE, type SpendLimitRow } from '@/lib/anthropic/spend-limits';
 
 export const dynamic = 'force-dynamic';
@@ -110,6 +113,7 @@ export async function GET(request: NextRequest) {
           unpricedOnly: false,
           mainWork: null,
           routeCount: 0,
+          topRoute: null,
           anthropic: row ? { ...row, shareUsed: shareUsed(row) } : null,
           pendingRequestAt: requests.get(email)?.createdAt ?? null,
         });
@@ -130,6 +134,7 @@ export async function GET(request: NextRequest) {
       unpricedModels: index.unpricedModels,
       limits: { status: limits.status, fetchedAt: limits.fetchedAt, pendingCount: limits.pendingRequests.length },
       nearLimitShare: NEAR_LIMIT_SHARE,
+      topTier: topTierName(await getTierNames(), await getCodeTierNames()),
     });
   } catch (err) {
     return errorResponse('api/finance/spend-review', err, { message: 'Could not build the spend review.' });

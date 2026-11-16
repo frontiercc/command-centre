@@ -53,6 +53,7 @@ export default function Sidebar({ theme = 'default' }: { theme?: Theme }) {
   const [finopsOpen, setFinopsOpen] = useState(false);
   const [useCasesOpen, setUseCasesOpen] = useState(true);
   const [useCasesEnabled, setUseCasesEnabled] = useState(false);
+  const [askEnabled, setAskEnabled] = useState(false);
   const [chargebackEnabled, setChargebackEnabled] = useState(false);
   const [displayName, setDisplayName] = useState('');
   const [email, setEmail] = useState('');
@@ -79,7 +80,9 @@ export default function Sidebar({ theme = 'default' }: { theme?: Theme }) {
     } catch { /* storage unavailable: fall back to the fetches */ }
   }, []);
 
+  // The open-alert count, only for roles that can see Alerts: anyone else would be refused.
   useEffect(() => {
+    if (!isCorePlatformRole(userRole)) return;
     const refreshAlertCount = () => {
       fetch('/api/alerts/count')
         .then(r => r.ok ? r.json() : Promise.reject())
@@ -93,13 +96,20 @@ export default function Sidebar({ theme = 'default' }: { theme?: Theme }) {
     window.addEventListener('alertsChanged', refreshAlertCount);
     // Poll every 60 s so AI-generated alerts surface without a page reload
     const pollTimer = setInterval(refreshAlertCount, 60_000);
+    return () => {
+      window.removeEventListener('alertsChanged', refreshAlertCount);
+      clearInterval(pollTimer);
+    };
+  }, [userRole]);
 
+  useEffect(() => {
     fetchConfigOnce()
       .then(raw => {
         if (!raw) return;
-        const data = raw as { organisationName?: string; useCasesEnabled?: boolean; chargebackEnabled?: boolean };
+        const data = raw as { organisationName?: string; useCasesEnabled?: boolean; chargebackEnabled?: boolean; askEnabled?: boolean };
         if (data.organisationName) setOrgName(data.organisationName);
         setUseCasesEnabled(data.useCasesEnabled === true);
+        setAskEnabled(data.askEnabled === true);
         setChargebackEnabled(data.chargebackEnabled === true);
         saveNavCache({ orgName: data.organisationName ?? '', useCasesEnabled: data.useCasesEnabled === true, chargebackEnabled: data.chargebackEnabled === true });
       })
@@ -126,11 +136,6 @@ export default function Sidebar({ theme = 'default' }: { theme?: Theme }) {
         }
       })
       .catch(() => {});
-
-    return () => {
-      window.removeEventListener('alertsChanged', refreshAlertCount);
-      clearInterval(pollTimer);
-    };
   }, []);
 
   // Fetch capability queue count once we know the user is admin
@@ -198,13 +203,19 @@ export default function Sidebar({ theme = 'default' }: { theme?: Theme }) {
     coworkOverview: canSeeCoworkOverview(userRole),
     // Mirrors /pulse/users: a viewer cannot open another person's Pulse, so the page refuses them.
     coworkUsers: userRole === 'admin' || userRole === 'manager' || userRole === 'cowork' || userRole === 'pulse',
+    coworkCoaching: userRole === 'admin' || userRole === 'manager',
     code: userRole === 'admin' || userRole === 'manager' || userRole === 'viewer' || userRole === 'code' || userRole === 'pulse',
     codeOverview: canSeeCodeOverview(userRole),
     codeTeam: userRole === 'admin' || userRole === 'manager' || userRole === 'viewer' || userRole === 'code' || userRole === 'pulse',
+    // Mirrors coworkUsers: a viewer cannot open another person's Developer Pulse.
+    codeUsers: userRole === 'admin' || userRole === 'manager' || userRole === 'code' || userRole === 'pulse',
+    codeCoaching: userRole === 'admin' || userRole === 'manager',
     codeOrg: (userRole === 'admin' || userRole === 'manager' || userRole === 'viewer') && !openaiOnly,
     useCases: useCasesEnabled && (userRole === 'admin' || userRole === 'manager' || userRole === 'viewer'),
     useCasesOverview: canSeeUseCasesOverview(userRole, useCasesEnabled),
     library: userRole !== '',
+    // Admin config carries askEnabled; other roles never get it, so they never see the link.
+    ask: userRole === 'admin' && askEnabled,
     admin: userRole === 'admin' || userRole === 'manager',
     adminHref: userRole === 'admin' ? '/admin/overview' : '/admin/pulse',
   };
@@ -361,9 +372,6 @@ export default function Sidebar({ theme = 'default' }: { theme?: Theme }) {
               <Link href="/pulse/dept" className={subLinkCls('/pulse/dept')}>
                 Departments
               </Link>
-              <Link href="/pulse/skills" className={subLinkCls('/pulse/skills')}>
-                Tool usage
-              </Link>
             </div>
           )}
         </div>}
@@ -414,6 +422,11 @@ export default function Sidebar({ theme = 'default' }: { theme?: Theme }) {
               {(userRole === 'admin' || userRole === 'manager' || userRole === 'viewer' || userRole === 'code' || userRole === 'pulse') && (
                 <Link href="/pulse/code/dept" className={subLinkCls('/pulse/code/dept')}>
                   Departments
+                </Link>
+              )}
+              {(userRole === 'admin' || userRole === 'manager') && (
+                <Link href="/pulse/code/coaching" className={subLinkCls('/pulse/code/coaching')}>
+                  Team Coaching
                 </Link>
               )}
               {(userRole === 'admin' || userRole === 'manager' || userRole === 'viewer') && !openaiOnly && (

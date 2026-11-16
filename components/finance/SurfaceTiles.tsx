@@ -45,7 +45,7 @@ const fmtTokensCompact = (n: number) =>
 
 const tokensTotal = (t: CodeTokens) => t.input + t.output + t.cacheWrite + t.cacheRead;
 
-const BASIS_TEXT: Record<SurfaceBasis, string> = {
+export const BASIS_TEXT: Record<SurfaceBasis, string> = {
   dormant: 'dormant',
   estimate: 'estimated at list rates',
   actual: 'actual, per request',
@@ -62,14 +62,14 @@ function SurfaceFigure({ label, spend, totalUsd }: { label: string; spend: Surfa
     return (
       <Figure
         label={label}
-        value={<span className="text-[#B3B3B3]">—</span>}
+        value={<span className="text-[#B3B3B3]">Not measured</span>}
         sub="Dormant: Chat spend is not captured on this deployment."
       />
     );
   }
   const total = tokensTotal(spend.tokens);
   if (spend.usd === null && spend.basis === 'openai_rates') {
-    return <Figure label={label} value={<span className="text-[#B3B3B3]">—</span>} sub="No cost records from OpenAI yet." />;
+    return <Figure label={label} value={<span className="text-[#B3B3B3]">Not measured</span>} sub="No cost records from OpenAI yet." />;
   }
   const share = shareOf(spend.usd, totalUsd);
   const parts = [
@@ -78,7 +78,7 @@ function SurfaceFigure({ label, spend, totalUsd }: { label: string; spend: Surfa
     BASIS_TEXT[spend.basis],
   ].filter(Boolean);
   // A non-dormant surface always carries a figure; null never renders as $0.
-  return <Figure label={label} value={spend.usd === null ? '—' : fmtUsd(spend.usd)} sub={parts.join(' · ')} />;
+  return <Figure label={label} value={spend.usd === null ? 'Not measured' : fmtUsd(spend.usd)} sub={parts.join(' · ')} />;
 }
 
 export default function SurfaceTiles({ surfaces, openaiOnly = false }: { surfaces: SurfaceSummary; openaiOnly?: boolean }) {

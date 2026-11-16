@@ -31,6 +31,8 @@ const dateStr = (secondsAgo: number) => new Date((NOW - secondsAgo) * 1000).toIS
 const TODAY = dateStr(0);
 const THREE_DAYS_AGO = dateStr(3 * 24 * 3600);
 const TWENTY_DAYS_AGO = dateStr(20 * 24 * 3600);
+// Inside the 35-day pre-check window, outside the 30-day counting window.
+const THIRTY_THREE_DAYS_AGO = dateStr(33 * 24 * 3600);
 
 beforeAll(async () => {
   const testDb = await createTestDatabase();
@@ -56,12 +58,14 @@ beforeEach(async () => {
   await sql.run(
     `INSERT INTO users (id, email, display_name, department) VALUES ('u3', 'u3@test.com', 'Kim', 'Sales')`
   );
-  // Two currently-mapped repos.
+  // Four currently-mapped repos.
   const insertMap = (...params: unknown[]) => sql.run(
     `INSERT INTO github_repo_map (repo, github_repo, created_at) VALUES (?, ?, ?)`, params
   );
   await insertMap('org/a', 'org/a', NOW);
   await insertMap('org/b', 'org/b', NOW);
+  await insertMap('org/c', 'org/c', NOW);
+  await insertMap('org/d', 'org/d', NOW);
 });
 
 function makeRequest(url: string): NextRequest {
@@ -69,21 +73,25 @@ function makeRequest(url: string): NextRequest {
 }
 
 describe('GET /api/pulse/code/dept/[dept] — githubRepos', () => {
-  it('returns dept-wide count7d + per-member github_repo_count, excluding an unmapped repo', async () => {
+  it('returns dept-wide count30d + per-member github_repo_count over the last 30 days, excluding an unmapped repo and a 33-day-old-only repo', async () => {
     const insertStats = (...params: unknown[]) => sql.run(
       `INSERT INTO github_user_repo_stats (user_id, repo, date, commit_count, synced_at) VALUES (?, ?, ?, ?, ?)`, params
     );
-    // Member A active in two mapped repos within 7d.
+    // Member A active in two mapped repos within 30d.
     await insertStats('u1', 'org/a', TODAY, 3, NOW);
     await insertStats('u1', 'org/b', THREE_DAYS_AGO, 2, NOW);
     // An unmapped repo for member A, active today — must be excluded entirely
     // from both the member count and the dept-wide set.
     await insertStats('u1', 'org/z', TODAY, 4, NOW);
-    // A mapped repo, but only active 20 days ago — outside the 7d window.
+    // An older day for a repo member A already counts: still one repo.
     await insertStats('u1', 'org/a', TWENTY_DAYS_AGO, 1, NOW);
-    // Member B (same dept) has no recent GitHub activity.
+    // Member B (same dept): org/c active 20 days ago counts (inside 30d);
+    // org/d active only 33 days ago is inside the 35d pre-check window but
+    // outside the 30d window, so must NOT count.
+    await insertStats('u2', 'org/c', TWENTY_DAYS_AGO, 1, NOW);
+    await insertStats('u2', 'org/d', THIRTY_THREE_DAYS_AGO, 2, NOW);
     // Member C (different dept) is active, but must not count toward
-    // Engineering's dept-wide total — proven by the count7d assertion below.
+    // Engineering's dept-wide total — proven by the count30d assertion below.
     await insertStats('u3', 'org/a', TODAY, 5, NOW);
 
     const route = await import('../app/api/pulse/code/dept/[dept]/route');
@@ -93,12 +101,12 @@ describe('GET /api/pulse/code/dept/[dept] — githubRepos', () => {
     expect(res.status).toBe(200);
     const data = await res.json();
 
-    expect(data.githubRepos).toEqual({ count7d: 2, names7d: ['org/a', 'org/b'], basis: 'all' });
+    expect(data.githubRepos).toEqual({ count30d: 3, names30d: ['org/a', 'org/b', 'org/c'], basis: 'all' });
 
     const memberA = data.members.find((m: { user_id: string }) => m.user_id === 'u1');
     const memberB = data.members.find((m: { user_id: string }) => m.user_id === 'u2');
     expect(memberA.github_repo_count).toBe(2);
-    expect(memberB.github_repo_count).toBe(0);
+    expect(memberB.github_repo_count).toBe(1);
   });
 
   it('returns githubRepos: null and members without github_repo_count when no repos are mapped', async () => {
@@ -116,13 +124,13 @@ describe('GET /api/pulse/code/dept/[dept] — githubRepos', () => {
     expect(memberA.github_repo_count).toBeUndefined();
   });
 
-  it('returns count7d: 0 (not null) when the dept has 35d-window activity but none in the last 7 days', async () => {
+  it('returns count30d: 0 (not null) when the dept has 35d-window activity but none in the last 30 days', async () => {
     const insertStats = (...params: unknown[]) => sql.run(
       `INSERT INTO github_user_repo_stats (user_id, repo, date, commit_count, synced_at) VALUES (?, ?, ?, ?, ?)`, params
     );
-    // Member A was active 20 days ago (within the 35d window) but not in the
-    // last 7 — this must read as a measured zero, not "Not captured".
-    await insertStats('u1', 'org/a', TWENTY_DAYS_AGO, 3, NOW);
+    // Member A was active 33 days ago (within the 35d window) but not in the
+    // last 30 — this must read as a measured zero, not "Not captured".
+    await insertStats('u1', 'org/a', THIRTY_THREE_DAYS_AGO, 3, NOW);
 
     const route = await import('../app/api/pulse/code/dept/[dept]/route');
     const res = await route.GET(makeRequest('/api/pulse/code/dept/Engineering'), {
@@ -131,7 +139,7 @@ describe('GET /api/pulse/code/dept/[dept] — githubRepos', () => {
     expect(res.status).toBe(200);
     const data = await res.json();
 
-    expect(data.githubRepos).toEqual({ count7d: 0, names7d: [], basis: 'all' });
+    expect(data.githubRepos).toEqual({ count30d: 0, names30d: [], basis: 'all' });
 
     const memberA = data.members.find((m: { user_id: string }) => m.user_id === 'u1');
     const memberB = data.members.find((m: { user_id: string }) => m.user_id === 'u2');
@@ -156,15 +164,15 @@ describe('GET /api/pulse/code/dept/[dept] — githubRepos', () => {
         params: Promise.resolve({ dept: 'Engineering' }),
       })).json();
       const codex = await read('openai');
-      expect(codex.githubRepos).toEqual({ count7d: 1, names7d: ['org/b'], basis: 'openai' });
+      expect(codex.githubRepos).toEqual({ count30d: 1, names30d: ['org/b'], basis: 'openai' });
       const count = (d: { members: Array<{ user_id: string; github_repo_count?: number }> }, id: string) =>
         d.members.find(m => m.user_id === id)?.github_repo_count;
       expect(count(codex, 'u1')).toBe(0);
       expect(count(codex, 'u2')).toBe(1);
       const claude = await read('claude');
-      expect(claude.githubRepos).toEqual({ count7d: 1, names7d: ['org/a'], basis: 'claude' });
+      expect(claude.githubRepos).toEqual({ count30d: 1, names30d: ['org/a'], basis: 'claude' });
       const all = await read('all');
-      expect(all.githubRepos).toEqual({ count7d: 2, names7d: ['org/a', 'org/b'], basis: 'all' });
+      expect(all.githubRepos).toEqual({ count30d: 2, names30d: ['org/a', 'org/b'], basis: 'all' });
     } finally {
       await sql.exec(`DELETE FROM cowork_messages WHERE id = 'codex:gh-dept-1'`);
     }
@@ -178,12 +186,12 @@ describe('GET /api/pulse/code/dept/[dept] — githubRepos', () => {
     const insertStats = (...params: unknown[]) => sql.run(
       `INSERT INTO github_user_repo_stats (user_id, repo, date, commit_count, synced_at) VALUES (?, ?, ?, ?, ?)`, params
     );
-    // Recent days synced before the split; an older day (inside 35, outside 7) with it.
+    // Recent days synced before the split; an older day (inside 35, outside 30) with it.
     await insertStats('u1', 'org/a', TODAY, 3, NOW);
     await insertStats('u2', 'org/b', THREE_DAYS_AGO, 2, NOW);
     await sql.run(
       `INSERT INTO github_user_repo_stats (user_id, repo, date, commit_count, synced_at, claude_commit_count, codex_commit_count, no_tool_commit_count)
-       VALUES (?, ?, ?, ?, ?, ?, ?, ?)`, ['u1', 'org/b', TWENTY_DAYS_AGO, 2, NOW, 1, 1, 0]
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?)`, ['u1', 'org/b', THIRTY_THREE_DAYS_AGO, 2, NOW, 1, 1, 0]
     );
     try {
       const route = await import('../app/api/pulse/code/dept/[dept]/route');
@@ -199,7 +207,7 @@ describe('GET /api/pulse/code/dept/[dept] — githubRepos', () => {
         expect(count(d, 'u2')).toBeUndefined();
       }
       const all = await read('all');
-      expect(all.githubRepos).toEqual({ count7d: 2, names7d: ['org/a', 'org/b'], basis: 'all' });
+      expect(all.githubRepos).toEqual({ count30d: 2, names30d: ['org/a', 'org/b'], basis: 'all' });
       expect(count(all, 'u1')).toBe(1);
       expect(count(all, 'u2')).toBe(1);
     } finally {
@@ -221,7 +229,7 @@ describe('GET /api/pulse/code/dept/[dept] — githubRepos', () => {
       const codex = await (await route.GET(makeRequest('/api/pulse/code/dept/Engineering?vendor=openai'), {
         params: Promise.resolve({ dept: 'Engineering' }),
       })).json();
-      expect(codex.githubRepos).toEqual({ count7d: 0, names7d: [], basis: 'openai' });
+      expect(codex.githubRepos).toEqual({ count30d: 0, names30d: [], basis: 'openai' });
       const memberA = codex.members.find((m: { user_id: string }) => m.user_id === 'u1');
       expect(memberA.github_repo_count).toBe(0);
     } finally {

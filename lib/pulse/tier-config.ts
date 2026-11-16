@@ -3,6 +3,7 @@
 
 import { getConfigValue } from '@/lib/config';
 import { UNTRUSTED_TEXT_RULE } from '@/lib/anthropic/untrusted';
+import { DEFAULT_TIER_NAMES, type TierNames } from '@/lib/pulse/tier-names';
 
 // ─── Types ───────────────────────────────────────────────────────────────────
 
@@ -146,6 +147,16 @@ export async function getTierConfig(): Promise<TierConfig> {
   } catch {
     return { ...DEFAULT_TIER_CONFIG };
   }
+}
+
+/** What this customer calls each tier, for the pages. Falls back to the shipped names. */
+export async function getTierNames(): Promise<TierNames> {
+  const c = await getTierConfig();
+  return {
+    t1: c.tiers?.tier1?.name?.trim() || DEFAULT_TIER_NAMES.t1,
+    t2: c.tiers?.tier2?.name?.trim() || DEFAULT_TIER_NAMES.t2,
+    t3: c.tiers?.tier3?.name?.trim() || DEFAULT_TIER_NAMES.t3,
+  };
 }
 
 // ─── Prompt builder ───────────────────────────────────────────────────────────

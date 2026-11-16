@@ -45,6 +45,13 @@ const UC_BILLING_ID = `${MARKER}uc-billing`;
 const UC_TIMESHEETS_ID = `${MARKER}uc-timesheets`;
 const UC_PIPELINE_ID = `${MARKER}uc-pipeline`;
 const UC_IDS = [UC_MONTH_END_ID, UC_BILLING_ID, UC_TIMESHEETS_ID, UC_PIPELINE_ID];
+// The file each workflow's sessions end with (the session's Write call; cowork_messages.output_name).
+const OUTPUT_NAMES = {
+  [UC_MONTH_END_ID]: 'Variance commentary.docx',
+  [UC_BILLING_ID]: 'Client billing pack.xlsx',
+  [UC_TIMESHEETS_ID]: 'Timesheet approvals and exceptions.xlsx',
+  [UC_PIPELINE_ID]: 'Pipeline review.docx',
+};
 const UC_MONTH_END_TITLE = 'Month-end variance commentary';
 const UC_BILLING_TITLE = 'Client billing pack assembly';
 const UC_TIMESHEETS_TITLE = 'Automated timesheet approvals';
@@ -106,7 +113,7 @@ const HISTORY = {
       'tone it down, this reads like a sales pitch not a board note',
     ],
     skills: ['anthropic-skills:xlsx', 'anthropic-skills:docx', 'deep-research'],
-    connectors: [['salesforce', 'query_records'], ['Gmail', 'search_threads'], ['google-drive', 'read_file']],
+    connectors: [['Salesforce', 'query_records'], ['Gmail', 'search_threads'], ['Google Drive', 'read_file']],
     taskTypes: ['structured_report', 'analysis', 'synthesis'],
     codePrompts: ['write a script that reconciles the management accounts export against the GL extract and lists mismatches', 'add a check to the close script that flags any cost centre with no budget line'],
   },
@@ -131,7 +138,7 @@ const HISTORY = {
       'sort the approvals list by team not by name',
     ],
     skills: ['anthropic-skills:xlsx', 'anthropic-skills:docx'],
-    connectors: [['google-drive', 'read_file'], ['slack', 'send_message'], ['Gmail', 'search_threads']],
+    connectors: [['Google Drive', 'read_file'], ['Slack', 'send_message'], ['Gmail', 'search_threads']],
     taskTypes: ['template_population', 'analysis', 'structured_report'],
     codePrompts: ['write a script that pulls the weekly timesheet export and joins it to the project allocation sheet', 'add a rule to the timesheet checker for contractors over their PO hours'],
   },
@@ -156,7 +163,7 @@ const HISTORY = {
       'add a slipped section with old and new close dates',
     ],
     skills: ['anthropic-skills:xlsx', 'deep-research', 'anthropic-skills:docx'],
-    connectors: [['salesforce', 'query_records'], ['Gmail', 'search_threads'], ['slack', 'read_channel']],
+    connectors: [['Salesforce', 'query_records'], ['Gmail', 'search_threads'], ['Slack', 'read_channel']],
     taskTypes: ['structured_report', 'synthesis', 'analysis'],
     codePrompts: ['write a script that pulls the pipeline export from the CRM API and computes the weighted forecast by stage', 'add slipped-close-date detection to the pipeline export script'],
   },
@@ -321,6 +328,8 @@ async function clean(c) {
   // this step's own prompts only (above): clearing them by user also wiped the
   // grades step 01 gave these people's Cowork prompts.
   await c.query(`DELETE FROM alerts WHERE user_id LIKE $1`, [`${MARKER}%`]);
+  // And alerts on this step's prompts, which would point at nothing once they go.
+  await c.query(`DELETE FROM alerts WHERE raw_evidence->>'message_id' LIKE $1`, [`${MARKER}%`]);
   await c.query(`DELETE FROM pulse_skill_runs WHERE user_id LIKE $1`, [`${MARKER}%`]);
   await c.query(`DELETE FROM analytics_snapshots WHERE user_id LIKE $1`, [`${MARKER}%`]);
   await c.query(`DELETE FROM otel_events WHERE user_id LIKE $1`, [`${MARKER}%`]);
@@ -385,12 +394,13 @@ async function seedSession(c, useCaseId, sessionId, user, baseAt, prompts, nowS,
       [`${sessionId}-msg${i}`, user.id, tier, taskType, at + 120]);
   }
   // Two tool events on the session so it has the >=3 timestamps a gap-based
-  // active-time measure needs, and so the tool list is not empty.
+  // active-time measure needs, and so the tool list is not empty. The Write
+  // call carries the name of the file it made, as the receiver records it.
   await c.query(
-    `INSERT INTO cowork_messages (id, session_id, user_id, message_type, surface, occurred_at, ingested_at, content_preview, source, tool_success)
-     VALUES ($1,$2,$3,'cowork_tool_metadata','cowork',$4,$4,'Read','otel',1), ($5,$2,$3,'cowork_tool_metadata','cowork',$6,$6,'Write','otel',1)
+    `INSERT INTO cowork_messages (id, session_id, user_id, message_type, surface, occurred_at, ingested_at, content_preview, source, tool_success, output_name)
+     VALUES ($1,$2,$3,'cowork_tool_metadata','cowork',$4,$4,'Read','otel',1,NULL), ($5,$2,$3,'cowork_tool_metadata','cowork',$6,$6,'Write','otel',1,$7)
      ON CONFLICT (id) DO NOTHING`,
-    [`${sessionId}-tool1`, sessionId, user.id, baseAt + 40, `${sessionId}-tool2`, lastAt + 20]);
+    [`${sessionId}-tool1`, sessionId, user.id, baseAt + 40, `${sessionId}-tool2`, lastAt + 20, OUTPUT_NAMES[useCaseId] ?? null]);
   // The spend row the real OTel receiver writes per API call — model + cost +
   // tokens in the exact "<model> | {json}" preview shape the session
   // aggregator parses (lib/pulse/cowork/session-aggregator.ts).
@@ -400,7 +410,8 @@ async function seedSession(c, useCaseId, sessionId, user, baseAt, prompts, nowS,
   const output = 600 + ((h >>> 4) % 2200);
   const cost = model.startsWith('claude-haiku') ? (input * 1 + output * 5) / 1e6
     : model.startsWith('claude-opus') ? (input * 15 + output * 75) / 1e6 : (input * 3 + output * 15) / 1e6;
-  const usage = { input_tokens: input, output_tokens: output, cache_read_input_tokens: 0, cache_creation_input_tokens: 0 };
+  // Token counts in the receiver's own shape (lib/otel/cowork-receiver.ts), which the session aggregator reads.
+  const usage = { inputTokens: input, outputTokens: output, cacheReadTokens: 0, cacheCreationTokens: 0 };
   await c.query(
     `INSERT INTO cowork_messages (id, session_id, user_id, message_type, surface, occurred_at, ingested_at, model, cost_usd, token_usage, content_preview, source)
      VALUES ($1,$2,$3,'cowork_api_request','cowork',$4,$4,$5,$6,$7::jsonb,$8,'otel') ON CONFLICT (id) DO NOTHING`,
@@ -560,7 +571,7 @@ async function seed(c) {
     id: UC_MONTH_END_ID, title: UC_MONTH_END_TITLE,
     description: 'Month-end commentary is hand-assembled from pasted spreadsheet rows drawn from the management accounts export each close, checked against Salesforce closed-won, and dropped into the board pack template.',
     departments: [DEPT_FINANCE], keywords: ['variance commentary', 'management accounts'],
-    skills: ['anthropic-skills:xlsx'], connectors: ['salesforce'],
+    skills: ['anthropic-skills:xlsx'], connectors: ['Salesforce'],
     origin: 'emergent', captureMethod: 'process_mined', createdAt: JUL_BASE, nowS,
   });
   const me = [
@@ -575,14 +586,14 @@ async function seed(c) {
     [`${MARKER}anna-skill-1`, ANNA.id, `${MARKER}anna-sep`, SEP_BASE]);
   await c.query(
     `INSERT INTO cowork_mcp_invocations (id, user_id, session_id, mcp_server, mcp_tool, occurred_at, surface)
-     VALUES ($1,$2,$3,'salesforce','query_records',$4,'cowork') ON CONFLICT (id) DO NOTHING`,
+     VALUES ($1,$2,$3,'Salesforce','query_records',$4,'cowork') ON CONFLICT (id) DO NOTHING`,
     [`${MARKER}anna-mcp-1`, ANNA.id, `${MARKER}anna-sep`, SEP_BASE]);
   await c.query(
     `INSERT INTO use_case_suggestions (id, signal_key, title, description, matching_rule, evidence, status, generated_at, updated_at, department, canvas_json)
      VALUES ($1,$1,$2,$3,$4,$5,'added',$6,$7,$8,$9) ON CONFLICT (id) DO NOTHING`,
     [CANVAS_SIGNAL_KEY, UC_MONTH_END_TITLE,
      'Month-end commentary appears hand-assembled from pasted spreadsheet rows drawn from the management accounts export each close. The same three people repeat the assembly step every month before the board pack goes out.',
-     JSON.stringify({ skills: ['anthropic-skills:xlsx'], connectors: ['salesforce'], taskTypes: [], departments: [DEPT_FINANCE], keywords: ['management accounts', 'variance commentary'] }),
+     JSON.stringify({ skills: ['anthropic-skills:xlsx'], connectors: ['Salesforce'], taskTypes: [], departments: [DEPT_FINANCE], keywords: ['management accounts', 'variance commentary'] }),
      JSON.stringify({ distinctUsers: 3, sessionCount: 9, departments: [DEPT_FINANCE] }),
      JUL_BASE, nowS, DEPT_FINANCE,
      JSON.stringify({
@@ -590,7 +601,7 @@ async function seed(c) {
        valueHypothesis: 'Feeding the board-pack template directly from the export and Salesforce would turn assembly into review.',
        people: 3, sessions: 9, occasions: 3, windowDays: 90,
        rhythm: { label: 'monthly', display: 'Monthly, month-end spike' },
-       systems: ['anthropic-skills:xlsx', 'salesforce'], activeHours: 5.0, tierNote: 'Mostly tier 2',
+       systems: ['anthropic-skills:xlsx', 'Salesforce'], activeHours: 5.0, tierNote: 'Mostly tier 2',
      })]);
 
   // ─── Client billing pack assembly — 2 people, 2 single-prompt sessions: honestly NOT ready.
@@ -610,7 +621,7 @@ async function seed(c) {
   const WK3_BASE = nowS - 6 * DAY;
   await insertUseCase(c, {
     id: UC_TIMESHEETS_ID, title: UC_TIMESHEETS_TITLE,
-    description: 'Weekly timesheets are checked by hand against the project allocation sheet - hours over 40, missing project codes, contractors over their PO hours - before being approved or listed as exceptions.',
+    description: 'Weekly timesheets are checked by hand against the project allocation sheet before being approved or listed as exceptions. The checks are hours over 40, missing project codes and contractors over their PO hours.',
     departments: [DEPT_HR], keywords: ['timesheet', 'approve'], skills: [], connectors: [],
     origin: 'planned', captureMethod: 'guided', createdAt: nowS - 12 * 7 * DAY, nowS,
   });
@@ -620,11 +631,11 @@ async function seed(c) {
     [`dan-wk3`, DAN, WK3_BASE, DAN_WK3], [`eve-wk3`, EVE, WK3_BASE + DAY, EVE_WK3], [`femi-wk3`, FEMI, WK3_BASE + 2 * DAY, FEMI_WK3],
   ];
   for (const [sid, u, at, prompts] of ts) await seedSession(c, UC_TIMESHEETS_ID, `${MARKER}${sid}`, u, at, prompts, nowS);
-  await seedInvocations(c, [[`${MARKER}dan-wk3`, DAN, WK3_BASE], [`${MARKER}eve-wk2`, EVE, WK2_BASE + DAY]], 'anthropic-skills:xlsx', 'google-drive', 'read_file');
+  await seedInvocations(c, [[`${MARKER}dan-wk3`, DAN, WK3_BASE], [`${MARKER}eve-wk2`, EVE, WK2_BASE + DAY]], 'anthropic-skills:xlsx', 'Google Drive', 'read_file');
 
   await insertUseCase(c, {
     id: UC_PIPELINE_ID, title: UC_PIPELINE_TITLE,
-    description: 'Every Monday the CRM pipeline export is turned into the sales meeting note by hand - deals by stage, movements since last week, deals stuck in a stage, slipped close dates and the weighted quarter forecast.',
+    description: 'Every Monday the CRM pipeline export is turned into the sales meeting note by hand. The note covers deals by stage, movements since last week, deals stuck in a stage, slipped close dates and the weighted quarter forecast.',
     departments: [DEPT_SALES], keywords: ['pipeline', 'forecast'], skills: [], connectors: [],
     origin: 'planned', captureMethod: 'guided', createdAt: nowS - 12 * 7 * DAY, nowS,
   });
@@ -639,7 +650,7 @@ async function seed(c) {
   await seedHistory(c, UC_MONTH_END_ID, nowS);
   await seedHistory(c, UC_TIMESHEETS_ID, nowS);
   await seedHistory(c, UC_PIPELINE_ID, nowS);
-  await seedInvocations(c, [[`${MARKER}gus-wk3`, GUS, WK3_BASE + 3 * DAY], [`${MARKER}hana-wk2`, HANA, WK2_BASE + 4 * DAY]], 'anthropic-skills:xlsx', 'salesforce', 'query_records');
+  await seedInvocations(c, [[`${MARKER}gus-wk3`, GUS, WK3_BASE + 3 * DAY], [`${MARKER}hana-wk2`, HANA, WK2_BASE + 4 * DAY]], 'anthropic-skills:xlsx', 'Salesforce', 'query_records');
 
   const counts = await c.query(
     `SELECT (SELECT COUNT(*) FROM users WHERE id LIKE $1) AS users,

@@ -44,10 +44,10 @@ export default function Sparkline({ data, partialLast = false, className = '', e
   const values = data.filter((v): v is number => v !== null);
   const max = fixedMax ?? (values.length > 0 ? Math.max(...values, 0) : 0);
 
-  const fill = estimate ? '#B4CDFD' : '#05073F';
-  const partialFill = estimate ? '#EDF3FF' : '#E8E9F2';
-  const partialStroke = estimate ? '#699BFB' : '#05073F';
-  const nullTick = estimate ? '#EDF3FF' : '#F2F2F2';
+  const fill = estimate ? '#A6C8D5' : '#1F6F8B';
+  const partialFill = estimate ? '#EEF5F8' : '#E4EFF3';
+  const partialStroke = estimate ? '#6BA3B8' : '#1F6F8B';
+  const nullTick = estimate ? '#EEF5F8' : '#F2F2F2';
   const gap = height >= 40 ? 4 : 2;
 
   return (

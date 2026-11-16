@@ -6,13 +6,15 @@ import { getUserBriefingModel } from '@/lib/anthropic/model';
 import Anthropic from '@anthropic-ai/sdk';
 import { createAnthropicClient } from '@/lib/anthropic/client';
 import { createGroundedJson, GroundingRejectedError, paragraphsShape } from '@/lib/anthropic/grounded-json';
-import { and, desc, eq, gte, lt, sql } from 'drizzle-orm';
+import { and, eq, gte, lt, sql } from 'drizzle-orm';
 import { buildFrontierView } from '@/lib/pulse/frontier-view';
 import { describeWork, kindText } from '@/lib/pulse/briefings/deep-work-facts';
 import { buildProductFacts } from '@/lib/pulse/briefings/product-facts';
 import { getTypedClient } from '@/lib/db/client';
 import { schema } from '@/lib/db/schema';
 import { getConfigValue } from '@/lib/config';
+import { getTierNames } from '@/lib/pulse/tier-config';
+import { tierLines, producedLine } from '@/lib/pulse/briefings/described-facts';
 import {
   WEEKLY_BRIEFING_SYSTEM,
   buildWeeklyBriefingUserMessage,
@@ -43,7 +45,6 @@ export async function generateUserWeeklyBriefing(
   const u = schema.users;
   const pc = schema.pulseClassifications;
   const cm = schema.coworkMessages;
-  const pm = schema.pulseMetrics;
 
   const userRows = await client.select({ display_name: u.display_name }).from(u).where(eq(u.id, userId)).limit(1);
   const user = userRows[0];
@@ -72,31 +73,26 @@ export async function generateUserWeeklyBriefing(
       gte(cm.occurred_at, periodStart), lt(cm.occurred_at, periodEnd),
     ));
 
-  const metricsRows = await client
-    .select({ dds: pm.dds, oti: pm.oti })
-    .from(pm)
-    .where(and(eq(pm.scope_type, 'user'), eq(pm.scope_id, userId), eq(pm.granularity, 'rolling')))
-    .orderBy(desc(pm.computed_at))
-    .limit(1);
-  const metrics = metricsRows[0];
-
   // Deep work, measured (the same facts as the frontier boxes). Built with the
   // default viewer, so no AI summary or file name is ever included.
   const deepWork: string[] = [];
   try {
     const view = await buildFrontierView({ userId }, periodEnd);
     const best = view.bestWork[0];
-    if (best && best.occurredAt >= periodStart) deepWork.push(`Deepest piece of work this week: ${describeWork(best)}`);
+    const names = await getTierNames();
+    if (best && best.occurredAt >= periodStart) deepWork.push(`Deepest piece of work this week: ${describeWork(best, names)}`);
     if (view.mainstay?.item) {
-      deepWork.push(`Main kind of Tier 3 work over the last 30 days: ${kindText(view.mainstay.item.taskType)} (${view.mainstay.count} of ${view.mainstay.tier3Sessions} Tier 3 sessions)`);
+      const deepest = (await getTierNames()).t3;
+      deepWork.push(`Main kind of ${deepest} work over the last 30 days: ${kindText(view.mainstay.item.taskType)} (${view.mainstay.count} of ${view.mainstay.tier3Sessions} ${deepest} sessions)`);
     }
     for (const c of view.capabilities.filter(c => c.occurredAt >= periodStart)) {
-      deepWork.push(`New capability this week: ${describeWork(c)} (${c.capability?.status === 'confirmed' ? 'confirmed' : 'awaiting review'})`);
+      deepWork.push(`New capability this week: ${describeWork(c, names)} (${c.capability?.status === 'confirmed' ? 'confirmed' : 'awaiting review'})`);
     }
   } catch (err) {
     console.error('[weekly-briefing] deep-work facts unavailable', err instanceof Error ? err.message : err);
   }
 
+  const tierNames = await getTierNames();
   const ctx: WeeklyBriefingContext = {
     user_id: userId,
     display_name: user?.display_name ?? null,
@@ -105,8 +101,8 @@ export async function generateUserWeeklyBriefing(
     tier_1_count: tierCounts[1],
     tier_2_count: tierCounts[2],
     tier_3_count: tierCounts[3],
-    dds: metrics?.dds ?? null,
-    oti: metrics?.oti ?? null,
+    tier_lines: tierLines(tierNames, tierCounts),
+    produced_line: await producedLine([userId], periodStart, periodEnd),
     deep_work: deepWork,
     task_types_used: taskTypeRows.map(r => r.task_type),
     products: await buildProductFacts({ periodStart, periodEnd, userIds: [userId] }),

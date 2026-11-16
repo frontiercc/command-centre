@@ -2,10 +2,12 @@
 // SPDX-License-Identifier: Apache-2.0
 
 import { getOrgBriefingModel } from '@/lib/anthropic/model';
+import { briefingPeriodLabel } from '@/lib/pulse/briefings/described-facts';
+import { personPerProduct } from '@/lib/dashboard/product-sql';
 import Anthropic from '@anthropic-ai/sdk';
 import { createAnthropicClient } from '@/lib/anthropic/client';
 import { createGroundedJson, paragraphsShape } from '@/lib/anthropic/grounded-json';
-import { and, eq, gte, isNotNull, lt, sql } from 'drizzle-orm';
+import { and, eq, gte, lt, sql } from 'drizzle-orm';
 import { getTypedClient } from '@/lib/db/client';
 import { schema } from '@/lib/db/schema';
 import { buildProductFacts } from '@/lib/pulse/briefings/product-facts';
@@ -13,6 +15,8 @@ import { buildDeepWorkSummary, deepWorkLines } from '@/lib/pulse/briefings/deep-
 import { workByProductFacts } from '@/lib/pulse/briefings/work-by-product';
 import { getAllConfig, getConfigValue } from '@/lib/config';
 import { listOpenDeptBoxes } from '@/lib/usecases/suggestion-store';
+import { getTierNames } from '@/lib/pulse/tier-config';
+import { tierLines, producedLine, departmentsBelowFloor } from '@/lib/pulse/briefings/described-facts';
 import {
   CIO_BRIEFING_SYSTEM,
   buildCioBriefingUserMessage,
@@ -23,10 +27,6 @@ async function getClient(): Promise<Anthropic> {
   const apiKey = await getConfigValue('anthropicAiApiKey');
   if (!apiKey) throw new Error('No AI API key configured');
   return createAnthropicClient(apiKey);
-}
-
-function periodLabel(date: Date): string {
-  return date.toLocaleDateString('en-GB', { month: 'long', year: 'numeric' });
 }
 
 interface RawFacade {
@@ -49,13 +49,14 @@ export async function generateCioBriefing(
 ): Promise<string> {
   const client = await getTypedClient();
   const pc = schema.pulseClassifications;
-  const pm = schema.pulseMetrics;
   const pe = schema.pulseEvents;
 
   // Active users in period
   const activeRows = await client
-    .select({ cnt: sql<number | string>`count(distinct ${pc.user_id})` })
+    // A person once for each product they used, as the pages' All view counts them.
+    .select({ cnt: sql<number | string>`count(distinct ${sql.raw(personPerProduct('cowork_messages.'))})` })
     .from(pc)
+    .innerJoin(schema.coworkMessages, eq(schema.coworkMessages.id, pc.cowork_message_id))
     .where(and(
       gte(pc.classified_at, periodStart), lt(pc.classified_at, periodEnd),
       eq(pc.classifier_status, 'classified'),
@@ -79,24 +80,6 @@ export async function generateCioBriefing(
   const totalTier = tierCounts[1] + tierCounts[2] + tierCounts[3];
 
   // Average DDS and OTI
-  const ddsRows = await client
-    .select({ v: sql<number | string | null>`avg(${pm.dds})` })
-    .from(pm)
-    .where(and(
-      eq(pm.scope_type, 'user'), isNotNull(pm.dds), eq(pm.granularity, 'rolling'),
-      gte(pm.computed_at, periodStart), lt(pm.computed_at, periodEnd),
-    ));
-  const ddsValue = ddsRows[0]?.v !== null && ddsRows[0]?.v !== undefined ? Number(ddsRows[0].v) : null;
-
-  const otiRows = await client
-    .select({ v: sql<number | string | null>`avg(${pm.oti})` })
-    .from(pm)
-    .where(and(
-      eq(pm.scope_type, 'user'), isNotNull(pm.oti), eq(pm.granularity, 'rolling'),
-      gte(pm.computed_at, periodStart), lt(pm.computed_at, periodEnd),
-    ));
-  const otiValue = otiRows[0]?.v !== null && otiRows[0]?.v !== undefined ? Number(otiRows[0].v) : null;
-
   // Confirmed capability creation events this month
   const capRows = await client
     .select({ cnt: sql<number | string>`count(*)` })
@@ -108,7 +91,7 @@ export async function generateCioBriefing(
   const capCount = Number(capRows[0]?.cnt ?? 0);
 
   // Deep work this month, measured (replaces the old template frontier events).
-  const deepWork = deepWorkLines(await buildDeepWorkSummary(null, periodStart, periodEnd));
+  const deepWork = deepWorkLines(await buildDeepWorkSummary(null, periodStart, periodEnd), (await getTierNames()).t3);
 
   // Concentration risk — task types where exactly one user did all Tier 3 work
   // this period, counted per user, then users with >=3 such sole-owned types.
@@ -133,32 +116,6 @@ export async function generateCioBriefing(
     HAVING COUNT(DISTINCT task_type) >= 3
   `);
 
-  // Departments with ORS below 0.7 (team-scope rows are never written; departments are scope 'function')
-  const lowOrsTeams = await client
-    .select({ scope_id: pm.scope_id })
-    .from(pm)
-    .where(and(
-      eq(pm.scope_type, 'function'),
-      isNotNull(pm.ors),
-      sql`${pm.ors} < 0.7`,
-      eq(pm.granularity, 'rolling'),
-      gte(pm.computed_at, periodStart), lt(pm.computed_at, periodEnd),
-    ))
-    .groupBy(pm.scope_id);
-
-  // Departments with any resilience score in the period: with none, "none below
-  // 0.7" would read as an all-clear when nothing was measured.
-  const scoredDepts = await client
-    .select({ scope_id: pm.scope_id })
-    .from(pm)
-    .where(and(
-      eq(pm.scope_type, 'function'),
-      isNotNull(pm.ors),
-      eq(pm.granularity, 'rolling'),
-      gte(pm.computed_at, periodStart), lt(pm.computed_at, periodEnd),
-    ))
-    .groupBy(pm.scope_id);
-
   // Open department process opportunities — counts only, and only when Use
   // Cases + its content switch are both on (the same gate as the tray and the
   // act-next boxes). Reads config through getAllConfig so the content key's
@@ -175,21 +132,18 @@ export async function generateCioBriefing(
     }
   } catch { /* contributes nothing */ }
 
+  const tierNames = await getTierNames();
   const ctx: CioBriefingContext = {
-    period_label: periodLabel(new Date(periodStart * 1000)),
+    period_label: briefingPeriodLabel(periodStart, periodEnd),
     weekly_active_users: activeCount,
     total_classified_events: totalTier,
-    tier_1_pct: totalTier > 0 ? Math.round((tierCounts[1] / totalTier) * 100) : 0,
-    tier_2_pct: totalTier > 0 ? Math.round((tierCounts[2] / totalTier) * 100) : 0,
-    tier_3_pct: totalTier > 0 ? Math.round((tierCounts[3] / totalTier) * 100) : 0,
-    avg_dds: ddsValue !== null ? Math.round(ddsValue * 100) / 100 : null,
-    avg_oti: otiValue !== null ? Math.round(otiValue * 100) / 100 : null,
+    tier_lines: tierLines(tierNames, tierCounts),
+    produced_line: await producedLine(null, periodStart, periodEnd),
     confirmed_capability_creation_count: capCount,
     concentration_risk_count: tier3UserCounts.length,
     deep_work: deepWork,
     work_by_product: await workByProductFacts(null, periodStart, periodEnd),
-    teams_with_ors_below_threshold: lowOrsTeams.map(r => r.scope_id),
-    departments_with_ors_count: scoredDepts.length,
+    floor_line: await departmentsBelowFloor(periodStart, periodEnd, tierNames),
     dept_process_opportunities: deptProcessOpportunities,
     products: await buildProductFacts({ periodStart, periodEnd }),
   };
@@ -238,7 +192,7 @@ export async function runCioBriefingJob(): Promise<void> {
   const periodEnd = new Date(now.getFullYear(), now.getMonth(), 1); // 1st of current month = end of last
   const periodStart = new Date(now.getFullYear(), now.getMonth() - 1, 1);
 
-  console.log(`[CioBriefing] Generating CIO briefing for ${periodLabel(periodStart)} with ${model}`);
+  console.log(`[CioBriefing] Generating CIO briefing for ${briefingPeriodLabel(Math.floor(periodStart.getTime() / 1000), Math.floor(periodEnd.getTime() / 1000))} with ${model}`);
 
   // A failure (including a reply the number check refused twice) is thrown, so
   // the scheduler's runJob records it and System health shows it. Nothing is

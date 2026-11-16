@@ -62,6 +62,23 @@ beforeEach(() => {
 
 // ─── validateComposed (pure unit) ───────────────────────────────────────
 
+describe('readReply', () => {
+  it('reads the JSON even with a sentence or a code fence around it', async () => {
+    const { readReply } = await import('@/lib/highlights/compose');
+    const json = '{"subject":"client proposals","deliverables":[{"item":1,"sentence":"A proposal."}]}';
+    expect(readReply(json)).toEqual(JSON.parse(json));
+    expect(readReply(`Here is the post:\n${json}\nHope this helps.`)).toEqual(JSON.parse(json));
+    expect(readReply('```json\n' + json + '\n```')).toEqual(JSON.parse(json));
+  });
+
+  it('repairs a raw line break inside a sentence, and gives null when there is no object', async () => {
+    const { readReply } = await import('@/lib/highlights/compose');
+    expect(readReply('{"subject":"a","deliverables":[{"item":1,"sentence":"Line one\nline two."}]}')).toEqual({ subject: 'a', deliverables: [{ item: 1, sentence: 'Line one\nline two.' }] });
+    expect(readReply('{"subject":"cut off mid-repl')).toBeNull();
+    expect(readReply('No JSON here.')).toBeNull();
+  });
+});
+
 describe('validateComposed', () => {
   it('keeps traced, digit-free deliverables and drops the rest', async () => {
     const { validateComposed } = await import('@/lib/highlights/compose');

@@ -29,6 +29,7 @@ import { and, eq, sql } from 'drizzle-orm';
 import type { getTypedClient } from '@/lib/db/client';
 import { schema } from '@/lib/db/schema';
 import { insertAlert } from '@/lib/db/queries';
+import { STALE_OTEL_AUTO_REASON } from '@/lib/jobs/user-cleanup';
 
 type Client = Awaited<ReturnType<typeof getTypedClient>>;
 
@@ -106,6 +107,20 @@ export interface ResolveResult {
   created: boolean;
 }
 
+/**
+ * A person sending telemetry is active: undo the stale-user cleanup's
+ * deactivation. Only that reason; an admin's deactivation stays.
+ */
+async function reactivateIfAutoDeactivated(client: Client, userId: string): Promise<void> {
+  await client
+    .update(schema.users)
+    .set({ deactivated_at: null, deactivation_reason: null })
+    .where(and(
+      eq(schema.users.id, userId),
+      eq(schema.users.deactivation_reason, STALE_OTEL_AUTO_REASON),
+    ));
+}
+
 export async function resolveOtelUser(client: Client, input: ResolveInput): Promise<ResolveResult> {
   // Telemetry decides who a person is, so only a single plain address may
   // create or find an account; anything else skips the resource (the caller
@@ -114,10 +129,14 @@ export async function resolveOtelUser(client: Client, input: ResolveInput): Prom
   const lowerEmail = input.email.trim().toLowerCase();
 
   const alias = await aliasUserId(client, lowerEmail);
-  if (alias) return { userId: alias, existing: true, created: false };
+  if (alias) {
+    await reactivateIfAutoDeactivated(client, alias);
+    return { userId: alias, existing: true, created: false };
+  }
 
   const existing = await userIdByEmail(client, lowerEmail);
   if (existing) {
+    await reactivateIfAutoDeactivated(client, existing);
     // Keep an open conflict's "last seen / events" current while it waits for a decision.
     if (input.installationId && input.installationId !== existing) {
       await client

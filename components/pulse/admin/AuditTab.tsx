@@ -155,8 +155,8 @@ export default function AuditTab() {
               {history.map(h => (
                 <tr key={h.id} className={T.row}>
                   <td className={T.td}>{h.period}</td>
-                  <td className={T.tdRight}>{h.agreementPct === null ? '—' : `${Math.round(h.agreementPct * 100)}%`}</td>
-                  <td className={T.tdRight}>{h.kappa === null ? '—' : h.kappa.toFixed(2)}</td>
+                  <td className={T.tdRight}>{h.agreementPct === null ? 'not measured' : `${Math.round(h.agreementPct * 100)}%`}</td>
+                  <td className={T.tdRight}>{h.kappa === null ? 'not measured' : h.kappa.toFixed(2)}</td>
                   <td className={T.tdRight}>{h.nReviewed}</td>
                 </tr>
               ))}

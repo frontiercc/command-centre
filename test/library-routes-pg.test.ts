@@ -164,6 +164,7 @@ async function runSpec(): Promise<void> {
     expect(brandEntry.vote_count).toBe(1);
     expect(brandEntry.user_voted).toBe(1); // caller (u2) has voted
     expect(brandEntry.week_count).toBe(2); // si1 + si2, both within 7 days
+    expect(brandEntry.week_user_count).toBe(1); // only u1 used it this week
     expect(brandEntry.prev_week_count).toBe(1); // si3, 8-14 days ago
     expect(typeof brandEntry.created_at).toBe('number');
     expect(typeof brandEntry.updated_at).toBe('number');
@@ -481,6 +482,49 @@ async function runSpec(): Promise<void> {
     expect(unvoteBody.count).toBe(0);
 
     mockSession.userId = 'u2'; // restore
+
+    // ═══════════ Connector uses, the banner count, and the linked person ═══════════
+    // An unclaimed connector entry named after a server u1 used (mi1), plus a
+    // skill use under the same name by u2, which must not count towards it;
+    // and an unclaimed entry nobody has used, which the banner leaves out.
+    await client.insert(schema.skillLibraryEntries).values([
+      { name: 'jira', type: 'connector', surface: 'cowork', source: 'org', is_published: 0, created_at: NOW - DAY, updated_at: NOW - DAY },
+      { name: 'unused-thing', type: 'skill', surface: 'cowork', source: 'org', is_published: 0, created_at: NOW - DAY, updated_at: NOW - DAY },
+    ]);
+    await client.insert(schema.coworkSkillInvocations).values([
+      { id: 'si6', user_id: 'u2', session_id: 's2', skill_name: 'jira', occurred_at: NOW - DAY, invocation_type: 'user_typed' },
+    ]);
+    // An Engineering person with no uses: not counted among the department's people.
+    await client.insert(schema.users).values([{ id: 'u6', email: 'u6@test.com', display_name: 'No Uses', department: 'Engineering' }]);
+
+    const connRes = await libraryGET(makeRequest('/api/library?source=org&per_page=50'));
+    const connBody = await connRes.json();
+    const jira = connBody.entries.find((x: { name: string }) => x.name === 'jira');
+    expect(jira).toMatchObject({ invocation_count: 1, user_count: 1, week_count: 1, week_user_count: 1 });
+    expect(connBody.unclaimed_count).toBe(2);
+    expect(connBody.unclaimed_in_use_count).toBe(1);
+    expect(connBody.dept_breakdown.find((r: { department: string }) => r.department === 'Engineering').user_count).toBe(2);
+
+    // A signed-in admin whose sign-in id differs from their linked person
+    // (u1) gets the person's standing, skills to try and department (which
+    // keys the department picks).
+    await client.insert(schema.adminUsers).values({
+      id: 'adm-linked', email: 'linked-admin@test.com', password_hash: 'x', role: 'admin', linked_cowork_user_id: 'u1',
+    });
+    mockSession.userId = 'adm-linked'; mockSession.email = 'linked-admin@test.com'; mockSession.role = 'admin';
+    const linkedRes = await libraryGET(makeRequest('/api/library?source=org&per_page=50'));
+    const linkedBody = await linkedRes.json();
+    expect(linkedBody.user_rank).toMatchObject({ rank: 1, skill_count: 2, connector_count: 1, total_count: 3 });
+    expect(linkedBody.user_dept).toBe('Engineering');
+    // u1 has used brand-review, so it is not a skill to try.
+    expect(linkedBody.skills_to_try.map((x: { name: string }) => x.name)).not.toContain('brand-review');
+
+    // A vote cast while signed in shows as the caller's own vote.
+    await voteRoute(new NextRequest(`http://localhost/api/library/${brandReviewId}/vote`, { method: 'POST' }), { params: Promise.resolve({ id: String(brandReviewId) }) });
+    const votedBody = await (await libraryGET(makeRequest('/api/library?source=org&per_page=50'))).json();
+    expect(votedBody.entries.find((x: { name: string }) => x.name === 'brand-review').user_voted).toBe(1);
+
+    mockSession.userId = 'u2'; mockSession.email = 'me@test.com'; // restore
   } finally {
     await cleanup();
   }

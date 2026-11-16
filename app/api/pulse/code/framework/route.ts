@@ -72,6 +72,7 @@ export async function GET(request: NextRequest) {
     engagedHours,
     cacheHitRatio: n(row?.cache_hit_ratio),
     hasWorkMix: cfg.codeClassifierEnabled === true,
+    classifierModel: cfg.codeClassifierModel,
     vendor,
   };
 

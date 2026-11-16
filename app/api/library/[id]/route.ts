@@ -6,8 +6,9 @@
 // straightforward selects/aggregates (bigint columns like created_at/
 // updated_at get decoded to `number` automatically via the query builder's
 // schema-aware codec), and a local rawAll() facade (mirrors lib/db/queries.ts
-// + app/api/pulse/cio/route.ts) ONLY for the one date-bucket GROUP BY
-// (day bucketing via to_char(to_timestamp(...) AT TIME ZONE 'UTC')).
+// + app/api/pulse/cio/route.ts) for the usage reads.
+// The usage figures (daily counts, top users, totals) are raw reads over one
+// per-entry source chosen by entry type, the same uses the Board list counts.
 // Every raw-SQL COUNT/AVG aggregate is
 // Number()-coerced (bigint/numeric come back as STRINGS on
 // Postgres).
@@ -20,7 +21,8 @@ import { boardUses } from '@/lib/library/visible-uses';
 import { NextRequest, NextResponse } from 'next/server';
 import { normaliseSourceUrl, SOURCE_URL_ERROR } from '@/lib/library/source-url';
 import { isEntryAuthor } from '@/lib/library/author';
-import { and, desc, eq, gte, isNotNull, lt, sql } from 'drizzle-orm';
+import { and, eq, sql } from 'drizzle-orm';
+import { notBoardHiddenConnector } from '@/lib/library/built-in-connectors';
 import { canAccessOrgOverview, canAccessPulseAdmin, getAdminSession } from '@/lib/auth/admin-auth';
 import { getTypedClient } from '@/lib/db/client';
 import { schema } from '@/lib/db/schema';
@@ -142,64 +144,62 @@ export async function GET(
     .where(and(eq(schema.skillLibraryVotes.entry_id, id), eq(schema.skillLibraryVotes.voter_user_id, userId)));
   const userVoted = userVotedRows.length > 0;
 
+  // This entry's uses, counted as the Board list counts them: a connector from
+  // its connector (MCP) uses, leaving out Claude's own servers; a skill from its
+  // skill uses. `uses` already leaves out ChatGPT and Codex while they are hidden.
+  const isConnector = entry.type === 'connector';
+  const entryUses = isConnector
+    ? sql`(SELECT user_id, occurred_at FROM ${uses.connectors}
+           WHERE mcp_server = ${name} AND ${notBoardHiddenConnector(sql.raw('mcp_server'))}) AS entry_uses`
+    : sql`(SELECT user_id, occurred_at FROM ${uses.skills} WHERE skill_name = ${name}) AS entry_uses`;
+
   // Per-day invocation counts for last 7 days (AT TIME ZONE 'UTC'
   // is required since to_char formats in the Postgres SESSION timezone).
   const dayExpr = sql`to_char(to_timestamp(occurred_at) AT TIME ZONE 'UTC', 'YYYY-MM-DD')`;
   const dailyRowsRaw = await rawAll<{ day: string; cnt: number | string }>(client, sql`
     SELECT ${dayExpr} AS day, COUNT(*) AS cnt
-    FROM ${uses.skills}
-    WHERE skill_name = ${name} AND occurred_at >= ${weekAgo}
+    FROM ${entryUses}
+    WHERE occurred_at >= ${weekAgo}
     GROUP BY ${dayExpr}
     ORDER BY day ASC
   `);
   const dailyRows = dailyRowsRaw.map(r => ({ day: r.day, cnt: Number(r.cnt) }));
 
   // Top users
-  const topUsersRaw = await client
-    .select({ user_id: csi.user_id, display_name: u.display_name, cnt: sql<number | string>`COUNT(*)` })
-    .from(csi)
-    .leftJoin(u, eq(u.id, csi.user_id))
-    .where(and(eq(csi.skill_name, name), uses.claudeOnly))
-    .groupBy(csi.user_id, u.display_name)
-    .orderBy(desc(sql`COUNT(*)`))
-    .limit(10);
+  const topUsersRaw = await rawAll<{ user_id: string; display_name: string | null; cnt: number | string }>(client, sql`
+    SELECT entry_uses.user_id, users.display_name, COUNT(*) AS cnt
+    FROM ${entryUses}
+    LEFT JOIN users ON users.id = entry_uses.user_id
+    GROUP BY entry_uses.user_id, users.display_name
+    ORDER BY cnt DESC
+    LIMIT 10
+  `);
   const topUsers = topUsersRaw.map(r => ({ ...r, cnt: Number(r.cnt) }));
 
-  // Invocation type split
-  const typeSplitRaw = await client
-    .select({ invocation_type: csi.invocation_type, cnt: sql<number | string>`COUNT(*)` })
-    .from(csi)
-    .where(and(eq(csi.skill_name, name), isNotNull(csi.invocation_type), uses.claudeOnly))
-    .groupBy(csi.invocation_type);
-  const typeSplit = typeSplitRaw.map(r => ({ ...r, cnt: Number(r.cnt) }));
-
-  const totalInvocationsRows = await client
-    .select({ cnt: sql<number | string>`COUNT(*)` })
-    .from(csi)
-    .where(and(eq(csi.skill_name, name), uses.claudeOnly));
-  const totalInvocations = Number(totalInvocationsRows[0]?.cnt ?? 0);
-
-  const distinctUsersRows = await client
-    .select({ cnt: sql<number | string>`COUNT(DISTINCT ${csi.user_id})` })
-    .from(csi)
-    .where(and(eq(csi.skill_name, name), uses.claudeOnly));
-  const distinctUsers = Number(distinctUsersRows[0]?.cnt ?? 0);
-
-  const weekCountRows = await client
-    .select({ cnt: sql<number | string>`COUNT(*)` })
-    .from(csi)
-    .where(and(eq(csi.skill_name, name), gte(csi.occurred_at, weekAgo)));
-  const weekCount = Number(weekCountRows[0]?.cnt ?? 0);
-
   const prevWeekAgo = weekAgo - 7 * 86400;
-  const prevWeekCountRows = await client
-    .select({ cnt: sql<number | string>`COUNT(*)` })
-    .from(csi)
-    .where(and(eq(csi.skill_name, name), gte(csi.occurred_at, prevWeekAgo), lt(csi.occurred_at, weekAgo)));
-  const prevWeekCount = Number(prevWeekCountRows[0]?.cnt ?? 0);
+  const countRows = await rawAll<{ total: number | string; people: number | string; week: number | string; prev_week: number | string }>(client, sql`
+    SELECT COUNT(*) AS total,
+           COUNT(DISTINCT user_id) AS people,
+           COUNT(*) FILTER (WHERE occurred_at >= ${weekAgo}) AS week,
+           COUNT(*) FILTER (WHERE occurred_at >= ${prevWeekAgo} AND occurred_at < ${weekAgo}) AS prev_week
+    FROM ${entryUses}
+  `);
+  const totalInvocations = Number(countRows[0]?.total ?? 0);
+  const distinctUsers = Number(countRows[0]?.people ?? 0);
+  const weekCount = Number(countRows[0]?.week ?? 0);
+  const prevWeekCount = Number(countRows[0]?.prev_week ?? 0);
 
-  const agentChained = typeSplit.find(r => r.invocation_type === 'agent_chained')?.cnt ?? 0;
-  const agentPct = totalInvocations > 0 ? Math.round((agentChained / totalInvocations) * 100) : 0;
+  // Agent-chained or typed: recorded for skill uses only, so not measured
+  // (null) for a connector.
+  let agentPct: number | null = null;
+  if (!isConnector) {
+    const agentRows = await client
+      .select({ cnt: sql<number | string>`COUNT(*)` })
+      .from(csi)
+      .where(and(eq(csi.skill_name, name), eq(csi.invocation_type, 'agent_chained'), uses.claudeOnly));
+    const agentChained = Number(agentRows[0]?.cnt ?? 0);
+    agentPct = totalInvocations > 0 ? Math.round((agentChained / totalInvocations) * 100) : 0;
+  }
 
   // OTel connector reliability — only for connector-type entries (mcp_server match)
   const reliabilityRows = await client

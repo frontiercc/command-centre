@@ -52,8 +52,8 @@ interface ImpactPanelProps {
   canRegenerate: boolean;
 }
 
-const MEASURED_CLS = 'text-[#05073F]';
-const ESTIMATE_CLS = 'text-[#2451F3]';
+const MEASURED_CLS = 'text-[#1F6F8B]';
+const ESTIMATE_CLS = 'text-[#1F6F8B]';
 const BLOCK_CLS = 'px-4 py-3 border-t border-[#F2F2F2] first:border-t-0 flex flex-col gap-2';
 
 function round1(n: number): number {
@@ -96,7 +96,7 @@ function surfaceSessionsLabel(s: { cowork: number; code: number; chatgpt?: numbe
 }
 
 /** AI-judged tiers: light to deep violet. */
-const TIER_CLS: Record<number, string> = { 1: 'bg-[#CCD1DB]', 2: 'bg-[#8DB2FC]', 3: 'bg-[#3D6CE8]' };
+const TIER_CLS: Record<number, string> = { 1: 'bg-[#CCD1DB]', 2: 'bg-[#6BA3B8]', 3: 'bg-[#1F6F8B]' };
 
 export default function ImpactPanel({ impact, summary, useCaseId, canRegenerate }: ImpactPanelProps) {
   const [localSummary, setLocalSummary] = useState(summary);

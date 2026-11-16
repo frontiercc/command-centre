@@ -5,10 +5,11 @@
 
 import { useEffect, useState } from 'react';
 import Link from 'next/link';
-import StatStrip from '@/components/pulse/StatStrip';
+import { deepShareOf } from '@/lib/pulse/tier-names';
 import GenerateBriefingButton from '@/components/pulse/GenerateBriefingButton';
 import { Panel, PanelFoot, SubHead, Toolbar, Muted, Notice, Tag, Bar, B, T, cx } from '@/components/precision/ui';
 import { SaveMsg } from '@/components/admin/precision-admin';
+import { shownContent } from '@/lib/retention/marker';
 
 function timeAgo(ts: number): string {
   const s = Math.floor(Date.now() / 1000) - ts;
@@ -19,8 +20,7 @@ function timeAgo(ts: number): string {
 }
 
 interface PulseMetrics {
-  oti: number | null; dds: number | null;
-  psr: number | null; ors: number | null;
+  tier_1_count: number | null; tier_2_count: number | null; tier_3_count: number | null;
 }
 
 interface Classification {
@@ -89,8 +89,6 @@ export default function UserDrillDown({ userId }: { userId: string }) {
 
   const m = meData?.metrics;
   const pm = meData?.priorMetrics;
-  const delta = (curr: number | null, prior: number | null) =>
-    pm ? (curr !== null && prior !== null ? Math.round((curr - prior) * 100) / 100 : null) : undefined;
 
   async function saveStartDate(dateStr: string | null) {
     setSavingStartDate(true);
@@ -153,18 +151,24 @@ export default function UserDrillDown({ userId }: { userId: string }) {
       </Panel>
 
       {/* Metrics */}
-      {m && (
-        <StatStrip
-          oti={m.oti} dds={m.dds}
-          psr={meData?.capabilitiesDetail?.count ?? m.psr}
-          ors={meData?.teamMetrics?.ors ?? m.ors}
-          otiDelta={delta(m.oti, pm?.oti ?? null)}
-          ddsDelta={delta(m.dds, pm?.dds ?? null)}
-          psrDelta={delta(m.psr, pm?.psr ?? null)}
-          orsDelta={delta(m.ors, pm?.ors ?? null)}
-          hideOrs
-        />
-      )}
+      {m && (() => {
+        // Described, never scored: the share of their judged tasks that were meaningful or
+        // frontier, then and a week before, and the new ways of working they started.
+        const now = deepShareOf(m.tier_1_count, m.tier_2_count, m.tier_3_count);
+        const before = pm ? deepShareOf(pm.tier_1_count, pm.tier_2_count, pm.tier_3_count) : null;
+        const tasks = Number(m.tier_1_count ?? 0) + Number(m.tier_2_count ?? 0) + Number(m.tier_3_count ?? 0);
+        const pct = (v: number) => `${Math.round(v * 100)}%`;
+        return (
+          <Panel title="Their work" badge={<Tag tone="judged">AI-judged</Tag>}>
+            <p className="m-0 text-[14px] leading-[21px] text-[#333333]">
+              {now === null
+                ? 'None of their tasks has been judged yet.'
+                : <><b>{pct(now)}</b> of their {tasks.toLocaleString('en-GB')} judged tasks were meaningful or frontier{before !== null ? `, against ${pct(before)} a week before` : ''}.</>}
+              {' '}{meData?.capabilitiesDetail?.count ? `${meData.capabilitiesDetail.count} new ${meData.capabilitiesDetail.count === 1 ? 'way' : 'ways'} of working started.` : ''}
+            </p>
+          </Panel>
+        );
+      })()}
 
       {/* Classification history */}
       <Panel
@@ -195,8 +199,8 @@ export default function UserDrillDown({ userId }: { userId: string }) {
                 <tr key={c.id} className={T.row}>
                   <td className={cx(T.tdMute, 'whitespace-nowrap tabular-nums')}>{timeAgo(c.classified_at)}</td>
                   <td className={cx(T.tdMute, 'max-w-xs')}>
-                    <span title={c.content_preview ?? ''}>
-                      {(c.content_preview ?? '').slice(0, 80)}{(c.content_preview ?? '').length > 80 ? '…' : ''}
+                    <span title={shownContent(c.content_preview ?? '')}>
+                      {shownContent(c.content_preview ?? '').slice(0, 80)}{shownContent(c.content_preview ?? '').length > 80 ? '…' : ''}
                     </span>
                   </td>
                   <td className={T.td}>
@@ -261,7 +265,7 @@ export default function UserDrillDown({ userId }: { userId: string }) {
                     {new Date(b.generated_at * 1000).toLocaleDateString('en-GB', {
                       day: 'numeric', month: 'long', year: 'numeric',
                     })}
-                    {i === 0 && <span className="ml-2 text-[13px] text-[#245BF3]">(latest)</span>}
+                    {i === 0 && <span className="ml-2 text-[13px] text-[#1F6F8B]">(latest)</span>}
                   </span>
                   <span className="text-[13px] text-[#8F8F8F]" aria-hidden="true">{expandedBriefing === i ? '▲' : '▼'}</span>
                 </button>

@@ -141,7 +141,7 @@ export default function AdminSetupPage() {
               required
               value={setupToken}
               onChange={e => setSetupToken(e.target.value)}
-              className="w-full text-[14px] px-2.5 py-2 rounded-[10px] border border-[#DADADA] bg-white text-[#0A0A0A] placeholder:text-[#8F8F8F] focus:outline-none focus:ring-2 focus:ring-[#245BF3]/30 focus:border-[#245BF3] font-mono"
+              className="w-full text-[14px] px-2.5 py-2 rounded-[10px] border border-[#DADADA] bg-white text-[#0A0A0A] placeholder:text-[#8F8F8F] focus:outline-none focus:ring-2 focus:ring-[#1F6F8B]/30 focus:border-[#1F6F8B] font-mono"
               placeholder="From the server log"
             />
             <p className="text-[#8F8F8F] text-[13px] mt-1">Printed once in the hub&apos;s log when it starts. Restart the hub to get a new one.</p>
@@ -159,7 +159,7 @@ export default function AdminSetupPage() {
               required
               value={email}
               onChange={e => setEmail(e.target.value)}
-              className="w-full text-[14px] px-2.5 py-2 rounded-[10px] border border-[#DADADA] bg-white text-[#0A0A0A] placeholder:text-[#8F8F8F] focus:outline-none focus:ring-2 focus:ring-[#245BF3]/30 focus:border-[#245BF3]"
+              className="w-full text-[14px] px-2.5 py-2 rounded-[10px] border border-[#DADADA] bg-white text-[#0A0A0A] placeholder:text-[#8F8F8F] focus:outline-none focus:ring-2 focus:ring-[#1F6F8B]/30 focus:border-[#1F6F8B]"
               placeholder="admin@example.com"
             />
           </div>
@@ -176,7 +176,7 @@ export default function AdminSetupPage() {
               autoComplete="name"
               value={displayName}
               onChange={e => setDisplayName(e.target.value)}
-              className="w-full text-[14px] px-2.5 py-2 rounded-[10px] border border-[#DADADA] bg-white text-[#0A0A0A] placeholder:text-[#8F8F8F] focus:outline-none focus:ring-2 focus:ring-[#245BF3]/30 focus:border-[#245BF3]"
+              className="w-full text-[14px] px-2.5 py-2 rounded-[10px] border border-[#DADADA] bg-white text-[#0A0A0A] placeholder:text-[#8F8F8F] focus:outline-none focus:ring-2 focus:ring-[#1F6F8B]/30 focus:border-[#1F6F8B]"
               placeholder="Defaults to email prefix"
             />
           </div>
@@ -193,7 +193,7 @@ export default function AdminSetupPage() {
               required
               value={password}
               onChange={e => setPassword(e.target.value)}
-              className="w-full text-[14px] px-2.5 py-2 rounded-[10px] border border-[#DADADA] bg-white text-[#0A0A0A] placeholder:text-[#8F8F8F] focus:outline-none focus:ring-2 focus:ring-[#245BF3]/30 focus:border-[#245BF3]"
+              className="w-full text-[14px] px-2.5 py-2 rounded-[10px] border border-[#DADADA] bg-white text-[#0A0A0A] placeholder:text-[#8F8F8F] focus:outline-none focus:ring-2 focus:ring-[#1F6F8B]/30 focus:border-[#1F6F8B]"
               placeholder={`Min ${MIN_PASSWORD_LENGTH} characters`}
             />
             {/* Password strength indicator */}
@@ -221,7 +221,7 @@ export default function AdminSetupPage() {
               required
               value={confirmPassword}
               onChange={e => setConfirmPassword(e.target.value)}
-              className="w-full text-[14px] px-2.5 py-2 rounded-[10px] border border-[#DADADA] bg-white text-[#0A0A0A] placeholder:text-[#8F8F8F] focus:outline-none focus:ring-2 focus:ring-[#245BF3]/30 focus:border-[#245BF3]"
+              className="w-full text-[14px] px-2.5 py-2 rounded-[10px] border border-[#DADADA] bg-white text-[#0A0A0A] placeholder:text-[#8F8F8F] focus:outline-none focus:ring-2 focus:ring-[#1F6F8B]/30 focus:border-[#1F6F8B]"
               placeholder="••••••••"
             />
           </div>

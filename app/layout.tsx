@@ -14,6 +14,7 @@ import MobileTopBar from "@/components/layout/MobileTopBar";
 import MobileTabBar from "@/components/layout/MobileTabBar";
 import { getTheme } from "@/lib/theme";
 import { ThemeProvider } from "@/components/layout/ThemeContext";
+import AskDrawer from "@/components/ask/AskDrawer";
 
 const inter = Inter({
   subsets: ["latin"],
@@ -60,6 +61,7 @@ export default async function RootLayout({
             <ToastProvider>{children}</ToastProvider>
           </main>
           <MobileTabBar />
+          <AskDrawer />
         </ThemeProvider>
       </body>
     </html>

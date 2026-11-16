@@ -60,6 +60,20 @@ export async function pickCodeMetricsSource(vendor: Vendor, codexPresent: boolea
     : { table: sql.raw('code_metrics'), only: sql`` };
 }
 
+/**
+ * For person-level readers of rolling rows: the earliest computed_at of the
+ * view's latest aggregation run. Each hourly run writes the organisation row
+ * first, then a row only for people with sessions in its window, so someone
+ * who stopped using a tool keeps their last row from an older run. Keep rows
+ * computed at or after this; anyone else has no activity in the view.
+ * With no organisation row at all (no run yet), every row is kept.
+ * `only` is the view's condition (pickCodeMetricsSource), unqualified or
+ * qualified with the bare table name.
+ */
+export function latestRunStart(table: SQL, only: SQL): SQL {
+  return sql`(SELECT COALESCE(MAX(computed_at), 0) FROM ${table} WHERE scope_type = 'organisation' AND granularity = 'rolling' ${only})`;
+}
+
 /** The trend readers' vendor argument for the view: none until Codex data exists. */
 export function trendVendor(vendor: Vendor, codexPresent: boolean): Vendor | undefined {
   return codexPresent ? vendor : undefined;

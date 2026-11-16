@@ -35,7 +35,7 @@ export default function GlobalError({
             <p style={{ color: '#6b7280', marginBottom: '1rem' }}>{error.message}</p>
             <button
               onClick={reset}
-              style={{ padding: '0.5rem 1rem', background: '#2563eb', color: 'white', border: 'none', borderRadius: '0.375rem', cursor: 'pointer' }}
+              style={{ padding: '0.5rem 1rem', background: '#1F6F8B', color: 'white', border: 'none', borderRadius: '0.375rem', cursor: 'pointer' }}
             >
               Try again
             </button>

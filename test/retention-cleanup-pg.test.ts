@@ -196,6 +196,14 @@ async function runSpec(): Promise<void> {
       ]);
     }
 
+    // Developer Pulse's other rolling snapshots (the 30 days before, the last 7 days) prune like 'rolling'.
+    await db.insert(schema.codeMetrics).values([
+      { scope_type: 'user', scope_id: 'user3', period_start: oldRolling40d, period_end: oldRolling40d + 3600, granularity: 'rolling_prior', computed_at: oldRolling40d },
+      { scope_type: 'user', scope_id: 'user3', period_start: oldRolling40d, period_end: oldRolling40d + 3600, granularity: 'rolling_7d', computed_at: oldRolling40d },
+      { scope_type: 'user', scope_id: 'user3', period_start: recentRolling, period_end: recentRolling + 3600, granularity: 'rolling_prior', computed_at: recentRolling },
+      { scope_type: 'user', scope_id: 'user3', period_start: recentRolling, period_end: recentRolling + 3600, granularity: 'rolling_7d', computed_at: recentRolling },
+    ]);
+
     await db.insert(schema.useCases).values({ id: 'uc-1', title: 'Test use case' });
     const oldWeekStart = NOW - 401 * DAY;
     const recentWeekStart = NOW - 40 * DAY;
@@ -221,6 +229,10 @@ async function runSpec(): Promise<void> {
       const futureRows = await db.select().from(table).where(eq(table.scope_id, 'user2'));
       expect(futureRows.length).toBe(0);
     }
+
+    const codeRollingAfter = await db.select().from(schema.codeMetrics).where(eq(schema.codeMetrics.scope_id, 'user3'));
+    expect(codeRollingAfter.map((r: { granularity: string; computed_at: number }) => `${r.granularity}:${r.computed_at}`).sort())
+      .toEqual([`rolling_7d:${recentRolling}`, `rolling_prior:${recentRolling}`]);
 
     const weeksAfter = await db.select().from(schema.useCaseActivationWeeks);
     expect(weeksAfter.map((r: { week_start: number }) => r.week_start)).toEqual([recentWeekStart]);

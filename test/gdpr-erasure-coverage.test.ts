@@ -58,6 +58,9 @@ const NOT_USER_IDENTITY: Record<string, string> = {
   'chargeback_periods.closed_by':     'admin session email/userId string — app/api/finance/chargeback/close/route.ts sets it from session.email ?? session.userId, not a users id',
   'agents.revoked_by':                'admin_users id column of the retired agent registry, which no code path writes any more; admin domain',
   'coaching_acks.acked_by':            'admin session email — app/api/pulse/coaching/ack/route.ts sets it from getAdminSession().email, not a users id',
+  'coaching_actions.done_by':         'admin session email of the team lead who marked the action done — app/api/pulse/code/coaching/actions/route.ts sets it from getAdminSession(); the table is keyed by department and holds no monitored user',
+  'decision_log.decided_by':          'admin session email of the leader who took the decision — app/api/pulse/code/so-what/decisions/route.ts and app/api/pulse/so-what/decisions/route.ts set it from getAdminSession(); the table is keyed by card and department and holds no monitored user',
+  'ask_log.asked_by':                  'admin session email of the admin who asked Ask the data a question — app/api/ask/route.ts sets it from getAdminSession(); only admins can ask, and rows are pruned to ask_log_retention_days',
   'otel_identity_aliases.created_by':   'admin session email — lib/otel/identity-conflicts.ts decideIdentityConflict() sets it from the deciding admin, not a monitored user',
   'otel_identity_conflicts.decided_by': 'admin session email — lib/otel/identity-conflicts.ts decideIdentityConflict() sets it from the deciding admin, not a monitored user',
   // ── pure substring false positives: "user"/"by" appears in the name but

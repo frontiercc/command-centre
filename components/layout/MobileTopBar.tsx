@@ -39,7 +39,6 @@ export default function MobileTopBar({ theme = 'default' }: { theme?: Theme }) {
     <header className="ccc-mobile-top lg:hidden sticky top-0 z-20 bg-sidebar-bg flex items-center gap-3 px-4 py-3">
       {/* eslint-disable-next-line @next/next/no-img-element */}
       <img src={logoFor(theme)} alt="Frontier Command Centre" className="h-6 w-auto" />
-      <span className="text-gray-400 text-sm font-light">Command Centre</span>
       {authed && (
         <span className="ml-auto flex items-center gap-2">
           {initials && (

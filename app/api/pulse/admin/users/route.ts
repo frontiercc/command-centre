@@ -23,6 +23,7 @@ import { getAdminSession, canAccessCoworkPulse, isDeptScoped } from '@/lib/auth/
 import { getTypedClient } from '@/lib/db/client';
 import { isWorkPulseSurface, classifiableSource, classifyChatgptOn } from '@/lib/pulse/work-surfaces';
 import { productExpr } from '@/lib/dashboard/product-sql';
+import { visibleVendor } from '@/lib/sources/openai-visibility';
 
 export const dynamic = 'force-dynamic';
 
@@ -81,6 +82,13 @@ export async function GET(request: NextRequest) {
     ? (session.department ?? undefined)
     : rawDept;
 
+  // Work Pulse's switch: a vendor view reads that vendor's own figures, as the
+  // person's page does (app/api/pulse/me). Without the parameter, all products.
+  const vendorParam = request.nextUrl.searchParams.get('vendor');
+  const vendor = vendorParam ? await visibleVendor(vendorParam) : 'all';
+  const metricsTable = sql.raw(vendor === 'all' ? 'pulse_metrics' : 'pulse_metrics_vendor');
+  const metricsVendor = vendor === 'all' ? sql`` : sql`AND vendor = ${vendor}`;
+
   const client = await getTypedClient();
 
   const rawRows = await rawAll<RawUserRow>(client, sql`
@@ -114,13 +122,14 @@ export async function GET(request: NextRequest) {
        (SELECT COUNT(*) FROM pulse_classifications
          WHERE user_id = u.id AND classifier_status = 'failed') AS failed_count
      FROM users u
-     LEFT JOIN pulse_metrics pm
+     LEFT JOIN ${metricsTable} pm
        ON pm.scope_id = u.id
        AND pm.scope_type = 'user'
        AND pm.granularity = 'rolling'
+       ${vendor === 'all' ? sql`` : sql`AND pm.vendor = ${vendor}`}
        AND pm.computed_at = (
-         SELECT MAX(computed_at) FROM pulse_metrics
-         WHERE scope_id = u.id AND scope_type = 'user' AND granularity = 'rolling'
+         SELECT MAX(computed_at) FROM ${metricsTable}
+         WHERE scope_id = u.id AND scope_type = 'user' AND granularity = 'rolling' ${metricsVendor}
        )
      WHERE EXISTS (
        SELECT 1 FROM cowork_messages

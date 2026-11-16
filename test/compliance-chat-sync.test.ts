@@ -210,6 +210,8 @@ async function runSpec(): Promise<void> {
     expect(m2Row.model).toBe('claude-sonnet-5');
     expect(m2Row.artifacts_count).toBe(1);
     expect(m2Row.generated_files_count).toBe(1);
+    // What the reply made, by name: the artifact's title and the generated file's name. Never its text.
+    expect(m2Row.output_names).toBe('Summary, summary.txt');
     expect(m2Row.user_id).toBe('user-exist');
     expect(Object.keys(m2Row)).not.toContain('text');
     expect(Object.keys(m2Row)).not.toContain('prompt_text');

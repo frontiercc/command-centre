@@ -187,6 +187,8 @@ export interface AppConfig {
   codeFrictionThreshold: number;
   // Developer Pulse session-digest classifier (opt-in judged layer)
   codeClassifierEnabled: boolean;
+  /** Team coaching: the share of sessions an admin intends each kind of work to take (JSON). */
+  codeEffortTargets: string;
   codeClassifierModel: string;
   codeClassifierIncludePrompt: boolean;
   codeClassifierLastRun: string;
@@ -202,8 +204,6 @@ export interface AppConfig {
   // Developer Pulse Time Saved (bottom-up estimate) — minutes-per-task assumptions
   timeSavedMinPerPr: string;
   timeSavedMinPerCommit: string;
-  timeSavedMinPerCoworkSession: string;
-  timeSavedMinPerChatConversation: string;
   // GitHub overlay (repo/org level only — standing decision)
   githubToken: string;
   githubSyncLastRun: string;
@@ -230,6 +230,10 @@ export interface AppConfig {
   alertsSlackSweepCursor: string;
   // Licensed seats (dashboard Active Users denominator)
   licensedSeats: string;
+  // Department adoption target for the dashboard, a percentage as a string; blank = 50, 0 = none.
+  targetDeptAdoptionPct: string;
+  // Work Pulse floor for each department's share of real work, a percentage as a string; blank = 33, 0 = none.
+  targetDeptRealWorkPct: string;
   // OIDC SSO
   ssoEnabled: boolean;
   ssoIssuerUrl: string;
@@ -241,6 +245,11 @@ export interface AppConfig {
   useCasesEnabled: boolean;
   useCasesExtractModel: string;
   useCasesIdeateModel: string;
+  // Ask the data (admin only): off until an admin turns it on, a monthly spend cap in USD, and
+  // how many days the question log keeps a question.
+  askEnabled: boolean;
+  askMonthlyCapUsd: string;
+  askLogRetentionDays: string;
   // Cost & Chargeback (dormant)
   chargebackEnabled: boolean;
   financeModelEfficiencyEnabled: boolean;
@@ -471,6 +480,7 @@ export const CONFIG_KEYS: Record<keyof AppConfig, string> = {
   codeAlertFrictionEnabled: 'code_alert_friction_enabled',
   codeFrictionThreshold: 'code_friction_threshold',
   codeClassifierEnabled: 'code_classifier_enabled',
+  codeEffortTargets: 'code_effort_targets',
   codeClassifierModel: 'code_classifier_model',
   codeClassifierIncludePrompt: 'code_classifier_include_prompt',
   codeClassifierLastRun: 'code_classifier_last_run',
@@ -484,8 +494,6 @@ export const CONFIG_KEYS: Record<keyof AppConfig, string> = {
   codeValueAnnualSpend: 'code_value_annual_spend',
   timeSavedMinPerPr: 'time_saved_min_per_pr',
   timeSavedMinPerCommit: 'time_saved_min_per_commit',
-  timeSavedMinPerCoworkSession: 'time_saved_min_per_cowork_session',
-  timeSavedMinPerChatConversation: 'time_saved_min_per_chat_conversation',
   githubToken: 'github_token',
   githubSyncLastRun: 'github_sync_last_run',
   codeBriefingLastRun: 'code_briefing_last_run',
@@ -505,6 +513,8 @@ export const CONFIG_KEYS: Record<keyof AppConfig, string> = {
   alertsSlackSweepLastRun: 'alerts_slack_sweep_last_run',
   alertsSlackSweepCursor: 'alerts_slack_sweep_cursor',
   licensedSeats: 'licensed_seats',
+  targetDeptAdoptionPct: 'target_dept_adoption_pct',
+  targetDeptRealWorkPct: 'target_dept_real_work_pct',
   ssoEnabled: 'sso_enabled',
   ssoIssuerUrl: 'sso_issuer_url',
   ssoClientId: 'sso_client_id',
@@ -514,6 +524,9 @@ export const CONFIG_KEYS: Record<keyof AppConfig, string> = {
   useCasesEnabled: 'use_cases_enabled',
   useCasesExtractModel: 'use_cases_extract_model',
   useCasesIdeateModel: 'use_cases_ideate_model',
+  askEnabled: 'ask_enabled',
+  askMonthlyCapUsd: 'ask_monthly_cap_usd',
+  askLogRetentionDays: 'ask_log_retention_days',
   chargebackEnabled: 'chargeback_enabled',
   financeModelEfficiencyEnabled: 'finance_model_efficiency_enabled',
   finopsSeatPriceMonthly: 'finops_seat_price_monthly',
@@ -819,7 +832,7 @@ export async function getAllConfig(): Promise<AppConfig> {
     smtpFromName: resolve('smtpFromName', 'Frontier Command Centre'),
     // Work Pulse
     pulseEnabled: resolve('pulseEnabled') === 'true',
-    pulseClassifierModel: resolve('pulseClassifierModel', 'claude-haiku-4-5-20251001'),
+    pulseClassifierModel: resolve('pulseClassifierModel', 'claude-haiku-5-5'),
     // The same constant the briefing jobs fall back to, so /admin/pulse shows
     // the model they actually use. The old default here,
     // claude-opus-4-5-20251001, was never a valid model ID.
@@ -875,7 +888,8 @@ export async function getAllConfig(): Promise<AppConfig> {
     codeAlertFrictionEnabled: resolve('codeAlertFrictionEnabled', 'false') === 'true',
     codeFrictionThreshold: parseFloat(resolve('codeFrictionThreshold', '0.25')),
     codeClassifierEnabled: resolve('codeClassifierEnabled', 'true') === 'true',
-    codeClassifierModel: resolve('codeClassifierModel', 'claude-haiku-4-5-20251001'),
+    codeEffortTargets: resolve('codeEffortTargets', ''),
+    codeClassifierModel: resolve('codeClassifierModel', 'claude-haiku-5-5'),
     codeClassifierIncludePrompt: resolve('codeClassifierIncludePrompt', 'true') === 'true',
     codeClassifierLastRun: resolve('codeClassifierLastRun'),
     codeClassifierConfig: resolve('codeClassifierConfig'),
@@ -888,8 +902,6 @@ export async function getAllConfig(): Promise<AppConfig> {
     codeValueAnnualSpend: resolve('codeValueAnnualSpend', ''),
     timeSavedMinPerPr: resolve('timeSavedMinPerPr', ''),
     timeSavedMinPerCommit: resolve('timeSavedMinPerCommit', ''),
-    timeSavedMinPerCoworkSession: resolve('timeSavedMinPerCoworkSession', ''),
-    timeSavedMinPerChatConversation: resolve('timeSavedMinPerChatConversation', ''),
     githubToken: resolve('githubToken'),
     githubSyncLastRun: resolve('githubSyncLastRun'),
     codeBriefingLastRun: resolve('codeBriefingLastRun'),
@@ -916,6 +928,8 @@ export async function getAllConfig(): Promise<AppConfig> {
     alertsSlackSweepCursor: resolve('alertsSlackSweepCursor'),
     // Licensed seats
     licensedSeats: resolve('licensedSeats'),
+    targetDeptAdoptionPct: resolve('targetDeptAdoptionPct'),
+    targetDeptRealWorkPct: resolve('targetDeptRealWorkPct'),
     // OIDC SSO
     ssoEnabled: resolve('ssoEnabled', 'false') === 'true',
     ssoIssuerUrl: resolve('ssoIssuerUrl'),
@@ -925,8 +939,11 @@ export async function getAllConfig(): Promise<AppConfig> {
     ssoRedirectBaseUrl: resolve('ssoRedirectBaseUrl'),
     // Use Cases register (Phase 1)
     useCasesEnabled: resolve('useCasesEnabled', 'false') === 'true',
-    useCasesExtractModel: resolve('useCasesExtractModel', 'claude-haiku-4-5-20251001'),
+    useCasesExtractModel: resolve('useCasesExtractModel', 'claude-haiku-5-5'),
     useCasesIdeateModel: resolve('useCasesIdeateModel', 'claude-sonnet-5'),
+    askEnabled: resolve('askEnabled', 'false') === 'true',
+    askMonthlyCapUsd: resolve('askMonthlyCapUsd', '5'),
+    askLogRetentionDays: resolve('askLogRetentionDays', '90'),
     // Cost & Chargeback (dormant)
     chargebackEnabled: resolve('chargebackEnabled', 'false') === 'true',
     financeModelEfficiencyEnabled: resolve('financeModelEfficiencyEnabled', 'false') === 'true',
@@ -966,7 +983,7 @@ export async function getAllConfig(): Promise<AppConfig> {
     useCasesAdoptedMinUsers: resolve('useCasesAdoptedMinUsers', '2'),
     useCasesAtRiskQuietWeeks: resolve('useCasesAtRiskQuietWeeks', '2'),
     useCasesNotSeenQuietWeeks: resolve('useCasesNotSeenQuietWeeks', '6'),
-    financeInsightModel: resolve('financeInsightModel', 'claude-haiku-4-5-20251001'),
+    financeInsightModel: resolve('financeInsightModel', 'claude-haiku-5-5'),
     financeDriftAlertThresholdPct: resolve('financeDriftAlertThresholdPct', '10'),
     financeEnterpriseMock: resolve('financeEnterpriseMock', 'false'),
     complianceAccessKey: resolve('complianceAccessKey'),
@@ -1050,6 +1067,8 @@ export interface DataSourceStatus {
   aiFeatures: boolean;
   /** An OpenAI Admin API key is saved, so the ChatGPT and Codex sync runs. */
   openai: boolean;
+  /** False when an admin switched "Show ChatGPT and Codex" off: the OpenAI source is then not listed. */
+  openaiShown: boolean;
   mode: 'max' | 'enterprise';
 }
 
@@ -1062,7 +1081,9 @@ export async function getDataSourceStatus(): Promise<DataSourceStatus> {
     coworkContent = coworkRows.length > 0;
   } catch { /* table might not exist yet */ }
 
-  const complianceKey = await getConfigValue('anthropicAdminApiKey');
+  // The Compliance API runs on the Compliance access key (lib/compliance/job.ts), not the Admin
+  // API key, which is for spend limits: the source is on when the key it runs on is saved.
+  const complianceKey = await getConfigValue('complianceAccessKey');
   const analyticsKey = await getConfigValue('anthropicAnalyticsApiKey');
   const complianceApi = !!complianceKey;
   const analyticsApi = !!analyticsKey;
@@ -1070,6 +1091,7 @@ export async function getDataSourceStatus(): Promise<DataSourceStatus> {
   const aiKey = await getConfigValue('anthropicAiApiKey');
   const aiFeatures = !!aiKey;
   const openai = !!(await getConfigValue('openaiAdminApiKey'));
+  const openaiShown = (await getConfigValue('openaiShown')) !== 'false';
   const mode = complianceApi || analyticsApi ? 'enterprise' : 'max';
 
   // Check if OTel Cowork data is present (users with source='otel')
@@ -1083,5 +1105,5 @@ export async function getDataSourceStatus(): Promise<DataSourceStatus> {
     otelCowork = otelUserRows.length > 0;
   } catch { /* users table may not have source column yet */ }
 
-  return { coworkContent, otelCowork, complianceApi, analyticsApi, aiFeatures, openai, mode };
+  return { coworkContent, otelCowork, complianceApi, analyticsApi, aiFeatures, openai, openaiShown, mode };
 }

@@ -18,6 +18,7 @@ This covers only Command Centre's own use of Claude, such as grading work, match
 - **Matching sessions to use cases** and **suggesting department processes** use Sonnet, and make up about two-thirds of the cost.
 - **Grading, the dashboard and personal briefings, descriptions and time estimates** use Haiku. On the newest Haiku they cost almost nothing.
 - **Organisation and department briefings** use Sonnet by default, for accuracy with figures.
+- **Ask the data**, when an admin turns it on, uses Claude Haiku 5.5 and stops for the month once its monthly spend cap is reached: $5 unless you change it on Admin → Ask the data.
 - More active people, more sessions and more use cases mean more calls.
 
 ## How to lower it

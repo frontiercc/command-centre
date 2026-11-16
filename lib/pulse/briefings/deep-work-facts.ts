@@ -9,6 +9,7 @@
 // of work, counts, systems. Never a name (the model must not attribute), never
 // an AI summary, never a file name, never prompt text.
 import { and, eq, gte, inArray, lt, sql } from 'drizzle-orm';
+import { personProductKey } from '@/lib/openai/sources';
 import { getTypedClient } from '@/lib/db/client';
 import { schema } from '@/lib/db/schema';
 import { MECHANISM_TASK_TYPES } from '@/lib/finance/model-efficiency';
@@ -21,8 +22,8 @@ export function kindText(taskType: string): string {
   return taskType.replace(/:/g, ' · ').replace(/_/g, ' ');
 }
 
-/** One piece of work as a measured sentence fragment, no names. Pure. */
-export function describeWork(item: WorkItem): string {
+/** One piece of work as a measured sentence fragment, no names, its tier by the customer's name. Pure. */
+export function describeWork(item: WorkItem, tierNames?: { t1: string; t2: string; t3: string }): string {
   const f = item.facts;
   const parts: string[] = [];
   if (f.activeSecs && f.activeSecs > 0) parts.push(`${Math.max(1, Math.round(f.activeSecs / 60))} min active`);
@@ -36,7 +37,8 @@ export function describeWork(item: WorkItem): string {
   ].filter(Boolean);
   if (out.length) parts.push(out.join(', '));
   else if (f.producedOutput === true) parts.push('produced a file');
-  return `${kindText(item.taskType)} (Tier ${item.tier})${parts.length ? `: ${parts.join(', ')}` : ''}`;
+  const tier = tierNames ? [tierNames.t1, tierNames.t2, tierNames.t3][item.tier - 1] : undefined;
+  return `${kindText(item.taskType)} (${tier ?? `Tier ${item.tier}`})${parts.length ? `: ${parts.join(', ')}` : ''}`;
 }
 
 export interface DeepWorkSummary {
@@ -79,12 +81,13 @@ export async function buildDeepWorkSummary(userIds: string[] | null, sinceS: num
   const byKind = new Map<string, { sessions: Set<string>; people: Set<string> }>();
   for (const r of rows) {
     if (!r.session_id) continue;
-    people.add(r.user_id);
+    // A person once for each product they used, as the pages' All view counts them.
+    people.add(personProductKey(r.user_id, r.session_id));
     sessions.add(r.session_id);
     if (TOOL_LABELS.has(r.task_type)) continue;
     const k = byKind.get(r.task_type) ?? { sessions: new Set(), people: new Set() };
     k.sessions.add(r.session_id);
-    k.people.add(r.user_id);
+    k.people.add(personProductKey(r.user_id, r.session_id));
     byKind.set(r.task_type, k);
   }
   const topKinds = [...byKind.entries()]
@@ -123,15 +126,15 @@ export async function buildDeepWorkSummary(userIds: string[] | null, sinceS: num
   };
 }
 
-/** Prompt lines for a group summary. Pure. */
-export function deepWorkLines(s: DeepWorkSummary): string[] {
+/** Prompt lines for a group summary, naming the deepest tier as this customer does. Pure. */
+export function deepWorkLines(s: DeepWorkSummary, deepestTier = 'Frontier'): string[] {
   const lines = [
     s.tier3People === 0
-      ? 'No Tier 3 (autonomous, high-consequence) work in this period.'
-      : `People doing Tier 3 work: ${s.tier3People} (${s.tier3Sessions} ${s.tier3Sessions === 1 ? 'session' : 'sessions'})`,
+      ? `No ${deepestTier} work (the deepest tier) in this period.`
+      : `People doing ${deepestTier} work (the deepest tier): ${s.tier3People} (${s.tier3Sessions} ${s.tier3Sessions === 1 ? 'session' : 'sessions'})`,
   ];
   if (s.topKinds.length) {
-    lines.push(`Main kinds of Tier 3 work: ${s.topKinds.map(k => `${kindText(k.kind)} (${k.sessions} ${k.sessions === 1 ? 'session' : 'sessions'}, ${k.people} ${k.people === 1 ? 'person' : 'people'})`).join('; ')}`);
+    lines.push(`Main kinds of ${deepestTier} work: ${s.topKinds.map(k => `${kindText(k.kind)} (${k.sessions} ${k.sessions === 1 ? 'session' : 'sessions'}, ${k.people} ${k.people === 1 ? 'person' : 'people'})`).join('; ')}`);
   }
   const capTotal = s.newCapabilities.reduce((a, c) => a + c.count, 0);
   lines.push(capTotal === 0

@@ -126,6 +126,7 @@ export async function POST(request: NextRequest) {
     'codeModelAllowlist',
     'codeSensitiveRepoPatterns',
     'codeClassifierEnabled',
+    'codeEffortTargets',
     'codeClassifierModel',
     'codeClassifierIncludePrompt',
     'codeClassifierConfig',
@@ -139,8 +140,6 @@ export async function POST(request: NextRequest) {
     'codeValueAnnualSpend',
     'timeSavedMinPerPr',
     'timeSavedMinPerCommit',
-    'timeSavedMinPerCoworkSession',
-    'timeSavedMinPerChatConversation',
     'riskSeverityLowDesc',
     'riskSeverityMediumDesc',
     'riskSeverityHighDesc',
@@ -182,6 +181,8 @@ export async function POST(request: NextRequest) {
     'alertsSlackEnabled',
     'alertsSlackWebhookUrl',
     'licensedSeats',
+    'targetDeptAdoptionPct',
+    'targetDeptRealWorkPct',
     'ssoEnabled',
     'ssoIssuerUrl',
     'ssoClientId',
@@ -197,6 +198,9 @@ export async function POST(request: NextRequest) {
     'chatgptSeatPriceMonthly',
     'useCasesExtractModel',
     'useCasesIdeateModel',
+    'askEnabled',
+    'askMonthlyCapUsd',
+    'askLogRetentionDays',
     'useCasesSuggestUseContent',
     'useCasesSuggestExcludedSignals',
     'useCasesTrackerIntervalHours',
@@ -254,17 +258,20 @@ export async function POST(request: NextRequest) {
       'riskSeverityLowDesc', 'riskSeverityMediumDesc', 'riskSeverityHighDesc', 'riskSeverityCriticalDesc',
       'codeValueTeamSize', 'codeValueAnnualSpend',
       'codeValueLiftPct', 'codeValueLoadedComp', 'codeValueCodingHrs',
-      'timeSavedMinPerPr', 'timeSavedMinPerCommit', 'timeSavedMinPerCoworkSession', 'timeSavedMinPerChatConversation',
+      'timeSavedMinPerPr', 'timeSavedMinPerCommit',
       'digestRecipients', 'digestHubUrl',
       // Blank = personal briefings follow the Core AI model again.
       'pulseUserBriefingModel',
       // Blank = Developer Pulse briefings use the organisation briefing model again.
       'codeBriefingModel',
-      'licensedSeats', 'finopsSeatPriceMonthly', 'chatgptSeats', 'chatgptSeatPriceMonthly',
+      'licensedSeats', 'targetDeptAdoptionPct', 'targetDeptRealWorkPct', 'finopsSeatPriceMonthly', 'chatgptSeats', 'chatgptSeatPriceMonthly',
       'ssoIssuerUrl', 'ssoClientId', 'ssoProviderLabel', 'ssoRedirectBaseUrl',
       'dxInstanceUrl',
       // Blank = the address falls back to CCC_COLLECTOR_ADDRESS, then localhost.
       'otelCollectorAddress',
+      // Blank = no intended share for any kind of work, so Team Coaching
+      // stops comparing effort with intent. Emptying every box has to mean that.
+      'codeEffortTargets',
       'openaiWorkspaceId', 'openaiOrganizationId',
     ]);
     if (!allowedKeys.has(key) || typeof value !== 'string') continue;

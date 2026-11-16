@@ -5,8 +5,10 @@
 
 // Capture-path indicator for the dashboard header: OTLP push is the path for
 // Cowork and Code, Chat comes from the Compliance API on an Enterprise plan,
-// and ChatGPT and Codex from OpenAI's Compliance API once its key is saved. With only
-// OpenAI connected the Claude paths are not shown.
+// and ChatGPT and Codex from OpenAI's Compliance API. Each source is listed with
+// whether it is on (its key saved, or for OpenTelemetry, data received). With only
+// OpenAI connected the Claude paths are not shown; with ChatGPT and Codex hidden
+// in Admin, OpenAI's is not.
 
 import { useOpenAiOnly } from '@/components/shared/VendorSwitch';
 
@@ -16,6 +18,7 @@ interface DataSourceStatus {
   complianceApi: boolean;
   analyticsApi: boolean;
   openai?: boolean;
+  openaiShown?: boolean;
   mode: 'max' | 'enterprise';
 }
 
@@ -30,7 +33,7 @@ export function DataSourceIndicator({ status }: { status: DataSourceStatus }) {
           <SourceChip label="Anthropic Analytics API" active={status.analyticsApi} />
         </>
       )}
-      {(status.openai || openaiOnly) && <SourceChip label="OpenAI Compliance API" active />}
+      {(status.openaiShown !== false || openaiOnly) && <SourceChip label="OpenAI Compliance API" active={Boolean(status.openai)} />}
     </div>
   );
 }

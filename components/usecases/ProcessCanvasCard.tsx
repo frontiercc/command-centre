@@ -26,6 +26,8 @@ export interface SuggestionDraft {
   evidence: { distinctUsers: number; sessionCount: number; departments: string[] };
   department: string | null;
   canvas: ProcessCanvas | null;
+  /** When it was drafted (epoch seconds): the end of the canvas's window. */
+  generatedAt: number;
   /** Sessions by product; null while ChatGPT and Codex are hidden or on older rows. */
   products?: SuggestionProducts | null;
 }
@@ -55,7 +57,8 @@ function buildFacts(canvas: ProcessCanvas, products: SuggestionProducts | null |
     facts.push({ label: 'Systems seen', value: canvas.systems.join(' · ') });
   }
   if (canvas.tierNote) {
-    facts.push({ label: 'Delegation depth', value: canvas.tierNote });
+    // The one fact here that is not measured: the tiers are Claude's judgement.
+    facts.push({ label: 'Delegation depth (AI-judged)', value: canvas.tierNote });
   }
   if (canvas.activeHours != null) {
     facts.push({ label: 'Time observed', value: `≈${canvas.activeHours} hrs`, sub: 'active work in sessions' });
@@ -88,6 +91,7 @@ export default function ProcessCanvasCard({
 }) {
   const canvas = suggestion.canvas;
   const facts = canvas ? buildFacts(canvas, suggestion.products) : [];
+  const draftedOn = new Date(suggestion.generatedAt * 1000).toLocaleDateString('en-GB', { day: 'numeric', month: 'long', year: 'numeric' });
 
   return (
     <div
@@ -106,8 +110,8 @@ export default function ProcessCanvasCard({
           {canvas && (
             <span className="text-[13px] text-[#8F8F8F]">
               {suggestion.department
-                ? <>Drafted from this department&apos;s own activity over the last {canvas.windowDays} days</>
-                : <>Drafted from activity in several departments over the last {canvas.windowDays} days</>}
+                ? <>Drafted from this department&apos;s own activity in the {canvas.windowDays} days to {draftedOn}</>
+                : <>Drafted from activity in several departments in the {canvas.windowDays} days to {draftedOn}</>}
             </span>
           )}
           {position && (
@@ -148,6 +152,10 @@ export default function ProcessCanvasCard({
 
           {canvas && (
             <p className="m-0 text-[14px] leading-6 text-[#333333] max-w-[66ch]">{canvas.story}</p>
+          )}
+
+          {!canvas && suggestion.description && (
+            <p className="m-0 text-[14px] leading-6 text-[#333333] max-w-[66ch]">{suggestion.description}</p>
           )}
 
           {canvas && (

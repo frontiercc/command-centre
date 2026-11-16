@@ -109,6 +109,16 @@ describe('summariseHumanTime', () => {
     expect(r.ratio).toBeCloseTo((300 + 120 + 30) / 100);
     expect(r.byKind.map(k => k.kind)).toEqual(['feature']);
     expect(r.byKind[0]).toEqual({ kind: 'feature', sessions: 5, humanMinutes: 300, claudeMinutes: 50 });
+    // The four bugfix sessions and the unnamed one go in one other row, so the rows add up.
+    expect(r.otherKinds).toEqual({ kind: '_other_kinds', sessions: 5, humanMinutes: 150, claudeMinutes: 50 });
+    expect(r.byKind[0].sessions + r.otherKinds!.sessions).toBe(r.sessions);
+    expect(r.byKind[0].humanMinutes + r.otherKinds!.humanMinutes).toBe(r.humanMinutes.likely);
+    expect(r.byKind[0].claudeMinutes + r.otherKinds!.claudeMinutes).toBeCloseTo(r.claudeMinutes);
+  });
+  it('has no other row when there is no named row, or nothing is left over', () => {
+    expect(summariseHumanTime([s('a', 60, 600, 'feature')], 10).otherKinds).toBeUndefined();
+    const all = summariseHumanTime(Array.from({ length: 5 }, (_, i) => s(`f${i}`, 60, 600, 'feature')), 10);
+    expect(all.otherKinds).toBeUndefined();
   });
 });
 

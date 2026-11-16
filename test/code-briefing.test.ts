@@ -66,6 +66,7 @@ beforeEach(async () => {
   await sql.exec(`DELETE FROM pulse_briefings;
            DELETE FROM code_metrics;
            DELETE FROM github_repo_stats;
+           DELETE FROM github_repo_map;
            DELETE FROM code_session_classifications;
            DELETE FROM code_session_stats;
            DELETE FROM config WHERE key IN ('anthropic_ai_api_key', 'pulse_briefing_model', 'code_classifier_enabled');`);
@@ -80,7 +81,7 @@ async function seedOrgRollingMetric(overrides: Partial<{
        scope_type, scope_id, period_start, period_end, spend_usd,
        session_count, repo_count, commit_count, autonomy_ratio, cache_hit_ratio,
        input_tokens, output_tokens, granularity, computed_at
-     ) VALUES ('organisation', 'org', ?, ?, ?, ?, ?, ?, ?, ?, 1000, 500, 'rolling', ?)`,
+     ) VALUES ('organisation', 'org', ?, ?, ?, ?, ?, ?, ?, ?, 1000, 500, 'rolling_7d', ?)`,
     [
     NOW - 7 * 24 * 3600, NOW,
     overrides.spend_usd ?? 12.5,
@@ -144,20 +145,50 @@ describe('generateCodeBriefing / getLatestCodeBriefing round-trip', () => {
     await seedOrgRollingMetric();
     await setConfigValue('anthropicAiApiKey', 'sk-test-key');
     const today = new Date().toISOString().slice(0, 10);
+    await sql.run(`INSERT INTO github_repo_map (repo, github_repo, created_at) VALUES ('my-app', 'org/my-app', ?)`, [NOW]);
     await sql.run(
       `INSERT INTO github_repo_stats (repo, date, commit_count, prs_merged, synced_at) VALUES ('my-app', ?, 9, 1, ?)`,
       [today, NOW],
     );
+    // Not counted: the eighth day back, and a repo that is not tracked.
+    const eightDaysAgo = new Date((NOW - 7 * 24 * 3600) * 1000).toISOString().slice(0, 10);
+    await sql.run(`INSERT INTO github_repo_stats (repo, date, commit_count, prs_merged, synced_at) VALUES ('my-app', ?, 5, 0, ?)`, [eightDaysAgo, NOW]);
+    await sql.run(`INSERT INTO github_repo_stats (repo, date, commit_count, prs_merged, synced_at) VALUES ('untracked', ?, 7, 0, ?)`, [today, NOW]);
 
     const mockCreate = await getMockCreate();
     mockCreate.mockImplementation(async (opts: { messages: Array<{ content: string }> }) => {
       const summary = opts.messages[0].content;
       expect(summary).toContain('github_overlay: total_commits_shipped_in_mapped_repos=9');
+      // Synced before commits were matched to tools: no share, never one worked out from session commits.
+      expect(summary).not.toContain('share_of_shipped_commits');
       return mockBriefingResponse(['p1', 'p2', 'p3'], 'do something');
     });
 
     await generateCodeBriefing();
     expect(mockCreate).toHaveBeenCalled();
+  });
+
+  it('with Codex data, gives the share of shipped commits matched to Claude Code or Codex', async () => {
+    await seedOrgRollingMetric();
+    await setConfigValue('anthropicAiApiKey', 'sk-test-key');
+    await sql.run(`INSERT INTO cowork_messages (id, user_id, session_id, message_type, surface, source, occurred_at, ingested_at)
+      VALUES ('cx-brief', NULL, 'codex:s', 'code_user_message', 'code', 'codex', ?, ?)`, [NOW, NOW]);
+    try {
+      const today = new Date().toISOString().slice(0, 10);
+      await sql.run(`INSERT INTO github_repo_map (repo, github_repo, created_at) VALUES ('my-app', 'org/my-app', ?)`, [NOW]);
+      await sql.run(`INSERT INTO github_repo_stats (repo, date, commit_count, prs_merged, synced_at, claude_commit_count, codex_commit_count, no_tool_commit_count)
+        VALUES ('my-app', ?, 9, 1, ?, 4, 2, 3)`, [today, NOW]);
+      const mockCreate = await getMockCreate();
+      let prompt = '';
+      mockCreate.mockImplementation(async (opts: { messages: Array<{ content: string }> }) => {
+        prompt = opts.messages[0].content;
+        return mockBriefingResponse(['p1', 'p2', 'p3'], 'do something');
+      });
+      await generateCodeBriefing();
+      expect(prompt).toContain('github_overlay: total_commits_shipped_in_mapped_repos=9, share_of_shipped_commits_matched_to_claude_code_or_codex=67%');
+    } finally {
+      await sql.run(`DELETE FROM cowork_messages WHERE id = 'cx-brief'`);
+    }
   });
 });
 
@@ -167,11 +198,14 @@ describe('number check', () => {
     await sql.run(
       `INSERT INTO code_metrics (scope_type, scope_id, period_start, period_end, spend_usd, session_count, repo_count, commit_count,
          autonomy_ratio, cache_hit_ratio, input_tokens, output_tokens, granularity, computed_at)
-       VALUES ('organisation', 'org', ?, ?, 10, 2, 2, 3, 1.5, 0.4, 1000, 500, 'rolling', ?)`,
+       VALUES ('organisation', 'org', ?, ?, 10, 2, 2, 3, 1.5, 0.4, 1000, 500, 'rolling_7d', ?)`,
       [NOW - 15 * 24 * 3600, NOW - 8 * 24 * 3600, NOW - 8 * 24 * 3600],
     );
     const today = new Date().toISOString().slice(0, 10);
-    await sql.run(`INSERT INTO github_repo_stats (repo, date, commit_count, prs_merged, synced_at) VALUES ('my-app', ?, 9, 1, ?)`, [today, NOW]);
+    await sql.run(`INSERT INTO github_repo_map (repo, github_repo, created_at) VALUES ('my-app', 'org/my-app', ?)`, [NOW]);
+    // 9 GitHub commits, 6 matched to Claude Code.
+    await sql.run(`INSERT INTO github_repo_stats (repo, date, commit_count, prs_merged, synced_at, claude_commit_count, codex_commit_count, no_tool_commit_count)
+      VALUES ('my-app', ?, 9, 1, ?, 6, 0, 3)`, [today, NOW]);
     // Work mix: 3 feature + 1 bugfix = 4 classified sessions this week.
     const mix = [['s1', 'feature'], ['s2', 'feature'], ['s3', 'feature'], ['s4', 'bugfix']];
     for (const [id, wt] of mix) {
@@ -191,7 +225,7 @@ describe('number check', () => {
     });
     const r = await generateCodeBriefing();
     expect(prompt).toContain('change_vs_prior_week: spend +25%, sessions +100%, commits +100%');
-    expect(prompt).toContain('ai_assisted_share_of_shipped_commits=67%');
+    expect(prompt).toContain('share_of_shipped_commits_matched_to_claude_code=67%');
     expect(prompt).toContain('(4 classified sessions in total, 2 kinds of work): "New functionality"=3 (75%), "Fixing defects"=1 (25%)');
     expect(r.body).toContain('67% of shipped commits');
   });
@@ -212,5 +246,32 @@ describe('number check', () => {
     // Two cycles (reply + retry each): a refusal gets one fresh cycle first.
     expect(mockCreate).toHaveBeenCalledTimes(4);
     expect((await getLatestCodeBriefing())?.body).toBe('Last week body.');
+  });
+});
+
+describe('Codex in the briefing', () => {
+  it('counts Codex sessions where over a quarter of actions failed in the friction line', async () => {
+    await seedOrgRollingMetric();
+    await setConfigValue('anthropicAiApiKey', 'sk-test-key');
+    // Codex data exists, and one Codex session failed 3 of its 6 actions this week.
+    await sql.run(`INSERT INTO cowork_messages (id, session_id, user_id, message_type, surface, source, content_full, occurred_at)
+                   VALUES ('cx-p', 'codex:f1', 'user-1', 'code_user_message', 'code', 'codex', 'text', ?)`, [NOW - 600]);
+    for (let i = 0; i < 6; i++) {
+      await sql.run(`INSERT INTO codex_actions (id, user_id, session_id, failed, occurred_at) VALUES (?, 'user-1', 'codex:f1', ?, ?)`,
+        [`cxa${i}`, i < 3 ? 1 : 0, NOW - 600 + i]);
+    }
+    try {
+      const mockCreate = await getMockCreate();
+      mockCreate.mockReset();
+      let prompt = '';
+      mockCreate.mockImplementation(async (opts: { messages: Array<{ content: string }> }) => {
+        prompt = opts.messages[0].content;
+        return mockBriefingResponse(['A steady week.', 'Work carried on.', 'Nothing stood out.'], 'Keep going.');
+      });
+      await generateCodeBriefing();
+      expect(prompt).toContain('high_friction_sessions_this_week: 1 (over a quarter of tool actions failed)');
+    } finally {
+      await sql.exec(`DELETE FROM codex_actions; DELETE FROM cowork_messages WHERE id = 'cx-p';`);
+    }
   });
 });

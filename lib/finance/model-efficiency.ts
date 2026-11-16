@@ -511,18 +511,35 @@ async function buildCodeModelEfficiency(period: string, surface: 'code' | 'codex
   }
 
   // Friction per activity: SUM(error_count) / NULLIF(SUM(tool_use_count), 0)
-  // from code_session_stats over the activity's sessions (0 when denom 0).
+  // over the activity's sessions; null (not measured) when there are no tool
+  // uses. Claude Code's come from code_session_stats; Codex's from its
+  // actions in codex_actions (each action a tool use, a failed one an error),
+  // as the Code figures count them (codexActionCounts in
+  // lib/pulse/code/aggregator.ts).
   const allSessionIds = Array.from(new Set(rows.map((r) => r.session_id)));
-  const statsRows = allSessionIds.length
-    ? await client
-        .select({
-          session_id: css.session_id,
-          tool_use_count: css.tool_use_count,
-          error_count: css.error_count,
-        })
-        .from(css)
-        .where(inArray(css.session_id, allSessionIds))
-    : [];
+  const ca = schema.codexActions;
+  const statsRows: Array<{ session_id: string; tool_use_count: number | string | null; error_count: number | string | null }> = [];
+  for (let i = 0; i < allSessionIds.length; i += 500) {
+    const ids = allSessionIds.slice(i, i + 500);
+    statsRows.push(...(surface === 'codex'
+      ? await client
+          .select({
+            session_id: ca.session_id,
+            tool_use_count: sql<number | string>`COUNT(*)`,
+            error_count: sql<number | string>`COALESCE(SUM(${ca.failed}), 0)`,
+          })
+          .from(ca)
+          .where(inArray(ca.session_id, ids))
+          .groupBy(ca.session_id)
+      : await client
+          .select({
+            session_id: css.session_id,
+            tool_use_count: css.tool_use_count,
+            error_count: css.error_count,
+          })
+          .from(css)
+          .where(inArray(css.session_id, ids))));
+  }
   const statsBySession = new Map<string, { tool_use_count: number; error_count: number }>();
   for (const s of statsRows) {
     statsBySession.set(s.session_id, {
@@ -549,7 +566,7 @@ async function buildCodeModelEfficiency(period: string, surface: 'code' | 'codex
         errorSum += s.error_count;
       }
     }
-    const friction = toolSum > 0 ? errorSum / toolSum : 0;
+    const friction = toolSum > 0 ? errorSum / toolSum : null;
 
     const modelsInUse = Array.from(activity.spendByModel.keys());
     const ranked = rankModelsByPrice(modelsInUse, rates);

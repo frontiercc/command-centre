@@ -25,7 +25,7 @@ import { schema } from '@/lib/db/schema';
 import { getConfigValue } from '@/lib/config';
 import { weekStart } from '@/lib/pulse/period';
 import { signalMatches } from '@/lib/usecases/signal-match';
-import { skillVendor } from '@/lib/pulse/vendor-filter';
+import { vendorClause } from '@/lib/dashboard/product-sql';
 import { activityPhrase, type MatchedSignalEvidence } from '@/lib/usecases/spread-format';
 
 import type { UseCase } from '@/lib/usecases/queries';
@@ -185,7 +185,8 @@ async function readSkillUsers(skillName: string): Promise<{ users: Set<string>; 
     .from(si)
     .where(and(
       sql`(lower(${si.skill_name}) = ${lc} OR lower(${si.skill_name}) LIKE ${'%:' + lc})`,
-      skillVendor('claude'),
+      // Claude skills on every surface, Claude Code's included: a use case may be code work.
+      sql.raw(vendorClause('claude', 'cowork_skill_invocations.')),
     ));
   const users = new Set(
     rows.filter(r => r.user_id && signalMatches(new Set([skillName]), r.name)).map(r => r.user_id as string),

@@ -225,11 +225,11 @@ export default function ReportsPage() {
                       onClick={() => toggleSection(section.id)}
                       className={`text-left rounded-[10px] border px-3 py-2 flex flex-col gap-0.5 ${
                         on
-                          ? 'border-[#245BF3] bg-[#F2F5FF]'
+                          ? 'border-[#1F6F8B] bg-[#EEF5F8]'
                           : 'border-[#EAEAEA] bg-white hover:border-[#DADADA]'
                       }`}
                     >
-                      <span className={`text-[14px] font-medium ${on ? 'text-[#245BF3]' : 'text-[#0A0A0A]'}`}>{section.label}</span>
+                      <span className={`text-[14px] font-medium ${on ? 'text-[#1F6F8B]' : 'text-[#0A0A0A]'}`}>{section.label}</span>
                       <span className="text-[13px] text-[#666666]">{section.description}</span>
                     </button>
                   );
@@ -302,7 +302,7 @@ export default function ReportsPage() {
                       </td>
                       <td className={`${T.tdMute} hidden md:table-cell`}>{report.generated_by || 'system'}</td>
                       <td className={`${T.tdMute} hidden md:table-cell max-w-sm truncate`}>
-                        {report.content_summary || '—'}
+                        {report.content_summary || 'none'}
                       </td>
                     </tr>
                   ))}

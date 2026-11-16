@@ -10,6 +10,8 @@ import { useRouter, useSearchParams } from 'next/navigation';
 import TopBar from '@/components/layout/TopBar';
 import { useConnectedProducts } from '@/components/shared/VendorSwitch';
 import LoadingSpinner from '@/components/shared/LoadingSpinner';
+import ToolRiskPanels from '@/components/library/ToolRiskPanels';
+import { anthropicUsesLine } from '@/components/library/anthropic-uses';
 import {
   PageBody, Toolbar, Panel, PanelFoot, Strip, Figure, Bar, T, Tag, B, Chip, Notice, Muted, cx,
 } from '@/components/precision/ui';
@@ -30,6 +32,8 @@ interface LibraryEntry {
   vote_count: number;
   user_voted: number;
   week_count: number;
+  /** People who used it this week. */
+  week_user_count?: number;
   trend_pct: number;
   /** Products it is used in, from its uses (Claude, ChatGPT, Codex). */
   products?: string[];
@@ -117,6 +121,8 @@ interface LibraryData {
   entries: LibraryEntry[];
   total: number;
   unclaimed_count: number;
+  /** Unclaimed entries with at least one use, for the banner. */
+  unclaimed_in_use_count?: number;
   stats: { skill_count: number; connector_count: number; invocations_this_week: number; new_this_week: number };
   capability: { claimed: number; total: number };
   leaderboard: LeaderboardUser[];
@@ -140,7 +146,7 @@ function initials(name: string | null) {
 
 /** Small outline button used on list rows (Install, upvote, Claim). */
 const SMALL_BTN = cx(B.secondary, '!px-2 !py-0.5');
-const VOTED_BTN = '!border-[#245BF3] !text-[#245BF3] !bg-[#F2F5FF]';
+const VOTED_BTN = '!border-[#1F6F8B] !text-[#1F6F8B] !bg-[#EEF5F8]';
 
 /** Line icon (24px grid, currentColor stroke): a single path via `d`, or shapes as children. */
 function LineIcon({ d, size = 14, className, children }: { d?: string; size?: 12 | 14; className?: string; children?: ReactNode }) {
@@ -268,13 +274,13 @@ function HeadlineStrip({ data }: { data: LibraryData }) {
           sub={
             <>
               <span className="tabular-nums">{ur.total_count.toLocaleString()} uses</span>
-              {gapToNext > 0 && <span className="tabular-nums text-[#B54708]"> · {gapToNext} behind #{ur.rank - 1}</span>}
+              {gapToNext > 0 && <span className="tabular-nums"> · {gapToNext} behind #{ur.rank - 1}</span>}
               <span className="block tabular-nums">{ur.skill_count} skill · {ur.connector_count} connector</span>
             </>
           }
         />
       ) : (
-        <Figure label="Your standing" value="—" sub={`Start using skills in ${connected?.openai ? (connected.claude ? 'Claude or ChatGPT' : 'ChatGPT') : 'Claude'} to earn your rank.`} />
+        <Figure label="Your standing" value={<span className="text-[14px] font-normal tracking-normal text-[#8F8F8F]">Not ranked yet</span>} sub={`Start using skills in ${connected?.openai ? (connected.claude ? 'Claude or ChatGPT' : 'ChatGPT') : 'Claude'} to earn your rank.`} />
       )}
     </Strip>
   );
@@ -289,7 +295,7 @@ interface StripCard {
   description: string | null;
   install_guide?: string | null;
   badge: string;
-  badgeTone: 'measured' | 'warn';
+  badgeTone: 'measured' | 'neutral';
   meta: string;
 }
 
@@ -302,7 +308,7 @@ function HighlightCard({ card }: { card: StripCard }) {
       <span className="flex items-center gap-2 min-w-0">
         <span className="font-mono text-[13px] font-semibold truncate">{fmt(card.name)}</span>
         <span className={cx('ml-auto text-[12px] font-medium tabular-nums whitespace-nowrap shrink-0',
-          card.badgeTone === 'warn' ? 'text-[#B54708]' : 'text-[#245BF3]')}>
+          card.badgeTone === 'neutral' ? 'text-[#666666]' : 'text-[#1F6F8B]')}>
           {card.badge}
         </span>
       </span>
@@ -349,7 +355,7 @@ function Highlights({ entries, recentEntries, deptPicks, userDept }: {
     .map(e => ({
       id: e.id, name: e.name, type: e.type, description: e.description, install_guide: e.install_guide,
       badge: `+${e.trend_pct}%`, badgeTone: 'measured',
-      meta: `${e.week_count} uses this week · ${e.user_count} ${e.user_count === 1 ? 'user' : 'users'}`,
+      meta: `${e.week_count} uses this week · ${e.week_user_count ?? 0} ${e.week_user_count === 1 ? 'user' : 'users'}`,
     }));
 
   const newCards: StripCard[] = recentEntries.slice(0, 3).map(e => ({
@@ -374,7 +380,7 @@ function Highlights({ entries, recentEntries, deptPicks, userDept }: {
     .slice(0, 3)
     .map(e => ({
       id: e.id, name: e.name, type: e.type, description: e.description, install_guide: null,
-      badge: 'No owner', badgeTone: 'warn',
+      badge: 'No owner', badgeTone: 'neutral',
       meta: `${e.invocation_count} uses · nobody has claimed this yet`,
     }));
 
@@ -442,12 +448,15 @@ function TabbedTopList({
   connectors,
   skillTotal,
   connectorTotal,
+  connectorAnthropic,
   onVote,
 }: {
   skills: LibraryEntry[];
   connectors: LibraryEntry[];
   skillTotal: number;
   connectorTotal: number;
+  /** How many of connectorTotal are Anthropic's, which the Organisation connectors tile leaves out. */
+  connectorAnthropic: number;
   onVote: (id: number) => void;
 }) {
   const [tab, setTab] = useState<'skills' | 'connectors'>('skills');
@@ -470,7 +479,7 @@ function TabbedTopList({
         label="Skills and connectors"
         tabs={[
           { value: 'skills' as const, label: <>Skills <span className="tabular-nums text-[#8F8F8F]">{skillTotal}</span></> },
-          { value: 'connectors' as const, label: <>Connectors <span className="tabular-nums text-[#8F8F8F]">{connectorTotal}</span></> },
+          { value: 'connectors' as const, label: <>Connectors <span className="tabular-nums text-[#8F8F8F]">{connectorTotal}{connectorAnthropic > 0 ? ` (${connectorAnthropic} from Anthropic)` : ''}</span></> },
         ]}
         value={tab}
         onChange={t => { setTab(t); setOpenId(null); }}
@@ -500,7 +509,7 @@ function TabbedTopList({
                         {e.is_published === 0 && (
                           <Link
                             href={`/library/submit?name=${encodeURIComponent(e.name)}&type=${e.type}`}
-                            className="text-[13px] font-medium text-[#B54708] hover:underline"
+                            className="text-[13px] font-medium text-[#1F6F8B] hover:underline"
                           >
                             Unclaimed
                           </Link>
@@ -593,7 +602,7 @@ function LeaderboardSidebar({
             </span>
             <span className="flex flex-col min-w-0 flex-1 relative">
               <span
-                className={cx('truncate cursor-default font-medium', isYou ? 'text-[#245BF3]' : 'text-[#0A0A0A]',
+                className={cx('truncate cursor-default font-medium', isYou ? 'text-[#1F6F8B]' : 'text-[#0A0A0A]',
                   hasDetails && 'underline decoration-dotted underline-offset-2 decoration-[#B3B3B3]')}
                 onMouseEnter={() => hasDetails && setHoveredId(u.user_id)}
                 onMouseLeave={() => setHoveredId(null)}
@@ -637,12 +646,12 @@ function LeaderboardSidebar({
       {/* The current user's position when outside the top five */}
       {userRank && userRank.rank > 5 && (
         <div className="flex items-center gap-2.5 px-4 py-2 border-t border-dashed border-[#DADADA] bg-[#F5F8FF]">
-          <span className="w-6 shrink-0 font-medium text-[#245BF3] tabular-nums">#{userRank.rank}</span>
-          <span className="w-6 h-6 rounded-full bg-white border border-[#245BF3] text-[11px] font-semibold text-[#245BF3] inline-flex items-center justify-center shrink-0">
+          <span className="w-6 shrink-0 font-medium text-[#1F6F8B] tabular-nums">#{userRank.rank}</span>
+          <span className="w-6 h-6 rounded-full bg-white border border-[#1F6F8B] text-[11px] font-semibold text-[#1F6F8B] inline-flex items-center justify-center shrink-0">
             me
           </span>
-          <span className="flex-1 font-medium text-[#245BF3]">You</span>
-          <span className="font-medium tabular-nums text-[#245BF3] shrink-0">{userRank.total_count.toLocaleString()}</span>
+          <span className="flex-1 font-medium text-[#1F6F8B]">You</span>
+          <span className="font-medium tabular-nums text-[#1F6F8B] shrink-0">{userRank.total_count.toLocaleString()}</span>
         </div>
       )}
     </Panel>
@@ -714,14 +723,14 @@ function DeptBreakdown({ rows }: { rows: DeptRow[] }) {
             <div className="flex items-baseline gap-2 min-w-0">
               <span className="text-[14px] font-medium text-[#0A0A0A] truncate">{r.department}</span>
               <span className="text-[13px] text-[#8F8F8F] tabular-nums truncate">
-                {r.skill_uses} skills · {r.connector_uses} connectors · {r.user_count} {r.user_count === 1 ? 'person' : 'people'}
+                {r.skill_uses} skill {r.skill_uses === 1 ? 'use' : 'uses'} · {r.connector_uses} connector {r.connector_uses === 1 ? 'use' : 'uses'} · {r.user_count} {r.user_count === 1 ? 'person' : 'people'}
               </span>
               <span className="ml-auto text-[13px] font-medium text-[#0A0A0A] tabular-nums shrink-0">{r.total_uses.toLocaleString()}</span>
             </div>
             {/* Split bar: blue = skills, grey = connectors, scaled to the busiest department */}
             <div className="w-full h-1.5 rounded-full bg-[#F2F2F2] overflow-hidden">
               <div className="h-full flex gap-px" style={{ width: `${barPct}%` }}>
-                <div className="h-full bg-[#05073F]" style={{ width: `${skillPct}%` }} />
+                <div className="h-full bg-[#1F6F8B]" style={{ width: `${skillPct}%` }} />
                 <div className="h-full bg-[#B3B3B3] flex-1" />
               </div>
             </div>
@@ -730,7 +739,7 @@ function DeptBreakdown({ rows }: { rows: DeptRow[] }) {
       })}
       <PanelFoot>
         <span className="inline-flex items-center gap-4">
-          <span className="inline-flex items-center gap-1.5"><span className="w-2 h-2 rounded-full bg-[#05073F]" aria-hidden="true" />Skills</span>
+          <span className="inline-flex items-center gap-1.5"><span className="w-2 h-2 rounded-full bg-[#1F6F8B]" aria-hidden="true" />Skills</span>
           <span className="inline-flex items-center gap-1.5"><span className="w-2 h-2 rounded-full bg-[#B3B3B3]" aria-hidden="true" />Connectors</span>
         </span>
       </PanelFoot>
@@ -744,18 +753,18 @@ function UnclaimedBanner({ count, onDismiss, onClaim }: { count: number; onDismi
   if (count === 0) return null;
   return (
     <Notice
-      tone="warn"
+      tone="info"
       title={
         <>
           <LineIcon d={ICON.flag} className="inline-block align-[-2px] mr-1.5" />
-          {`${count} skill${count !== 1 ? 's' : ''} ${count !== 1 ? 'have' : 'has'} no owner.`}
+          {count === 1 ? '1 skill or connector in use has no owner.' : `${count} skills and connectors in use have no owner.`}
         </>
       }
       action={
         <span className="flex items-center gap-3">
           <button
             type="button"
-            className="text-[14px] font-medium text-[#8A5300] hover:underline"
+            className="text-[14px] font-medium text-[#1F6F8B] hover:underline"
             onClick={() => { onClaim(); onDismiss(); }}
           >
             Claim one
@@ -764,7 +773,7 @@ function UnclaimedBanner({ count, onDismiss, onClaim }: { count: number; onDismi
             type="button"
             onClick={onDismiss}
             aria-label="Dismiss"
-            className="text-[#B08A4A] hover:text-[#5C3A00]"
+            className="text-[#8F8F8F] hover:text-[#0A0A0A]"
           >
             <svg className="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2} aria-hidden="true">
               <path strokeLinecap="round" strokeLinejoin="round" d="M6 18L18 6M6 6l12 12" />
@@ -773,7 +782,9 @@ function UnclaimedBanner({ count, onDismiss, onClaim }: { count: number; onDismi
         </span>
       }
     >
-      These are in use across your organisation but nobody has claimed them yet. Be the first: add a description and own it.
+      {count === 1
+        ? 'This is in use across your organisation but nobody has claimed it yet. Be the first: add a description and own it.'
+        : 'These are in use across your organisation but nobody has claimed them yet. Be the first: add a description and own it.'}
     </Notice>
   );
 }
@@ -852,7 +863,8 @@ function AnthropicCatalog({ entries, onVote }: { entries: LibraryEntry[]; onVote
               <Link href={`/library/${e.id}`} className="font-mono text-[13px] font-semibold text-[#0A0A0A] hover:underline truncate">{fmt(e.name)}</Link>
               <Tag>Anthropic</Tag>
             </span>
-            <span className="text-[14px] leading-5 text-[#4D4D4D] line-clamp-2">{e.description ?? 'No description yet.'}</span>
+            {e.description && <span className="text-[14px] leading-5 text-[#4D4D4D] line-clamp-2">{e.description}</span>}
+            <span className={cx('text-[13px] tabular-nums', e.invocation_count > 0 ? 'text-[#666666]' : 'text-[#8F8F8F]')}>{anthropicUsesLine(e)}</span>
             <span className="flex items-center gap-1.5 mt-auto">
               <span className="relative">
                 <InstallButton
@@ -891,7 +903,7 @@ function FilteredList({ entries, onVote }: { entries: LibraryEntry[]; onVote: (i
                   <Tag>{e.type}</Tag>
                   <ProductTags e={e} show={showProducts} />
                   {e.source === 'anthropic' && <Tag>Anthropic</Tag>}
-                  {isUnclaimed && <Tag tone="warn">Unclaimed</Tag>}
+                  {isUnclaimed && <Tag>Unclaimed</Tag>}
                 </div>
                 {e.description && <p className="m-0 mt-0.5 text-[#666666] truncate">{e.description}</p>}
                 {rw && <p className="m-0 mt-0.5 text-[13px] text-[#8F8F8F] tabular-nums truncate">{rw}</p>}
@@ -903,7 +915,7 @@ function FilteredList({ entries, onVote }: { entries: LibraryEntry[]; onVote: (i
                 {isUnclaimed ? (
                   <Link
                     href={`/library/submit?name=${encodeURIComponent(e.name)}&type=${e.type}`}
-                    className={cx(SMALL_BTN, '!border-[#F5D9A8] !text-[#8A5300] !bg-[#FFFAF0]')}
+                    className={SMALL_BTN}
                   >
                     Claim
                   </Link>
@@ -1029,9 +1041,9 @@ export default function LibraryPage() {
         {data && <HeadlineStrip data={data} />}
 
         {/* Unclaimed banner */}
-        {!bannerDismissed && data && data.unclaimed_count > 0 && (
+        {!bannerDismissed && data && (data.unclaimed_in_use_count ?? 0) > 0 && (
           <UnclaimedBanner
-            count={data.unclaimed_count}
+            count={data.unclaimed_in_use_count ?? 0}
             onDismiss={() => setBannerDismissed(true)}
             onClaim={() => { setTypeFilter(''); setClaimedFilter('false'); setSourceFilter(''); }}
           />
@@ -1039,7 +1051,7 @@ export default function LibraryPage() {
 
         {/* Search + filters */}
         <div className="flex gap-2 items-center flex-wrap">
-          <label className="flex-1 min-w-[220px] flex items-center gap-2 px-2.5 py-1.5 border border-[#DADADA] rounded-[10px] bg-white text-[#8F8F8F] focus-within:ring-2 focus-within:ring-[#245BF3]/30 focus-within:border-[#245BF3]">
+          <label className="flex-1 min-w-[220px] flex items-center gap-2 px-2.5 py-1.5 border border-[#DADADA] rounded-[10px] bg-white text-[#8F8F8F] focus-within:ring-2 focus-within:ring-[#1F6F8B]/30 focus-within:border-[#1F6F8B]">
             <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2} aria-hidden="true">
               <circle cx="11" cy="11" r="8" /><path d="m21 21-4.3-4.3" />
             </svg>
@@ -1060,7 +1072,7 @@ export default function LibraryPage() {
             >
               {f.label}
               {f.claimed === 'false' && data?.unclaimed_count ? (
-                <span className="ml-1.5 tabular-nums text-[#8A5300]">{data.unclaimed_count}</span>
+                <span className="ml-1.5 tabular-nums">{data.unclaimed_count}</span>
               ) : null}
             </Chip>
           ))}
@@ -1106,6 +1118,7 @@ export default function LibraryPage() {
                   connectors={topConnectors}
                   skillTotal={allOrgSkills.length}
                   connectorTotal={topConnectors.length}
+                  connectorAnthropic={anthropicConnectors.length}
                   onVote={handleVote}
                 />
                 <DeptBreakdown rows={data.dept_breakdown} />
@@ -1113,6 +1126,8 @@ export default function LibraryPage() {
               <div className="flex flex-col gap-4 min-w-0">
                 <LeaderboardSidebar users={data.leaderboard} userRank={data.user_rank} />
                 <SkillsToTry skills={data.skills_to_try} />
+                {/* Skills and connectors only one person uses, and claimed ones nobody uses */}
+                <ToolRiskPanels />
               </div>
             </div>
 

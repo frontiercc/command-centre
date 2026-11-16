@@ -126,6 +126,21 @@ describe('department process mining (postgres)', () => {
           content_full: 'Draft the client renewal proposal', occurred_at: inWin,
         });
 
+        // Path C: both set and different. The login account's department wins,
+        // as on Team Coaching and work groups, so the same person lands in the same team.
+        await db.insert(schema.users).values({
+          id: 'pg-cara', email: 'pg-cara@test.local', display_name: 'Cara PG', department: 'PG Finance Dept',
+        });
+        await db.insert(schema.adminUsers).values({
+          id: 'pg-admin-cara', email: 'pg-admin-cara@test.local', password_hash: 'x',
+          department: 'PG Sales Dept', linked_cowork_user_id: 'pg-cara',
+        });
+        await db.insert(schema.coworkMessages).values({
+          id: 'm-pg-cara-1', session_id: 's-pg-cara-1', user_id: 'pg-cara',
+          message_type: 'cowork_user_message', surface: 'cowork',
+          content_full: 'Build the quarterly pipeline review', occurred_at: inWin,
+        });
+
         const corpora = await corpus.gatherDeptCorpora(NOW, 28);
         const depts = corpora.map(c => c.department).sort();
         expect(depts).toEqual(['PG Finance Dept', 'PG Sales Dept']);
@@ -140,7 +155,7 @@ describe('department process mining (postgres)', () => {
         expect(finance.excerpts[0].text).not.toContain('jane.doe@example.com');
 
         const sales = corpora.find(c => c.department === 'PG Sales Dept')!;
-        expect(sales.excerpts.map(e => e.userId)).toEqual(['pg-ben']);
+        expect(sales.excerpts.map(e => e.userId).sort()).toEqual(['pg-ben', 'pg-cara']);
         expect(typeof sales.excerpts[0].occurredAt).toBe('number');
 
         // ════════════════════════════════════════════════════════════════

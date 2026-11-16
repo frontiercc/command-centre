@@ -64,10 +64,10 @@ function SilenceSettings({ initial }: { initial: SilenceForm }) {
 }
 
 const fmt = (s: number | null) =>
-  s ? new Date(s * 1000).toLocaleString('en-GB', { day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit' }) : '—';
+  s ? new Date(s * 1000).toLocaleString('en-GB', { day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit' }) : 'never';
 
 function ago(s: number | null, now: number): string {
-  if (!s) return '—';
+  if (!s) return 'time not recorded';
   const d = Math.max(0, now - s);
   if (d < 60) return 'just now';
   if (d < 3600) return `${Math.floor(d / 60)} min ago`;
@@ -209,7 +209,7 @@ export default function SystemHealthCard() {
             </ul>
           )}
           <details className="mt-2">
-            <summary className="text-[13px] font-medium text-[#245BF3] cursor-pointer">All jobs ({health.jobs.length})</summary>
+            <summary className="text-[13px] font-medium text-[#1F6F8B] cursor-pointer">All jobs ({health.jobs.length})</summary>
             <ul className={cx(listCls, 'mt-1')}>
               {health.jobs.map(j => <JobRow key={j.name} j={j} now={now} />)}
             </ul>

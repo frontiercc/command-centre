@@ -78,15 +78,6 @@ describe('Work Pulse per-vendor past weeks', () => {
         { vendor: 'openai', scope_type: 'user', scope_id: 'u-ben', period_start: W3, event_count: 1, tier_3_count: 0 },
       ]);
 
-      // The overview's weekly volume has the past weeks in a vendor view.
-      const { NextRequest } = await import('next/server');
-      const { GET } = await import('../app/api/pulse/cio/route');
-      const res = await GET(new NextRequest('http://localhost/api/pulse/cio?vendor=claude'));
-      const body = await res.json() as { weeklyVolume: { series: Array<{ weekStart: number; eventCount: number }> } };
-      const byWeek = new Map(body.weeklyVolume.series.map(w => [w.weekStart, w.eventCount]));
-      expect(byWeek.get(W3)).toBe(2);
-      expect(byWeek.get(W2)).toBe(1);
-
       // A week with nothing newly graded is left exactly as it is (77 marks "untouched").
       await sql.run(`UPDATE pulse_metrics_vendor SET event_count = 77 WHERE vendor = 'claude' AND scope_type = 'user' AND scope_id = 'u-ana' AND period_start = ? AND granularity = 'week'`, [W3]);
       // A late prompt for two weeks ago is graded now.

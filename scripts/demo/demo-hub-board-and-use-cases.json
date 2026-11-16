@@ -141,48 +141,6 @@
    "source": "org"
   },
   {
-   "name": "Claude_in_Chrome",
-   "type": "connector",
-   "surface": "cowork",
-   "description": "Browser automation via Claude in Chrome extension: navigate pages, fill forms, extract data, and screenshot.",
-   "author_user_id": null,
-   "is_published": 1,
-   "install_guide": null,
-   "source_url": null,
-   "department": null,
-   "created_at": 1781079388,
-   "updated_at": 1781352911,
-   "source": "org"
-  },
-  {
-   "name": "ccd_session",
-   "type": "connector",
-   "surface": "cowork",
-   "description": "Claude Desktop session connector: gives Claude the context of the current session.",
-   "author_user_id": null,
-   "is_published": 1,
-   "install_guide": null,
-   "source_url": null,
-   "department": null,
-   "created_at": 1781011267,
-   "updated_at": 1781352911,
-   "source": "org"
-  },
-  {
-   "name": "cowork",
-   "type": "connector",
-   "surface": "cowork",
-   "description": "Cowork surface connector: surfaces local-agent-mode audit logs and session metadata for project-level context.",
-   "author_user_id": null,
-   "is_published": 1,
-   "install_guide": null,
-   "source_url": null,
-   "department": null,
-   "created_at": 1781018920,
-   "updated_at": 1781352911,
-   "source": "org"
-  },
-  {
    "name": "docusign",
    "type": "connector",
    "surface": "cowork",
@@ -309,34 +267,6 @@
    "source": "org"
   },
   {
-   "name": "slack",
-   "type": "connector",
-   "surface": "cowork",
-   "description": "Read channels, post messages, search conversations, and manage reactions. Useful for surfacing context from Slack without switching apps.",
-   "author_user_id": null,
-   "is_published": 1,
-   "install_guide": null,
-   "source_url": null,
-   "department": null,
-   "created_at": 1778505346,
-   "updated_at": 1781352911,
-   "source": "org"
-  },
-  {
-   "name": "visualize",
-   "type": "connector",
-   "surface": "cowork",
-   "description": "Render charts, diagrams, and data visualisations inline. Outputs SVG or PNG: useful for quick data storytelling without external tooling.",
-   "author_user_id": null,
-   "is_published": 1,
-   "install_guide": null,
-   "source_url": null,
-   "department": null,
-   "created_at": 1781081201,
-   "updated_at": 1781352911,
-   "source": "org"
-  },
-  {
    "name": "workday",
    "type": "connector",
    "surface": "cowork",
@@ -347,20 +277,6 @@
    "source_url": null,
    "department": null,
    "created_at": 1778518989,
-   "updated_at": 1781352911,
-   "source": "org"
-  },
-  {
-   "name": "workspace",
-   "type": "connector",
-   "surface": "cowork",
-   "description": "Google Workspace connector: integrates Drive, Docs, Gmail, and Calendar data into Claude sessions for full workplace context.",
-   "author_user_id": null,
-   "is_published": 1,
-   "install_guide": null,
-   "source_url": null,
-   "department": null,
-   "created_at": 1780924664,
    "updated_at": 1781352911,
    "source": "org"
   },
@@ -379,20 +295,6 @@
    "source": "org"
   },
   {
-   "name": "anthropic-skills:web-fetch",
-   "type": "skill",
-   "surface": "code",
-   "description": "Fetch and analyse web pages, extract structured content, and summarise articles or documentation inline in your session.",
-   "author_user_id": null,
-   "is_published": 1,
-   "install_guide": "claude install anthropic-skills:web-fetch",
-   "source_url": "https://github.com/anthropics/anthropic-skills",
-   "department": null,
-   "created_at": 1781352871,
-   "updated_at": 1781352871,
-   "source": "anthropic"
-  },
-  {
    "name": "anthropic-skills:docx",
    "type": "skill",
    "surface": "cowork",
@@ -407,132 +309,6 @@
    "source": "anthropic"
   },
   {
-   "name": "anthropic-skills:sequential-thinking",
-   "type": "skill",
-   "surface": "code",
-   "description": "Break complex problems into structured steps with explicit reasoning chains: useful for architecture decisions, debugging, and multi-step analysis.",
-   "author_user_id": null,
-   "is_published": 1,
-   "install_guide": "claude install anthropic-skills:sequential-thinking",
-   "source_url": "https://github.com/anthropics/anthropic-skills",
-   "department": null,
-   "created_at": 1781352871,
-   "updated_at": 1781352871,
-   "source": "anthropic"
-  },
-  {
-   "name": "anthropic-skills:data-analyst",
-   "type": "skill",
-   "surface": "code",
-   "description": "Load, clean, and analyse datasets with automatic visualisations. Supports CSV, JSON, and Parquet. Produces summary statistics and charts.",
-   "author_user_id": null,
-   "is_published": 1,
-   "install_guide": "claude install anthropic-skills:data-analyst",
-   "source_url": "https://github.com/anthropics/anthropic-skills",
-   "department": null,
-   "created_at": 1781352871,
-   "updated_at": 1781352871,
-   "source": "anthropic"
-  },
-  {
-   "name": "anthropic-skills:memory",
-   "type": "skill",
-   "surface": "code",
-   "description": "Persistent memory across sessions: save facts, project context, and preferences so Claude remembers them in future conversations.",
-   "author_user_id": null,
-   "is_published": 1,
-   "install_guide": "claude install anthropic-skills:memory",
-   "source_url": "https://github.com/anthropics/anthropic-skills",
-   "department": null,
-   "created_at": 1781352871,
-   "updated_at": 1781352871,
-   "source": "anthropic"
-  },
-  {
-   "name": "anthropic-skills:code-review",
-   "type": "skill",
-   "surface": "code",
-   "description": "Structured code review covering correctness, security, performance, and style. Outputs scored findings with suggested fixes.",
-   "author_user_id": null,
-   "is_published": 1,
-   "install_guide": "claude install anthropic-skills:code-review",
-   "source_url": "https://github.com/anthropics/anthropic-skills",
-   "department": null,
-   "created_at": 1781352871,
-   "updated_at": 1781352871,
-   "source": "anthropic"
-  },
-  {
-   "name": "anthropic-skills:test-gen",
-   "type": "skill",
-   "surface": "code",
-   "description": "Generate unit and integration tests for any function or module. Covers happy path, edge cases, and error conditions.",
-   "author_user_id": null,
-   "is_published": 1,
-   "install_guide": "claude install anthropic-skills:test-gen",
-   "source_url": "https://github.com/anthropics/anthropic-skills",
-   "department": null,
-   "created_at": 1781352871,
-   "updated_at": 1781352871,
-   "source": "anthropic"
-  },
-  {
-   "name": "anthropic-skills:bug-finder",
-   "type": "skill",
-   "surface": "code",
-   "description": "Static analysis over a file or diff: surfaces logic errors, off-by-one mistakes, null-pointer risks, and race conditions.",
-   "author_user_id": null,
-   "is_published": 1,
-   "install_guide": "claude install anthropic-skills:bug-finder",
-   "source_url": "https://github.com/anthropics/anthropic-skills",
-   "department": null,
-   "created_at": 1781352871,
-   "updated_at": 1781352871,
-   "source": "anthropic"
-  },
-  {
-   "name": "anthropic-skills:prime-directives",
-   "type": "skill",
-   "surface": "cowork",
-   "description": "Establish operating principles for a Claude session: sets tone, constraints, and decision-making heuristics before any task begins.",
-   "author_user_id": null,
-   "is_published": 1,
-   "install_guide": "claude install anthropic-skills:prime-directives",
-   "source_url": "https://github.com/anthropics/anthropic-skills",
-   "department": null,
-   "created_at": 1781352871,
-   "updated_at": 1781352871,
-   "source": "anthropic"
-  },
-  {
-   "name": "anthropic-skills:architect",
-   "type": "skill",
-   "surface": "code",
-   "description": "Software architecture planning: proposes system designs, evaluates trade-offs, generates ADRs, and produces C4-style diagrams.",
-   "author_user_id": null,
-   "is_published": 1,
-   "install_guide": "claude install anthropic-skills:architect",
-   "source_url": "https://github.com/anthropics/anthropic-skills",
-   "department": null,
-   "created_at": 1781352871,
-   "updated_at": 1781352871,
-   "source": "anthropic"
-  },
-  {
-   "name": "anthropic-skills:diagram",
-   "type": "skill",
-   "surface": "code",
-   "description": "Generate Mermaid, PlantUML, or SVG diagrams from code or natural language descriptions. Supports flowcharts, sequence diagrams, and ERDs.",
-   "author_user_id": null,
-   "is_published": 1,
-   "install_guide": "claude install anthropic-skills:diagram",
-   "source_url": "https://github.com/anthropics/anthropic-skills",
-   "department": null,
-   "created_at": 1781352871,
-   "updated_at": 1781352871,
-   "source": "anthropic"
-  },
-  {
    "name": "hubspot-crm",
    "type": "connector",
    "surface": "cowork",
@@ -544,20 +320,6 @@
    "department": null,
    "created_at": 1781425834,
    "updated_at": 1781425834,
-   "source": "org"
-  },
-  {
-   "name": "ccd_session_mgmt",
-   "type": "connector",
-   "surface": "cowork",
-   "description": null,
-   "author_user_id": null,
-   "is_published": 0,
-   "install_guide": null,
-   "source_url": null,
-   "department": null,
-   "created_at": 1781888184,
-   "updated_at": 1781888184,
    "source": "org"
   },
   {
@@ -601,48 +363,6 @@
    "created_at": 1778703754,
    "updated_at": 1785411851,
    "source": "anthropic"
-  },
-  {
-   "name": "File Creation",
-   "type": "connector",
-   "surface": "chat",
-   "description": null,
-   "author_user_id": null,
-   "is_published": 0,
-   "install_guide": null,
-   "source_url": null,
-   "department": null,
-   "created_at": 1789543848,
-   "updated_at": 1789543848,
-   "source": "org"
-  },
-  {
-   "name": "Dynamic Widget",
-   "type": "connector",
-   "surface": "chat",
-   "description": null,
-   "author_user_id": null,
-   "is_published": 0,
-   "install_guide": null,
-   "source_url": null,
-   "department": null,
-   "created_at": 1789543848,
-   "updated_at": 1789543848,
-   "source": "org"
-  },
-  {
-   "name": "salesforce",
-   "type": "connector",
-   "surface": "cowork",
-   "description": "UAT marker claim so the Library tool view has a target.",
-   "author_user_id": null,
-   "is_published": 1,
-   "install_guide": "Connect via Salesforce OAuth in Admin > Integrations.",
-   "source_url": null,
-   "department": null,
-   "created_at": 1788601263,
-   "updated_at": 1788601263,
-   "source": "org"
   },
   {
    "name": "Gmail",
@@ -705,7 +425,7 @@
   {
    "id": "bb2858be-53c6-4d75-b10a-e6e59e5a53a8",
    "title": "Engineering Planning & Code Review Cycle",
-   "description": "The combination of review, coding, analysis and planning indicates a structured engineering workflow where code changes are planned, analyzed, written, and then reviewed.",
+   "description": "Engineers plan a change, write the code, check it and then review it, as one cycle.",
    "owner_user_id": null,
    "departments": "[\"Legal\",\"HR\",\"Product\",\"Finance\",\"Marketing\",\"Engineering\"]",
    "surfaces": "[]",
@@ -795,7 +515,7 @@
   {
    "id": "349f8022-992e-4a72-9978-ab62c7756540",
    "title": "Building Integrated Reporting and Developer Tools",
-   "description": "Users are orchestrating multiple connectors to build internal tools: such as unified marketing performance reports and developer portals: that pull and combine data from several external systems.",
+   "description": "People combine several connectors to build internal tools, such as one marketing performance report or a developer portal, that pull data from several systems together.",
    "owner_user_id": null,
    "departments": "[\"Legal\",\"Marketing\",\"Engineering\",\"Finance\"]",
    "surfaces": "[]",
@@ -1065,7 +785,7 @@
   {
    "id": "bd6db7a4-a1d4-467b-ab09-a39a111353c8",
    "title": "Customer Payment History Export",
-   "description": "A recurring request is to export the full payment history for every customer into a spreadsheet, appearing multiple times with identical phrasing. This suggests a standard, repeatable data extraction task tied to some downstream reporting or analysis need. Automating this export on a schedule could eliminate the need for repeated manual requests for the same dataset.",
+   "description": "People ask, often in the same words, for the full payment history of every customer as a spreadsheet. A scheduled export would save them asking each time.",
    "owner_user_id": "ff9-ben",
    "departments": "[\"Finance\"]",
    "surfaces": "[]",
@@ -1087,8 +807,8 @@
    "strategic": 0,
    "impact_summary": null,
    "impact_summary_at": null,
-   "pain_point": "A recurring request is to export the full payment history for every customer into a spreadsheet, appearing multiple times with identical phrasing. This suggests a standard, repeatable data extraction task tied to some downstream reporting or analysis need. Automating this export on a schedule could eliminate the need for repeated manual requests for the same dataset.",
-   "value_hypothesis": "Standardizing this export as a routine automated feed could reduce repetitive manual requests and ensure timely access to customer payment data.",
+   "pain_point": "People ask, often in the same words, for the full payment history of every customer as a spreadsheet. A scheduled export would save them asking each time.",
+   "value_hypothesis": "A scheduled export would end the repeated requests and keep customer payment data up to date.",
    "baseline_note": null,
    "kpi_note": null
   },
@@ -1215,7 +935,7 @@
   {
    "id": "4b85c7de-0294-4d4d-88cb-4b61d35a468e",
    "title": "Cross-functional research synthesis briefs",
-   "description": "People across many departments turn raw research material: market studies, vendor evaluations, interview transcripts: into concise briefs that summarize key findings and recommendations.",
+   "description": "People across many departments turn research material, such as market studies, vendor evaluations and interview transcripts, into short briefs with the main findings and recommendations.",
    "owner_user_id": null,
    "departments": "[\"Marketing\",\"Finance\",\"Sales\",\"HR\",\"Product\",\"Legal\",\"Customer Success\",\"Engineering\"]",
    "surfaces": "[]",
@@ -1341,7 +1061,7 @@
    "surfaces": "[]",
    "keywords": "[]",
    "skills": "[\"writing-plans\",\"internal-comms\"]",
-   "connectors": "[\"google-drive\"]",
+   "connectors": "[\"Google Drive\"]",
    "task_types": "[\"capability_creation\"]",
    "origin": "emergent",
    "status": "archived",
@@ -8376,7 +8096,7 @@
    "signal_key": "b20f444d64757d505631d258107d4c0a",
    "title": "First-time playbook creation for ops workflows",
    "description": "People are building brand-new, repeatable playbooks for processes like escalation handling and automation audits from scratch, then capturing the plan and communications in shared drive docs.",
-   "matching_rule": "{\"skills\":[\"writing-plans\",\"internal-comms\"],\"connectors\":[\"google-drive\"],\"taskTypes\":[\"capability_creation\"],\"departments\":[\"Enablement\",\"Finance\",\"HR\",\"Sales\",\"Product\",\"Legal\",\"Customer Success\",\"Engineering\",\"Marketing\"]}",
+   "matching_rule": "{\"skills\":[\"writing-plans\",\"internal-comms\"],\"connectors\":[\"Google Drive\"],\"taskTypes\":[\"capability_creation\"],\"departments\":[\"Enablement\",\"Finance\",\"HR\",\"Sales\",\"Product\",\"Legal\",\"Customer Success\",\"Engineering\",\"Marketing\"]}",
    "evidence": "{\"distinctUsers\":44,\"sessionCount\":44,\"departments\":[\"Enablement\",\"Finance\",\"HR\",\"Sales\",\"Product\",\"Legal\",\"Customer Success\",\"Engineering\",\"Marketing\"]}",
    "status": "added",
    "generated_at": 1788525365,
@@ -8511,13 +8231,13 @@
    "signal_key": "procmine-uat-ready",
    "title": "Month-end variance commentary",
    "description": "Month-end commentary appears hand-assembled from pasted spreadsheet rows drawn from the management accounts export each close.",
-   "matching_rule": "{\"skills\":[\"anthropic-skills:xlsx\"],\"connectors\":[\"salesforce\"],\"taskTypes\":[],\"departments\":[\"Finance\"],\"keywords\":[\"management accounts\",\"variance commentary\"]}",
+   "matching_rule": "{\"skills\":[\"anthropic-skills:xlsx\"],\"connectors\":[\"Salesforce\"],\"taskTypes\":[],\"departments\":[\"Finance\"],\"keywords\":[\"management accounts\",\"variance commentary\"]}",
    "evidence": "{\"distinctUsers\":3,\"sessionCount\":9,\"departments\":[\"Finance\"]}",
    "status": "dismissed",
    "generated_at": 1788893006,
    "updated_at": 1790182431,
    "department": "Finance",
-   "canvas_json": "{\"story\":\"Month-end commentary appears hand-assembled from pasted spreadsheet rows drawn from the management accounts export each close. The same three people repeat the assembly step every month before the board pack goes out.\",\"valueHypothesis\":\"Feeding the board-pack template directly from the export would turn assembly into review.\",\"people\":3,\"sessions\":9,\"occasions\":3,\"windowDays\":28,\"rhythm\":{\"label\":\"monthly\",\"display\":\"Monthly, month-end spike\"},\"systems\":[\"anthropic-skills:xlsx\",\"salesforce\"],\"activeHours\":4.5,\"tierNote\":\"Mostly tier 2\"}",
+   "canvas_json": "{\"story\":\"Month-end commentary appears hand-assembled from pasted spreadsheet rows drawn from the management accounts export each close. The same three people repeat the assembly step every month before the board pack goes out.\",\"valueHypothesis\":\"Feeding the board-pack template directly from the export would turn assembly into review.\",\"people\":3,\"sessions\":9,\"occasions\":3,\"windowDays\":28,\"rhythm\":{\"label\":\"monthly\",\"display\":\"Monthly, month-end spike\"},\"systems\":[\"anthropic-skills:xlsx\",\"Salesforce\"],\"activeHours\":4.5,\"tierNote\":\"Mostly tier 2\"}",
    "surface": null,
    "cited_sessions": null
   },
@@ -8526,13 +8246,13 @@
    "signal_key": "sd-uat-me-canvas",
    "title": "Month-end variance commentary",
    "description": "Month-end commentary appears hand-assembled from pasted spreadsheet rows drawn from the management accounts export each close. The same three people repeat the assembly step every month before the board pack goes out.",
-   "matching_rule": "{\"skills\":[\"anthropic-skills:xlsx\"],\"connectors\":[\"salesforce\"],\"taskTypes\":[],\"departments\":[\"Finance\"],\"keywords\":[\"management accounts\",\"variance commentary\"]}",
+   "matching_rule": "{\"skills\":[\"anthropic-skills:xlsx\"],\"connectors\":[\"Salesforce\"],\"taskTypes\":[],\"departments\":[\"Finance\"],\"keywords\":[\"management accounts\",\"variance commentary\"]}",
    "evidence": "{\"distinctUsers\":3,\"sessionCount\":9,\"departments\":[\"Finance\"]}",
    "status": "added",
    "generated_at": 1783326369,
    "updated_at": 1790238369,
    "department": "Finance",
-   "canvas_json": "{\"story\":\"Month-end commentary is hand-assembled from pasted spreadsheet rows drawn from the management accounts export each close, checked against Salesforce closed-won, and dropped into the board pack template.\",\"valueHypothesis\":\"Feeding the board-pack template directly from the export and Salesforce would turn assembly into review.\",\"people\":3,\"sessions\":9,\"occasions\":3,\"windowDays\":90,\"rhythm\":{\"label\":\"monthly\",\"display\":\"Monthly, month-end spike\"},\"systems\":[\"anthropic-skills:xlsx\",\"salesforce\"],\"activeHours\":5,\"tierNote\":\"Mostly tier 2\"}",
+   "canvas_json": "{\"story\":\"Month-end commentary is hand-assembled from pasted spreadsheet rows drawn from the management accounts export each close, checked against Salesforce closed-won, and dropped into the board pack template.\",\"valueHypothesis\":\"Feeding the board-pack template directly from the export and Salesforce would turn assembly into review.\",\"people\":3,\"sessions\":9,\"occasions\":3,\"windowDays\":90,\"rhythm\":{\"label\":\"monthly\",\"display\":\"Monthly, month-end spike\"},\"systems\":[\"anthropic-skills:xlsx\",\"Salesforce\"],\"activeHours\":5,\"tierNote\":\"Mostly tier 2\"}",
    "surface": null,
    "cited_sessions": null
   },
@@ -8556,15 +8276,15 @@
    "signal_key": "c86d17f24dea3c73d599e32b1f026e9d",
    "title": "Weekly pipeline review note",
    "description": "This work turns raw CRM export data into a short briefing covering deal stages, movements, stuck or slipped deals, and forecast, used ahead of a recurring sales or leadership pipeline meeting. Today someone pastes an export and asks for the usual sections or a condensed version for a notes field or slide, with care taken to use official stage names and not invent dates. If transformed, the pipeline note could be generated directly from the CRM data on a consistent cadence without manual recomposition each time.",
-   "matching_rule": "{\"skills\":[],\"connectors\":[\"slack\"],\"taskTypes\":[],\"departments\":[\"Customer Success\",\"Sales\"],\"keywords\":[\"pipeline note\",\"stages, movements, stuck, slipped, forecast\",\"weighted by stage\"]}",
+   "matching_rule": "{\"skills\":[],\"connectors\":[\"Slack\"],\"taskTypes\":[],\"departments\":[\"Customer Success\",\"Sales\"],\"keywords\":[\"pipeline note\",\"stages, movements, stuck, slipped, forecast\",\"weighted by stage\"]}",
    "evidence": "{\"distinctUsers\":5,\"sessionCount\":7,\"departments\":[\"Customer Success\",\"Sales\"]}",
    "status": "open",
    "generated_at": 1791264669,
    "updated_at": 1791264669,
    "department": null,
-   "canvas_json": "{\"story\":\"This work turns raw CRM export data into a short briefing covering deal stages, movements, stuck or slipped deals, and forecast, used ahead of a recurring sales or leadership pipeline meeting. Today someone pastes an export and asks for the usual sections or a condensed version for a notes field or slide, with care taken to use official stage names and not invent dates. If transformed, the pipeline note could be generated directly from the CRM data on a consistent cadence without manual recomposition each time.\",\"valueHypothesis\":\"Automating this would save preparation time before recurring pipeline meetings while making the forecast narrative more consistent and trustworthy.\",\"departments\":[\"Customer Success\",\"Sales\"],\"people\":5,\"sessions\":7,\"occasions\":7,\"windowDays\":28,\"rhythm\":{\"label\":\"weekly\",\"display\":\"Weekly\"},\"systems\":[\"slack\"],\"activeHours\":3.4,\"tierNote\":\"Mostly tier 2\"}",
+   "canvas_json": "{\"story\":\"This work turns raw CRM export data into a short briefing covering deal stages, movements, stuck or slipped deals, and forecast, used ahead of a recurring sales or leadership pipeline meeting. Today someone pastes an export and asks for the usual sections or a condensed version for a notes field or slide, with care taken to use official stage names and not invent dates. If transformed, the pipeline note could be generated directly from the CRM data on a consistent cadence without manual recomposition each time.\",\"valueHypothesis\":\"Automating this would save preparation time before recurring pipeline meetings while making the forecast narrative more consistent and trustworthy.\",\"departments\":[\"Customer Success\",\"Sales\"],\"people\":5,\"sessions\":7,\"occasions\":7,\"windowDays\":28,\"rhythm\":{\"label\":\"weekly\",\"display\":\"Weekly\"},\"systems\":[\"Slack\"],\"activeHours\":3.4,\"tierNote\":\"Mostly tier 2\"}",
    "surface": "cowork",
-   "cited_sessions": "[\"ff9-bg-pipeline-w4-2\",\"ff-cwsess-kv1mbq0k-nu1rsnya\",\"ff9-bg-pipeline-w3-1\",\"ff9-bg-pipeline-w3-0\",\"ff9-bg-pipeline-w2-2\",\"ff9-bg-pipeline-w2-0\",\"ff5-cwsess-7dpfrxhn-050xt88w\"]"
+   "cited_sessions": "[\"ff9-bg-pipeline-w4-2\",\"ff9-bg-pipeline-w3-1\",\"ff9-bg-pipeline-w3-0\",\"ff9-bg-pipeline-w2-2\",\"ff9-bg-pipeline-w2-0\"]"
   },
   {
    "id": "e7319e9a-aa8f-42f2-a39b-86cd0109e472",
@@ -8579,7 +8299,7 @@
    "department": null,
    "canvas_json": "{\"story\":\"This work takes raw survey responses or free-text comments from training sessions, partner programs, or customer feedback and distills them into top themes with representative quotes, often split by audience or department for a leadership readout. It currently involves manually reading comments, grouping similar points, and writing a short narrative explaining shifts in scores. A transformed version would consistently extract themes and quotes from feedback data without requiring manual re-reading each cycle.\",\"valueHypothesis\":\"Automating this would make recurring feedback readouts faster to produce and more consistent in how themes are identified and reported to leadership.\",\"departments\":[\"HR\",\"Legal\",\"Marketing\"],\"people\":7,\"sessions\":7,\"occasions\":7,\"windowDays\":28,\"rhythm\":{\"label\":\"weekly\",\"display\":\"Weekly\"},\"systems\":[\"internal-comms\"],\"activeHours\":4.1,\"tierNote\":\"Mostly tier 3\"}",
    "surface": "cowork",
-   "cited_sessions": "[\"ff5-cwsess-gn7s878z-k5mmt3ej\",\"ff5-cwsess-zfow3lzf-q0crmi7u\",\"ff5-cwsess-h9pg3n2g-7l61rrr7\",\"ff-cwsess-f60rtqap-wt66ni1o\",\"ff5-cwsess-ph5krnmm-x2n87s9k\",\"ff5-cwsess-368w5nqw-ccv3mg89\",\"ff5-cwsess-shxmrtmy-rg7cwrc9\"]"
+   "cited_sessions": null
   },
   {
    "id": "71e0bbfd-a5c6-4e24-afde-d333060e394a",
@@ -8594,7 +8314,7 @@
    "department": null,
    "canvas_json": "{\"story\":\"This work assembles a security and compliance posture summary in response to customer procurement questionnaires, covering topics like encryption, access control, incident response, data hosting, and AI data handling. It is produced by pulling together known facts, keeping claims limited to what can be evidenced, and incorporating legal's requested wording changes. A transformed version would maintain a current, reusable set of verified statements that can be assembled into these packs without re-verifying facts each time a customer asks.\",\"valueHypothesis\":\"Automating this would speed up responses to customer security reviews while reducing the risk of overstating compliance claims.\",\"departments\":[\"Engineering\",\"Finance\",\"HR\"],\"people\":4,\"sessions\":4,\"occasions\":4,\"windowDays\":28,\"rhythm\":{\"label\":\"weekly\",\"display\":\"Weekly\"},\"systems\":[],\"activeHours\":3.1,\"tierNote\":\"Mostly tier 3\"}",
    "surface": "cowork",
-   "cited_sessions": "[\"ff5-cwsess-dttb9adt-6ttzcyi4\",\"ff5-cwsess-5e2j1551-rhxdnhv4\",\"ff5-cwsess-t0dpwo0z-x4xgd7uq\",\"ff5-cwsess-t8t6se92-vckg158q\"]"
+   "cited_sessions": null
   },
   {
    "id": "8b5d4934-771a-49ec-a993-0530c3832dc8",
@@ -8609,7 +8329,7 @@
    "department": null,
    "canvas_json": "{\"story\":\"This work turns a technical incident or bug investigation into a short, blameless summary for a non-technical or cross-team audience. Inputs include logs, database statements, or system behaviour details, and the output is a concise explanation of what happened and what is being done about it. Today it appears to be written manually after the fix is understood, with tone and length adjusted for the audience; transformation would make it faster to produce consistently right after resolution.\",\"valueHypothesis\":\"Standardising incident summaries would save engineering time and improve trust with stakeholders who need plain explanations quickly.\",\"departments\":[\"Engineering\"],\"people\":3,\"sessions\":3,\"occasions\":3,\"windowDays\":28,\"rhythm\":{\"label\":\"recurring\",\"display\":\"3 occasions over 4 weeks\"},\"systems\":[],\"activeHours\":3.9,\"tierNote\":\"Mostly tier 2\"}",
    "surface": "cowork",
-   "cited_sessions": "[\"ff-cwsess-ebbytsim-rymjkcl5\",\"ff-cwsess-x1v9agl1-clpo8bkq\",\"ff-cwsess-x5p5sdnf-lbtu2b3a\"]"
+   "cited_sessions": null
   },
   {
    "id": "b6ae026f-7545-4a1f-bc58-641dd52231b4",
@@ -8624,7 +8344,7 @@
    "department": null,
    "canvas_json": "{\"story\":\"This process takes a submitted risk register, with ratings and mitigation comments from various owners, and reviews it for vague mitigations, under-rated items, missing reasons for changes, and duplicates. The output is a cleaned-up register or a short list of real issues for a governance or committee meeting. It currently relies on someone manually reading submissions and pushing back on weak entries, and transformation would make that scrutiny and rewrite consistent across cycles.\",\"valueHypothesis\":\"Systematising risk register review would catch under-rated or vague entries before they reach leadership, improving the quality of governance decisions.\",\"departments\":[\"Engineering\",\"Finance\",\"Product\",\"Sales\"],\"people\":5,\"sessions\":5,\"occasions\":5,\"windowDays\":28,\"rhythm\":{\"label\":\"weekly\",\"display\":\"Weekly\"},\"systems\":[\"Gmail\"],\"activeHours\":4.1,\"tierNote\":\"Mostly tier 2\"}",
    "surface": "cowork",
-   "cited_sessions": "[\"ff5-cwsess-s2fp5ezx-26vp9ibk\",\"ff5-cwsess-8nb11mmj-w6rj5wbg\",\"ff5-cwsess-qvm095f3-ulm5sy3c\",\"ff5-cwsess-pnnt6cpi-930gipsm\",\"ff2-capisess-58zycciu-6o7p7q9g\"]"
+   "cited_sessions": null
   },
   {
    "id": "1ec717cd-93c6-4239-85ca-9e13d2015659",
@@ -8639,7 +8359,7 @@
    "department": null,
    "canvas_json": "{\"story\":\"Teams across the business respond to customer security and procurement questionnaires that include a section asking about use of AI, and they draft a standard explanation covering the use of third-party model providers, data handling, opt-out options and prompt scanning. The output is a short, consistent paragraph inserted into the wider questionnaire response in the same tone as the rest of the document. Transforming this would mean reusing one vetted answer across every questionnaire instead of redrafting it each time.\",\"valueHypothesis\":\"Standardizing the AI-related answer to customer questionnaires saves repeated drafting effort and ensures consistent, approved claims are used every time.\",\"departments\":[\"Customer Success\",\"Engineering\",\"Finance\",\"Marketing\"],\"people\":4,\"sessions\":4,\"occasions\":4,\"windowDays\":28,\"rhythm\":{\"label\":\"monthly\",\"display\":\"Monthly\"},\"systems\":[\"internal-comms\",\"Gmail\"],\"activeHours\":3.2,\"tierNote\":\"Mostly tier 1\"}",
    "surface": "cowork",
-   "cited_sessions": "[\"ff5-cwsess-t0dpwo0z-x4xgd7uq\",\"ff5-cwsess-t8t6se92-vckg158q\",\"ff5-cwsess-8kbpreif-78na95cc\",\"ff5-cwsess-ufti9ag5-5fjgldbd\"]"
+   "cited_sessions": null
   },
   {
    "id": "f80bc3ba-c780-4ed1-bda1-4f2046837e12",
@@ -8654,7 +8374,7 @@
    "department": null,
    "canvas_json": "{\"story\":\"People pull together the latest status of a handful of named large deals, including stage, expected close date, and recent updates from deal owners, to brief leadership or feed a forecast call. The raw material is scattered updates from account owners that get consolidated into a short structured summary. If transformed, the rollup could be assembled automatically from CRM and deal-owner notes rather than manually chased and typed up each time.\",\"valueHypothesis\":\"Automating the deal status rollup would save significant manual chasing and recompilation time while giving leadership a more consistently updated view of pipeline risk.\",\"departments\":[\"Customer Success\",\"Engineering\",\"Finance\",\"HR\",\"Product\",\"Sales\"],\"people\":6,\"sessions\":6,\"occasions\":5,\"windowDays\":28,\"rhythm\":{\"label\":\"weekly\",\"display\":\"Weekly\"},\"systems\":[],\"activeHours\":3.1,\"tierNote\":\"Mostly tier 1\"}",
    "surface": "cowork",
-   "cited_sessions": "[\"ff5-cwsess-g2vzbiwg-1cngol2q\",\"ff5-cwsess-1q8d7mn2-tttalpv2\",\"ff5-cwsess-pgi8c7dg-szopvzwe\",\"ff5-cwsess-fu9i1cz3-x43l426h\",\"ff5-cwsess-hqrwg7bm-82i2i5rg\",\"ff5-cwsess-660im0c7-pgtf5bcn\"]"
+   "cited_sessions": null
   },
   {
    "id": "5e1eb812-fd58-42c9-bda2-262bf2540530",
@@ -8669,7 +8389,7 @@
    "department": null,
    "canvas_json": "{\"story\":\"Account owners turn rough call notes or transcripts into a structured brief for internal stakeholders, covering customer concerns, commercial facts, and next steps, while being careful not to overpromise on roadmap or pricing. This happens after customer meetings across sales and customer success teams who need to hand off context to colleagues who weren't present. If transformed, these briefs could be generated directly from call notes and CRM data with built-in guardrails on what can and cannot be promised.\",\"valueHypothesis\":\"Standardizing the call-to-brief conversion would reduce the time account teams spend writing up customer context and reduce the risk of inconsistent commercial messaging.\",\"departments\":[\"Customer Success\"],\"people\":3,\"sessions\":3,\"occasions\":3,\"windowDays\":28,\"rhythm\":{\"label\":\"recurring\",\"display\":\"3 occasions over 4 weeks\"},\"systems\":[\"doc-coauthoring\"],\"activeHours\":1.6,\"tierNote\":\"Mostly tier 1\"}",
    "surface": "cowork",
-   "cited_sessions": "[\"ff-cwsess-gb856i6t-lupuqrdz\",\"ff3-cwsess-r3f7w5i0-03bgbfod\",\"ff-cwsess-oimq7oa4-hi05yzhg\"]"
+   "cited_sessions": null
   },
   {
    "id": "b09702ef-d7be-4ff4-9532-a18ec9aa18df",
@@ -8684,7 +8404,7 @@
    "department": null,
    "canvas_json": "{\"story\":\"After preparing a briefing or analysis, people ask for a list of likely follow-up questions from the audience so they can prepare answers in advance. This appears across finance, marketing, and customer success when readying material for a meeting with executives or clients. If transformed, this anticipatory step could be built directly into the briefing generation process rather than requested as an afterthought each time.\",\"valueHypothesis\":\"Automatically surfacing likely follow-up questions would help presenters walk into meetings better prepared with less extra effort.\",\"departments\":[\"Customer Success\",\"Finance\",\"Marketing\"],\"people\":3,\"sessions\":3,\"occasions\":3,\"windowDays\":28,\"rhythm\":{\"label\":\"weekly\",\"display\":\"Weekly\"},\"systems\":[\"internal-comms\",\"Gmail\"],\"activeHours\":2.7,\"tierNote\":\"Mostly tier 1\"}",
    "surface": "cowork",
-   "cited_sessions": "[\"ff5-cwsess-t0dpwo0z-x4xgd7uq\",\"ff5-cwsess-8kbpreif-78na95cc\",\"ff5-cwsess-ufti9ag5-5fjgldbd\"]"
+   "cited_sessions": null
   },
   {
    "id": "30521da5-4ea1-43eb-ae27-34ba75ca4e7d",
@@ -8699,7 +8419,7 @@
    "department": "Customer Success",
    "canvas_json": "{\"story\":\"Support tickets that share a common complaint are grouped into a theme and turned into a structured bug report for engineering, covering symptoms, pattern across tickets, what is known, and what needs investigating. The input is raw ticket notes and the output is a short, consistent write-up engineering can act on. With transformation, the grouping and drafting could happen automatically whenever a theme reaches a threshold of tickets.\",\"valueHypothesis\":\"Turning scattered ticket notes into a consistent bug brief should speed up engineering triage and reduce back-and-forth clarifying what customers actually experienced.\",\"people\":2,\"sessions\":2,\"occasions\":2,\"windowDays\":28,\"rhythm\":{\"label\":\"recurring\",\"display\":\"2 occasions over 4 weeks\"},\"systems\":[],\"activeHours\":1.6,\"tierNote\":\"Mostly tier 1\"}",
    "surface": "cowork",
-   "cited_sessions": "[\"ff-cwsess-00a9tzpx-mbe055wd\",\"ff-cwsess-0u0jq7ph-gys7nr91\"]"
+   "cited_sessions": null
   },
   {
    "id": "79e0b669-70c5-44c9-be39-3c1ee854748e",
@@ -8714,7 +8434,7 @@
    "department": "Customer Success",
    "canvas_json": "{\"story\":\"When a customer's satisfaction or sentiment score drops significantly, account manager input is gathered and turned into a short explanation of why the score moved plus a suggested next action, focused on at-risk accounts rather than healthy ones. This draws on qualitative notes from account teams and produces a page used to prioritize attention. If transformed, the linkage between score drops and the underlying account narrative could be generated directly from account manager notes with less manual compilation.\",\"valueHypothesis\":\"Automatically turning score drops into explained, actioned account narratives should help teams intervene faster on at-risk relationships.\",\"people\":2,\"sessions\":2,\"occasions\":2,\"windowDays\":28,\"rhythm\":{\"label\":\"recurring\",\"display\":\"2 occasions over 4 weeks\"},\"systems\":[],\"activeHours\":1.7,\"tierNote\":\"Mostly tier 3\"}",
    "surface": "cowork",
-   "cited_sessions": "[\"ff-cwsess-wuult9z5-fhwyv1rw\",\"ff-cwsess-xepsrmxm-baaazasi\"]"
+   "cited_sessions": null
   },
   {
    "id": "80eba2dc-4846-4f5d-923d-ecf19e43a400",
@@ -8729,7 +8449,7 @@
    "department": "Customer Success",
    "canvas_json": "{\"story\":\"This work turns a populated numbers template into written commentary for a quarterly review meeting, covering performance, customer, delivery, people and outlook sections. The input is a set of headline figures and additional context supplied afterward about specific events, such as a late project or attrition reasons, and the output is a short narrative for a senior audience that explains causes rather than restating numbers. If transformed, the commentary could be drafted directly from source data and context notes with consistent tone and structure, reducing manual back-and-forth to refine each section.\",\"valueHypothesis\":\"Turning raw quarterly figures into polished explanatory commentary faster would save preparation time ahead of leadership reviews and improve consistency of the narrative.\",\"people\":2,\"sessions\":2,\"occasions\":2,\"windowDays\":28,\"rhythm\":{\"label\":\"recurring\",\"display\":\"2 occasions over 4 weeks\"},\"systems\":[\"Gmail\"],\"activeHours\":0.7,\"tierNote\":\"Mostly tier 2\"}",
    "surface": "cowork",
-   "cited_sessions": "[\"ff2-capisess-m87atkwp-s5k2n88u\",\"ff2-capisess-3inhotsl-etdkyd1n\"]"
+   "cited_sessions": null
   },
   {
    "id": "c52c83dc-7163-4d9b-aea5-b02943728059",
@@ -8744,7 +8464,7 @@
    "department": "Engineering",
    "canvas_json": "{\"story\":\"This work turns operational knowledge about deployments, migrations and incident recovery into written runbooks and rollback procedures. It is produced by drafting a procedure, then correcting it against how the team actually operates, such as migration policy or dashboard names, and adding sections like verification steps or on-call consequences. The output is a document engineers can follow during an incident or rollback, kept accurate as practices change.\",\"valueHypothesis\":\"Centralising this work should produce more accurate, consistently structured runbooks with fewer dangerous gaps or outdated assumptions.\",\"people\":5,\"sessions\":5,\"occasions\":5,\"windowDays\":28,\"rhythm\":{\"label\":\"weekly\",\"display\":\"Weekly\"},\"systems\":[],\"activeHours\":4.1,\"tierNote\":\"Mostly tier 2\"}",
    "surface": "cowork",
-   "cited_sessions": "[\"ff-cwsess-ce0gnfi9-h4m1h5b1\",\"ff-cwsess-2lijatn8-dc26h35b\",\"ff-cwsess-6ej8n55l-45cj6i23\",\"ff-cwsess-xfbzbxnj-yiea4q8c\",\"ff-cwsess-1h83o76h-5z7qs2b1\"]"
+   "cited_sessions": null
   },
   {
    "id": "66e7103f-72ca-4ab6-961f-8f7fa367c655",
@@ -8759,7 +8479,7 @@
    "department": "Engineering",
    "canvas_json": "{\"story\":\"This process takes a code change or technical analysis and turns it into a structured review comment for a pull request, grouped by priority and including suggested tests. It involves correcting technical assumptions about shared state or concurrency before the final comment is produced. The output is a ready-to-paste review that is calibrated in tone for the recipient.\",\"valueHypothesis\":\"Standardising this work should produce faster, more technically accurate and consistently toned code reviews.\",\"people\":5,\"sessions\":5,\"occasions\":5,\"windowDays\":28,\"rhythm\":{\"label\":\"weekly\",\"display\":\"Weekly\"},\"systems\":[],\"activeHours\":2.7,\"tierNote\":\"Mostly tier 3\"}",
    "surface": "cowork",
-   "cited_sessions": "[\"ff-cwsess-3l83u8s0-91rpv4gj\",\"ff-cwsess-dh99pcqn-ro8vpm90\",\"ff-cwsess-yzqoccf6-6bzjwct5\",\"ff-cwsess-jf0ltufk-g0uxrgnh\",\"ff5-cwsess-gnl0xt4r-qrd7gu82\"]"
+   "cited_sessions": null
   },
   {
    "id": "d477c1d0-e401-4cd9-ac4c-b14b109d8743",
@@ -8774,7 +8494,7 @@
    "department": "Engineering",
    "canvas_json": "{\"story\":\"This process analyzes quarterly revenue, margin and related metrics against prior periods to identify what is structural versus seasonal, separating effects like mix, pricing or one-off account losses. It is produced by taking raw figures, applying requested adjustments such as accounting for lost accounts or showing working, and flagging what should worry a finance leader. The output is a pre-read analysis used ahead of a budget or leadership discussion.\",\"valueHypothesis\":\"Standardising this should give leadership a more reliable, defensible view of what is driving financial performance changes.\",\"people\":4,\"sessions\":6,\"occasions\":4,\"windowDays\":28,\"rhythm\":{\"label\":\"recurring\",\"display\":\"4 occasions over 4 weeks\"},\"systems\":[\"doc-coauthoring\"],\"activeHours\":3.7,\"tierNote\":\"Mostly tier 2\"}",
    "surface": "cowork",
-   "cited_sessions": "[\"ff2-capisess-31o3jkra-35k32i1e\",\"ff2-capisess-lsemfcbj-ixrbgy6p\",\"ff2-capisess-9nf092hr-mdnsawun\",\"ff2-capisess-ln5t13za-vdxibiob\",\"ff2-capisess-r94wjfr1-dgz6qnni\",\"ff5-anchor-l3xj9ct9-r7osc6mn\"]"
+   "cited_sessions": null
   },
   {
    "id": "7c2d69b8-6008-46b5-ac9a-d68fc024fe9f",
@@ -8789,7 +8509,7 @@
    "department": "Finance",
    "canvas_json": "{\"story\":\"Each quarter, the department takes pre-populated performance numbers and writes the narrative commentary that explains them for a senior audience, covering plan performance, customer, delivery, people and outlook. The work involves turning raw causes, like a late project or staff attrition, into careful, non-alarmist explanatory text, and sharpening vague sections with specific risks and opportunities. The result is a short, explanation-focused commentary document attached to the standard quarterly numbers template.\",\"valueHypothesis\":\"Standardising quarterly review commentary drafting would ensure consistent, well-reasoned narrative is produced quickly from the same recurring inputs each quarter.\",\"people\":5,\"sessions\":5,\"occasions\":4,\"windowDays\":28,\"rhythm\":{\"label\":\"recurring\",\"display\":\"4 occasions over 4 weeks\"},\"systems\":[\"Gmail\"],\"activeHours\":3.4,\"tierNote\":\"Mostly tier 2\"}",
    "surface": "cowork",
-   "cited_sessions": "[\"ff2-capisess-bnls4e4q-ykyst3fm\",\"ff2-capisess-70zqqbtq-i5hetuhd\",\"ff2-capisess-m8hese10-fzjxiey1\",\"ff2-capisess-ovhbcfo1-ise1y6qy\",\"ff2-capisess-0sm58cfs-27fts5py\"]"
+   "cited_sessions": null
   },
   {
    "id": "dde088b5-1403-47a5-9647-31351bb4051e",
@@ -8804,20 +8524,20 @@
    "department": "Finance",
    "canvas_json": "{\"story\":\"This work distills a long, meandering email thread involving multiple teams into a clear record of what was actually decided, by whom, and what remains open. It requires tracking reversed decisions to surface only the final position, and incorporating updates that happened outside the thread itself. The output is a decision log with owners and open questions, used to bring people who were not involved up to speed, and a plain-English summary for the wider team.\",\"valueHypothesis\":\"Turning messy cross-team email threads into a reliable decision record saves time for everyone who would otherwise have to read the whole thread themselves.\",\"people\":5,\"sessions\":5,\"occasions\":4,\"windowDays\":28,\"rhythm\":{\"label\":\"recurring\",\"display\":\"4 occasions over 4 weeks\"},\"systems\":[\"internal-comms\",\"Gmail\"],\"activeHours\":4.8,\"tierNote\":\"Mostly tier 1\"}",
    "surface": "cowork",
-   "cited_sessions": "[\"ff2-capisess-2eqzrvkn-kchkia36\",\"ff2-capisess-2ctlxbko-vtryf7kq\",\"ff2-capisess-86x7eg9l-ly2f4v1q\",\"ff2-capisess-58zycciu-6o7p7q9g\",\"ff5-anchor-2tmmi8hf-fqx6f4qj\"]"
+   "cited_sessions": null
   },
   {
    "id": "281019fa-2a4d-4d4f-8ac9-f183cdc9ebf6",
    "signal_key": "4869aa8b46b066bfff41565a824df185",
    "title": "Timesheet exception checking",
    "description": "This work takes a weekly timesheet export and checks it against standing rules such as hours thresholds, missing project codes and contractor PO limits, producing an approvals list and a separate exceptions list with reasons attached. It currently runs as a manual review against an allocation sheet each week with recurring corrections about sorting and routing. With the process made more systematic, the same checks could be applied consistently every cycle without re-explaining the rules each time.",
-   "matching_rule": "{\"skills\":[],\"connectors\":[\"google-drive\"],\"taskTypes\":[],\"departments\":[\"HR\"],\"keywords\":[\"exceptions list\",\"approvals list\",\"missing project code\",\"contractors over PO hours\"]}",
+   "matching_rule": "{\"skills\":[],\"connectors\":[\"Google Drive\"],\"taskTypes\":[],\"departments\":[\"HR\"],\"keywords\":[\"exceptions list\",\"approvals list\",\"missing project code\",\"contractors over PO hours\"]}",
    "evidence": "{\"distinctUsers\":6,\"sessionCount\":14,\"departments\":[\"HR\"]}",
    "status": "open",
    "generated_at": 1791264669,
    "updated_at": 1791264669,
    "department": "HR",
-   "canvas_json": "{\"story\":\"This work takes a weekly timesheet export and checks it against standing rules such as hours thresholds, missing project codes and contractor PO limits, producing an approvals list and a separate exceptions list with reasons attached. It currently runs as a manual review against an allocation sheet each week with recurring corrections about sorting and routing. With the process made more systematic, the same checks could be applied consistently every cycle without re-explaining the rules each time.\",\"valueHypothesis\":\"Standardising this process would save payroll and operations staff time and reduce approval errors from inconsistent manual checks.\",\"people\":6,\"sessions\":14,\"occasions\":13,\"windowDays\":28,\"rhythm\":{\"label\":\"weekly\",\"display\":\"Weekly\"},\"systems\":[\"anthropic-skills:xlsx\",\"google-drive\"],\"activeHours\":6.2,\"tierNote\":\"Mostly tier 2\"}",
+   "canvas_json": "{\"story\":\"This work takes a weekly timesheet export and checks it against standing rules such as hours thresholds, missing project codes and contractor PO limits, producing an approvals list and a separate exceptions list with reasons attached. It currently runs as a manual review against an allocation sheet each week with recurring corrections about sorting and routing. With the process made more systematic, the same checks could be applied consistently every cycle without re-explaining the rules each time.\",\"valueHypothesis\":\"Standardising this process would save payroll and operations staff time and reduce approval errors from inconsistent manual checks.\",\"people\":6,\"sessions\":14,\"occasions\":13,\"windowDays\":28,\"rhythm\":{\"label\":\"weekly\",\"display\":\"Weekly\"},\"systems\":[\"anthropic-skills:xlsx\",\"Google Drive\"],\"activeHours\":6.2,\"tierNote\":\"Mostly tier 2\"}",
    "surface": "cowork",
    "cited_sessions": "[\"ff9-bg-timesheets-w4-3\",\"ff9-bg-timesheets-w4-2\",\"ff9-bg-timesheets-w4-0\",\"ff9-bg-timesheets-w3-1\",\"ff9-dan-wk1\",\"ff9-eve-wk1\",\"ff9-femi-wk1\",\"ff9-bg-timesheets-w3-0\",\"ff9-femi-wk2\",\"ff9-bg-timesheets-w2-1\",\"ff9-bg-timesheets-w2-0\",\"ff9-dan-wk3\",\"ff9-bg-timesheets-w1-0\",\"ff9-bg-timesheets-w1-1\"]"
   },
@@ -8834,7 +8554,7 @@
    "department": "HR",
    "canvas_json": "{\"story\":\"This work maintains a living reference document, such as a benefits FAQ or onboarding checklist, by incorporating new policy details, correcting inaccurate claims, and adding guidance sections as new questions or requirements arise. It also produces condensed versions for different audiences, like short summaries or slide bullets, from the same source material. Today it is done through iterative manual edits as new information comes in from stakeholders like IT, legal or benefits teams; this could become a standard update-and-republish cycle.\",\"valueHypothesis\":\"Centralizing this document maintenance would reduce the risk of stale or inaccurate policy information reaching staff and speed up turnaround on routine updates.\",\"people\":4,\"sessions\":6,\"occasions\":6,\"windowDays\":28,\"rhythm\":{\"label\":\"weekly\",\"display\":\"Weekly\"},\"systems\":[\"Gmail\"],\"activeHours\":3.4,\"tierNote\":\"Mostly tier 1\"}",
    "surface": "cowork",
-   "cited_sessions": "[\"ff-cwsess-ewsbe9ha-uns9btly\",\"ff-cwsess-7117mcsk-z2aaltgo\",\"ff-cwsess-q7glzl01-m3jimnat\",\"ff-cwsess-9x5csrqu-ayb4jned\",\"ff-cwsess-91arnxyk-r3usv5xq\",\"ff-cwsess-ldbgd3nk-eb1v0wj0\"]"
+   "cited_sessions": null
   },
   {
    "id": "cfdbc912-fd0c-4b9a-8459-9523254b3c62",
@@ -8849,7 +8569,7 @@
    "department": "HR",
    "canvas_json": "{\"story\":\"This work maintains the interview or hiring scorecard template used by hiring managers, updating assessment criteria, adding instructions like independent scoring before debrief, and inserting guidance on appropriate versus inappropriate notes. It is currently done through ad hoc edits whenever talent or legal stakeholders flag an issue with the template's wording or practice. Standardizing it would make the template consistently reflect current hiring guidance across all interview panels.\",\"valueHypothesis\":\"Keeping this template current would reduce inconsistent or inappropriate interview practices across hiring panels.\",\"people\":4,\"sessions\":4,\"occasions\":4,\"windowDays\":28,\"rhythm\":{\"label\":\"weekly\",\"display\":\"Weekly\"},\"systems\":[],\"activeHours\":3,\"tierNote\":\"Mostly tier 1\"}",
    "surface": "cowork",
-   "cited_sessions": "[\"ff-cwsess-8kr4zsgi-duwdxil4\",\"ff-cwsess-i8p56cn6-vs3dg14z\",\"ff-cwsess-xdwhvpl8-xazvxr8u\",\"ff-cwsess-eebzvjy6-6u7dawut\"]"
+   "cited_sessions": null
   },
   {
    "id": "7a0d8bd0-e00d-40b7-874b-f0ee226c09c0",
@@ -8864,7 +8584,7 @@
    "department": "HR",
    "canvas_json": "{\"story\":\"This work combines workshop notes and survey responses from staff on an operational change into a single set of themes, weighted by how strongly each is supported across sources. It produces a synthesized view for operations leadership, refined by splitting results by group (such as shift) and folding in new qualitative notes as they arrive. It is currently done by manually merging messy notes and numeric survey splits into updated themes; transformation would let new feedback batches be merged into the running theme view automatically.\",\"valueHypothesis\":\"Combining qualitative and quantitative frontline feedback into one weighted view speeds up operational decisions that would otherwise wait on manual analysis.\",\"people\":3,\"sessions\":4,\"occasions\":4,\"windowDays\":28,\"rhythm\":{\"label\":\"recurring\",\"display\":\"4 occasions over 4 weeks\"},\"systems\":[],\"activeHours\":1.7,\"tierNote\":\"Mostly tier 2\"}",
    "surface": "cowork",
-   "cited_sessions": "[\"ff2-capisess-4iia1ah7-f8g3isiq\",\"ff2-capisess-simnechx-az6mmr7q\",\"ff2-capisess-gyptor7g-h1cn9tcu\",\"ff2-capisess-10w1b11x-f6l2qlex\"]"
+   "cited_sessions": null
   },
   {
    "id": "23ccb4a3-b4c3-4fdf-9fc8-75bc599fc948",
@@ -8879,7 +8599,7 @@
    "department": "Legal",
    "canvas_json": "{\"story\":\"This work reviews supplier or vendor contract clauses against the organisation's standard playbook positions, flagging gaps such as liability caps and data protection terms. It produces fallback negotiation positions, draft replacement clause wording, and classification of issues as accept, negotiate, or reject. The output is also distilled into plain-English notes for business owners and formal file notes for compliance records explaining the final decision.\",\"valueHypothesis\":\"Standardising contract clause review and fallback positioning could speed up vendor sign-off while ensuring consistent risk positions across deals.\",\"people\":9,\"sessions\":20,\"occasions\":17,\"windowDays\":28,\"rhythm\":{\"label\":\"weekly\",\"display\":\"Weekly\"},\"systems\":[],\"activeHours\":14,\"tierNote\":\"Mostly tier 2\"}",
    "surface": "cowork",
-   "cited_sessions": "[\"ff-cwsess-mdh26obq-rhkjudgd\",\"ff-cwsess-spcyln7i-eddw88zt\",\"ff-cwsess-w53nzz4s-tawsqmos\",\"ff-cwsess-77bjo7oo-8u68inms\",\"ff-cwsess-gilaez4a-m8it4y3q\",\"ff-cwsess-mdtmxq96-gid4msul\",\"ff-cwsess-572as5dz-sqlm3zl8\",\"ff5-cwsess-zfow3lzf-q0crmi7u\",\"ff-cwsess-vpmay77n-1brzeidd\",\"ff5-cwsess-u50o5qd1-mttj58jc\",\"ff-cwsess-nf2szjw5-gxmbyqek\",\"ff-cwsess-37y2xqx4-mavycpsu\",\"ff-cwsess-xr39w9rd-do8cb4kd\",\"ff-cwsess-1i2wfjf1-9d1j818n\",\"ff-cwsess-trelsff9-l23l3te1\",\"ff5-cwsess-vz3pcvx8-z9gew66b\",\"ff-cwsess-ger6z6a8-a86r9gph\",\"ff-cwsess-i0aqaxmv-p7bp1u3e\",\"ff-cwsess-7mjc7ah7-a5jnb3fc\",\"ff-cwsess-t8jd29j8-2ulecw8r\"]"
+   "cited_sessions": null
   },
   {
    "id": "97d1db62-8338-4428-acc4-a701cbd1bcc9",
@@ -8894,7 +8614,7 @@
    "department": "Legal",
    "canvas_json": "{\"story\":\"This process takes raw churn or growth figures by segment or period and adjusts them for known distortions, such as a lost account or a shifted renewal date, to produce a restated, defensible trend. It currently works by the requester supplying the extra context after seeing an initial read, then asking for the figures to be recalculated and the distortion flagged explicitly. Done as a repeatable process, the restatement logic and defensibility checks would be applied the same way each period rather than reconstructed from scratch.\",\"valueHypothesis\":\"Making this a standard process would produce more trustworthy trend figures for commercial discussions and reduce rework when new context emerges late.\",\"people\":2,\"sessions\":4,\"occasions\":3,\"windowDays\":28,\"rhythm\":{\"label\":\"recurring\",\"display\":\"3 occasions over 4 weeks\"},\"systems\":[\"Gmail\"],\"activeHours\":2.3,\"tierNote\":\"Mostly tier 2\"}",
    "surface": "cowork",
-   "cited_sessions": "[\"ff2-anchor-vb3s4sd8-fp0vu4g8\",\"ff2-capisess-lqdttuex-9tw574dj\",\"ff2-capisess-eljlsum8-vi44lyks\",\"ff5-anchor-29ak76rt-0lcnfw7c\"]"
+   "cited_sessions": null
   },
   {
    "id": "824250eb-6ef9-4c26-8169-75ea5ccb0628",
@@ -8909,7 +8629,7 @@
    "department": "Marketing",
    "canvas_json": "{\"story\":\"The department combines workshop notes and survey results from staff on a process change into a single set of themes, weighing how strongly each is supported by evidence, for an operations or steering audience. It is refined as further segmented data arrives, such as by shift or by group, and ends with specific recommendations tied to evidence that a steering group can approve or reject. The output is a structured findings and recommendations document used to decide on operational changes.\",\"valueHypothesis\":\"Synthesizing mixed qualitative and survey feedback into evidence-backed themes should let steering groups make faster, better-supported operational decisions.\",\"people\":3,\"sessions\":3,\"occasions\":2,\"windowDays\":28,\"rhythm\":{\"label\":\"recurring\",\"display\":\"2 occasions over 4 weeks\"},\"systems\":[\"Gmail\"],\"activeHours\":1.4,\"tierNote\":\"Mostly tier 2\"}",
    "surface": "cowork",
-   "cited_sessions": "[\"ff2-capisess-by9rx0ft-bknky39c\",\"ff2-capisess-79edituv-mz83x84d\",\"ff2-capisess-p57cxrac-pvuc6hdv\"]"
+   "cited_sessions": null
   },
   {
    "id": "16832e16-23bc-4855-83fb-b2f84ac962d2",
@@ -8924,7 +8644,7 @@
    "department": "Marketing",
    "canvas_json": "{\"story\":\"This work turns campaign context and past performance data into new newsletter subject line options and an A/B testing plan. It takes in audience notes and open-rate history, then produces draft subject lines, a pick of the most different pair for testing, and guidance on how long to run the test before declaring a winner. With transformation, the drafting and test-design reasoning could be generated directly from performance data rather than reconstructed each time from context the requester has to re-explain.\",\"valueHypothesis\":\"Automating this would save marketing time on repetitive subject line drafting and testing design while making use of performance history more consistent.\",\"people\":2,\"sessions\":3,\"occasions\":3,\"windowDays\":28,\"rhythm\":{\"label\":\"recurring\",\"display\":\"3 occasions over 4 weeks\"},\"systems\":[],\"activeHours\":2.5,\"tierNote\":\"Mostly tier 1\"}",
    "surface": "cowork",
-   "cited_sessions": "[\"ff-cwsess-rrpvj5ag-rxokzsnc\",\"ff-cwsess-7idfvrsr-xkze3yaw\",\"ff-cwsess-y2aaaueu-8d4efs9p\"]"
+   "cited_sessions": null
   },
   {
    "id": "1d569a1d-4e43-47d9-b52f-044498335131",
@@ -8939,7 +8659,7 @@
    "department": "Marketing",
    "canvas_json": "{\"story\":\"This process checks marketing or sales copy against current product facts supplied by the product team, such as plan availability, feature limitations and banned claims, and corrects any draft that misstates them. It takes in a list of factual constraints and a draft document, and produces a revised draft with inaccurate claims fixed or removed. If transformed, these constraint checks could be applied automatically whenever a draft is produced rather than requiring a manual re-check each time.\",\"valueHypothesis\":\"Automating this would reduce the risk of inaccurate product claims reaching customers while cutting manual review time.\",\"people\":6,\"sessions\":6,\"occasions\":6,\"windowDays\":28,\"rhythm\":{\"label\":\"weekly\",\"display\":\"Weekly\"},\"systems\":[\"internal-comms\"],\"activeHours\":3.9,\"tierNote\":\"Mostly tier 1\"}",
    "surface": "cowork",
-   "cited_sessions": "[\"ff-cwsess-mnip9sar-vt4626km\",\"ff5-cwsess-cv9aok1n-80wsstmd\",\"ff-cwsess-m0n8mf5z-9uzoh6nq\",\"ff5-cwsess-d64syyj5-3oc5t1ub\",\"ff-cwsess-oub8njkm-h7z46idt\",\"ff-cwsess-h5qfvqep-vtr3l430\"]"
+   "cited_sessions": null
   },
   {
    "id": "c9c99f60-53f0-4b86-bedd-dd9b87c405fc",
@@ -8954,7 +8674,7 @@
    "department": "Product",
    "canvas_json": "{\"story\":\"This work turns a backlog of feature requests and technical constraints into a Now/Next/Later style roadmap with rationale, success metrics and talking points for leadership and sales pushback. It produces a formatted table or short spoken paragraphs explaining why items are placed where they are, including what tradeoffs and workarounds exist. Currently it is built through iterative discussion about sequencing, capacity and what stakeholders will ask.\",\"valueHypothesis\":\"Structuring roadmap prioritization and its justification consistently should reduce time spent defending sequencing decisions to stakeholders.\",\"people\":5,\"sessions\":5,\"occasions\":5,\"windowDays\":28,\"rhythm\":{\"label\":\"weekly\",\"display\":\"Weekly\"},\"systems\":[],\"activeHours\":3,\"tierNote\":null}",
    "surface": "cowork",
-   "cited_sessions": "[\"ff-cwsess-s8knpjyc-qpwk7y9f\",\"ff-cwsess-pumse0gl-1mr1ezzn\",\"ff-cwsess-ueulr8fr-lysqyh8r\",\"ff-cwsess-bi83zc7k-xv5nlhz8\",\"ff-cwsess-s39d417e-qn5ks598\"]"
+   "cited_sessions": null
   },
   {
    "id": "3e4f1b95-11f5-46dd-af62-40331f6b7ac1",
@@ -8969,7 +8689,7 @@
    "department": "Product",
    "canvas_json": "{\"story\":\"This process combines interview notes, survey responses and support ticket data into unified themes that inform a product requirements document, incorporating new evidence as it arrives and correcting assumptions about target segments. It produces requirement criteria and open questions for engineering and design review. Today it is revised repeatedly as new interviews, QA questions or support data surface gaps in the original synthesis.\",\"valueHypothesis\":\"Continuously folding new research evidence into a single synthesized view should produce more accurate requirements and fewer late-stage surprises.\",\"people\":5,\"sessions\":6,\"occasions\":5,\"windowDays\":28,\"rhythm\":{\"label\":\"weekly\",\"display\":\"Weekly\"},\"systems\":[\"internal-comms\"],\"activeHours\":4.4,\"tierNote\":null}",
    "surface": "cowork",
-   "cited_sessions": "[\"ff-cwsess-cb1z2rc8-rw28uul5\",\"ff-cwsess-4t17ecyz-eotie307\",\"ff-cwsess-kyj0z3ex-0no1tebz\",\"ff-cwsess-qe6yljv5-ktlngj76\",\"ff-cwsess-verlp01c-gyxr47j0\",\"ff-cwsess-fz1j4t4l-tjrir6zk\"]"
+   "cited_sessions": null
   },
   {
    "id": "945880b4-7511-4357-b8e3-faa62e92a2b5",
@@ -8984,20 +8704,20 @@
    "department": "Product",
    "canvas_json": "{\"story\":\"When new information arrives about deal value, timing, or engineering progress, the team reworks the roadmap sequencing across horizons and squads, then drafts a short spoken explanation for why an item moved and what happens in the interim. The output is both a revised roadmap table and a communication line for stakeholders. This currently happens reactively each time new context surfaces, but could become a standard re-sequencing and messaging exercise triggered whenever key assumptions change.\",\"valueHypothesis\":\"Keeps roadmap commitments aligned with real business value and gives leadership a consistent way to explain changes without looking reactive.\",\"people\":4,\"sessions\":4,\"occasions\":4,\"windowDays\":28,\"rhythm\":{\"label\":\"recurring\",\"display\":\"4 occasions over 4 weeks\"},\"systems\":[],\"activeHours\":3.2,\"tierNote\":null}",
    "surface": "cowork",
-   "cited_sessions": "[\"ff-cwsess-s8knpjyc-qpwk7y9f\",\"ff-cwsess-pumse0gl-1mr1ezzn\",\"ff-cwsess-ueulr8fr-lysqyh8r\",\"ff-cwsess-037t57f4-1cnc8mx6\"]"
+   "cited_sessions": null
   },
   {
    "id": "8008603e-ea27-44ce-8db7-34f6963d5284",
    "signal_key": "c9cab404b8756c2750c050455d54287f",
    "title": "Sales pipeline forecast narrative building",
    "description": "Starting from a CRM export, this work turns raw deal records into a structured commentary organized by stage, movements since the last review, stuck or at-risk deals with reasons, and a weighted and unweighted quarter forecast. It is done repeatedly ahead of recurring review meetings, with strict rules to use exact CRM stage names, never invent close dates, and justify any at-risk labels from the data. If transformed, the narrative could be generated directly from the export in the expected format without manual reshaping each time.",
-   "matching_rule": "{\"skills\":[\"internal-comms\"],\"connectors\":[\"Gmail\",\"slack\"],\"taskTypes\":[],\"departments\":[\"Sales\"],\"keywords\":[\"by stage, movements, stuck deals, quarter forecast\",\"weighted and unweighted forecast\"]}",
+   "matching_rule": "{\"skills\":[\"internal-comms\"],\"connectors\":[\"Gmail\",\"Slack\"],\"taskTypes\":[],\"departments\":[\"Sales\"],\"keywords\":[\"by stage, movements, stuck deals, quarter forecast\",\"weighted and unweighted forecast\"]}",
    "evidence": "{\"distinctUsers\":4,\"sessionCount\":6,\"departments\":[\"Sales\"]}",
    "status": "open",
    "generated_at": 1791264669,
    "updated_at": 1791264669,
    "department": "Sales",
-   "canvas_json": "{\"story\":\"Starting from a CRM export, this work turns raw deal records into a structured commentary organized by stage, movements since the last review, stuck or at-risk deals with reasons, and a weighted and unweighted quarter forecast. It is done repeatedly ahead of recurring review meetings, with strict rules to use exact CRM stage names, never invent close dates, and justify any at-risk labels from the data. If transformed, the narrative could be generated directly from the export in the expected format without manual reshaping each time.\",\"valueHypothesis\":\"Automating this narrative construction would save preparation time before every pipeline meeting while keeping the output trustworthy and consistent.\",\"people\":4,\"sessions\":6,\"occasions\":6,\"windowDays\":28,\"rhythm\":{\"label\":\"weekly\",\"display\":\"Weekly\"},\"systems\":[\"internal-comms\",\"Gmail\",\"slack\"],\"activeHours\":2,\"tierNote\":\"Mostly tier 2\"}",
+   "canvas_json": "{\"story\":\"Starting from a CRM export, this work turns raw deal records into a structured commentary organized by stage, movements since the last review, stuck or at-risk deals with reasons, and a weighted and unweighted quarter forecast. It is done repeatedly ahead of recurring review meetings, with strict rules to use exact CRM stage names, never invent close dates, and justify any at-risk labels from the data. If transformed, the narrative could be generated directly from the export in the expected format without manual reshaping each time.\",\"valueHypothesis\":\"Automating this narrative construction would save preparation time before every pipeline meeting while keeping the output trustworthy and consistent.\",\"people\":4,\"sessions\":6,\"occasions\":6,\"windowDays\":28,\"rhythm\":{\"label\":\"weekly\",\"display\":\"Weekly\"},\"systems\":[\"internal-comms\",\"Gmail\",\"Slack\"],\"activeHours\":2,\"tierNote\":\"Mostly tier 2\"}",
    "surface": "cowork",
    "cited_sessions": "[\"ff9-bg-pipeline-w3-0\",\"ff9-hana-wk1\",\"ff9-gus-wk2\",\"ff9-ivan-wk2\",\"ff9-bg-pipeline-w1-2\",\"ff9-ivan-wk3\"]"
   },
@@ -9014,7 +8734,7 @@
    "department": "Engineering",
    "canvas_json": "{\"story\":\"Engineers repeatedly diagnose slow queries using execution plans, apply indexes or paging changes, and verify the improvement against staging or snapshot data. The work involves reading EXPLAIN output, proposing a fix such as keyset paging or an index, and re-running timings to confirm gains while avoiding regressions like duplicate indexes or changed response shapes. If transformed, this becomes a faster, more consistent cycle of plan analysis, fix proposal and verification tied to concrete performance numbers.\",\"valueHypothesis\":\"Speeding up and standardizing query tuning reduces time spent chasing slow endpoints and prevents repeated performance regressions.\",\"people\":7,\"sessions\":10,\"occasions\":10,\"windowDays\":28,\"rhythm\":{\"label\":\"weekly\",\"display\":\"Weekly\"},\"systems\":[\"commit\",\"frontend-design\",\"systematic-debugging\",\"linear\"],\"activeHours\":null,\"tierNote\":null}",
    "surface": "code",
-   "cited_sessions": "[\"ff-code-sess-o77aajc4-gixmnp59\",\"ff-code-sess-uy9xxrik-hnmm1i8a\",\"ff-code-sess-6zqixgom-r06pewsn\",\"ff-code-sess-p09t8uzj-u1mzjuwp\",\"ff-code-sess-nzh6br32-d7gev5i2\",\"ff-code-sess-o9d918qw-vkin4syf\",\"ff-code-sess-7t2bn6pc-rcrjneos\",\"ff-code-sess-7ox5hdp4-rhxv425o\",\"ff-code-sess-bwle3180-zcslj9t0\",\"ff-code-sess-ydgkego3-3x8csyw9\"]"
+   "cited_sessions": null
   },
   {
    "id": "e4df8852-ecf1-40f3-88f7-ae20b3f2fb0a",
@@ -9029,7 +8749,7 @@
    "department": "Finance",
    "canvas_json": "{\"story\":\"Each week a sales operations person compares the current CRM export against the prior week's to work out total open pipeline, stage movement, deals added or slipped, and top movers, then turns that arithmetic into a markdown draft with commentary placeholders for the exec pipeline review. The work is being automated into a script that takes both CSV exports and produces the draft automatically, with fixes for segment mismatches between the two files and an added coverage-ratio line against quarterly targets. Once reliable, the person only needs to add qualitative commentary and rerun with specific segment filters rather than redo the arithmetic by hand.\",\"valueHypothesis\":\"Automating the weekly pipeline arithmetic frees the sales lead from repetitive recalculation and reduces errors from mismatched data segments.\",\"people\":5,\"sessions\":5,\"occasions\":5,\"windowDays\":28,\"rhythm\":{\"label\":\"weekly\",\"display\":\"Weekly\"},\"systems\":[],\"activeHours\":null,\"tierNote\":null}",
    "surface": "code",
-   "cited_sessions": "[\"ff5-sess-o72bs232-4trngzi7\",\"ff5-sess-l2pq2pdt-cj2dchez\",\"ff5-sess-fi62mvxp-u4xnb3fm\",\"ff5-sess-vujlzidh-1ba3jhox\",\"ff5-sess-u211zktv-qxjqr0k4\"]"
+   "cited_sessions": null
   },
   {
    "id": "a05247c7-17b2-4ed3-9ef3-cbf8fb55310c",
@@ -9044,7 +8764,7 @@
    "department": "Finance",
    "canvas_json": "{\"story\":\"An accountant runs a monthly reconciliation between a bank statement and the ledger, matching lines one-to-one and reviewing the remainder by hand, including card settlements that are single bank lines covering multiple ledger entries on the same day. The process is being built into a script that performs one-to-one matching, then a second pass grouping same-date, same-reference ledger lines that sum to a bank line, and outputs a summary tying opening balance, matched and unmatched totals, and closing balance with a zero-check. The output is written to a single multi-tab spreadsheet instead of separate files, cutting the manual line-by-line review down to spot-checking exceptions.\",\"valueHypothesis\":\"Automating bank reconciliation matching reduces manual line-matching effort and surfaces only genuine exceptions for review.\",\"people\":7,\"sessions\":7,\"occasions\":6,\"windowDays\":28,\"rhythm\":{\"label\":\"weekly\",\"display\":\"Weekly\"},\"systems\":[],\"activeHours\":null,\"tierNote\":null}",
    "surface": "code",
-   "cited_sessions": "[\"ff-code-sess-s1gaj324-7rvkva12\",\"ff-code-sess-koep0xq9-dts3y4b5\",\"ff-code-sess-51bi0mry-fyurcjb5\",\"ff-code-sess-5a2lqzgd-8p7wuza9\",\"ff-code-sess-3lfvy5oa-qs91o1my\",\"ff-code-sess-vnf4q92z-ymr0m51g\",\"ff-code-sess-epjunavv-w2yeyddr\"]"
+   "cited_sessions": null
   },
   {
    "id": "db1228b0-fb42-4974-b624-c972be8ee89e",
@@ -9059,7 +8779,7 @@
    "department": "Finance",
    "canvas_json": "{\"story\":\"Each month a finance analyst formats a management accounts workbook for the board pack, applying consistent styling such as bold subtotal rows, colour-coded variance columns, percentage formatting, print area and orientation settings, and a cover sheet derived from the filename. This formatting is being scripted so it works across months despite inconsistencies in the source export, such as numeric account codes or inconsistent\",\"valueHypothesis\":\"Scripting the board pack formatting removes repetitive manual spreadsheet styling and keeps month-to-month output consistent.\",\"people\":6,\"sessions\":8,\"occasions\":9,\"windowDays\":28,\"rhythm\":{\"label\":\"weekly\",\"display\":\"Weekly\"},\"systems\":[],\"activeHours\":null,\"tierNote\":null}",
    "surface": "code",
-   "cited_sessions": "[\"ff-code-sess-s1kf43la-hiyq8ksk\",\"ff-code-sess-fy7qlmeb-ajgaoyyv\",\"ff-code-sess-2b4jvszm-fdnxkaon\",\"ff-code-sess-75rttmzm-olqqidh0\",\"ff-code-sess-k30ne407-zv8tw5nk\",\"ff-code-sess-tfaan2vb-81kyn38z\",\"ff-code-sess-dupl1bcz-e70akcop\",\"ff-code-sess-snpti8fe-ob6brkbx\"]"
+   "cited_sessions": null
   },
   {
    "id": "400f9a87-636f-4e77-ac2c-e1e3fcf23491",
@@ -9074,7 +8794,7 @@
    "department": "HR",
    "canvas_json": "{\"story\":\"This work merges duplicate applicant records from recruiting data exports, resolving conflicting stage values and inconsistent date formats, and preserving rows that cannot be safely matched. It produces a cleaned, deduplicated applicant dataset with a source field reflecting earliest contact, plus tests documenting the merge rules. Today it is handled through an iteratively refined script with manual review of row counts after each run; transformation would make the merge rules and edge-case handling a standing, trusted part of the data pipeline rather than a recurring debugging exercise.\",\"valueHypothesis\":\"Automating this would save analyst time spent re-debugging recurring data quality issues and reduce the risk of inaccurate applicant source reporting.\",\"people\":5,\"sessions\":6,\"occasions\":7,\"windowDays\":28,\"rhythm\":{\"label\":\"weekly\",\"display\":\"Weekly\"},\"systems\":[],\"activeHours\":null,\"tierNote\":null}",
    "surface": "code",
-   "cited_sessions": "[\"ff-code-sess-qxgyqr9h-ryftrs2s\",\"ff-code-sess-xecjvgyx-a14msg76\",\"ff-code-sess-hrg3yltk-udu77zqj\",\"ff-code-sess-k3unxnoe-6ovrhab5\",\"ff-code-sess-ycaqeorg-f5yrnfhf\",\"ff-code-sess-xwzuy9qe-yarv1wkm\"]"
+   "cited_sessions": null
   },
   {
    "id": "7d153922-48dc-454e-aa1e-0c302542edf5",
@@ -9089,7 +8809,7 @@
    "department": "HR",
    "canvas_json": "{\"story\":\"This process joins the weekly timesheet export with the project allocation sheet and produces a report of open tasks, grouped by owner team, with overdue items highlighted. It must tolerate inconsistent file formats, column ordering, and stray duplicate files left behind by other teams. Currently it relies on a script that is repeatedly patched for new edge cases; a transformed version would handle these format variations robustly and deliver a consistent weekly report without manual firefighting.\",\"valueHypothesis\":\"Streamlining this would reduce the time spent reconciling messy timesheet files each week and provide a more reliable view of overdue tasks.\",\"people\":9,\"sessions\":12,\"occasions\":11,\"windowDays\":28,\"rhythm\":{\"label\":\"weekly\",\"display\":\"Weekly\"},\"systems\":[\"writing-plans\"],\"activeHours\":null,\"tierNote\":null}",
    "surface": "code",
-   "cited_sessions": "[\"ff9-cd-timesheets-w4\",\"ff-code-sess-cmezo9hz-xpmbkylr\",\"ff-code-sess-ggbcbooj-mf9uzqo0\",\"ff5-sess-mmo69ev3-7clsn2l0\",\"ff-code-sess-hjnrwiz1-d0pome1o\",\"ff-code-sess-29hlwip3-d2xognir\",\"ff-code-sess-txd4b8gp-fb7g3b0s\",\"ff9-cd-timesheets-w2\",\"ff5-sess-maacfcs0-t0y14j6e\",\"ff-code-sess-dzpgc4md-fqn09y1i\",\"ff-code-sess-32x3belj-52jph98l\",\"ff-code-sess-cfwf2wi9-3aozb3sy\"]"
+   "cited_sessions": "[\"ff9-cd-timesheets-w4\",\"ff9-cd-timesheets-w2\"]"
   },
   {
    "id": "bd6ba064-adb1-4e57-846b-a90386b365e2",
@@ -9104,7 +8824,7 @@
    "department": "Legal",
    "canvas_json": "{\"story\":\"Legal maintains a standard clause across a batch of contract templates and needs it inserted or replaced consistently as a tracked change, with a log of which files were updated. The work involves finding the clause location even when document formatting splits the text across runs, preserving formatting, and recording outcomes including templates with multiple occurrences. If transformed, the matching and logging could run reliably across the full template set without manual per-file checking.\",\"valueHypothesis\":\"Automating this would reduce manual review time and errors when updating standard clauses across many contract templates.\",\"people\":7,\"sessions\":8,\"occasions\":8,\"windowDays\":28,\"rhythm\":{\"label\":\"weekly\",\"display\":\"Weekly\"},\"systems\":[\"code-review\",\"systematic-debugging\",\"linear\"],\"activeHours\":null,\"tierNote\":null}",
    "surface": "code",
-   "cited_sessions": "[\"ff-code-sess-jt20z6rs-rajz8jzf\",\"ff-code-sess-c1k747x9-ti03bwse\",\"ff-code-sess-d1zmf68a-x2ubf5jd\",\"ff-code-sess-nj4fj4a8-q0294u7x\",\"ff-code-sess-k92jaufd-70z45pgz\",\"ff5-sess-6rihbncr-fwg4iy40\",\"ff5-sess-pmeovjy4-h5om7n13\",\"ff5-sess-xypilgz5-wgc0rore\"]"
+   "cited_sessions": null
   },
   {
    "id": "bcf5e8f3-3795-4f8a-816c-9b0a84b0b540",
@@ -9119,7 +8839,7 @@
    "department": "Legal",
    "canvas_json": "{\"story\":\"Legal operations runs a batch extraction of specific clauses such as liability, governing law and notice periods from a large set of contracts, producing a structured output per document. The process requires tolerant heading matching with aliases, whitespace handling, and normalization of notice periods into a consistent unit, leaving ambiguous text blank rather than guessing. Once refined, this produces a reliable structured dataset of clause contents and notice terms across the contract set with minimal manual spot-checking.\",\"valueHypothesis\":\"Standardizing clause extraction would save significant manual review time and reduce missed or misread clauses across large contract batches.\",\"people\":3,\"sessions\":4,\"occasions\":4,\"windowDays\":28,\"rhythm\":{\"label\":\"weekly\",\"display\":\"Weekly\"},\"systems\":[],\"activeHours\":null,\"tierNote\":null}",
    "surface": "code",
-   "cited_sessions": "[\"ff-code-sess-ph1ao9i7-ckueb5vi\",\"ff-code-sess-x03babxe-9d5q57wp\",\"ff-code-sess-zkqxvboj-y74j0b9i\",\"ff-code-sess-a48ccn74-irfnhrpr\"]"
+   "cited_sessions": null
   },
   {
    "id": "6ac53e54-02ca-450d-8917-9c1056e44613",
@@ -9134,7 +8854,7 @@
    "department": "Sales",
    "canvas_json": "{\"story\":\"This work takes a folder of personal or team notes with front-matter metadata and converts them into a CSV formatted for import into a CRM or similar system. It involves normalising inconsistent date formats, truncating long fields to the importer's character limit, skipping malformed entries with a reason, and only exporting items newer than the last run. If transformed, the normalisation, validation and skip-reporting would be handled consistently every run instead of being discovered and patched import by import.\",\"valueHypothesis\":\"Reliable, repeatable note-to-CRM exports would save the time lost to failed imports and manual reformatting of dates and long fields.\",\"people\":8,\"sessions\":8,\"occasions\":7,\"windowDays\":28,\"rhythm\":{\"label\":\"recurring\",\"display\":\"7 occasions over 4 weeks\"},\"systems\":[\"frontend-design\",\"systematic-debugging\"],\"activeHours\":null,\"tierNote\":null}",
    "surface": "code",
-   "cited_sessions": "[\"ff-code-sess-ezrt9bai-ck7nusvf\",\"ff9-cd-pipeline-w4\",\"ff-code-sess-8nt1dm61-9a2bk89i\",\"ff-code-sess-r957ttnf-swldih3g\",\"ff-code-sess-0e4nzs7v-52dptjxd\",\"ff9-cd-pipeline-w2\",\"ff-code-sess-rdthy3m0-jc4jsqjk\",\"ff-code-sess-yk3zdkv7-zrny0pmy\"]"
+   "cited_sessions": "[\"ff9-cd-pipeline-w4\",\"ff9-cd-pipeline-w2\"]"
   },
   {
    "id": "b3ccf386-cd99-433f-9295-72cf7ee1dd6c",
@@ -9149,7 +8869,7 @@
    "department": "Sales",
    "canvas_json": "{\"story\":\"This process takes a list of informally-named accounts from notes or other sources and matches them against the CRM's official account list, first by exact match and then by a normalised match that ignores legal suffixes and punctuation. Anything left unmatched is written to a separate file for manual resolution rather than being guessed. Transforming this would make the matching and reporting of match counts a standard, repeatable step rather than a one-off script each time.\",\"valueHypothesis\":\"Consistent automated account matching would reduce manual reconciliation of informal account names against the CRM and cut errors from guessed matches.\",\"people\":3,\"sessions\":3,\"occasions\":3,\"windowDays\":28,\"rhythm\":{\"label\":\"recurring\",\"display\":\"3 occasions over 4 weeks\"},\"systems\":[],\"activeHours\":null,\"tierNote\":null}",
    "surface": "code",
-   "cited_sessions": "[\"ff-code-sess-9xupkplq-53fueao9\",\"ff-code-sess-0e4nzs7v-52dptjxd\",\"ff-code-sess-yk3zdkv7-zrny0pmy\"]"
+   "cited_sessions": null
   },
   {
    "id": "c3ade427-ae10-4af9-963c-6d7e90d4787e",
@@ -9164,7 +8884,7 @@
    "department": null,
    "canvas_json": "{\"story\":\"Teams gather figures and commentary from several sources and assemble them into a recurring board or leadership pack following the same section order each cycle. Today this is done by manually pulling inputs together and formatting them to match prior editions. If transformed, the pack could be assembled automatically from the underlying data feeds with only exceptions needing human attention.\",\"valueHypothesis\":\"Standardizing how recurring leadership packs are assembled would save preparation time and ensure consistent, comparable reporting cycle after cycle.\",\"departments\":[\"Customer Success\",\"Legal\",\"Marketing\"],\"people\":6,\"sessions\":6,\"occasions\":4,\"windowDays\":28,\"rhythm\":{\"label\":\"recurring\",\"display\":\"4 occasions over 4 weeks\"},\"systems\":[\"doc-coauthoring\",\"Gmail\"],\"activeHours\":0.6,\"tierNote\":\"Mostly tier 2\"}",
    "surface": "cowork",
-   "cited_sessions": "[\"ff2-capisess-uz2ikbsp-z98poj3i\",\"ff2-capisess-mtgpqrza-7zl05lc1\",\"ff2-capisess-wse4lxhz-u2n4zl9b\",\"ff2-capisess-uwkdo3lu-n0vetqlo\",\"ff2-capisess-awhhg3fl-4b4jvdx6\",\"ff2-capisess-98j6hn9m-da4gwgjg\"]"
+   "cited_sessions": null
   },
   {
    "id": "196a3357-6e05-449a-b018-5b10e14eac43",
@@ -9179,7 +8899,7 @@
    "department": "Customer Success",
    "canvas_json": "{\"story\":\"When a customer issue requires compensation or escalation, the team pulls together the facts of what happened, what was agreed, and who approved it into both an internal record and an escalation message to management. The output is a factual, concise note that documents impact, remedy, and follow-up actions, sometimes alongside a message asking colleagues for specific help. Today this is drafted manually from scattered billing and support details; transformation would let the facts be assembled and formatted consistently every time.\",\"valueHypothesis\":\"Standardizing escalation and resolution notes should speed up resolution communication and reduce the risk of missing key facts like approvals or follow-up dates.\",\"people\":3,\"sessions\":3,\"occasions\":3,\"windowDays\":28,\"rhythm\":{\"label\":\"recurring\",\"display\":\"3 occasions over 4 weeks\"},\"systems\":[],\"activeHours\":1,\"tierNote\":\"Mostly tier 2\"}",
    "surface": "cowork",
-   "cited_sessions": "[\"ff-cwsess-5rc76eil-gj6dfumk\",\"ff-cwsess-an42nvr2-jriwd5g4\",\"ff-cwsess-wub93jsk-wergx7m7\"]"
+   "cited_sessions": null
   },
   {
    "id": "f11992de-2dd0-408e-983f-896a65066040",
@@ -9194,7 +8914,7 @@
    "department": "Engineering",
    "canvas_json": "{\"story\":\"This is the recurring task of taking a standard reporting pack or briefing and reworking it to reflect feedback from stakeholders, such as reordering sections, cutting length, or changing emphasis based on how a particular audience reads it. The output is a revised pack or memo ready for distribution. It is currently done through iterative instructions after a draft is produced, and could instead be built from stated audience preferences captured once and applied automatically each cycle.\",\"valueHypothesis\":\"Capturing standing formatting and audience preferences would cut the repeated manual rework needed on every cycle's pack.\",\"people\":5,\"sessions\":5,\"occasions\":3,\"windowDays\":28,\"rhythm\":{\"label\":\"recurring\",\"display\":\"3 occasions over 4 weeks\"},\"systems\":[\"doc-coauthoring\",\"internal-comms\"],\"activeHours\":4.8,\"tierNote\":\"Mostly tier 2\"}",
    "surface": "cowork",
-   "cited_sessions": "[\"ff2-capisess-oq6h3fw6-hvdsghyx\",\"ff2-capisess-mq9tscfq-smxkxhmh\",\"ff2-capisess-slb1mmoo-36wxelf1\",\"ff5-anchor-ruhqrnjf-pa101pyq\",\"ff2-anchor-eltmkt70-26g4gs08\"]"
+   "cited_sessions": null
   },
   {
    "id": "15305f27-4c9c-4baf-80e7-7175d74b3180",
@@ -9209,7 +8929,7 @@
    "department": "Product",
    "canvas_json": "{\"story\":\"This work produces a recurring pack that used to be sent to an outside agency and is now produced in-house from standard inputs. It involves reformatting and condensing data into a short, slide-ready summary with clear themes and actions for distribution to stakeholders. With this transformed, the compilation and formatting step is handled automatically, leaving the department to focus on reviewing content rather than assembling it.\",\"valueHypothesis\":\"Bringing this recurring pack in-house saves agency cost and turnaround time while keeping output consistent.\",\"people\":4,\"sessions\":5,\"occasions\":5,\"windowDays\":28,\"rhythm\":{\"label\":\"monthly\",\"display\":\"Monthly\"},\"systems\":[\"internal-comms\",\"Gmail\"],\"activeHours\":2.4,\"tierNote\":\"Mostly tier 1\"}",
    "surface": "cowork",
-   "cited_sessions": "[\"ff2-capisess-e16srpm5-tepvdwn6\",\"ff2-capisess-ly2okmdu-w25jdq1j\",\"ff2-capisess-q75o6vtz-vd4tz2b1\",\"ff5-cwsess-i2f9sll6-nnevlsn0\",\"ff5-cwsess-a5tpacme-wnlbu6vp\"]"
+   "cited_sessions": null
   },
   {
    "id": "4eef0744-d829-43a8-9091-f993d6376143",
@@ -9224,7 +8944,7 @@
    "department": "Sales",
    "canvas_json": "{\"story\":\"A written draft (report, briefing or recommendation document) is revised based on feedback from a manager or other audience about structure, emphasis, tone or omitted context, producing a reordered document with findings first, recommendations with owners and dates, and background moved to an appendix. This currently happens as ad hoc rewriting each time feedback comes in. It could become a standard revision pass applied consistently whenever feedback is received.\",\"valueHypothesis\":\"Standardizing how feedback-driven redrafting happens would make documents land correctly with their intended audience faster and with less back and forth.\",\"people\":4,\"sessions\":4,\"occasions\":4,\"windowDays\":28,\"rhythm\":{\"label\":\"monthly\",\"display\":\"Monthly, month-end spike\"},\"systems\":[],\"activeHours\":2.9,\"tierNote\":null}",
    "surface": "cowork",
-   "cited_sessions": "[\"ff2-anchor-imrxdmxa-ewtr48wb\",\"ff2-anchor-ydq8r7ev-odqrw6vc\",\"ff2-anchor-w5l5nogv-ri8j2h3s\",\"ff5-anchor-mgl6uhh3-fgerho4w\"]"
+   "cited_sessions": null
   },
   {
    "id": "8167f5bf-095b-4ed1-a996-c24f5dbb9dca",
@@ -9239,7 +8959,7 @@
    "department": "Sales",
    "canvas_json": "{\"story\":\"A longer report or briefing is condensed into shorter variants for audiences with limited attention, such as a one-paragraph version, a three-bullet spoken version, or a leadership summary. The output is a set of shortened restatements of the same underlying material. This is currently done by manually rewriting the same content multiple times per document; it could be made a repeatable step applied to any finished report.\",\"valueHypothesis\":\"Producing audience-specific short versions as a standard step would save repeated manual condensing of the same material for each audience.\",\"people\":4,\"sessions\":6,\"occasions\":5,\"windowDays\":28,\"rhythm\":{\"label\":\"recurring\",\"display\":\"5 occasions over 4 weeks\"},\"systems\":[\"doc-coauthoring\",\"internal-comms\",\"Gmail\"],\"activeHours\":3.4,\"tierNote\":\"Mostly tier 2\"}",
    "surface": "cowork",
-   "cited_sessions": "[\"ff2-anchor-1tt86r85-fdkznr3i\",\"ff2-capisess-le2flu71-dar2wpbw\",\"ff5-anchor-mgl6uhh3-fgerho4w\",\"ff5-anchor-jpi5pw9e-6aa59qba\",\"ff5-anchor-bu2v81au-cp5j803p\",\"ff5-anchor-92tq41zr-tx1tm070\"]"
+   "cited_sessions": null
   },
   {
    "id": "ce686ecc-e757-4123-9178-9b8d441677f6",
@@ -9254,7 +8974,7 @@
    "department": "Sales",
    "canvas_json": "{\"story\":\"Regional or account-level figures are compared against recent prior periods to identify what is driving change, distinguishing structural shifts from seasonal noise and folding in one-off distortions like lost accounts. The output is a narrative explanation of the numbers for use in reviews or reports. This is currently done by manually working through the data each quarter; it could become a standard analytical step applied whenever new period data arrives.\",\"valueHypothesis\":\"Standardizing variance analysis would surface the real drivers behind performance changes more consistently and save repeated manual number-crunching.\",\"people\":5,\"sessions\":5,\"occasions\":4,\"windowDays\":28,\"rhythm\":{\"label\":\"recurring\",\"display\":\"4 occasions over 4 weeks\"},\"systems\":[\"doc-coauthoring\",\"internal-comms\"],\"activeHours\":1.7,\"tierNote\":\"Mostly tier 2\"}",
    "surface": "cowork",
-   "cited_sessions": "[\"ff2-anchor-1tt86r85-fdkznr3i\",\"ff2-anchor-1c99t4sj-2t6oej1w\",\"ff2-capisess-p3zjuahf-pfikseop\",\"ff2-capisess-8vtcm273-t914ovpa\",\"ff2-anchor-2084lac1-ogz7dso9\"]"
+   "cited_sessions": null
   },
   {
    "id": "b8f29ce2-6536-4c8f-9d13-d8839959d4fe",
@@ -9269,7 +8989,7 @@
    "department": "Engineering",
    "canvas_json": "{\"story\":\"This work covers writing and refining tests for the rate limiting middleware, including edge cases like store failures and multi-store Retry-After calculations. The output is a corrected, tested middleware behaviour applied consistently across both in-memory and Redis-backed stores. It is currently done through iterative back-and-forth review of test failures and source inspection before a fix is applied in both places at once.\",\"valueHypothesis\":\"Consistent, verified handling of rate limiting edge cases across stores reduces the risk of production incidents caused by store disagreement.\",\"people\":5,\"sessions\":6,\"occasions\":6,\"windowDays\":28,\"rhythm\":{\"label\":\"weekly\",\"display\":\"Weekly\"},\"systems\":[],\"activeHours\":null,\"tierNote\":null}",
    "surface": "code",
-   "cited_sessions": "[\"ff-code-sess-6vca48kz-dv2ocyn4\",\"ff-code-sess-154zyb62-0gngwb09\",\"ff-code-sess-iw3rwjkc-gaftswgl\",\"ff-code-sess-rjykv1yt-687fweqd\",\"ff-code-sess-54ygx2m8-rd6yv9wf\",\"ff-code-sess-en89ll2d-p0dkci5o\"]"
+   "cited_sessions": null
   },
   {
    "id": "b34b9c79-3404-41a9-8006-b09e8d432fbc",
@@ -9284,7 +9004,7 @@
    "department": "Engineering",
    "canvas_json": "{\"story\":\"This process involves adjusting webhook payload validation so that schema checks reject only genuinely invalid data rather than unrecognized but harmless fields, reusing an existing shared schema rather than writing new validators. The output is an updated validator plus a regression test proving backward compatibility with older senders. It currently happens in response to reviewer pushback on a draft pull request about overly strict rejection behaviour.\",\"valueHypothesis\":\"Loosening validation to tolerate unknown fields while reusing shared schemas prevents valid events from being dropped and avoids duplicated validation logic.\",\"people\":5,\"sessions\":5,\"occasions\":5,\"windowDays\":28,\"rhythm\":{\"label\":\"weekly\",\"display\":\"Weekly\"},\"systems\":[],\"activeHours\":null,\"tierNote\":null}",
    "surface": "code",
-   "cited_sessions": "[\"ff-code-sess-ubwreygj-5vmx0ye8\",\"ff-code-sess-vpxcxywg-nxte57vn\",\"ff-code-sess-3vtx74o8-y0stp9jh\",\"ff-code-sess-jkdutp7c-kcg4xr5h\",\"ff-code-sess-wr9jsive-jlvibu3r\"]"
+   "cited_sessions": null
   },
   {
    "id": "dc70a258-e040-4ee4-975c-9727c6ce0670",
@@ -9299,7 +9019,7 @@
    "department": "Engineering",
    "canvas_json": "{\"story\":\"This is the recurring cycle of applying an index or query change to staging, measuring the resulting timings, and iterating with another targeted adjustment such as a lateral subquery or keyset pagination. The output is a measured, incrementally improved query plan with an explanation added to the code. It is done by running the change against a snapshot or staging environment and reporting back timings for the next adjustment.\",\"valueHypothesis\":\"Iteratively measuring and tuning slow queries against real data produces verified performance improvements without changing external behaviour.\",\"people\":6,\"sessions\":7,\"occasions\":7,\"windowDays\":28,\"rhythm\":{\"label\":\"weekly\",\"display\":\"Weekly\"},\"systems\":[],\"activeHours\":null,\"tierNote\":null}",
    "surface": "code",
-   "cited_sessions": "[\"ff-code-sess-6zqixgom-r06pewsn\",\"ff-code-sess-dv9rc0s7-yvxri4fl\",\"ff-code-sess-nzh6br32-d7gev5i2\",\"ff-code-sess-1r96s89z-r64g3vrv\",\"ff-code-sess-p09t8uzj-u1mzjuwp\",\"ff-code-sess-o9d918qw-vkin4syf\",\"ff-code-sess-7t2bn6pc-rcrjneos\"]"
+   "cited_sessions": null
   },
   {
    "id": "afa96405-079f-4689-9241-a55baa51d5aa",
@@ -9314,7 +9034,7 @@
    "department": "HR",
    "canvas_json": "{\"story\":\"Multiple copies of a tasks spreadsheet are merged into a single view, filtering to only open items and highlighting ones now overdue relative to the run date. The work must reconcile duplicate or renamed files, pick the most recently modified copy when conflicts exist, and group results by owning team with counts. Once transformed, the merge and exception handling run automatically against the latest files without manual reconciliation of stray copies.\",\"valueHypothesis\":\"Automating this saves staff from manually hunting down and reconciling duplicate task files each week to produce a reliable overdue list.\",\"people\":4,\"sessions\":5,\"occasions\":5,\"windowDays\":28,\"rhythm\":{\"label\":\"weekly\",\"display\":\"Weekly\"},\"systems\":[],\"activeHours\":null,\"tierNote\":null}",
    "surface": "code",
-   "cited_sessions": "[\"ff-code-sess-29hlwip3-d2xognir\",\"ff-code-sess-txd4b8gp-fb7g3b0s\",\"ff-code-sess-dzpgc4md-fqn09y1i\",\"ff-code-sess-32x3belj-52jph98l\",\"ff-code-sess-cfwf2wi9-3aozb3sy\"]"
+   "cited_sessions": null
   },
   {
    "id": "0748e3ce-ec9f-40a2-96ab-45b08922e321",
@@ -9329,7 +9049,7 @@
    "department": "Product",
    "canvas_json": "{\"story\":\"This work investigates a reported seat/row overcounting bug by writing a test that reliably reproduces the race condition against a real database, then verifies a proposed fix such as a row lock resolves it without introducing retry storms. It produces a repro test, a verified fix, and a short writeup of which scenarios were confirmed versus withdrawn. Today it is done through iterative back-and-forth confirming findings against the actual code and closing out each suspected race one at a time.\",\"valueHypothesis\":\"Faster, more reliable confirmation of concurrency bugs and fixes reduces the risk of shipping unverified concurrency fixes.\",\"people\":5,\"sessions\":5,\"occasions\":4,\"windowDays\":28,\"rhythm\":{\"label\":\"recurring\",\"display\":\"4 occasions over 4 weeks\"},\"systems\":[],\"activeHours\":null,\"tierNote\":null}",
    "surface": "code",
-   "cited_sessions": "[\"ff-code-sess-adbwklj4-xqbaqso4\",\"ff-code-sess-8vwuakdl-95h3kacg\",\"ff-code-sess-tollxvh4-eoz2j64i\",\"ff-code-sess-yg52opk8-2xap6gvl\",\"ff-code-sess-i1k9f35a-kqesmur1\"]"
+   "cited_sessions": null
   },
   {
    "id": "9cb613fa-f842-4ec5-a7be-ad78c9f76e10",
@@ -9344,7 +9064,7 @@
    "department": "Product",
    "canvas_json": "{\"story\":\"This process addresses bugs found in the rate limiting middleware's store implementations, such as incorrect Retry-After calculation or untested failure modes, and ensures both the in-memory and Redis-backed stores are corrected the same way. The output is patched store code plus added tests confirming behaviour like failing open when the store errors. It currently runs as a cycle of a bug report, a check across both stores, and a small aligned fix.\",\"valueHypothesis\":\"Keeping both rate-limit store implementations consistently correct reduces production incidents from mismatched throttling behaviour.\",\"people\":5,\"sessions\":7,\"occasions\":6,\"windowDays\":28,\"rhythm\":{\"label\":\"weekly\",\"display\":\"Weekly\"},\"systems\":[],\"activeHours\":null,\"tierNote\":null}",
    "surface": "code",
-   "cited_sessions": "[\"ff-code-sess-g90id0l8-lr4s20pz\",\"ff-code-sess-eiihnv99-6xfk5gsk\",\"ff-code-sess-4dh808tb-yhvymraa\",\"ff-code-sess-ym0cd3ks-1a7c4ssj\",\"ff-code-sess-6j582h65-k6iiwg3h\",\"ff-code-sess-4c4ta8jv-20zuivqs\",\"ff-code-sess-jwmuf7l6-9g952xnx\"]"
+   "cited_sessions": null
   },
   {
    "id": "db1b98b4-3825-49a2-81c3-e37251e84786",
@@ -9359,7 +9079,7 @@
    "department": "Product",
    "canvas_json": "{\"story\":\"This process responds to test failures caused by a code change, such as a shifted function signature or an error-wrapping change, by diagnosing the root cause and deciding whether to adjust the implementation or update the test. The output is a fixed test or restored interface along with an explanation of the chosen approach. It is done by inspecting the failure output, tracing it to the underlying change, and confirming the chosen resolution before applying it.\",\"valueHypothesis\":\"Systematically triaging broken tests after changes reduces wasted debugging time and prevents silent behavioural regressions.\",\"people\":4,\"sessions\":4,\"occasions\":4,\"windowDays\":28,\"rhythm\":{\"label\":\"weekly\",\"display\":\"Weekly\"},\"systems\":[],\"activeHours\":null,\"tierNote\":null}",
    "surface": "code",
-   "cited_sessions": "[\"ff-code-sess-5d3ovko3-alz483wi\",\"ff-code-sess-s378ud9u-nfsqh3gm\",\"ff-code-sess-yrp28xjw-ui96k2sf\",\"ff-code-sess-wncn8mdo-puo6cgar\"]"
+   "cited_sessions": null
   },
   {
    "id": "d12985aa-b4bf-4ca9-abd7-9d75db7e59a0",
@@ -9374,7 +9094,7 @@
    "department": "Product",
    "canvas_json": "{\"story\":\"This process improves a slow database query by examining its execution plan, testing an indexing or query restructuring change on staging, and measuring the resulting latency, while checking for existing indexes to avoid duplication. The output is a migration adding the right index or rewritten query along with before-and-after timing evidence. It is done by iterating between EXPLAIN output, proposed changes, and rerun timings until performance is acceptable.\",\"valueHypothesis\":\"Evidence-based query tuning using execution plans reduces latency regressions and avoids redundant indexing work.\",\"people\":5,\"sessions\":6,\"occasions\":6,\"windowDays\":28,\"rhythm\":{\"label\":\"weekly\",\"display\":\"Weekly\"},\"systems\":[],\"activeHours\":null,\"tierNote\":null}",
    "surface": "code",
-   "cited_sessions": "[\"ff-code-sess-m755ro9w-z21l4ibo\",\"ff-code-sess-5w73q4tq-gz8ruwdd\",\"ff-code-sess-cco64v14-tol4pgl6\",\"ff-code-sess-gqwbk1d3-n87ffqi6\",\"ff-code-sess-j3nzmax4-jl45kpzy\",\"ff-code-sess-0ye2z8p3-ak3zfk03\"]"
+   "cited_sessions": null
   },
   {
    "id": "f9bbedb8-75fd-4374-a403-d91ab1658b01",
@@ -9389,7 +9109,7 @@
    "department": "Sales",
    "canvas_json": "{\"story\":\"This work processes survey response files to compute average ratings by category, compare them against a prior period, and apply minimum response count thresholds before reporting an average. It appears to be a recurring monthly comparison task that feeds into a broader reporting pack. Transforming it would mean the thresholding and month-over-month comparison logic is applied consistently without manual rechecking each cycle.\",\"valueHypothesis\":\"Standardizing the rating comparison logic would reduce manual recomputation and ensure consistent reporting thresholds each month.\",\"people\":3,\"sessions\":3,\"occasions\":3,\"windowDays\":28,\"rhythm\":{\"label\":\"weekly\",\"display\":\"Weekly\"},\"systems\":[],\"activeHours\":null,\"tierNote\":null}",
    "surface": "code",
-   "cited_sessions": "[\"ff5-sess-rf7xvtlb-azaedmzj\",\"ff5-sess-l7d8cvjz-q8n7zc28\",\"ff5-sess-l0rnfy7c-tsy5a67t\"]"
+   "cited_sessions": null
   },
   {
    "id": "c63329d1-3691-4e9d-ae9a-cffd04599022",
@@ -9404,20 +9124,20 @@
    "department": "Sales",
    "canvas_json": "{\"story\":\"This work reviews a set of source documents' last-reviewed dates from their metadata and flags any that are overdue for review, producing a column or report of staleness. It currently requires separately pulling the review date and applying an age threshold each time a questionnaire or compliance pack is produced. If transformed, freshness flagging would be a consistent automatic check applied whenever source documents are used.\",\"valueHypothesis\":\"Automatically flagging stale source documents would reduce the risk of compliance answers being based on outdated material.\",\"people\":3,\"sessions\":4,\"occasions\":4,\"windowDays\":28,\"rhythm\":{\"label\":\"weekly\",\"display\":\"Weekly\"},\"systems\":[],\"activeHours\":null,\"tierNote\":null}",
    "surface": "code",
-   "cited_sessions": "[\"ff5-sess-791xh7vf-zwyfxpp6\",\"ff5-sess-yfrle1ih-kraqawe8\",\"ff5-sess-hoh6tu8g-56qrrdbu\",\"ff5-sess-ju5bvp41-fvx54sd0\"]"
+   "cited_sessions": null
   },
   {
    "id": "ff9-me-canvas",
    "signal_key": "ff9-me-canvas",
    "title": "Month-end variance commentary",
    "description": "Month-end commentary appears hand-assembled from pasted spreadsheet rows drawn from the management accounts export each close. The same three people repeat the assembly step every month before the board pack goes out.",
-   "matching_rule": "{\"skills\":[\"anthropic-skills:xlsx\"],\"connectors\":[\"salesforce\"],\"taskTypes\":[],\"departments\":[\"Finance\"],\"keywords\":[\"management accounts\",\"variance commentary\"]}",
+   "matching_rule": "{\"skills\":[\"anthropic-skills:xlsx\"],\"connectors\":[\"Salesforce\"],\"taskTypes\":[],\"departments\":[\"Finance\"],\"keywords\":[\"management accounts\",\"variance commentary\"]}",
    "evidence": "{\"distinctUsers\":3,\"sessionCount\":9,\"departments\":[\"Finance\"]}",
    "status": "added",
    "generated_at": 1785044003,
    "updated_at": 1791956003,
    "department": "Finance",
-   "canvas_json": "{\"story\":\"Month-end commentary is hand-assembled from pasted spreadsheet rows drawn from the management accounts export each close, checked against Salesforce closed-won, and dropped into the board pack template.\",\"valueHypothesis\":\"Feeding the board-pack template directly from the export and Salesforce would turn assembly into review.\",\"people\":3,\"sessions\":9,\"occasions\":3,\"windowDays\":90,\"rhythm\":{\"label\":\"monthly\",\"display\":\"Monthly, month-end spike\"},\"systems\":[\"anthropic-skills:xlsx\",\"salesforce\"],\"activeHours\":5,\"tierNote\":\"Mostly tier 2\"}",
+   "canvas_json": "{\"story\":\"Month-end commentary is hand-assembled from pasted spreadsheet rows drawn from the management accounts export each close, checked against Salesforce closed-won, and dropped into the board pack template.\",\"valueHypothesis\":\"Feeding the board-pack template directly from the export and Salesforce would turn assembly into review.\",\"people\":3,\"sessions\":9,\"occasions\":3,\"windowDays\":90,\"rhythm\":{\"label\":\"monthly\",\"display\":\"Monthly, month-end spike\"},\"systems\":[\"anthropic-skills:xlsx\",\"Salesforce\"],\"activeHours\":5,\"tierNote\":\"Mostly tier 2\"}",
    "surface": null,
    "cited_sessions": null
   }

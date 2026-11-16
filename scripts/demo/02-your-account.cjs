@@ -36,7 +36,7 @@ const REPO_BY_DEPT = {
 
 const rand = (min, max) => Math.floor(Math.random() * (max - min + 1)) + min;
 const pick = (arr) => arr[Math.floor(Math.random() * arr.length)];
-const uid = (prefix) => `${MARKER}${prefix}-${Math.random().toString(36).slice(2, 10)}-${Math.random().toString(36).slice(2, 10)}`;
+const uid = (prefix) => `${MARKER}${prefix}-${require('crypto').randomBytes(8).toString('hex')}`;
 
 // Deterministic per-user "gone quiet recently" decision — MUST match
 // 01-organisation.cjs/-v2.cjs exactly. See that file's comment on this
@@ -54,10 +54,13 @@ const MODELS_WEIGHTED = [['claude-opus-4-8', 2], ['claude-sonnet-4-6', 6], ['cla
 const weightedModel = () => pick(MODELS_WEIGHTED.flatMap(([m, w]) => Array(w).fill(m)));
 const RATES = { 'claude-opus-4-8': { in: 5, out: 25 }, 'claude-sonnet-4-6': { in: 3, out: 15 }, 'claude-haiku-4-5': { in: 1, out: 5 } };
 const LANGUAGES = ['TypeScript', 'Python', 'SQL', 'Markdown'];
-const CODE_TASK_TYPES = ['bug_investigation', 'feature_build', 'code_review', 'documentation', 'refactor'];
+// Kinds of Code work from the classifier's rubric (lib/pulse/code/classifier-prompt.ts); a review is exploration.
+// Testing is left to the Team Coaching people (13-team-coaching.cjs), whose story is tests repeated with no skill.
+const CODE_TASK_TYPES = ['bugfix', 'feature', 'exploration', 'documentation', 'refactor'];
 const COWORK_TASK_TYPES = ['analysis', 'structured_report', 'synthesis', 'summarisation', 'process_substitution'];
 const SKILLS = ['code-review', 'writing-plans', 'systematic-debugging', 'doc-coauthoring', 'meeting-notes'];
-const MCP_SERVERS = [['github', 'search_repos'], ['slack', 'post_message'], ['linear', 'list_issues']];
+// Slack by the name Claude reports it under (lib/otel/cowork-receiver.ts).
+const MCP_SERVERS = [['github', 'search_repos'], ['Slack', 'post_message'], ['linear', 'list_issues']];
 const FRONTIER_TASK_TYPES = [
   'org_wide_spend_reconciliation', 'cross_department_risk_review', 'demo_environment_health_check',
   'partner_enablement_playbook', 'customer_success_escalation_triage', 'roadmap_dependency_mapping',
@@ -110,6 +113,8 @@ async function main() {
     await c.query(`DELETE FROM code_session_classifications WHERE session_id LIKE $1`, [`${MARKER}%`]);
     await c.query(`DELETE FROM pulse_classifications WHERE cowork_message_id LIKE $1`, [`${MARKER}%`]);
     await c.query(`DELETE FROM pulse_events WHERE cowork_message_id LIKE $1`, [`${MARKER}%`]);
+    // Alerts the Hub raised on these prompts would point at nothing once they go.
+    await c.query(`DELETE FROM alerts WHERE raw_evidence->>'message_id' LIKE $1`, [`${MARKER}%`]);
     await c.query(`DELETE FROM cowork_skill_invocations WHERE id LIKE $1`, [`${MARKER}%`]);
     await c.query(`DELETE FROM cowork_mcp_invocations WHERE id LIKE $1`, [`${MARKER}%`]);
     await c.query(`DELETE FROM cowork_messages WHERE id LIKE $1`, [`${MARKER}%`]);
@@ -153,6 +158,8 @@ async function main() {
       await c.query(
         `UPDATE admin_users SET linked_cowork_user_id = $1, department = COALESCE(department, $2) WHERE email = $3`,
         [userId, dept, admin.email]);
+      // Their briefings were written from the activity this replaces; the Hub writes new ones from the new rows.
+      await c.query(`DELETE FROM pulse_briefings WHERE scope_type = 'user' AND scope_id = $1`, [userId]);
 
       let adminLastActivity = 0;
       // Same deterministic decision as 01-organisation.cjs/-v2.cjs — if this
@@ -229,7 +236,7 @@ async function main() {
                VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,'main',$13,$13,$14,'otel','main')`,
               [uid('meta'), userId, sessionId, model, ti, to, tcw, tcr, Math.random() < 0.7 ? 'end_turn' : 'tool_use', tu, te, `/repos/${repo}`, startAt + t * rand(30, 400), tc]);
           }
-          const lastAt = startAt + turns * rand(60, 500);
+          const lastAt = Math.min(startAt + turns * rand(60, 500), now);
           const modelsJson = JSON.stringify({ [model]: { input: inp, output: outp, cache_creation: cw, cache_read: cr } });
           await c.query(
             `INSERT INTO code_session_stats (session_id, user_id, repo, git_branch, first_at, last_at, user_msg_count, assistant_turns, tool_use_count, error_count, input_tokens, output_tokens, cache_creation_tokens, cache_read_tokens, models_json, skills_json, mcp_json, commit_count, computed_at)

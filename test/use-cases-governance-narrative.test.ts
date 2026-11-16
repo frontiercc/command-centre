@@ -10,7 +10,7 @@ import { trailingQuietWeeks, buildGovernanceNarrative, type GovernanceBet } from
 const bet = (over: Partial<GovernanceBet>): GovernanceBet => ({
   id: 'b1', title: 'Recruiting Screener', ownerDisplayName: null, departments: ['HR'],
   lifecycle: 'at_risk', weeksInLifecycle: 0, quietWeeks: 0,
-  measured: { distinctUsers: 2, sessions: 3, hours: null, platformSessions: { claude: 3, openai: null }, platformHours: { claude: null, openai: null }, productSessions: { cowork: 3, code: 0, chatgpt: null, codex: null }, productHours: { cowork: null, code: null, chatgpt: null, codex: null } }, estimated: { hoursRecovered: 1 },
+  measured: { distinctUsers: 2, sessions: 3, hours: null, platformSessions: { claude: 3, openai: null }, platformHours: { claude: null, openai: null }, productSessions: { cowork: 3, code: 0, chatgpt: null, codex: null }, productHours: { cowork: null, code: null, chatgpt: null, codex: null }, sessionsThisWeek: 0, hiddenActivity: false }, estimated: { hoursRecovered: 1 },
   series: [], ...over,
 });
 
@@ -35,5 +35,32 @@ describe('buildGovernanceNarrative at-risk sentence', () => {
   it('never claims a quiet length it cannot count', () => {
     const text = buildGovernanceNarrative([bet({ series: [4, null], quietWeeks: 0 })]);
     expect(text).toContain('Recruiting Screener is at risk');
+  });
+});
+
+describe('buildGovernanceNarrative adoption concentration', () => {
+  const adopted = (id: string, departments: string[]) => bet({ id, title: id, lifecycle: 'adopted', departments });
+
+  it('says concentrated when the top two strictly lead the next', () => {
+    const text = buildGovernanceNarrative([
+      adopted('a', ['HR', 'Finance']), adopted('b', ['HR', 'Finance']), adopted('c', ['Legal']),
+    ]);
+    expect(text).toContain('Adoption is concentrated in Finance and HR.');
+  });
+
+  it('names one department when it alone leads', () => {
+    const text = buildGovernanceNarrative([adopted('a', ['HR', 'Legal']), adopted('b', ['HR', 'Finance'])]);
+    expect(text).toContain('Adoption is concentrated in HR.');
+  });
+
+  it('says it spans the departments on a tie at the cut-off', () => {
+    const text = buildGovernanceNarrative([adopted('a', ['HR']), adopted('b', ['Finance']), adopted('c', ['Legal'])]);
+    expect(text).toContain('Adoption spans 3 departments.');
+    expect(text).not.toContain('concentrated');
+  });
+
+  it('says it spans two departments that tie', () => {
+    const text = buildGovernanceNarrative([adopted('a', ['HR', 'Finance'])]);
+    expect(text).toContain('Adoption spans 2 departments.');
   });
 });

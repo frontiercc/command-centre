@@ -39,7 +39,8 @@ interface UseCase {
   taskTypes: string[];
   origin: 'planned' | 'emergent' | 'ideated';
   status: 'candidate' | 'confirmed' | 'archived';
-  lifecycle: 'not_seen' | 'piloting' | 'adopted' | 'at_risk';
+  /** Null for an archived use case: it is no longer tracked, so it has no stage. */
+  lifecycle: 'not_seen' | 'piloting' | 'adopted' | 'at_risk' | null;
   captureMethod: string;
   sourceExcerpt: string | null;
   lastActivatedAt: number | null;
@@ -393,7 +394,7 @@ export default function UseCaseDetailPage() {
 
   if (!uc) return null;
 
-  const lifecyclePill = LIFECYCLE_PILL[uc.lifecycle];
+  const lifecyclePill = uc.lifecycle ? LIFECYCLE_PILL[uc.lifecycle] : undefined;
   const weeks = uc.weeks ?? [];
   const sparklineData = weeks.map(w => w.matchedMessages + w.sessionCount);
   // Fall back to the stored snapshot only for an old cached client response
@@ -407,7 +408,7 @@ export default function UseCaseDetailPage() {
         <Toolbar
           left={
             <span className="flex flex-wrap items-center gap-2">
-              <Link href="/use-cases" className="text-[#245BF3] hover:underline">Back to register</Link>
+              <Link href="/use-cases" className="text-[#1F6F8B] hover:underline">Back to register</Link>
               <span className="text-[#D4D4D4]" aria-hidden="true">·</span>
               <Tag>{ORIGIN_LABEL[uc.origin]}</Tag>
               <Pill tone={uc.status === 'confirmed' ? 'good' : 'neutral'}>{STATUS_LABEL[uc.status]}</Pill>
@@ -689,7 +690,7 @@ function RuleRow({ label, values }: { label: string; values: string[] }) {
     return (
       <div className="flex items-center gap-2">
         <span className="text-[13px] text-[#8F8F8F] w-20 shrink-0">{label}</span>
-        <span className="text-[13px] text-[#B3B3B3]">—</span>
+        <span className="text-[13px] text-[#B3B3B3]">none</span>
       </div>
     );
   }

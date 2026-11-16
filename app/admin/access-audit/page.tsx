@@ -144,7 +144,7 @@ export default function AccessAuditPage() {
                         {new Date(row.occurred_at * 1000).toLocaleString('en-GB')}
                       </td>
                       <td className={cx(T.td, 'text-[#0A0A0A]')}>{row.actor_email}</td>
-                      <td className={cx(T.td, 'text-[13px] font-mono text-[#8F8F8F]')}>{row.actor_ip ?? '—'}</td>
+                      <td className={cx(T.td, 'text-[13px] font-mono text-[#8F8F8F]')}>{row.actor_ip ?? 'not recorded'}</td>
                       <td className={cx(T.td, 'text-[#333333]')}>{row.resource}</td>
                       <td className={T.td}>
                         <Tag tone={
@@ -161,7 +161,7 @@ export default function AccessAuditPage() {
                         }>{row.outcome}</Pill>
                       </td>
                       <td className={cx(T.td, 'text-[13px] text-[#8F8F8F] truncate max-w-xs')} title={row.detail ?? ''}>
-                        {row.detail ?? '—'}
+                        {row.detail ?? 'none'}
                       </td>
                     </tr>
                   ))}
