@@ -11,11 +11,11 @@ Command Centre is a self-hosted web application that receives activity from your
 The object of measurement is the work people hand to AI. Command Centre answers four questions for every employee and department:
 
 - Is each employee and department producing more valuable work with the same time?
-- Is each employee and department using AI for simple tasks, or fundamentally changing how work gets done?
+- Is each employee and department using AI for simple tasks, or changing how the work is done?
 - How many new types of work has each employee and department handed to AI?
 - Would this capability survive if the best AI person in the department left tomorrow?
 
-Anthropic's and OpenAI's administration consoles already report who uses their products and how often. Command Centre tells leaders whether the investment is changing the work, where it is changing fastest, where capability is fragile and where the next gains lie. Governance and security controls sit underneath that view. They are a substantial part of the product and a secondary benefit: they allow an organisation to leave the telemetry switched on with confidence.
+Anthropic's and OpenAI's administration consoles already report who uses their products and how often. Command Centre tells leaders whether the money spent on AI is changing the work, where it is changing fastest, where it rests on one or two people and where to look next. Governance and security controls sit underneath. They are a large part of the product, but they serve that purpose: they let an organisation keep the telemetry switched on.
 
 ## At a glance
 
@@ -149,7 +149,7 @@ Spend Review shows what each person's AI spend goes on and whether colleagues do
 
 Command Centre brings supported Claude, ChatGPT and Codex activity into a searchable audit trail, with role-based access to prompt content and logging of who reads it. Retention, erasure, departmental access, single sign-on and encrypted stored secrets support organisational controls.
 
-**Operational boundary:** Command Centre sees activity only after prompts reach Claude, ChatGPT or Codex, so Command Centre cannot block or change a prompt. Command Centre stores people's prompts, never the replies of Claude, ChatGPT or Codex.
+**Operational boundary:** Command Centre sees activity only after prompts reach Claude, ChatGPT or Codex, so it cannot block or change a prompt. It stores people's prompts, never the replies of Claude, ChatGPT or Codex.
 
 ![The Audit Log filtered to Claude in Google, each prompt labelled with its app](images/audit-log.png)
 
@@ -173,7 +173,7 @@ Admin holds Command Centre's settings: users and roles, integration keys, alert 
 
 *Sample data from Acme Corp, a fictional company.*
 
-Explore Command Centre with sample data, connect Claude, ChatGPT and Codex, inspect the code and extend Command Centre for your organisation.
+To try it, follow the README's [quick start with sample data](../README.md#1-quick-start-try-it-with-sample-data).
 
 ## The problem it answers
 
@@ -869,7 +869,7 @@ Codex sessions carry the cost of their own turns. OpenAI reports ChatGPT cost pe
 
 ## Governance and risk
 
-Command Centre applies its controls to what it stores. Command Centre sees a prompt only after the prompt has reached Claude, ChatGPT or Codex, so Command Centre flags, alerts, restricts access and applies retention, but cannot block.
+Command Centre applies its controls to what it stores. It sees a prompt only after the prompt has reached Claude, ChatGPT or Codex, so it can flag, alert, restrict access and apply retention, but cannot block.
 
 ### Personal data, secrets and intent
 
@@ -887,7 +887,7 @@ Alerts from detection, Developer Pulse, at-risk use cases and system health appe
 
 - **High-priority alerts to Slack.** Switched off until an administrator turns it on and saves a webhook under **Admin → Risk Scoring**. An hourly job then sends every high or critical alert, from any source, to a Slack channel you choose, carrying the title, explanation, type, severity and time; the evidence stored with the alert is removed before sending. Alerts refer to a person by display name, or by email where no name is set, never by an internal user ID, both in Slack and on the Alerts page. For an intent alert the explanation is Claude's assessment of the prompt and can quote it.
 - **Anomaly detection.** Once a day, while a Claude API key is set and at least one of its alert types is on under **Admin → Risk Scoring**, a Claude model reviews recent activity for unusual patterns. It reads activity metadata, flag reasons and per-person counts, including Codex turns and tokens and ChatGPT replies, but no prompt text. It takes your acceptable use policy into account where one is set.
-- **Telemetry-silence alerts.** When system-health alerting is on, Command Centre raises a high-severity alert if a connected source sends nothing for a set number of working hours (three by default, Monday to Friday within a working day and time zone you configure). The sources watched are Claude Cowork, Claude Code, Claude Code metrics, ChatGPT and Codex, each on its own, and a source that has never sent anything is never raised; ChatGPT and Codex are not watched while the OpenAI sync is paused. This brings to light a client configuration change, collector fault or sync failure that stops activity arriving. A rejected OpenAI Admin API key raises its own alert, as a rejected Anthropic key does.
+- **Telemetry-silence alerts.** When system-health alerting is on, Command Centre raises a high-severity alert if a connected source sends nothing for a set number of working hours (three by default, Monday to Friday within a working day and time zone you configure). The sources watched are Claude Cowork, Claude Code, Claude Code metrics, ChatGPT and Codex, each on its own, and a source that has never sent anything is never raised; ChatGPT and Codex are not watched while the OpenAI sync is paused. This catches a client configuration change, collector fault or sync failure that stops activity arriving. A rejected OpenAI Admin API key raises its own alert, as a rejected Anthropic key does.
 
 ### The Audit Log
 

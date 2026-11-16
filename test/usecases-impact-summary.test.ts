@@ -106,7 +106,8 @@ describe('generateImpactSummary', () => {
         cappedAt: null,
       },
     });
-    const reply = 'The team leans on claude-haiku-4-5 for this workflow.';
+    // The facts carry the model's display name, as the pages show it, so that is what the reply names.
+    const reply = 'The team leans on Claude Haiku 4.5 for this workflow.';
 
     const result = await generateImpactSummary('uc-1', 'Board-Pack Prep', impact, {
       callModel: async () => reply,

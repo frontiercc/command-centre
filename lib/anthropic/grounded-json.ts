@@ -15,7 +15,8 @@
 // and the caller keeps the previous briefing and records the failure.
 // A model-call error is thrown as-is (not counted as a rejection).
 import type Anthropic from '@anthropic-ai/sdk';
-import { extractText } from '@/lib/anthropic/constants';
+import { extractText, parseModelJson } from '@/lib/anthropic/constants';
+import { thinkingOff } from '@/lib/anthropic/thinking';
 import { extractNumbers, numberVariants, ungroundedNumbers } from '@/lib/anthropic/grounded-narrative';
 
 // ─── Facts helpers: work figures out in code so the model never has to ───────
@@ -94,15 +95,13 @@ export function numberWordsIn(text: string): string[] {
 
 /** Pure: parse one reply and check its numbers against `allowed`. */
 export function checkGroundedJson<T>(raw: string, allowed: Set<string>, shape: GroundedShape<T>): GroundedCheck<T> {
-  // Accept bare JSON or a fenced block anywhere in the reply (some models add a preamble).
-  const trimmed = raw.trim();
-  const fence = trimmed.match(/```(?:json)?\s*([\s\S]*?)```/i);
-  const cleaned = fence ? fence[1].trim() : trimmed;
+  const obj = readObject(raw);
+  if (obj === null) return { ok: false, reasons: ['the reply was not a readable JSON object'] };
   let value: T;
   try {
-    value = shape.parse(JSON.parse(cleaned));
+    value = shape.parse(obj);
   } catch {
-    return { ok: false, reasons: ['the reply was not a JSON object in the required shape'] };
+    return { ok: false, reasons: ['the reply was missing a required field'] };
   }
   const ok = new Set(allowed);
   for (const n of shape.extraAllowed?.(value) ?? []) for (const v of numberVariants(n)) ok.add(v);
@@ -135,11 +134,24 @@ export function textIsGrounded(text: string, ok: Set<string>): boolean {
   return ungroundedNumbers(text, ok).length === 0 && numberWordsIn(text).every(w => ok.has(w));
 }
 
+/**
+ * The JSON object in a reply, even with a sentence or code fence around it and raw line breaks
+ * inside its strings: read the way Weekly Highlights reads its reply. Null when there is none.
+ */
+function readObject(raw: string): unknown | null {
+  const fence = raw.match(/```(?:json)?\s*([\s\S]*?)```/i);
+  const body = fence ? fence[1] : raw;
+  const start = body.indexOf('{');
+  const end = body.lastIndexOf('}');
+  if (start < 0 || end <= start) return null;
+  return parseModelJson(body.slice(start, end + 1));
+}
+
 /** Pure: parse a reply without checking numbers (for the trim fallback). */
 function parseReply<T>(raw: string, shape: GroundedShape<T>): T | null {
-  const trimmed = raw.trim();
-  const fence = trimmed.match(/```(?:json)?\s*([\s\S]*?)```/i);
-  try { return shape.parse(JSON.parse(fence ? fence[1].trim() : trimmed)); } catch { return null; }
+  const obj = readObject(raw);
+  if (obj === null) return null;
+  try { return shape.parse(obj); } catch { return null; }
 }
 
 /**
@@ -169,12 +181,18 @@ async function groundedCycle<T>(req: GroundedJsonRequest<T>): Promise<{ value: T
     const content = attempt === 1 ? req.userMessage : `${req.userMessage}
 
 Your previous reply was not accepted: ${reasons.join('; ')}. Use only numbers that appear in the data above, exactly as written, and do not calculate new figures (no sums, differences or percentages of your own). Reply with the JSON object only.`;
+    // Thinking off: models that think by default (Haiku 5.5 among them) spend max_tokens on
+    // thinking, and a briefing came back with no text at all (stopped: max_tokens, 0 characters).
+    // thinkingOff picks the setting the configured model accepts.
+    const off = thinkingOff(req.model);
     const message = await req.client.messages.create({
       model: req.model,
       max_tokens: req.maxTokens,
       system: req.system,
       messages: [{ role: 'user', content }],
       ...(req.temperature !== undefined ? { temperature: req.temperature } : {}),
+      ...(off.thinking ? { thinking: off.thinking } : {}),
+      ...(off.effort ? { output_config: { effort: off.effort } } : {}),
     });
     const text = extractText(message);
     lastText = text;
@@ -183,7 +201,7 @@ Your previous reply was not accepted: ${reasons.join('; ')}. Use only numbers th
     reasons = check.reasons;
     // Server log only: without the refused text nobody can tell a model
     // mistake from a check that is too strict.
-    console.warn(`[grounded-json] attempt ${attempt} refused (${reasons.join('; ')}): ${text.replace(/\s+/g, ' ').slice(0, 400)}`);
+    console.warn(`[grounded-json] attempt ${attempt} refused (${reasons.join('; ')}; stopped: ${message.stop_reason}, ${text.length} characters): ${text.replace(/\s+/g, ' ').slice(0, 400)}`);
   }
   if (req.trim) {
     const parsed = parseReply(lastText, req);
@@ -243,6 +261,6 @@ export function paragraphsShape<K extends string>(minParagraphs: number, stringF
 /** Route-level options for errorResponse(): a refused briefing says so plainly (502). */
 export function aiFailureOptions(err: unknown): { status?: number; message: string } {
   return err instanceof GroundingRejectedError
-    ? { status: 502, message: 'The new briefing failed the number check twice, so the previous one is still shown. Details are in the server log.' }
+    ? { status: 502, message: 'The new briefing did not pass its checks twice, so the previous one is still shown. Details are in the server log.' }
     : { message: 'The AI request failed. Details are in the server log.' };
 }

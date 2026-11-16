@@ -8,6 +8,7 @@
  * Uses Haiku for cost-efficient contextual severity assessment.
  * ~$0.001 per call, only on pre-filtered messages.
  */
+import { withThinkingOff } from '@/lib/anthropic/thinking';
 import { createAnthropicClient } from '@/lib/anthropic/client';
 import { extractText, stripCodeFences } from '@/lib/anthropic/constants';
 import { getCoreAiModel } from '@/lib/anthropic/model';
@@ -88,7 +89,7 @@ export async function assessIntent(
   try {
     const client = createAnthropicClient(apiKey);
     const coreModel = await getCoreAiModel();
-    const message = await queueAiCall(() => client.messages.create({
+    const message = await queueAiCall(() => client.messages.create(withThinkingOff({
       model: coreModel,
       max_tokens: 512,
       system: INTENT_SYSTEM_PROMPT,
@@ -96,7 +97,7 @@ export async function assessIntent(
         role: 'user',
         content: `Message text:\n${fenceUntrusted(messageText)}\n\nIntent matches:\n${matchSummary}\n\nAcceptable use policy:\n${policy || 'No policy configured.'}`,
       }],
-    }));
+    })));
 
     const parsed = JSON.parse(stripCodeFences(extractText(message)));
     return {

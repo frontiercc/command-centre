@@ -6,7 +6,7 @@ The commands are for Docker Compose installations: run them from the `command-ce
 
 ## Installing and signing in
 
-**The site cannot be reached.** Command Centre is still starting. Command Centre is ready when `docker compose ps` shows the hub as `healthy`.
+**The site cannot be reached.** Command Centre is still starting. It is ready when `docker compose ps` shows the hub as `healthy`.
 
 **The hub never becomes `healthy` after you made a new `.env`.** The database keeps the password from the first `.env`, and the settings Command Centre saved can only be read with the first `.env`'s encryption key. Put the first `.env` back, or start again with `docker compose down -v`, which deletes all data.
 

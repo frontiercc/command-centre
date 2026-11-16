@@ -21,6 +21,7 @@
 // Retention deletes a description with the prompts it came from, and it is
 // part of a person's data erasure. Off when pulseSessionDescriptionsEnabled='false'.
 // Who may SEE a description is decided in the API routes, not here.
+import { withThinkingOff } from '@/lib/anthropic/thinking';
 import { createAnthropicClient } from '@/lib/anthropic/client';
 import { and, eq, gte, inArray, or, sql } from 'drizzle-orm';
 import { getTypedClient } from '@/lib/db/client';
@@ -138,7 +139,7 @@ async function callRealModel(prompt: string): Promise<{ text: string; model: str
   const model = await getCoreAiModel();
   const client = createAnthropicClient(apiKey);
   const message = await queueAiCall(() =>
-    client.messages.create({ model, max_tokens: 200, messages: [{ role: 'user', content: prompt }] }));
+    client.messages.create(withThinkingOff({ model, max_tokens: 200, messages: [{ role: 'user', content: prompt }] })));
   return { text: extractText(message), model };
 }
 

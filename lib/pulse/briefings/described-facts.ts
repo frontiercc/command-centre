@@ -18,7 +18,7 @@ import { tierNamesOr, type TierNames } from '@/lib/pulse/tier-names';
 
 /** The rule every Work Pulse briefing's system prompt carries. */
 export const DESCRIBE_NOT_SCORE_RULE =
-  'Never use scores, indexes or ratios: no delegation depth score, output or throughput index, resilience score or governance score, and no multipliers such as "2.5x". Describe the work with the counts and shares given, in plain words. Name the tiers by the names given, never by number.';
+  'Never use scores, indexes or ratios: no delegation depth score, output or throughput index, resilience score or governance score, and no multipliers such as "2.5x". Describe the work with the counts and shares given, in plain words. Name the tiers by the names given, never by number. When you describe a tier, put its description in brackets after its name, and never use more than one colon in a sentence.';
 
 /** The three tiers as this customer names them, with a share of the total each, for the facts. */
 export function tierLines(names: TierNames | null | undefined, counts: { 1: number; 2: number; 3: number }): string[] {

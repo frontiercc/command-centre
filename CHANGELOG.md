@@ -17,18 +17,20 @@
 - The Work Pulse Overview and the dashboard answer four questions (people doing meaningful or frontier work, the share of such tasks, new ways of working, and who frontier work rests on) in place of the four scores. Reports still carry the scores.
 - Developer Pulse counts repositories over 30 days everywhere, and shows no month-end projection before day 7 of the month.
 - Developer Pulse Value counts time saved from pull requests and commits only. The minutes-saved settings for Claude Cowork sessions and Claude Chat conversations are removed.
-- FinOps leads with four figures and where the spend goes by product, with the detail folded below. Anyone other than an administrator or manager who opens it is told it is for them, and sees no figures.
+- FinOps leads with four figures and where the spend goes by product, with the detail folded below. Anyone else who opens it is told it is for administrators and managers, and sees no figures.
 - Spend Review leads with better routes, proven savings first. The most efficient board compares each session with colleagues' typical session for the same kind of work.
 - A person's spend is shown only to them, administrators and managers, on Work Pulse and Developer Pulse alike. Colleagues and viewers see "hidden".
 - The S&C Board leaves out Claude's own connectors and Claude Code's bundled skills, says how many connectors come from Anthropic, and counts only unclaimed entries that are in use. The Tool Usage page is folded into the Board.
 - Use Case Governance groups bets by lifecycle, says how long each has been at its stage, and reads "Not estimated" for a bet with no sessions.
 - Opening Work Pulse takes administrators, managers and viewers to the Overview. Viewers no longer get Developer Pulse Users, which could not show them another person, matching Work Pulse.
 - Only administrators see the buttons to acknowledge, resolve, dismiss or clear alerts, the actions only they can take.
+- Features that defaulted to Claude Haiku 4.5 (the Core AI model, both classifiers and transcript import) now default to Claude Haiku 5.5. Every AI call asks for thinking off, so a model that thinks by default cannot use up a short reply before writing it. A model already chosen in Admin, and features that default to Sonnet, are unchanged.
 - Skills discovery no longer runs: no page showed its results, so its weekly web search made model calls for nothing.
 
 ### Fixed
 
 - Weekly Highlights could fail with "The model call failed or produced nothing that could be traced back to real work items" when the reply came wrapped in text or ran long. The draft is now read reliably, with room for six full sentences, and the log says why a draft was rejected.
+- The Dashboard briefing's Refresh could fail with "failed the number check twice" when the AI model spent its whole reply thinking, or put text around its reply. Every briefing now asks for thinking off and reads its reply as Weekly Highlights does, and the message no longer blames the numbers.
 - A Pulse colleague with no sign-in account could not be opened from the Users list, which offered them.
 - Opening the address of a Pulse page your menu does not offer now takes you to your own page, not one that cannot load. Someone with Developer Pulse only goes to My Developer Pulse, and someone with Work Pulse only goes to My Pulse.
 - So What and Team Coaching sentences: singular and plural agree ("1 person is left out"), "most" no longer claims more than the figure shows, time windows read as they are counted, and the 30-day follow-up is said against the card's aim rather than the leader's choice. A decided Developer Pulse So What card keeps its follow-up after its finding stops qualifying.

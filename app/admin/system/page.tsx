@@ -200,7 +200,7 @@ export default function SystemPage() {
   const [seatPriceSaving, setSeatPriceSaving] = useState(false);
 
   // Core AI model state
-  const [coreAiModel, setCoreAiModel] = useState('claude-haiku-4-5-20251001');
+  const [coreAiModel, setCoreAiModel] = useState('claude-haiku-5-5');
   const [coreAiSaving, setCoreAiSaving] = useState(false);
   const [aiModels, setAiModels] = useState<{ id: string; display_name: string }[]>([]);
   const [aiModelsLoading, setAiModelsLoading] = useState(true);

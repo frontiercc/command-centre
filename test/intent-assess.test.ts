@@ -57,7 +57,7 @@ describe('assessIntent', () => {
     });
     expect(mockCreate).toHaveBeenCalledTimes(1);
     // Verify model is Haiku
-    expect(mockCreate.mock.calls[0][0].model).toBe('claude-haiku-4-5-20251001');
+    expect(mockCreate.mock.calls[0][0].model).toBe('claude-haiku-5-5');
     // Verify max_tokens is conservative
     expect(mockCreate.mock.calls[0][0].max_tokens).toBeLessThanOrEqual(512);
     // Verify deterministic output for audit consistency

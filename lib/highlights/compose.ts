@@ -14,6 +14,7 @@
  * Returns null on any API/parse/validation failure — the route explains rather
  * than sending a degraded post.
  */
+import { withThinkingOff } from '@/lib/anthropic/thinking';
 import Anthropic from '@anthropic-ai/sdk';
 import { createAnthropicClient } from '@/lib/anthropic/client';
 import { getConfigValue } from '@/lib/config';
@@ -100,10 +101,10 @@ export async function composeHighlights(input: HighlightsInput): Promise<Compose
   let message: Anthropic.Message;
   try {
     const client = createAnthropicClient(apiKey);
-    message = await queueAiCall(() => client.messages.create({
+    message = await queueAiCall(() => client.messages.create(withThinkingOff({
       // Room for six full sentences and a subject: a reply cut off mid-JSON cannot be read.
       model, max_tokens: 3000, system: SYSTEM_PROMPT, messages: [{ role: 'user', content: userMsg }],
-    }));
+    })));
   } catch (err) {
     const status = (err as { status?: number }).status;
     console.warn(`[Highlights] model call failed (model ${model}${status ? `, status ${status}` : ''})`);

@@ -21,7 +21,7 @@ It shows how far people have moved from quick questions to handing over substant
 
 Finance and security teams get what they need from the same place. Spend is broken down by person, department, cost centre, model and vendor, with suggestions for doing the same work for less. Prompts are checked for personal data, secrets and risky intent, and a searchable audit trail supports GDPR, the EU AI Act, ISO 27001 and ISO 42001.
 
-Somewhere in your organisation, someone may already have handed an entire process to AI. Command Centre helps you find that work, understand its value, make it repeatable and spread it across the business, with the financial accountability, security and governance needed to do so responsibly.
+Someone in your organisation may already have handed a whole process to AI. Command Centre helps you find that work, see what it is worth and spread it to other teams, while keeping track of spend, security and governance.
 
 ## Who it is for
 
@@ -130,11 +130,11 @@ This runs Command Centre on your own computer with a fictional organisation's da
 - **Docker:** [Docker Desktop](https://www.docker.com/products/docker-desktop/) installed and running on Windows or macOS. Linux users can use Docker Engine with the Docker Compose plugin.
 - **Git:** [Download Git](https://git-scm.com/downloads). On macOS, running `git` may prompt you to install Apple's Command Line Tools.
 - **Ports 3001 and 4318** available on your computer.
-- **A Claude API key (optional):** Required for AI-powered features such as grading work, generating briefings and producing reports. Create a key in a workspace through the [Claude Console](https://platform.claude.com/settings/keys). Command Centre requires a workspace-associated key. This is the only API key needed for the initial setup.
+- **A Claude API key (optional):** the AI features need it, such as grading work, briefings and reports. Create it inside a workspace in the [Claude Console](https://platform.claude.com/settings/keys): Command Centre needs a key that belongs to a workspace. It is the only key you need to start.
 
-You can explore Command Centre using sample data without an API key, but the Dashboard briefing and Ask the data need one. See [What works without a key](docs/ai-data-flow.md#running-with-ai-features-off) for the capabilities available.
+You can explore the sample data without a key, but the Dashboard briefing and Ask the data need one. [What works without a key](docs/ai-data-flow.md#running-with-ai-features-off) lists the rest.
 
-AI-powered features incur Anthropic API charges. Sample-data evaluation is expected to cost around $5 initially, depending on usage. See [indicative costs](docs/costs.md).
+Anthropic charges for the AI features. Trying it with sample data costs about $5 at first, depending on how much you use it. See [indicative costs](docs/costs.md).
 
 Run the commands below in PowerShell on Windows, or Terminal on macOS and Linux.
 
@@ -236,7 +236,7 @@ The first command deletes everything Command Centre stored, including the sample
 
 ## 2. Connect Claude for Teams
 
-This deployment runs Command Centre within your organisation and connects Claude Code, Claude Cowork and Claude in Office/Google activity, giving you visibility into how employees use Claude, the work they delegate and the value being created across teams.
+This runs Command Centre for your organisation and connects Claude Code, Claude Cowork and Claude in Office/Google, so you can see how people use Claude, what work they hand over and what it is worth.
 
 ### Before you begin
 
@@ -244,7 +244,7 @@ You need:
 
 - **A Linux server** accessible to the employees and devices sending telemetry, with Git, Docker Engine and the Docker Compose plugin, at least 8 GB of memory, and 5 GB of free disk space plus capacity for your data. For a cloud deployment, see [Running in Azure or AWS](docs/running-in-azure-or-aws.md) instead of steps 1 to 5 below.
 - **Two HTTPS addresses** pointing to the deployment: one for employees to access Command Centre, such as `command-centre.your-company.com`, and another for collecting Claude activity through OpenTelemetry, such as `otel.your-company.com`. Both require valid TLS certificates.
-- **A Claude API key**, created within a workspace in the [Claude Console](https://platform.claude.com/settings/keys), for AI-powered analysis, assessments, briefings and reports. Telemetry collection can operate without this key.
+- **A Claude API key**, created within a workspace in the [Claude Console](https://platform.claude.com/settings/keys), for the AI features, such as grading work, briefings and reports. Activity is still collected without it.
 - **A Claude organisation Owner or Primary Owner** with permission to configure organisation-wide Claude Code, Claude Cowork and Claude in Office/Google telemetry settings.
 
 ### Steps
@@ -378,7 +378,7 @@ The **Last sync** line under the fields shows ChatGPT and Codex prompts, and the
 
 **Which plans does it work with?** Claude for Teams and Claude for Enterprise, and ChatGPT Enterprise and Edu. Claude Code, Claude Cowork and Claude in Office/Google work on both Claude plans; Claude Chat needs Claude for Enterprise, through Anthropic's Compliance API. ChatGPT and Codex come through OpenAI's Compliance API. See [How it integrates](#how-it-integrates).
 
-**Do I need a Claude API key?** Not to explore the sample data, but yes if you want to bring every feature to life. Grading work, briefings and summaries use your organisation's own key, including when ChatGPT and Codex are your only products.
+**Do I need a Claude API key?** Not to explore the sample data, but yes for the AI features. Grading work, briefings and summaries use your organisation's own key, including when ChatGPT and Codex are your only products.
 
 **Can it block risky prompts?** No. It sees activity after it reaches Claude, ChatGPT or Codex, so it flags and alerts rather than blocks.
 

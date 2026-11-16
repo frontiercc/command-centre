@@ -1,6 +1,6 @@
 # Frontier Command Centre: Configure Command Centre
 
-Once you have signed in as the first administrator, this page walks through each area of Command Centre's settings, in a sensible order. It applies to every installation, on your own server or in the cloud.
+Once you have signed in as the first administrator, this page walks through each area of Command Centre's settings, in the order to set them up. It applies to every installation, on your own server or in the cloud.
 
 All configuration lives under **Admin** in the navigation; only administrators see all of it. Settings are stored in the database and take effect without a restart. Secret values (API keys, webhooks, the SSO client secret, the SMTP password, the GitHub token) are encrypted at rest with `CCC_ENCRYPTION_KEY`, are shown masked after saving, and are only ever cleared with their **Remove** button; saving a blank field leaves the stored secret in place.
 
@@ -42,7 +42,7 @@ Command Centre captures Claude Chat by pulling it from the Anthropic Compliance 
 
 The sync runs every two minutes, up to 200 changed chats per run. The first run reaches back 30 days, or less if your Chat retention period is shorter.
 
-**Check:** a **Last sync** line appears under the key within a few minutes, showing chats, prompts, connectors and activities, with an error count added only when a run has errors. The figures count what the run examined, so read the absence of errors as the signal of health. Claude Chat prompts then appear in the Audit Log with Anthropic Compliance API as their source.
+**Check:** a **Last sync** line appears under the key within a few minutes, showing chats, prompts, connectors and activities, with an error count added only when a run has errors. The figures count what the run examined, so no error count means it is working. Claude Chat prompts then appear in the Audit Log with Anthropic Compliance API as their source.
 
 ## Connect ChatGPT and Codex
 

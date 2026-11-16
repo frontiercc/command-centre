@@ -14,6 +14,7 @@
  * be surfaced verbatim in the UI, same trust level as the Weekly Highlights
  * Slack draft).
  */
+import { withThinkingOff } from '@/lib/anthropic/thinking';
 import { createAnthropicClient } from '@/lib/anthropic/client';
 import { eq } from 'drizzle-orm';
 import { getTypedClient } from '@/lib/db/client';
@@ -25,6 +26,7 @@ import { numberVariants, isGrounded } from '@/lib/anthropic/grounded-narrative';
 import { redactPii } from '@/lib/pii/detect';
 import { queueAiCall } from '@/lib/ingestion/scheduler';
 import type { UseCaseImpact } from '@/lib/usecases/impact';
+import { formatModelLabel } from '@/lib/pulse/code/model-label';
 
 interface ImpactSummaryFacts {
   title: string;
@@ -58,7 +60,8 @@ function buildFacts(ucTitle: string, impact: UseCaseImpact): ImpactSummaryFacts 
     // unsupported conclusions — the summary must not narrate them either.
     topSkills: impact.participation.skills.slice(0, 3).map(s => s.name),
     topConnectors: impact.participation.connectors.slice(0, 3).map(c => c.name),
-    topModel: impact.participation.models[0]?.name ?? null,
+    // The model's display name ("Claude Haiku 4.5"), as the pages show it, not its raw id.
+    topModel: impact.participation.models[0]?.name ? formatModelLabel(impact.participation.models[0].name).label : null,
   };
 }
 
@@ -157,7 +160,7 @@ When you mention a skill, connector, or model name, reproduce it exactly as writ
 FACTS (JSON):
 ${JSON.stringify(facts)}
 
-Write the paragraph now. Plain prose only, no markdown, no headings, no bullet points.`;
+Write the paragraph now. Plain prose only, no markdown, no headings, no bullet points. Use British English spelling (for example "totalling", "organisation") and no em dashes.`;
 }
 
 async function callRealModel(prompt: string): Promise<string> {
@@ -166,11 +169,11 @@ async function callRealModel(prompt: string): Promise<string> {
   const model = await getOrgBriefingModel();
   const client = createAnthropicClient(apiKey);
   const message = await queueAiCall(() =>
-    client.messages.create({
+    client.messages.create(withThinkingOff({
       model,
       max_tokens: 384,
       messages: [{ role: 'user', content: prompt }],
-    })
+    }))
   );
   return extractText(message);
 }

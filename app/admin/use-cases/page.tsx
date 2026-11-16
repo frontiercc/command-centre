@@ -70,7 +70,7 @@ export default function UseCasesAdminPage() {
   const [models, setModels] = useState<{ id: string; display_name: string }[]>([]);
   const [modelsLoading, setModelsLoading] = useState(true);
   const [useCasesEnabled, setUseCasesEnabled] = useState(false);
-  const [useCasesExtractModel, setUseCasesExtractModel] = useState('claude-haiku-4-5-20251001');
+  const [useCasesExtractModel, setUseCasesExtractModel] = useState('claude-haiku-5-5');
   const [useCasesIdeateModel, setUseCasesIdeateModel] = useState('claude-sonnet-5');
   const [useCasesAdoptedMinWeeks, setUseCasesAdoptedMinWeeks] = useState('3');
   const [useCasesAdoptedMinUsers, setUseCasesAdoptedMinUsers] = useState('2');

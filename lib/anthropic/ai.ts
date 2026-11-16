@@ -1,6 +1,7 @@
 // Copyright 2026 Lee James
 // SPDX-License-Identifier: Apache-2.0
 
+import { withThinkingOff } from '@/lib/anthropic/thinking';
 import Anthropic from '@anthropic-ai/sdk';
 import { createAnthropicClient, LONG_AI_CALL_TIMEOUT_MS } from '@/lib/anthropic/client';
 import { eq, and, gte, lt, sql } from 'drizzle-orm';
@@ -199,7 +200,7 @@ export async function runAnomalyDetection(): Promise<AnomalyAlert[]> {
   const client = await getClient();
   const anomalySystemPrompt = await buildAnomalySystemPrompt();
   const coreModel = await getCoreAiModel();
-  const message = await queueAiCall(() => client.messages.create({
+  const message = await queueAiCall(() => client.messages.create(withThinkingOff({
     model: coreModel,
     max_tokens: 4096,
     system: anomalySystemPrompt,
@@ -209,7 +210,7 @@ export async function runAnomalyDetection(): Promise<AnomalyAlert[]> {
         content: `Analyse the following usage data and identify any genuine anomalies or concerns.\n\n<usage-data>\n${dataPayload}\n</usage-data>`,
       },
     ],
-  }));
+  })));
 
   const responseText = extractText(message);
 
@@ -460,7 +461,7 @@ export async function generateAdoptionInsights(): Promise<AdoptionNudge[]> {
 
   const client = await getClient();
   const coreModel = await getCoreAiModel();
-  const message = await queueAiCall(() => client.messages.create({
+  const message = await queueAiCall(() => client.messages.create(withThinkingOff({
     model: coreModel,
     max_tokens: 4096,
     system: ADOPTION_SYSTEM_PROMPT,
@@ -470,7 +471,7 @@ export async function generateAdoptionInsights(): Promise<AdoptionNudge[]> {
         content: `Analyse the following 30-day usage data and generate adoption nudges.\n\n<usage-data>\n${JSON.stringify(snapshots, null, 2)}\n</usage-data>`,
       },
     ],
-  }));
+  })));
 
   const responseText = extractText(message);
 
@@ -869,7 +870,7 @@ ${topFiles.length > 0
 
   const client = await getClient();
   const coreModel = await getCoreAiModel();
-  const message = await queueAiCall(() => client.messages.create({
+  const message = await queueAiCall(() => client.messages.create(withThinkingOff({
     model: coreModel,
     max_tokens: 12288,
     system: `You are writing a governance and compliance report for a UK organisation using AI assistants: ${openaiPresent ? 'Claude (Claude Chat, Claude Cowork, Claude Code) and OpenAI (ChatGPT Chat, ChatGPT Work, Codex)' : 'Claude (Claude Chat, Claude Cowork, Claude Code)'}.
@@ -898,7 +899,7 @@ Report period: ${periodStart} to ${periodEnd}`,
         content: `Generate the governance report using this data:\n\n<report-data>\n${productUsageData}Analytics (Anthropic Analytics API, Claude only):\n${JSON.stringify(snapshots.slice(0, 50), null, 2)}${alertsData}\n</report-data>`,
       },
     ],
-  }, { timeout: LONG_AI_CALL_TIMEOUT_MS })); // long output: up to 12,288 tokens
+  }), { timeout: LONG_AI_CALL_TIMEOUT_MS })); // long output: up to 12,288 tokens
 
   const reportMd = extractText(message);
   const deptPrefix = department ? `> **Scoped to department:** ${department}\n\n` : '';

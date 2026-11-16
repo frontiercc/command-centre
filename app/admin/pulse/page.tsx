@@ -62,7 +62,7 @@ export default function AdminPulsePage() {
   const [userRole, setUserRole] = useState('');
   const [config, setConfig] = useState<ModuleConfig>({
     pulseEnabled: 'false',
-    pulseClassifierModel: 'claude-haiku-4-5-20251001',
+    pulseClassifierModel: 'claude-haiku-5-5',
     pulseBriefingModel: BRIEFING_DEFAULT_MODEL,
     pulseUserBriefingModel: '',
     pulseSessionDescriptionsEnabled: 'true',
@@ -93,7 +93,7 @@ export default function AdminPulsePage() {
     ]).then(([configData, statsData]) => {
       setConfig({
         pulseEnabled: String(configData.pulseEnabled ?? 'false'),
-        pulseClassifierModel: String(configData.pulseClassifierModel ?? 'claude-haiku-4-5-20251001'),
+        pulseClassifierModel: String(configData.pulseClassifierModel ?? 'claude-haiku-5-5'),
         pulseBriefingModel: String(configData.pulseBriefingModel ?? BRIEFING_DEFAULT_MODEL),
         pulseUserBriefingModel: String(configData.pulseUserBriefingModel ?? ''),
         pulseSessionDescriptionsEnabled: String(configData.pulseSessionDescriptionsEnabled ?? 'true'),

@@ -17,6 +17,7 @@
  * lib/anthropic/grounded-narrative.ts, shared with lib/usecases/impact-summary.ts —
  * do not fork a local copy here again.
  */
+import { withThinkingOff } from '@/lib/anthropic/thinking';
 import { createAnthropicClient } from '@/lib/anthropic/client';
 import { getConfigValue } from '@/lib/config';
 import { extractText } from '@/lib/anthropic/constants';
@@ -36,13 +37,13 @@ Write the paragraph now. Plain prose only, no markdown, no headings, no bullet p
 async function callRealModel(prompt: string): Promise<string> {
   const apiKey = await getConfigValue('anthropicAiApiKey');
   if (!apiKey) throw new Error('No AI API key configured');
-  const model = (await getConfigValue('financeInsightModel')) || 'claude-haiku-4-5-20251001';
+  const model = (await getConfigValue('financeInsightModel')) || 'claude-haiku-5-5';
   const client = createAnthropicClient(apiKey);
-  const message = await client.messages.create({
+  const message = await client.messages.create(withThinkingOff({
     model,
     max_tokens: 512,
     messages: [{ role: 'user', content: prompt }],
-  });
+  }));
   return extractText(message);
 }
 

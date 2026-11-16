@@ -100,12 +100,14 @@ describe('runCodeHourlyAggregation: 30-day windows', () => {
     expect(span(org.rolling_7d)).toBe(7 * DAY);
     expect(org.rolling_7d).toMatchObject({ session_count: 1, commit_count: 1 });
 
-    // The person's own rows, for My Developer Pulse and the Users list.
+    // The person's own rows, for My Developer Pulse and the Users list. The calendar-week row is
+    // left out, as orgRows does: whether a session two days ago falls in this week depends on the
+    // day the test runs (on a Monday or Tuesday it is last week).
     const user = (await sql.all(
-      `SELECT granularity, session_count, commit_count FROM code_metrics WHERE scope_type = 'user' AND scope_id = 'user-1' ORDER BY granularity`,
+      `SELECT granularity, session_count, commit_count FROM code_metrics WHERE scope_type = 'user' AND scope_id = 'user-1' AND granularity <> 'week' ORDER BY granularity`,
     )) as Array<{ granularity: string; session_count: number; commit_count: number }>;
     expect(user.map(r => [r.granularity, r.session_count, r.commit_count])).toEqual([
-      ['rolling', 2, 3], ['rolling_7d', 1, 1], ['rolling_prior', 1, 4], ['week', 1, 1],
+      ['rolling', 2, 3], ['rolling_7d', 1, 1], ['rolling_prior', 1, 4],
     ]);
   });
 

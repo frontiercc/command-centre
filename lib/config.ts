@@ -832,7 +832,7 @@ export async function getAllConfig(): Promise<AppConfig> {
     smtpFromName: resolve('smtpFromName', 'Frontier Command Centre'),
     // Work Pulse
     pulseEnabled: resolve('pulseEnabled') === 'true',
-    pulseClassifierModel: resolve('pulseClassifierModel', 'claude-haiku-4-5-20251001'),
+    pulseClassifierModel: resolve('pulseClassifierModel', 'claude-haiku-5-5'),
     // The same constant the briefing jobs fall back to, so /admin/pulse shows
     // the model they actually use. The old default here,
     // claude-opus-4-5-20251001, was never a valid model ID.
@@ -889,7 +889,7 @@ export async function getAllConfig(): Promise<AppConfig> {
     codeFrictionThreshold: parseFloat(resolve('codeFrictionThreshold', '0.25')),
     codeClassifierEnabled: resolve('codeClassifierEnabled', 'true') === 'true',
     codeEffortTargets: resolve('codeEffortTargets', ''),
-    codeClassifierModel: resolve('codeClassifierModel', 'claude-haiku-4-5-20251001'),
+    codeClassifierModel: resolve('codeClassifierModel', 'claude-haiku-5-5'),
     codeClassifierIncludePrompt: resolve('codeClassifierIncludePrompt', 'true') === 'true',
     codeClassifierLastRun: resolve('codeClassifierLastRun'),
     codeClassifierConfig: resolve('codeClassifierConfig'),
@@ -939,7 +939,7 @@ export async function getAllConfig(): Promise<AppConfig> {
     ssoRedirectBaseUrl: resolve('ssoRedirectBaseUrl'),
     // Use Cases register (Phase 1)
     useCasesEnabled: resolve('useCasesEnabled', 'false') === 'true',
-    useCasesExtractModel: resolve('useCasesExtractModel', 'claude-haiku-4-5-20251001'),
+    useCasesExtractModel: resolve('useCasesExtractModel', 'claude-haiku-5-5'),
     useCasesIdeateModel: resolve('useCasesIdeateModel', 'claude-sonnet-5'),
     askEnabled: resolve('askEnabled', 'false') === 'true',
     askMonthlyCapUsd: resolve('askMonthlyCapUsd', '5'),
@@ -983,7 +983,7 @@ export async function getAllConfig(): Promise<AppConfig> {
     useCasesAdoptedMinUsers: resolve('useCasesAdoptedMinUsers', '2'),
     useCasesAtRiskQuietWeeks: resolve('useCasesAtRiskQuietWeeks', '2'),
     useCasesNotSeenQuietWeeks: resolve('useCasesNotSeenQuietWeeks', '6'),
-    financeInsightModel: resolve('financeInsightModel', 'claude-haiku-4-5-20251001'),
+    financeInsightModel: resolve('financeInsightModel', 'claude-haiku-5-5'),
     financeDriftAlertThresholdPct: resolve('financeDriftAlertThresholdPct', '10'),
     financeEnterpriseMock: resolve('financeEnterpriseMock', 'false'),
     complianceAccessKey: resolve('complianceAccessKey'),

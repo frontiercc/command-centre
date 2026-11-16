@@ -53,7 +53,7 @@ Set delta explicitly, even where it is already the client's default, so that no 
 
 ## Optional and privacy-relevant settings
 
-`OTEL_LOG_USER_PROMPTS` is the single most consequential choice. Without it, prompts arrive redacted: Command Centre still counts them, but the Audit Log, PII and intent detection, use case judging and process suggestions cannot work on them, and the Code session classifier works from metadata alone. Decide it with your data protection officer, alongside the retention periods and the switches that control which features read prompt text.
+`OTEL_LOG_USER_PROMPTS` is the most important choice here. Without it, prompts arrive redacted: Command Centre still counts them, but the Audit Log, PII and intent detection, use case judging and process suggestions cannot work on them, and the Code session classifier works from metadata alone. Decide it with your data protection officer, alongside the retention periods and the switches that control which features read prompt text.
 
 `OTEL_LOG_TOOL_DETAILS` sends tool parameters and the names of your organisation's own skills. Command Centre keeps from the parameters only a connector's name and the name of the connector tool used, and the fact of a commit (never its identifier); it never stores the content of tool inputs. You can leave it unset at the cost of connector and organisation skill names in Claude Code and AI-assisted commit counts.
 

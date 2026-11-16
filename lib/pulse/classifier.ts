@@ -1,6 +1,7 @@
 // Copyright 2026 Lee James
 // SPDX-License-Identifier: Apache-2.0
 
+import { withThinkingOff } from '@/lib/anthropic/thinking';
 import Anthropic from '@anthropic-ai/sdk';
 import { createAnthropicClient } from '@/lib/anthropic/client';
 import type { DrainPassResult } from '@/lib/pulse/drain';
@@ -292,14 +293,14 @@ export async function classifyBatch(
     ...tierConfig.taxonomy.tier2,
     ...tierConfig.taxonomy.tier3,
   ].map((d) => d.name));
-  const response = await client.messages.create({
+  const response = await client.messages.create(withThinkingOff({
     model,
     max_tokens: 8192,
     messages: [
       { role: 'user', content: userMessage },
     ],
     system: buildClassifierSystemMessage(tierConfig),
-  });
+  }));
 
   // Extract text content from the response
   const textBlock = response.content.find(b => b.type === 'text');
@@ -428,7 +429,7 @@ const MAX_ATTEMPTS = 5;
  */
 export async function runClassifierJob(): Promise<DrainPassResult> {
   const client = await getTypedClient();
-  const model = (await getConfigValue('pulseClassifierModel')) || 'claude-haiku-4-5-20251001';
+  const model = (await getConfigValue('pulseClassifierModel')) || 'claude-haiku-5-5';
   const classifyChatgpt = await classifyChatgptOn();
 
   // Fetch unclassified rows, excluding those that have already failed

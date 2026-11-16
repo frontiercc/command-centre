@@ -25,7 +25,7 @@ export async function getClassifierHealth(nowS?: number) {
   const c = rows[0];
   return {
     enabled: (await getConfigValue('codeClassifierEnabled')) !== 'false',
-    model: (await getConfigValue('codeClassifierModel')) || 'claude-haiku-4-5-20251001',
+    model: (await getConfigValue('codeClassifierModel')) || 'claude-haiku-5-5',
     queue: await getClassifierQueueDepth(nowS),
     classified: Number(c?.classified ?? 0),
     failed: Number(c?.failed ?? 0),

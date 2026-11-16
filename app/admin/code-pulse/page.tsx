@@ -704,7 +704,7 @@ function CodePulseAdminContent() {
 
   const [clf, setClf] = useState<ClassifierData | null>(null);
   const [clfEnabled, setClfEnabled] = useState(true);
-  const [clfModel, setClfModel] = useState('claude-haiku-4-5-20251001');
+  const [clfModel, setClfModel] = useState('claude-haiku-5-5');
   const [clfIncludePrompt, setClfIncludePrompt] = useState(true);
   const [briefingModel, setBriefingModel] = useState('');
   const [humanTimeCode, setHumanTimeCode] = useState<boolean | null>(null);

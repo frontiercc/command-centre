@@ -332,7 +332,7 @@ The table summarises the principal threats at each trust boundary and the contro
 
 ## Incident response
 
-Detection draws on the access audit log, authentication events, active sessions, alerts and System health. Your team holds these containment levers:
+Detection draws on the access audit log, authentication events, active sessions, alerts and System health. To contain an incident, your team can:
 
 | Situation | Action |
 |---|---|
