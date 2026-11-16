@@ -47,7 +47,7 @@ const SELF_SCOPED: Record<string, string> = {
   'admin/mfa/setup POST': 'the caller\'s own MFA enrolment',
   'admin/mfa/disable POST': 'the caller\'s own MFA',
   'pulse/user-prefs GET': 'the caller\'s own preferences',
-  'pulse/skills-overview GET': 'the caller\'s own skills (resolved from session email)',
+  'pulse/skills-overview GET': 'S&C Board figures, which every role sees; department-only entries filtered as on the Board',
   'library POST': 'any user may submit a Board entry',
   'library/[id]/vote POST': 'any user may upvote a Board entry once',
 };

@@ -9,7 +9,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { notBoardHiddenConnector, entryNotBoardHidden } from '@/lib/library/built-in-connectors';
 import { and, eq, gte, notInArray, sql } from 'drizzle-orm';
-import { getAdminSession } from '@/lib/auth/admin-auth';
+import { canAccessOrgOverview, getAdminSession } from '@/lib/auth/admin-auth';
 import { getTypedClient } from '@/lib/db/client';
 import { schema } from '@/lib/db/schema';
 import { vendorExpr, toolTagExpr } from '@/lib/dashboard/product-sql';
@@ -176,6 +176,17 @@ export async function GET(request: NextRequest) {
     department: whoById.get(r.user_id)?.department ?? null,
   }));
 
+  // The S&C Board's own department rule (app/api/library/route.ts): an entry an admin or manager
+  // restricted to a department is shown only to that department, and to admins, managers and
+  // viewers. The caller's department is the sign-in account's or the activity record's.
+  const usersDeptRows = userId ? await client.select({ department: u.department }).from(u).where(eq(u.id, userId)) : [];
+  const callerDepts = [...new Set([session.department, usersDeptRows[0]?.department ?? null].filter((d): d is string => Boolean(d)))];
+  const boardVisible = canAccessOrgOverview(session.role)
+    ? sql`TRUE`
+    : callerDepts.length
+      ? sql`(e.department IS NULL OR ${sql.join(callerDepts.map(d => sql`e.department = ${d}`), sql` OR `)})`
+      : sql`e.department IS NULL`;
+
   // ── Used by nobody: the organisation's OWN published Board entries with no use in the last 30
   // days. Unclaimed entries are left out (the Board registers every name telemetry sees, so an
   // unused name nobody chose is not a finding) and so is Anthropic's catalogue, which publishes
@@ -193,6 +204,7 @@ export async function GET(request: NextRequest) {
     LEFT JOIN admin_users au ON au.linked_cowork_user_id = e.author_user_id
     WHERE e.is_published = 1 AND e.source <> 'anthropic'
       AND ${entryNotBoardHidden(sql.raw('e.type'), sql.raw('e.name'))}
+      AND ${boardVisible}
     ORDER BY e.name
   `)).rows as Array<{ id: number | string; name: string; type: string; is_published: number | string; author: string | null; last_at: number | string | null }>;
   const unused = unusedRows
