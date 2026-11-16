@@ -22,6 +22,7 @@
 // --clean only clears these rows. load.cjs runs it before the other scripts, so none of them
 // finds last load's Team Coaching sessions and adds to them.
 const { Client } = require('pg');
+const { randomBytes } = require('crypto');
 const { orgTimezone, workingTime } = require('./working-hours.cjs');
 
 const COACH = 'ff-coach-';
@@ -82,7 +83,7 @@ async function main() {
     };
     const MODEL = 'claude-haiku-4-5-20251001';
     let seq = 0;
-    const nextId = (kind) => `${COACH}${kind}-${++seq}-${Math.random().toString(36).slice(2, 8)}`;
+    const nextId = (kind) => `${COACH}${kind}-${++seq}-${randomBytes(4).toString('hex')}`;
     const workSession = async (userId, at) => {
       const sid = nextId('s');
       await c.query(`INSERT INTO cowork_sessions (id, conversation_id, user_id, source, started_at, created_at)

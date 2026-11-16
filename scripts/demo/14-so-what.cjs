@@ -31,6 +31,7 @@
 //   docker compose exec hub node scripts/demo/14-so-what.cjs
 //   docker compose exec hub node scripts/demo/14-so-what.cjs --clean
 const { Client } = require('pg');
+const { randomBytes } = require('crypto');
 const { orgTimezone, workingTime } = require('./working-hours.cjs');
 
 const SW = 'ff-sw-';
@@ -96,7 +97,7 @@ async function main() {
     const team = (name) => (teams.includes(name) ? name : null);
 
     let seq = 0;
-    const nextId = (kind) => `${SW}${kind}-${++seq}-${Math.random().toString(36).slice(2, 8)}`;
+    const nextId = (kind) => `${SW}${kind}-${++seq}-${randomBytes(4).toString('hex')}`;
     const person = async (slug, first, last, department) => {
       const id = `${SW}${slug}`;
       await c.query(`INSERT INTO users (id, email, display_name, department, source, first_seen_at, last_seen_at)
