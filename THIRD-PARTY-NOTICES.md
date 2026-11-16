@@ -2,12 +2,12 @@
 
 Frontier Command Centre uses the open-source packages below when it runs. Development-only tools are not listed. This file is generated from package-lock.json and the installed packages by `npm run notices`, and CI checks it is current. For each package it gives the version, licence and source, the copyright lines from the package's licence file and, where the package ships one, its NOTICE file. The text of each licence follows the list.
 
-456 packages:
+454 packages:
 
 | Licence | Packages |
 |---|---|
-| MIT | 275 |
-| Apache-2.0 | 120 |
+| MIT | 274 |
+| Apache-2.0 | 119 |
 | ISC | 25 |
 | LGPL-3.0-or-later | 10 |
 | BlueOak-1.0.0 | 6 |
@@ -757,7 +757,7 @@ Licence: MIT.
 
 Installed on some machines only; licence taken from package-lock.json.
 
-### @nodable/entities 3.0.0
+### @nodable/entities 3.1.0
 
 Licence: MIT. Source: https://github.com/nodable/val-parsers.
 
@@ -1802,12 +1802,6 @@ Licence: MIT. Source: https://github.com/lukeed/dequal.
 
 - Copyright (c) Luke Edwards <luke.edwards05@gmail.com> (lukeed.com)
 
-### detect-libc 2.1.2
-
-Licence: Apache-2.0.
-
-Installed on some machines only; licence taken from package-lock.json.
-
 ### devlop 1.1.0
 
 Licence: MIT. Source: https://github.com/wooorm/devlop.
@@ -1907,13 +1901,13 @@ Licence: MIT. Source: https://github.com/mafintosh/fast-fifo.
 
 Licence: Unlicense. Source: https://github.com/dchest/fast-sha256-js.
 
-### fast-xml-builder 1.2.0
+### fast-xml-builder 1.3.2
 
 Licence: MIT. Source: https://github.com/NaturalIntelligence/fast-xml-builder.
 
 - Copyright (c) 2026 Natural Intelligence
 
-### fast-xml-parser 5.10.1
+### fast-xml-parser 5.12.0
 
 Licence: MIT. Source: https://github.com/NaturalIntelligence/fast-xml-parser.
 
@@ -2053,7 +2047,7 @@ Licence: MIT. Source: https://github.com/sindresorhus/is-stream.
 
 - Copyright (c) Sindre Sorhus <sindresorhus@gmail.com> (https://sindresorhus.com)
 
-### is-unsafe 2.0.0
+### is-unsafe 2.0.3
 
 Licence: MIT. Source: https://github.com/NaturalIntelligence/is-unsafe.
 
@@ -2849,7 +2843,7 @@ Licence: MIT. Source: https://github.com/chalk/strip-ansi.
 
 - Copyright (c) Sindre Sorhus <sindresorhus@gmail.com> (sindresorhus.com)
 
-### strnum 2.4.1
+### strnum 2.5.1
 
 Licence: MIT. Source: https://github.com/NaturalIntelligence/strnum.
 
@@ -3016,10 +3010,6 @@ Licence: ISC. Source: https://github.com/nexdrew/which-module.
 Licence: MIT. Source: https://github.com/chalk/wrap-ansi.
 
 - Copyright (c) Sindre Sorhus <sindresorhus@gmail.com> (sindresorhus.com)
-
-### xml-naming 0.1.0
-
-Licence: MIT. Source: https://github.com/NaturalIntelligence/xml-naming.
 
 ### xml-naming 0.3.0
 
