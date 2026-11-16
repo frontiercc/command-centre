@@ -66,7 +66,8 @@ export async function cachedWorkPulse<T>(
   const hit = entries.get(key) as Entry<T> | undefined;
   if (hit && !opts.force) {
     if (now() - hit.computedAt >= freshMs) {
-      build(key, fn, keep, now).catch(err => console.error(`[work-pulse-cache] background rebuild of ${key} failed`, err));
+      // The key carries request values, so it is logged as data, never as the format string.
+      build(key, fn, keep, now).catch(err => console.error('[work-pulse-cache] background rebuild failed for key %s', key, err));
     }
     return hit.value;
   }
