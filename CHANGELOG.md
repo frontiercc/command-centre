@@ -4,9 +4,10 @@
 
 ### Changed
 
-- Work Pulse's Overview, Departments, Team Coaching and So What, and the dashboard's Work Pulse panels, keep their figures for five minutes and then refresh them in the background, as Spend Review does. On a large hub they took several seconds on every visit; now only the first visit after a restart waits. Confirming a new way of working or generating a briefing shows the change straight away. A result with a part that failed to load is never kept.
+- Every Work Pulse page (Overview, My Pulse, Users, Departments, Team Coaching and So What) and the dashboard's Work Pulse panels keep their figures for five minutes and then refresh them in the background, as Spend Review does. Figures that depend on who is looking are kept for each viewer, and reading someone's prompt text is recorded in the Audit Log on every visit, kept or not. On a large hub they took several seconds on every visit; now only the first visit after a restart waits. Confirming a new way of working or generating a briefing shows the change straight away. A result with a part that failed to load is never kept.
 - So What works its figures out about twice as fast. The evenings card built a new timezone reader for every prompt, which made it most of the page's wait; it now builds one per timezone and checks each 15-minute slot once. On the sample hub So What's own work went from 1.4 seconds to 0.65.
 - Work Pulse's "What did the work produce?" and FinOps Model Efficiency work out each session's kind of work in the database, and the panel counts sessions by week and kind there too. The app gets back about a hundred rows instead of every session and every label. The answers are unchanged.
+- The dashboard's "Which skills and connectors are spreading?" says how its product users split between Claude and ChatGPT, since someone using both counts in each.
 - Claude Chat conversations for So What and "What did the work produce?" are found through the conversations with a prompt in the window, rather than by grouping every conversation ever held.
 
 ### Fixed
@@ -14,6 +15,7 @@
 - A panel no longer disappears while its feature is switched on. If its figures fail to load it says "Couldn't load this. Try refreshing the page.", and with no data it says there is nothing yet. Only a feature that is switched off, or a page that isn't for that role, still hides a panel. This covers Work Pulse, Developer Pulse, the dashboard, FinOps, Spend Review, Use Cases, the S&C Board, Reports, Alerts, the Audit Log and Admin.
 - A page that failed to load no longer showed "No work yet", "No alerts", "No reports" or "No events found" as if there were none. It now says it couldn't load. The S&C Board no longer goes blank, and an entry that fails to load no longer sends you back to the Board without saying why.
 - Switching view while a load failed no longer leaves the last view's figures on show under the new view's name.
+- The dashboard's AI briefing could set this week's active users against everyone on record, as in "141 of 100 active users". It now gives active users as the dashboard does and never against a total.
 - On a hub with more than about 65,000 sessions in a quarter, Work Pulse's "What did the work produce?" panel disappeared, because Postgres refuses more than 65,535 values in one query. Sessions are now looked up 1,000 at a time.
 - One person's Spend Review showed Claude in Office and Google even when **Show Claude in Office and Google** was off. It now follows the setting, as FinOps does.
 - In the Codex view, panels for figures Codex doesn't send (Language mix, Efficiency, Leverage and Observed signal) now say so instead of disappearing.

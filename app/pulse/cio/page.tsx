@@ -113,7 +113,8 @@ export default function CioPulsePage() {
 
   useEffect(() => {
     if (!vendorReady) return; // the saved view is read after the page loads
-    fetch(`/api/pulse/cio?weeks=${delegationWeeks}&vendor=${vendor}`)
+    // After an action on the page (refreshKey moved), ask for fresh figures, not the kept ones.
+    fetch(`/api/pulse/cio?weeks=${delegationWeeks}&vendor=${vendor}${refreshKey > 0 ? '&fresh=1' : ''}`)
       .then(r => {
         if (!r.ok) throw new Error("Couldn't load this page. Try again.");
         return r.json();

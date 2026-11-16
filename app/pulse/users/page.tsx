@@ -122,11 +122,12 @@ export default function UsersPickerPage() {
       .finally(() => setUsersLoading(false));
   }, [adminChecked, deptScoped, userDept, vendor, vendorReady]); // eslint-disable-line react-hooks/exhaustive-deps
 
-  const loadUser = useCallback((userId: string) => {
+  const loadUser = useCallback((userId: string, fresh = false) => {
     if (!userId) return;
     setDataLoading(true);
     setError(null);
-    fetch(`/api/pulse/me?userId=${encodeURIComponent(userId)}&vendor=${vendor}&period=${period}`)
+    // `fresh` after an action on the page, so it shows the change, not the kept figures.
+    fetch(`/api/pulse/me?userId=${encodeURIComponent(userId)}&vendor=${vendor}&period=${period}${fresh ? '&fresh=1' : ''}`)
       .then(r => {
         if (!r.ok) throw new Error("Couldn't load this page. Try again.");
         return r.json();
@@ -300,7 +301,7 @@ export default function UsersPickerPage() {
                 period={
                   <span className="inline-flex items-center gap-2">
                     {d.weeklyPulse && new Date(d.weeklyPulse.generated_at * 1000).toLocaleDateString('en-GB', { weekday: 'long', day: 'numeric', month: 'long' })}
-                    {d.userId && <GenerateBriefingButton type="user" userId={d.userId} onComplete={() => loadUser(selectedUserId)} />}
+                    {d.userId && <GenerateBriefingButton type="user" userId={d.userId} onComplete={() => loadUser(selectedUserId, true)} />}
                   </span>
                 }
               >

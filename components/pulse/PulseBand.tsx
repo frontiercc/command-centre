@@ -43,6 +43,8 @@ export interface OrgSummary {
     connectorSpread: { total: number; rows: SpreadRow[] };
     /** Counted once per product used, so All is Claude plus ChatGPT. */
     activePeople30d: number;
+    /** All view only: the same count for Claude and for ChatGPT (someone using both counts in each). */
+    activePeopleByVendor30d?: { claude: number; openai: number } | null;
     deepPeople30d?: number;
     deepPeopleWeeks?: number[];
     frontierPeople30d?: number;
@@ -203,7 +205,7 @@ function formatName(kind: 'skills' | 'connectors', name: string): string {
   return kind === 'skills' ? name.replace(':', ' · ') : name.replace(/^mcp__/, '').replace(/_/g, ' ');
 }
 
-function SpreadPanel({ skills, connectors, activePeople }: { skills: { total: number; rows: SpreadRow[] }; connectors: { total: number; rows: SpreadRow[] }; activePeople: number }) {
+function SpreadPanel({ skills, connectors, activePeople, split }: { skills: { total: number; rows: SpreadRow[] }; connectors: { total: number; rows: SpreadRow[] }; activePeople: number; split?: { claude: number; openai: number } | null }) {
   const [kind, setKind] = useState<'skills' | 'connectors'>('skills');
   const list = kind === 'skills' ? skills : connectors;
   const one = kind === 'skills' ? 'skill' : 'connector';
@@ -251,6 +253,7 @@ function SpreadPanel({ skills, connectors, activePeople }: { skills: { total: nu
         </div>
       )}
       <p className="m-0 mt-3 pt-2.5 border-t border-dashed border-[#EAEAEA] text-[12px] text-[#8F8F8F]">
+        {split && split.openai > 0 ? `${activePeople.toLocaleString('en-GB')} product users: ${split.claude.toLocaleString('en-GB')} on Claude, ${split.openai.toLocaleString('en-GB')} on ChatGPT (someone using both counts in each). ` : ''}
         Bars count the people using each {one}, not how often it was used, so one that is spreading stands out. Change is against the 30 days before; new means first used in the last 30 days.
         {list.total > rows.length ? ` Top ${rows.length} of ${list.total} shown.` : ''} <Link href="/library" className="text-[#1F6F8B] font-medium hover:underline">See all on the S&amp;C Board</Link>
       </p>
@@ -308,7 +311,7 @@ export default function PulseBand({ children, vendor = 'all', showVendor = false
           {children}
 
           {data.dashboard && (
-            <SpreadPanel skills={data.dashboard.skillSpread} connectors={data.dashboard.connectorSpread} activePeople={data.dashboard.activePeople30d} />
+            <SpreadPanel skills={data.dashboard.skillSpread} connectors={data.dashboard.connectorSpread} activePeople={data.dashboard.activePeople30d} split={data.dashboard.activePeopleByVendor30d} />
           )}
         </>
       )}

@@ -87,8 +87,10 @@ export default function PersonalPulsePage() {
     const meUrl = viewingUserId
       ? `/api/pulse/me?userId=${encodeURIComponent(viewingUserId)}&vendor=${vendor}&period=${period}`
       : `/api/pulse/me?vendor=${vendor}&period=${period}`;
+    // After confirming work or generating the paragraph (refreshKey moved), ask for fresh figures.
+    const meFetch = refreshKey > 0 ? `${meUrl}&fresh=1` : meUrl;
     Promise.all([
-      fetch(meUrl).then(r => { if (!r.ok) throw new Error("Couldn't load this page. Try again."); return r.json(); }),
+      fetch(meFetch).then(r => { if (!r.ok) throw new Error("Couldn't load this page. Try again."); return r.json(); }),
       fetch('/api/pulse/user-prefs').then(r => r.ok ? r.json() : { pulse_start_at: null }),
     ])
       .then(([meData, prefs]) => {

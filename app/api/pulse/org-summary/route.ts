@@ -307,6 +307,18 @@ async function buildOrgSummary(vendor: Vendor, quarterly: boolean) {
     WHERE cm.user_id IS NOT NULL AND cm.occurred_at >= ${bStart} AND cm.occurred_at < ${bEnd}
       AND ${isWorkPulseSurface(sql`cm.surface`, true)} AND ${sql.raw(vendorClause(vendor, 'cm.'))}
   `);
+  // In the All view, the same count for Claude and for ChatGPT, so the page can say how the
+  // product users split (someone using both counts in each).
+  const activeByVendorRows = vendor !== 'all' ? [] : await rawAll<{ vendor: string; n: number | string }>(client, sql`
+    SELECT ${sql.raw(vendorExpr('cm.'))} AS vendor, COUNT(DISTINCT cm.user_id) AS n FROM cowork_messages cm
+    WHERE cm.user_id IS NOT NULL AND cm.occurred_at >= ${bStart} AND cm.occurred_at < ${bEnd}
+      AND ${isWorkPulseSurface(sql`cm.surface`, true)}
+    GROUP BY 1
+  `);
+  const activePeopleByVendor30d = vendor !== 'all' ? null : {
+    claude: Number(activeByVendorRows.find(r => r.vendor === 'claude')?.n ?? 0),
+    openai: Number(activeByVendorRows.find(r => r.vendor === 'openai')?.n ?? 0),
+  };
   // People who handed over meaningful or frontier work in the last 30 days, weekly counts of
   // the same, and how many people do half of all frontier work (counts only, no names).
   const deepPeopleRow = await rawGet<{ n: number | string }>(client, sql`
@@ -380,6 +392,7 @@ async function buildOrgSummary(vendor: Vendor, quarterly: boolean) {
     skillSpread: await spread('cowork_skill_invocations', 'skill_name'),
     connectorSpread: await spread('cowork_mcp_invocations', 'mcp_server'),
     activePeople30d: Number(activePeopleRow?.n ?? 0),
+    activePeopleByVendor30d,
   };
 
   return {
