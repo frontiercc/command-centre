@@ -1,18 +1,13 @@
 # Changelog
 
-## 1.4.2 (unreleased)
-
-### Changed
-
-- So What works its figures out about twice as fast. The evenings card built a new timezone reader for every prompt, which made it most of the page's wait; it now builds one per timezone and checks each 15-minute slot once. On the sample hub So What's own work went from 1.4 seconds to 0.65.
-- Work Pulse's "What did the work produce?" and FinOps Model Efficiency work out each session's kind of work in the database, and the panel counts sessions by week and kind there too. The app gets back about a hundred rows instead of every session and every label. The answers are unchanged.
-- Claude Chat conversations for So What and "What did the work produce?" are found through the conversations with a prompt in the window, rather than by grouping every conversation ever held.
-
 ## 1.4.1 (unreleased)
 
 ### Changed
 
 - Work Pulse's Overview, Departments, Team Coaching and So What, and the dashboard's Work Pulse panels, keep their figures for five minutes and then refresh them in the background, as Spend Review does. On a large hub they took several seconds on every visit; now only the first visit after a restart waits. Confirming a new way of working or generating a briefing shows the change straight away. A result with a part that failed to load is never kept.
+- So What works its figures out about twice as fast. The evenings card built a new timezone reader for every prompt, which made it most of the page's wait; it now builds one per timezone and checks each 15-minute slot once. On the sample hub So What's own work went from 1.4 seconds to 0.65.
+- Work Pulse's "What did the work produce?" and FinOps Model Efficiency work out each session's kind of work in the database, and the panel counts sessions by week and kind there too. The app gets back about a hundred rows instead of every session and every label. The answers are unchanged.
+- Claude Chat conversations for So What and "What did the work produce?" are found through the conversations with a prompt in the window, rather than by grouping every conversation ever held.
 
 ### Fixed
 
