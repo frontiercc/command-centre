@@ -322,7 +322,7 @@ describe('OpenAI sync against the stand-in export', () => {
     } finally {
       await cleanup();
     }
-  }, 300_000);
+  }, 600_000); // a full 5-day sync: about 100s alone, over 300s when the whole suite runs at once
 
   it('drops everything for people on the exclusion list', async () => {
     const { createTestDatabase } = await import('./helpers/db');
@@ -363,7 +363,7 @@ describe('OpenAI sync against the stand-in export', () => {
     } finally {
       await cleanup();
     }
-  }, 300_000);
+  }, 600_000);
 
   it('stops between files when the key is removed mid-run, and keeps no sync position', async () => {
     const { createTestDatabase } = await import('./helpers/db');

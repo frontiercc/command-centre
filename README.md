@@ -5,7 +5,7 @@
   <img src="public/frontier-logo-dark.svg" alt="Frontier Command Centre" width="460">
 </picture>
 
-**Understand, measure and manage how AI is transforming your organisation.**
+**See whether AI is changing your organisation's work, and what it is worth.**
 
 Works with Claude, ChatGPT and Codex.
 

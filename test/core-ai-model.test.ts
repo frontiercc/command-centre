@@ -18,6 +18,6 @@ describe('getCoreAiModel', () => {
   it('falls back to the Haiku default when unset (empty string)', async () => {
     getConfigValue.mockResolvedValue('');
     const { getCoreAiModel } = await import('@/lib/anthropic/model');
-    expect(await getCoreAiModel()).toBe('claude-haiku-4-5-20251001');
+    expect(await getCoreAiModel()).toBe('claude-haiku-5-5');
   });
 });

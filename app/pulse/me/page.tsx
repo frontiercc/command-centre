@@ -200,8 +200,9 @@ export default function PersonalPulsePage() {
             : <Notice tone="info" title="No work yet.">Nothing has been recorded for {who.you ? 'you' : 'this person'} yet.</Notice>
         )}
 
-        {/* 6. The week, in a paragraph */}
-        <Frame
+        {/* 6. The week, in a paragraph: only for a sign-in linked to someone's activity, since
+            nothing can be written for an unlinked one */}
+        {data.userId && <Frame
           title={who.you ? 'Your week, in a paragraph' : 'Their week, in a paragraph'}
           tag="AI summary"
           period={
@@ -218,9 +219,9 @@ export default function PersonalPulsePage() {
             </div>
           ) : (
             // "Generate now" is mentioned only when its button is shown: the sign-in is matched to a person.
-            <p className="m-0 mt-2 text-[13px] text-[#8F8F8F]">No paragraph yet. It is written each Sunday{data.userId ? ', or use Generate now' : ''}.</p>
+            <p className="m-0 mt-2 text-[13px] text-[#8F8F8F]">No paragraph yet. It is written each Sunday, or use Generate now.</p>
           )}
-        </Frame>
+        </Frame>}
 
         {/* New ways of working waiting for review */}
         {pending.length > 0 && (
