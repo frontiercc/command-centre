@@ -224,7 +224,6 @@ export async function POST(request: NextRequest) {
     'skillDraftSoloMinWeeks',
     'skillDraftModel',
     'useCaseJudgeModel',
-    'financeInsightModel',
     'financeDriftAlertThresholdPct',
     'financeEnterpriseMock',
     'dxFrameworkEnabled',

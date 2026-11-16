@@ -2,8 +2,8 @@
 // SPDX-License-Identifier: Apache-2.0
 
 // Postgres coverage for these lib/pulse/** modules:
-// trends.ts, stickiness.ts, mcp-classify.ts, briefings/cio.ts,
-// skills-discover.ts, against a migrated Postgres database
+// trends.ts, stickiness.ts, mcp-classify.ts, briefings/cio.ts
+// against a migrated Postgres database
 // (createTestDbClient('postgres')).
 //
 // HARNESS RULE (copied from pulse-metrics-events-pg.test.ts): modules-under-
@@ -59,7 +59,6 @@ async function runSpec(): Promise<void> {
     const stickiness = await import('@/lib/pulse/stickiness');
     const mcpClassify = await import('@/lib/pulse/mcp-classify');
     const cio = await import('@/lib/pulse/briefings/cio');
-    const skillsDiscover = await import('@/lib/pulse/skills-discover');
     const configLib = await import('@/lib/config');
 
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -219,25 +218,12 @@ async function runSpec(): Promise<void> {
 
     const briefingRowsAfterSecondCall = await db.select().from(schema.pulseBriefings);
     expect(briefingRowsAfterSecondCall).toHaveLength(2);
-
-    // ── (5) skills-discover cache write + read (proving the unixepoch replacement) ─
-    const before = await skillsDiscover.getDiscoverCache();
-    expect(before.items).toEqual([]);
-    expect(before.cached_at).toBeNull();
-    expect(before.is_stale).toBe(true);
-
-    const items = await skillsDiscover.runSkillsDiscover();
-    expect(Array.isArray(items)).toBe(true);
-
-    const after = await skillsDiscover.getDiscoverCache();
-    expect(after.cached_at).not.toBeNull();
-    expect(after.is_stale).toBe(false);
   } finally {
     await cleanup();
   }
 }
 
-describe('pulse trends + stickiness + mcp-classify + cio briefing + skills-discover (postgres)', () => {
+describe('pulse trends + stickiness + mcp-classify + cio briefing (postgres)', () => {
   it(
     'behave correctly on postgres',
     async () => {

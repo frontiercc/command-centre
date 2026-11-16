@@ -3,9 +3,8 @@
 
 /**
  * Shared grounding helpers for LLM narratives over deterministic facts.
- * Originally lifted verbatim from lib/finance/insight-narrative.ts; that file
- * now imports from here too (both callers share one copy) — do not fork a
- * local copy in either caller again.
+ * Every grounded narrative imports these: do not fork a local copy in a
+ * caller.
  */
 
 /** Rounded-to-whole, rounded-to-1dp, exact-value, and exact-2dp string forms of `n`

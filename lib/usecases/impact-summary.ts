@@ -3,8 +3,7 @@
 
 /**
  * Grounded LLM narrative + cache for a single use case's Workflow Impact view.
- * Mirrors lib/finance/insight-narrative.ts's
- * grounding discipline via the shared lib/anthropic/grounded-narrative.ts
+ * Grounded through the shared lib/anthropic/grounded-narrative.ts
  * helpers: the model may only restate numbers already present in a
  * deterministic facts object built from `UseCaseImpact` — any invented number
  * rejects the whole narrative. Never throws; any failure resolves to

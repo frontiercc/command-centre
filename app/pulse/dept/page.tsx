@@ -115,12 +115,13 @@ export default function DeptPickerPage() {
   // refetches quietly and swaps in place, matching the CIO page, so the pill
   // click does not blank the whole page or lose the scroll position.
   const loadedDeptRef = useRef<string | null>(null);
-  const loadDept = useCallback((dept: string) => {
+  const loadDept = useCallback((dept: string, fresh = false) => {
     if (!vendorReady) return; // the saved view is read after the page loads
     if (!dept) return;
     if (loadedDeptRef.current !== dept) setDataLoading(true);
     setError(null);
-    fetch(`/api/pulse/dept/${encodeURIComponent(dept)}?weeks=${delegationWeeks}&vendor=${vendor}&period=${period}`)
+    // `fresh` after an action on the page, so it shows the change, not the kept figures.
+    fetch(`/api/pulse/dept/${encodeURIComponent(dept)}?weeks=${delegationWeeks}&vendor=${vendor}&period=${period}${fresh ? '&fresh=1' : ''}`)
       .then(async r => {
         if (r.ok) return r.json();
         // A refusal says why, so nobody retries what can never load; the
@@ -255,7 +256,7 @@ export default function DeptPickerPage() {
                       items={d.frontier?.capabilities ?? []}
                       pending={d.frontier?.capabilityPending ?? 0}
                       canReview={d.frontierAccess?.canReview ?? false}
-                      onChanged={() => loadDept(selectedDept)}
+                      onChanged={() => loadDept(selectedDept, true)}
                     />
                     {d.spendThisMonth
                       ? <SpendPanel s={d.spendThisMonth} product={product} who={who} reviewHref={null} />
@@ -285,7 +286,7 @@ export default function DeptPickerPage() {
                 period={
                   <span className="inline-flex items-center gap-2">
                     {d.deptBriefing && new Date(d.deptBriefing.generated_at * 1000).toLocaleDateString('en-GB', { day: 'numeric', month: 'long', year: 'numeric' })}
-                    <GenerateBriefingButton type="dept" dept={d.dept} onComplete={() => loadDept(selectedDept)} />
+                    <GenerateBriefingButton type="dept" dept={d.dept} onComplete={() => loadDept(selectedDept, true)} />
                   </span>
                 }
               >

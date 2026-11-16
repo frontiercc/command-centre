@@ -1,5 +1,31 @@
 # Changelog
 
+## 1.4.1 (unreleased)
+
+### Changed
+
+- Work Pulse's Overview, Departments, Team Coaching and So What, and the dashboard's Work Pulse panels, keep their figures for five minutes and then refresh them in the background, as Spend Review does. On a large hub they took several seconds on every visit; now only the first visit after a restart waits. Confirming a new way of working or generating a briefing shows the change straight away. A result with a part that failed to load is never kept.
+
+### Fixed
+
+- A panel no longer disappears while its feature is switched on. If its figures fail to load it says "Couldn't load this. Try refreshing the page.", and with no data it says there is nothing yet. Only a feature that is switched off, or a page that isn't for that role, still hides a panel. This covers Work Pulse, Developer Pulse, the dashboard, FinOps, Spend Review, Use Cases, the S&C Board, Reports, Alerts, the Audit Log and Admin.
+- A page that failed to load no longer showed "No work yet", "No alerts", "No reports" or "No events found" as if there were none. It now says it couldn't load. The S&C Board no longer goes blank, and an entry that fails to load no longer sends you back to the Board without saying why.
+- Switching view while a load failed no longer leaves the last view's figures on show under the new view's name.
+- On a hub with more than about 65,000 sessions in a quarter, Work Pulse's "What did the work produce?" panel disappeared, because Postgres refuses more than 65,535 values in one query. Sessions are now looked up 1,000 at a time.
+- One person's Spend Review showed Claude in Office and Google even when **Show Claude in Office and Google** was off. It now follows the setting, as FinOps does.
+- In the Codex view, panels for figures Codex doesn't send (Language mix, Efficiency, Leverage and Observed signal) now say so instead of disappearing.
+- An unconfirmed use case shows its Skill and Spread opportunities panels, saying to confirm it first. An archived one says it is archived.
+- The AI data flow guide said administrators, managers and viewers could ask for adoption suggestions. Nothing in the app asks for them; it only runs through `/api/ai/analyze`.
+
+### Removed
+
+- The unused AI summary for FinOps, and its model setting. The FinOps summary has always been written in code.
+- The skills discovery code, switched off in 1.4.0.
+
+### Security
+
+- vitest 4 and fast-xml-parser 5.12.0, which clear the remaining Dependabot alerts.
+
 ## 1.4.0 (2026-11-16)
 
 ### Added

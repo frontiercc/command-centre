@@ -12,7 +12,7 @@ import type { TestSql } from './helpers/sql';
 import { isGitCommit, interpretCodexAction } from '@/lib/openai/sync';
 
 vi.mock('@anthropic-ai/sdk', () => ({
-  default: vi.fn().mockImplementation(() => ({ messages: { create: vi.fn() } })),
+  default: vi.fn().mockImplementation(function () { return ({ messages: { create: vi.fn() } }); }),
 }));
 
 vi.mock('@/lib/auth/admin-auth', async (orig) => {

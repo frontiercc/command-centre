@@ -1,6 +1,6 @@
 {
   "name": "command-centre",
-  "version": "1.4.0",
+  "version": "1.4.1",
   "description": "Measures whether teams using Claude are becoming more productive, from the telemetry Claude already sends.",
   "license": "Apache-2.0",
   "author": "Lee James",
@@ -60,10 +60,10 @@
     "postcss": "^8.5.31",
     "tailwindcss": "^3.4.1",
     "typescript": "^5",
-    "vitest": "^3.0.0"
+    "vitest": "^4.1.12"
   },
   "overrides": {
-    "fast-xml-parser": "5.10.1",
+    "fast-xml-parser": "5.12.0",
     "archiver-utils": {
       "glob": "^14.0.2"
     },

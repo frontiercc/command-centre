@@ -126,7 +126,8 @@ export default function CioPulsePage() {
   useEffect(() => {
     if (!vendorReady) return; // the saved view is read after the page loads
     setOrgState('loading');
-    fetch(`/api/pulse/org-summary?vendor=${vendor}&window=quarter`)
+    // After an action on the page (refreshKey moved), ask for fresh figures, not the kept ones.
+    fetch(`/api/pulse/org-summary?vendor=${vendor}&window=quarter${refreshKey > 0 ? '&fresh=1' : ''}`)
       .then(r => r.ok ? r.json() : null)
       .then(d => {
         // Failed: clear the last view's figures so they are never shown under this view's name.

@@ -24,10 +24,9 @@ import type { TierNames } from '@/lib/pulse/tier-names';
 import { BEYOND_QUICK } from '@/lib/pulse/code/coaching-words';
 import { formatModelLabel } from '@/lib/pulse/code/model-label';
 import {
-  CHECK_AFTER_DAYS, COACHING_MIN_PEOPLE, SAME_WITHIN, DAY_S,
   compareMetric as coreCompareMetric, coachingResult as coreCoachingResult,
   planAction as corePlanAction, pastActions as corePastActions,
-  type CoachingResult, type DoneRecord, type PlanAction, type Suggested, type MetricRules,
+  type DoneRecord, type PlanAction, type Suggested, type MetricRules,
 } from '@/lib/pulse/coaching-core';
 
 export { BEYOND_QUICK } from '@/lib/pulse/code/coaching-words';

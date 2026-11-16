@@ -414,7 +414,7 @@ Vote or add ideas in [Discussions](https://github.com/frontiercc/command-centre/
 
 ## Status
 
-1.0.0, in October 2026, was the first public release; the current release is 1.4.0, which redesigns every page, adds So What and Team Coaching to Work Pulse and Developer Pulse, and adds Ask the data in preview. Command Centre was built with Claude Code, then reviewed, tested and run in production; it has been in daily use since mid-2026. Several features ship switched off and are turned on from the admin pages: FinOps, Use Cases, Ask the data, the Weekly Digest, Weekly Highlights, human time, Dev Framework Alignment, single sign-on and department sync.
+1.0.0, in October 2026, was the first public release; 1.4.0 redesigned every page, added So What and Team Coaching to Work Pulse and Developer Pulse, and added Ask the data in preview. The current release, 1.4.1, fixes panels that disappeared when they should have said why they were empty. Command Centre was built with Claude Code, then reviewed, tested and run in production; it has been in daily use since mid-2026. Several features ship switched off and are turned on from the admin pages: FinOps, Use Cases, Ask the data, the Weekly Digest, Weekly Highlights, human time, Dev Framework Alignment, single sign-on and department sync.
 
 ## Support
 

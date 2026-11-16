@@ -15,7 +15,7 @@ import type { TestSql } from './helpers/sql';
 import { weekStart } from '@/lib/pulse/period';
 
 vi.mock('@anthropic-ai/sdk', () => ({
-  default: vi.fn().mockImplementation(() => ({ messages: { create: vi.fn() } })),
+  default: vi.fn().mockImplementation(function () { return ({ messages: { create: vi.fn() } }); }),
 }));
 
 const session = { authenticated: true, role: 'admin', email: 'me@example.org', department: null as string | null };

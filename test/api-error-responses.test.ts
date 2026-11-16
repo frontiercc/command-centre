@@ -47,7 +47,9 @@ const SAFE = new Set([
 
 describe('library error lists', () => {
   it('sanitizeErrors logs each and returns one fixed line', () => {
+    // vitest 4 reuses an existing console spy, calls and all, so start from a clean count.
     const log = vi.spyOn(console, 'error').mockImplementation(() => {});
+    log.mockClear();
     expect(sanitizeErrors('t', [])).toEqual([]);
     expect(sanitizeErrors('t', ['connect ECONNREFUSED 10.0.0.5:5432', 'relation "x" does not exist'])).toEqual(['2 errors. Details are in the server log.']);
     expect(log).toHaveBeenCalledTimes(2);
