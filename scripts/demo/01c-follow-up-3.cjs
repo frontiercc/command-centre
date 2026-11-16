@@ -34,7 +34,7 @@ const N_COMPLETED_WEEKS = 8;
 
 const rand = (min, max) => Math.floor(Math.random() * (max - min + 1)) + min;
 const pick = (arr) => arr[Math.floor(Math.random() * arr.length)];
-const uid = (prefix) => `${MARKER}${prefix}-${Math.random().toString(36).slice(2, 10)}-${Math.random().toString(36).slice(2, 10)}`;
+const uid = (prefix) => `${MARKER}${prefix}-${require('crypto').randomBytes(8).toString('hex')}`;
 
 function mondayUtcStart(tsSec) {
   const d = new Date(tsSec * 1000);

@@ -27,7 +27,7 @@ const PREVIEW_CHARS = 250; // lib/otel/content-limits.ts CONTENT_PREVIEW_CHARS
 
 const rand = (min, max) => Math.floor(Math.random() * (max - min + 1)) + min;
 const pick = (arr) => arr[Math.floor(Math.random() * arr.length)];
-const uid = (prefix) => `${MARKER}${prefix}-${Math.random().toString(36).slice(2, 10)}-${Math.random().toString(36).slice(2, 10)}`;
+const uid = (prefix) => `${MARKER}${prefix}-${require('crypto').randomBytes(8).toString('hex')}`;
 
 // Same formula as 01-organisation.cjs/-v2.cjs/-v5.cjs — MUST match exactly
 // so a user already "gone quiet recently" there is quiet here too.

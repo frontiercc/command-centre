@@ -44,7 +44,7 @@ const WEEK = 7 * DAY;
 
 const rand = (min, max) => Math.floor(Math.random() * (max - min + 1)) + min;
 const pick = (arr) => arr[Math.floor(Math.random() * arr.length)];
-const uid = (prefix) => `${MARKER}${prefix}-${Math.random().toString(36).slice(2, 10)}-${Math.random().toString(36).slice(2, 10)}`;
+const uid = (prefix) => `${MARKER}${prefix}-${require('crypto').randomBytes(8).toString('hex')}`;
 
 // Deterministic per-user "gone quiet recently" decision — MUST match
 // 01-organisation.cjs/-v5.cjs exactly (same formula) so all three scripts
