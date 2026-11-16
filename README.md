@@ -13,6 +13,8 @@ Works with Claude, ChatGPT and Codex.
 
 </div>
 
+https://github.com/user-attachments/assets/90b28fb9-3691-4856-9218-40c7b374a670
+
 Command Centre shows whether AI is making your teams more productive, and what that is worth. It covers Claude and ChatGPT for everyday work and Claude Code and Codex for coding, showing the results for each person, each department and the organisation as a whole.
 
 It shows how far people have moved from quick questions to handing over substantial work and whole processes. It finds the recurring work teams have already given to AI, helps turn that work into skills others can use, and shows where coaching or further investment would help most.

@@ -30,6 +30,7 @@
 
 - Weekly Highlights could fail with "The model call failed or produced nothing that could be traced back to real work items" when the reply came wrapped in text or ran long. The draft is now read reliably, with room for six full sentences, and the log says why a draft was rejected.
 - A Pulse colleague with no sign-in account could not be opened from the Users list, which offered them.
+- Opening the address of a Pulse page your menu does not offer now takes you to your own page, not one that cannot load. Someone with Developer Pulse only goes to My Developer Pulse, and someone with Work Pulse only goes to My Pulse.
 - So What and Team Coaching sentences: singular and plural agree ("1 person is left out"), "most" no longer claims more than the figure shows, time windows read as they are counted, and the 30-day follow-up is said against the card's aim rather than the leader's choice. A decided Developer Pulse So What card keeps its follow-up after its finding stops qualifying.
 - Messages that pointed to the wrong admin page now name the right one: the Claude API key is on Access & Keys, Use Cases is switched on under Use Cases, model rates are under Developer Pulse → Rates, and Work Pulse tiers are on Tier config.
 - Twelve dependency security alerts, report dates that are not real dates, and month links on FinOps and Spend Review.
