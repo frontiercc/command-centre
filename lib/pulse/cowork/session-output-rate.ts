@@ -33,11 +33,10 @@
  * same as an unaggregated Cowork session. A conversation starts at its first prompt.
  */
 
-import { and, gte, isNotNull, lt, sql } from 'drizzle-orm';
+import { sql, type SQL } from 'drizzle-orm';
 import { getTypedClient } from '@/lib/db/client';
-import { schema } from '@/lib/db/schema';
 import { weekStarts } from '@/lib/pulse/period';
-import { buildSessionTaskTypeMap, MECHANISM_TASK_TYPES } from '@/lib/finance/model-efficiency';
+import { sessionKindSql, MECHANISM_TASK_TYPES } from '@/lib/finance/model-efficiency';
 import { outputRate } from './session-output';
 import type { Vendor } from '@/lib/dashboard/vendor';
 
@@ -124,11 +123,13 @@ export interface SessionOutputRateReport {
   byTaskType: OutputRateByTaskType[];
 }
 
-interface StatsRow {
-  session_id: string;
-  first_event_at: number | string | null;
-  /** 1 produced, 0 did not, NULL not yet aggregated (excluded entirely). */
-  produced_output: number | string | null;
+/** One week and kind of work, counted by the database. Counts come back as strings. */
+interface GroupedRow {
+  wk: number | string;
+  /** Null when the session carries no classification. */
+  task_type: string | null;
+  sessions: number | string;
+  produced: number | string;
 }
 
 /**
@@ -145,49 +146,71 @@ export async function buildSessionOutputRate(nowS: number = Math.floor(Date.now(
   const windowEnd = windowWeeks[windowWeeks.length - 1] + WEEK_SECS;
 
   const client = await getTypedClient();
-  const css = schema.coworkSessionStats;
-
-  const exec = client as unknown as { execute: (q: unknown) => Promise<{ rows: unknown[] }> };
+  const exec = client as unknown as { execute: (q: SQL) => Promise<{ rows: unknown[] }> };
   const withClaude = vendor !== 'openai';
-  const rows = !withClaude ? [] as StatsRow[] : (await client
-    .select({ session_id: css.session_id, first_event_at: css.first_event_at, produced_output: css.produced_output })
-    .from(css)
-    .where(and(
-      isNotNull(css.first_event_at),
-      isNotNull(css.produced_output),
-      gte(css.first_event_at, windowStart),
-      lt(css.first_event_at, windowEnd),
-    ))) as StatsRow[];
 
-  // ChatGPT: one row per conversation started in the window; a reply OpenAI lists files on made
-  // something. Replies stored before the count was kept are not measured and are left out.
+  // Every measured session that started in the window, on each platform the view covers: its id,
+  // when it started, and 1 or 0 for whether it produced something. Unmeasured ones are left out.
+  const parts: SQL[] = [];
+  if (withClaude) {
+    // Claude Cowork and Claude in Office/Google, from the session aggregator.
+    parts.push(sql`
+      SELECT css.session_id, css.first_event_at, css.produced_output AS produced
+      FROM cowork_session_stats css
+      WHERE css.first_event_at IS NOT NULL AND css.produced_output IS NOT NULL
+        AND css.first_event_at >= ${windowStart} AND css.first_event_at < ${windowEnd}`);
+    // Claude Chat: one row per conversation started in the window, produced from its replies.
+    // A conversation with no reply on record is not measured.
+    parts.push(sql`
+      SELECT c.session_id, c.first_at AS first_event_at, c.produced FROM (
+        SELECT x.session_id, x.first_at,
+               (SELECT CASE WHEN COUNT(*) = 0 THEN NULL
+                            WHEN SUM(m.artifacts_count + m.generated_files_count) > 0 THEN 1 ELSE 0 END
+                FROM chat_assistant_meta m WHERE m.conversation_id = x.session_id) AS produced
+        FROM (
+          SELECT cm.session_id, MIN(cm.occurred_at) AS first_at
+          FROM cowork_messages cm
+          WHERE cm.surface = 'chat' AND cm.message_type = 'cowork_user_message' AND cm.session_id IS NOT NULL
+            -- Only conversations with a prompt in the window, so the grouping reads those, not every
+            -- conversation ever held. One whose first prompt is in the window always has one there.
+            AND cm.session_id IN (
+              SELECT w.session_id FROM cowork_messages w
+              WHERE w.surface = 'chat' AND w.message_type = 'cowork_user_message'
+                AND w.occurred_at >= ${windowStart} AND w.occurred_at < ${windowEnd}
+            )
+          GROUP BY cm.session_id
+          HAVING MIN(cm.occurred_at) >= ${windowStart} AND MIN(cm.occurred_at) < ${windowEnd}
+        ) x
+      ) c WHERE c.produced IS NOT NULL`);
+  }
   if (vendor !== 'claude') {
-    const gptRows = (await exec.execute(sql`
-      SELECT g.session_id, g.first_at AS first_event_at,
-             (SELECT CASE WHEN COUNT(r.files_count) = 0 THEN NULL
-                          WHEN SUM(r.files_count) > 0 THEN 1 ELSE 0 END
-              FROM openai_replies r WHERE r.session_id = g.session_id) AS produced_output
-      FROM chatgpt_session_time g
-      WHERE g.first_at >= ${windowStart} AND g.first_at < ${windowEnd}
-    `)).rows as StatsRow[];
-    for (const r of gptRows) if (r.produced_output !== null) rows.push(r);
+    // ChatGPT: one row per conversation started in the window; a reply OpenAI lists files on made
+    // something. Replies stored before the count was kept are not measured.
+    parts.push(sql`
+      SELECT g.session_id, g.first_at AS first_event_at, g.produced FROM (
+        SELECT g0.session_id, g0.first_at,
+               (SELECT CASE WHEN COUNT(r.files_count) = 0 THEN NULL
+                            WHEN SUM(r.files_count) > 0 THEN 1 ELSE 0 END
+                FROM openai_replies r WHERE r.session_id = g0.session_id) AS produced
+        FROM chatgpt_session_time g0
+        WHERE g0.first_at >= ${windowStart} AND g0.first_at < ${windowEnd}
+      ) g WHERE g.produced IS NOT NULL`);
   }
 
-  // Claude Chat: one row per conversation started in the window, produced from its replies.
-  const chatRows = !withClaude ? [] as StatsRow[] : (await exec.execute(sql`
-    SELECT c.session_id, c.first_at AS first_event_at,
-           (SELECT CASE WHEN COUNT(*) = 0 THEN NULL
-                        WHEN SUM(m.artifacts_count + m.generated_files_count) > 0 THEN 1 ELSE 0 END
-            FROM chat_assistant_meta m WHERE m.conversation_id = c.session_id) AS produced_output
-    FROM (
-      SELECT cm.session_id, MIN(cm.occurred_at) AS first_at
-      FROM cowork_messages cm
-      WHERE cm.surface = 'chat' AND cm.message_type = 'cowork_user_message' AND cm.session_id IS NOT NULL
-      GROUP BY cm.session_id
-      HAVING MIN(cm.occurred_at) >= ${windowStart} AND MIN(cm.occurred_at) < ${windowEnd}
-    ) c
-  `)).rows as StatsRow[];
-  for (const r of chatRows) if (r.produced_output !== null) rows.push(r);
+  // The database counts the sessions by the week they started and by their kind of work (the
+  // shared rule in lib/finance/model-efficiency.ts, sessionKindSql), and sends back one row per
+  // week and kind instead of every session and every label. Sessions are bucketed by
+  // first_event_at, so one straddling a Monday counts once, in the week it began.
+  const grouped = parts.length === 0 ? [] : (await exec.execute(sql`
+    WITH s AS (${sql.join(parts, sql` UNION ALL `)}),
+    k AS (${sessionKindSql(sql`SELECT session_id FROM s`)})
+    SELECT FLOOR((s.first_event_at - ${windowStart}) / ${WEEK_SECS}) AS wk,
+           k.task_type,
+           COUNT(*) AS sessions,
+           SUM(CASE WHEN s.produced = 1 THEN 1 ELSE 0 END) AS produced
+    FROM s LEFT JOIN k ON k.session_id = s.session_id
+    GROUP BY 1, 2
+  `)).rows as GroupedRow[];
 
   // Seed every window week so an empty week renders as a measured gap rather
   // than vanishing from the series.
@@ -196,42 +219,27 @@ export async function buildSessionOutputRate(nowS: number = Math.floor(Date.now(
 
   let sessions = 0;
   let produced = 0;
-  // Collapse each session's classifications to one task_type using the shared
-  // rule in lib/finance/model-efficiency.ts (most-frequent, newest breaks a
-  // tie). Session-based, NOT a message-id join — pulse_classifications tags
-  // cowork_user_message rows while the session's other evidence sits on
-  // different rows in the same session.
-  const taskTypeBySession = await buildSessionTaskTypeMap(client, rows.map((r) => r.session_id));
   const byTaskTypeAcc = new Map<string, { sessions: number; produced: number }>();
 
-  for (const row of rows) {
-    const startedAt = Number(row.first_event_at);
-    if (!Number.isFinite(startedAt)) continue;
-
-    // Integer-divide into the seeded bucket rather than recomputing weekStart per
-    // row — the window is contiguous, so the offset is exact.
-    const idx = Math.floor((startedAt - windowStart) / WEEK_SECS);
-    const bucket = byWeek.get(windowWeeks[idx]);
+  for (const row of grouped) {
+    // Number() throughout: Postgres hands counts and sums back as strings.
+    const bucket = byWeek.get(windowWeeks[Number(row.wk)]);
     if (!bucket) continue; // defensive: a row outside the window the WHERE already excluded
+    const n = Number(row.sessions);
+    const p = Number(row.produced);
+    bucket.sessions += n;
+    bucket.produced += p;
+    sessions += n;
+    produced += p;
 
-    // Number() not truthiness — Postgres can hand an integer column back as a string.
-    const didProduce = Number(row.produced_output) === 1;
-    bucket.sessions += 1;
-    sessions += 1;
-    if (didProduce) {
-      bucket.produced += 1;
-      produced += 1;
-    }
-
-    // Named kinds of work only — see the note on the breakdown above. A session
+    // Named kinds of work only, see the note on the breakdown above. A session
     // we cannot name still counts toward the headline and the weekly trend; it
     // simply gets no row of its own.
-    const taskType = taskTypeBySession.get(row.session_id);
-    if (taskType !== undefined && !MECHANISM_TASK_TYPES.has(taskType)) {
-      const tt = byTaskTypeAcc.get(taskType) ?? { sessions: 0, produced: 0 };
-      tt.sessions += 1;
-      if (didProduce) tt.produced += 1;
-      byTaskTypeAcc.set(taskType, tt);
+    if (row.task_type !== null && !MECHANISM_TASK_TYPES.has(row.task_type)) {
+      const tt = byTaskTypeAcc.get(row.task_type) ?? { sessions: 0, produced: 0 };
+      tt.sessions += n;
+      tt.produced += p;
+      byTaskTypeAcc.set(row.task_type, tt);
     }
   }
 

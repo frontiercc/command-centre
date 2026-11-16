@@ -10,7 +10,7 @@
 
 import { useCallback, useEffect, useState } from 'react';
 import { useToast } from '@/components/shared/ToastProvider';
-import { Panel, Muted, B, cx } from '@/components/precision/ui';
+import { Panel, Muted, B, cx, LOAD_FAILED } from '@/components/precision/ui';
 
 interface Conflict {
   id: string;
@@ -41,12 +41,13 @@ export default function IdentityConflictsCard() {
   const { showToast } = useToast();
   const [conflicts, setConflicts] = useState<Conflict[] | null>(null);
   const [busy, setBusy] = useState<string | null>(null);
+  const [failed, setFailed] = useState(false);
 
   const load = useCallback(() => {
     fetch('/api/admin/identity-conflicts')
       .then(r => (r.ok ? r.json() : Promise.reject(new Error(String(r.status)))))
-      .then((d: { conflicts: Conflict[] }) => setConflicts(d.conflicts))
-      .catch(() => setConflicts([]));
+      .then((d: { conflicts: Conflict[] }) => { setConflicts(d.conflicts); setFailed(false); })
+      .catch(() => { setConflicts([]); setFailed(true); });
   }, []);
 
   useEffect(() => { load(); }, [load]);
@@ -82,7 +83,7 @@ export default function IdentityConflictsCard() {
 
       {open.length === 0 ? (
         <div className="px-4 py-3 border-t border-[#F2F2F2]">
-          <Muted>No identity conflicts.</Muted>
+          <Muted>{failed ? LOAD_FAILED : 'No identity conflicts.'}</Muted>
         </div>
       ) : (
         <ul className="m-0 p-0 list-none">

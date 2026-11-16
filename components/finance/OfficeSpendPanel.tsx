@@ -11,7 +11,7 @@
  * Also used per person on Spend Review (scope="person").
  */
 import { Fragment } from 'react';
-import { Panel, PanelFoot, Dot, T } from '@/components/precision/ui';
+import { Panel, PanelFoot, Dot, T, Muted, LOAD_FAILED } from '@/components/precision/ui';
 import { WORK_PRODUCT_COLOR } from '@/lib/ui/chart-colours';
 import { FAMILY_LABEL, PRODUCT_FAMILY, PRODUCT_LABEL, type WorkProduct } from '@/lib/pulse/cowork/products';
 
@@ -51,7 +51,12 @@ function Spend({ usd, calls }: { usd: number | null; calls: number }) {
 }
 
 export default function OfficeSpendPanel({ data, scope = 'organisation' }: { data: OfficeSpendData | null | undefined; scope?: 'organisation' | 'person' }) {
-  if (!data || data.byProduct.length === 0) return null;
+  // Only rendered while Office and Google are shown, so missing data is a failed load.
+  if (!data || data.byProduct.length === 0) return (
+    <Panel title="Claude in Office and Google (estimate)" subtitle={scope === 'person' ? 'This month' : 'This month, not included in the totals above'}>
+      <Muted>{!data ? LOAD_FAILED : 'No use of Claude in Office or Google this month.'}</Muted>
+    </Panel>
+  );
   const showPeople = scope === 'organisation';
   // App users: a person counts once for each app they used, so the column adds up.
   const appUsers = data.byProduct.reduce((n, r) => n + (r.people ?? 0), 0);

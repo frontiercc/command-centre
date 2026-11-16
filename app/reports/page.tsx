@@ -6,7 +6,7 @@
 import { useEffect, useState, useMemo } from 'react';
 import TopBar from '@/components/layout/TopBar';
 import LoadingSpinner from '@/components/shared/LoadingSpinner';
-import { PageBody, Toolbar, Panel, SubHead, Empty, T, B } from '@/components/precision/ui';
+import { PageBody, Toolbar, Panel, SubHead, Empty, Notice, T, B } from '@/components/precision/ui';
 import ReportViewer from '@/components/reports/ReportViewer';
 import { REPORT_SECTIONS, availableSections } from '@/lib/reports/section-catalog';
 import { useCorePlatformGuard } from '@/components/shared/useCorePlatformGuard';
@@ -27,6 +27,7 @@ export default function ReportsPage() {
   useCorePlatformGuard();
   const [reports, setReports] = useState<Report[]>([]);
   const [loading, setLoading] = useState(true);
+  const [failed, setFailed] = useState(false);
   const [generating, setGenerating] = useState(false);
   const [selectedReport, setSelectedReport] = useState<Report | null>(null);
   const [showOptions, setShowOptions] = useState(false);
@@ -86,9 +87,9 @@ export default function ReportsPage() {
 
   const fetchReports = () => {
     fetch('/api/ai/report')
-      .then(r => r.json())
-      .then(data => { if (Array.isArray(data)) setReports(data); })
-      .catch(console.error)
+      .then(r => { if (!r.ok) throw new Error(String(r.status)); return r.json(); })
+      .then(data => { if (!Array.isArray(data)) throw new Error('not a list'); setReports(data); setFailed(false); })
+      .catch(e => { console.error(e); setFailed(true); })
       .finally(() => setLoading(false));
   };
 
@@ -260,6 +261,8 @@ export default function ReportsPage() {
           <LoadingSpinner />
         ) : selectedReport ? (
           <ReportViewer report={selectedReport} onBack={() => setSelectedReport(null)} />
+        ) : failed ? (
+          <Notice tone="error" title="Couldn’t load this.">Try refreshing the page.</Notice>
         ) : reports.length === 0 ? (
           <Empty title="No reports">
             No reports generated yet. Click Generate report to create your first governance report.

@@ -13,7 +13,7 @@ import { Suspense, useCallback, useEffect, useState } from 'react';
 import { useSearchParams } from 'next/navigation';
 import TopBar from '@/components/layout/TopBar';
 import LoadingSpinner from '@/components/shared/LoadingSpinner';
-import { PageBody, Toolbar, Notice, B, cx } from '@/components/precision/ui';
+import { PageBody, Toolbar, Notice, B, cx, Muted } from '@/components/precision/ui';
 import { Frame, Track, linkCls } from '@/components/pulse/WorkPulseOverview';
 import CoachingDone from '@/components/pulse/CoachingDone';
 import { tierNamesOr } from '@/lib/pulse/tier-names';
@@ -28,6 +28,8 @@ interface Data {
   department: string | null;
   plan: CoworkCoachingPlan | null;
   checkAfterDays: number;
+  /** Admin → Work Pulse "Human time": off hides What it freed. */
+  humanTimeOn?: boolean;
   /** Whether ChatGPT is connected and shown, so the page names what its figures cover. */
   openaiPresent: boolean;
 }
@@ -233,7 +235,7 @@ function TeamCoaching() {
             </div>
 
             <div className="grid grid-cols-1 xl:grid-cols-2 gap-4">
-              {plan.figures.freed && (
+              {plan.figures.freed ? (
                 <Frame
                   title="What it freed"
                   tag="AI estimate"
@@ -253,9 +255,9 @@ function TeamCoaching() {
                     </div>
                   ))}
                 </Frame>
-              )}
+              ) : (data?.humanTimeOn ?? true) ? <Frame title="What it freed" tag="AI estimate" period="Last 30 days"><Muted>No sessions with a by-hand estimate in the last 30 days yet.</Muted></Frame> : null}
 
-              {plan.figures.producedNothing && (
+              {plan.figures.producedNothing ? (
                 <Frame
                   title="Did the work come out"
                   period="Last 30 days"
@@ -273,7 +275,7 @@ function TeamCoaching() {
                   ))}
                   <ProducedList items={plan.figures.produced ?? []} />
                 </Frame>
-              )}
+              ) : <Frame title="Did the work come out" period="Last 30 days"><Muted>Too few sessions in the last 30 days to say yet.</Muted></Frame>}
             </div>
 
             <Frame
@@ -316,7 +318,7 @@ function TeamCoaching() {
               ))}
             </Frame>
 
-            {plan.pastActions.length > 0 && (
+            {plan.pastActions.length > 0 ? (
               <Frame
                 title="Done before"
                 period={`${plan.pastActions.length} ${plan.pastActions.length === 1 ? 'action' : 'actions'}`}
@@ -329,7 +331,7 @@ function TeamCoaching() {
                   </div>
                 ))}
               </Frame>
-            )}
+            ) : <Frame title="Done before"><Muted>Nothing done before yet. Actions you mark done move here once their figure has moved.</Muted></Frame>}
           </>
         )}
       </PageBody>

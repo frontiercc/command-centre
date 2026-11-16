@@ -62,10 +62,13 @@ export async function GET(
     // Claude in Office: this person's estimated Office spend, separate from the
     // Cowork review above (it has no cost and is never compared or advised on).
     const { start, end } = monthBounds(period);
-    const office = await officeSpendByUser(start, end, userId).then(summariseOfficeSpend).catch(() => null);
+    // Off in Admin → Work Pulse "Show Claude in Office and Google": no panel, as on FinOps.
+    const officeShown = (await getAllConfig()).claudeInOfficeShown !== 'false';
+    const office = officeShown ? await officeSpendByUser(start, end, userId).then(summariseOfficeSpend).catch(() => null) : null;
     return NextResponse.json({
       ...review,
       office,
+      officeShown,
       isCurrentMonth: isCurrent,
       updatedAt: Math.floor(built.computedAt / 1000),
       anthropic: {

@@ -138,6 +138,8 @@ interface Review {
   canSeePrompts: boolean;
   /** Claude in Office, estimated from tokens, kept out of every figure above. null without Office activity. */
   office?: OfficeSpendData | null;
+  /** Admin → Work Pulse "Show Claude in Office and Google": off hides the panel. */
+  officeShown?: boolean;
   /** The organisation's depth tier names: Work Pulse's (Cowork, ChatGPT) and Code's (Code, Codex). */
   tierNames?: { cowork: TierNames; code: TierNames };
 }
@@ -861,7 +863,9 @@ function SpendReviewContent() {
 
         {!loading && data && (
           <>
-            {data.isCurrentMonth && !openaiOnly && <AnthropicCard a={data.anthropic} nearShare={data.nearLimitShare} email={data.email} />}
+            {!openaiOnly && (data.isCurrentMonth
+              ? <AnthropicCard a={data.anthropic} nearShare={data.nearLimitShare} email={data.email} />
+              : <Panel title="Anthropic spend limit"><Muted>Only for the current month.</Muted></Panel>)}
 
             <div className="flex flex-col gap-2">
               <Strip cols={3}>
@@ -913,18 +917,20 @@ function SpendReviewContent() {
                   <span className="text-[14px] font-medium text-[#0A0A0A]">No Code or Cowork spend for this month.</span>
                 </div>
                 {/* Claude in Office: an estimate, never part of the Cowork review */}
-                <OfficeSpendPanel data={data.office} scope="person" />
+                {data.officeShown !== false && <OfficeSpendPanel data={data.office} scope="person" />}
               </>
             ) : (
               <>
                 <DoThis items={routes} name={firstName} whose={whose} when={when} />
 
-                {data.scheduledTasks.length > 0 && <ScheduledTasks tasks={data.scheduledTasks} isCurrentMonth={data.isCurrentMonth} />}
+                {data.scheduledTasks.length > 0
+                  ? <ScheduledTasks tasks={data.scheduledTasks} isCurrentMonth={data.isCurrentMonth} />
+                  : <Panel title="Scheduled tasks"><Muted>No sessions started by a scheduled task this month.</Muted></Panel>}
 
                 <WhereTheMoneyGoes data={data} name={firstName} showAll={showAllWork} onShowAll={setShowAllWork} />
 
                 {/* Claude in Office: an estimate, never part of the Cowork review */}
-                <OfficeSpendPanel data={data.office} scope="person" />
+                {data.officeShown !== false && <OfficeSpendPanel data={data.office} scope="person" />}
 
                 <Fold title="Cost drivers (models, cost by type, cache)">
                   <CostDrivers report={data.modelEfficiency} />

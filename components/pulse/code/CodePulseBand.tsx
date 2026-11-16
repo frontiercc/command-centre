@@ -10,7 +10,7 @@
  */
 import { useEffect, useState } from 'react';
 import Link from 'next/link';
-import { Tag } from '@/components/precision/ui';
+import { Tag, Muted, LOAD_FAILED } from '@/components/precision/ui';
 import { formatCurrency, type CodeMetricsRow } from '@/components/pulse/code/CodeStatStrip';
 import { QuestionCard, changeFrom } from '@/components/dashboard/QuestionCard';
 
@@ -29,18 +29,27 @@ interface BandData {
 export default function CodePulseBand({ vendor = 'all' }: { vendor?: 'all' | 'claude' | 'openai' }) {
   const [data, setData] = useState<BandData | null>(null);
   const [forbidden, setForbidden] = useState(false);
+  const [failed, setFailed] = useState(false);
 
   useEffect(() => {
     fetch(`/api/pulse/code/org-summary?vendor=${vendor}`)
       .then(r => {
         if (r.status === 403 || r.status === 401) { setForbidden(true); return null; }
+        if (!r.ok) throw new Error(String(r.status));
         return r.json();
       })
-      .then(d => { if (d) setData(d); })
-      .catch(() => {});
+      .then(d => { if (d) { setData(d); setFailed(false); } })
+      .catch(() => { setData(null); setFailed(true); });
   }, [vendor]);
 
-  if (forbidden || !data) return null;
+  // Not this role's to see: no band. Loading or failed: the band keeps its place and says which.
+  if (forbidden) return null;
+  if (!data) return (
+    <section className="bg-white border border-[#EAEAEA] rounded-[14px] px-4 py-3.5">
+      <h2 className="m-0 mb-2 text-[14px] font-semibold text-[#0A0A0A]">Developer Pulse</h2>
+      <Muted>{failed ? LOAD_FAILED : 'Loading…'}</Muted>
+    </section>
+  );
   const m = data.metrics;
   const tool = vendor === 'openai' ? 'Codex' : vendor === 'claude' || !data.codexPresent ? 'Claude Code' : 'Claude Code and Codex';
   const series = (s?: WeeklyPoint[]) => (s ?? []).filter(p => !p.partial).map(p => p.value);

@@ -111,6 +111,13 @@ describe('/api/pulse/cio capability log', () => {
     expect(log['Sales capability'].content_preview).toBe('SALES PREVIEW');
   });
 
+  it('a second visit, served from the kept figures, still records the read', async () => {
+    as('manager', 'mgr@t.test', 'Sales');
+    await capabilityLog();
+    await capabilityLog();
+    expect(logAccess.mock.calls.map(c => c[0].resource)).toEqual(['pulse/cio/capability-log', 'pulse/cio/capability-log']);
+  });
+
   it('a manager with no department sees no prompt text', async () => {
     as('manager', 'manager@t.test', null);
     const log = await capabilityLog();
@@ -149,6 +156,13 @@ describe('/api/pulse/me capability candidates', () => {
     as('admin', 'admin@t.test', null);
     expect((await pending('/api/pulse/me?userId=fin1'))[0].body).toContain('FIN CANDIDATE');
     expect(logAccess.mock.calls.map(c => c[0].resource)).toEqual(['pulse/me/capability-candidates']);
+  });
+
+  it('a second visit, served from the kept figures, still records the read', async () => {
+    as('admin', 'admin@t.test', null);
+    await pending('/api/pulse/me?userId=fin1');
+    await pending('/api/pulse/me?userId=fin1');
+    expect(logAccess.mock.calls.map(c => c[0].resource)).toEqual(['pulse/me/capability-candidates', 'pulse/me/capability-candidates']);
   });
 });
 

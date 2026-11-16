@@ -24,7 +24,7 @@
  * flag's estimated ceiling; a row with no parseable tokens still counts its
  * real cost_usd toward spend (see `parseCoworkTokenUsage`).
  */
-import { and, eq, gte, inArray, isNull, lt, sql } from 'drizzle-orm';
+import { and, eq, gte, inArray, isNull, lt, sql, type SQL } from 'drizzle-orm';
 import { getCodeWorkTypeLabeller } from '@/lib/pulse/code/tier-config';
 import { getTypedClient } from '@/lib/db/client';
 import { schema } from '@/lib/db/schema';
@@ -647,12 +647,6 @@ interface CoworkSpendRow {
   token_usage: unknown;
 }
 
-interface CoworkClassificationRow {
-  session_id: string;
-  task_type: string;
-  /** bigint on Postgres reads back as a string (Policy B) — Number()'d below. */
-  occurred_at: number | string;
-}
 
 /**
  * Parse a `cowork_messages.token_usage` value into a `TokenUsage`.
@@ -704,6 +698,39 @@ export const MECHANISM_TASK_TYPES: ReadonlySet<string> = new Set([
   'skill_invocation',
 ]);
 
+/** One session's kind of work, as sessionKindSql returns it. */
+export interface SessionKindRow {
+  session_id: string;
+  task_type: string;
+  /** True when the label is a mechanism label (the session had nothing else). */
+  mech: boolean;
+}
+
+/**
+ * The kind-of-work rule, in SQL: one row per session in `sessionIds` (a subquery or a list of
+ * ids), carrying its most frequent work-shaped task_type. A mechanism label wins only when the
+ * session has nothing else, and the newest occurrence breaks a tie (then the label's name, so
+ * the answer never depends on row order). A session with no classification has no row.
+ *
+ * The one copy of the rule: buildSessionTaskTypeMap (FinOps Model Efficiency) and the session
+ * output rate (Work Pulse) both read it, so the database does the work and sends back one row
+ * per session instead of every label.
+ */
+export function sessionKindSql(sessionIds: SQL): SQL {
+  const mech = sql.join([...MECHANISM_TASK_TYPES].map(t => sql`${t}`), sql`, `);
+  return sql`
+    SELECT DISTINCT ON (c.session_id) c.session_id, c.task_type, c.mech
+    FROM (
+      SELECT cm.session_id, pc.task_type, COUNT(*) AS n, MAX(cm.occurred_at) AS latest,
+             (pc.task_type IN (${mech})) AS mech
+      FROM pulse_classifications pc
+      JOIN cowork_messages cm ON cm.id = pc.cowork_message_id
+      WHERE cm.session_id IN (${sessionIds})
+      GROUP BY cm.session_id, pc.task_type
+    ) c
+    ORDER BY c.session_id, c.mech ASC, c.n DESC, c.latest DESC, c.task_type ASC`;
+}
+
 /**
  * Build a session_id → task_type map from `pulse_classifications`.
  *
@@ -748,62 +775,21 @@ export async function buildSessionTaskTypeMap(
   const sessionTaskType = new Map<string, string>();
   if (!sessionIds.length) return sessionTaskType;
 
-  const cm = schema.coworkMessages;
-  const pc = schema.pulseClassifications;
-
-  const classRows = (await client
-    .select({
-      session_id: cm.session_id,
-      task_type: pc.task_type,
-      occurred_at: cm.occurred_at,
-    })
-    .from(pc)
-    .innerJoin(cm, eq(cm.id, pc.cowork_message_id))
-    .where(inArray(cm.session_id, sessionIds))) as CoworkClassificationRow[];
-
-  // Per session: count occurrences of each task_type, tracking the latest
-  // occurred_at seen for that task_type (for the tie-break).
-  const perSession = new Map<string, Map<string, { count: number; latest: number }>>();
-  for (const r of classRows) {
-    let bySessionMap = perSession.get(r.session_id);
-    if (!bySessionMap) {
-      bySessionMap = new Map();
-      perSession.set(r.session_id, bySessionMap);
-    }
-    const entry = bySessionMap.get(r.task_type) ?? { count: 0, latest: -Infinity };
-    entry.count += 1;
-    const occurredAt = Number(r.occurred_at);
-    if (occurredAt > entry.latest) entry.latest = occurredAt;
-    bySessionMap.set(r.task_type, entry);
-  }
-
-  const pickBest = (
-    byTaskType: Map<string, { count: number; latest: number }>,
-    allow: (taskType: string) => boolean,
-  ): string | null => {
-    let bestTaskType: string | null = null;
-    let best = { count: -1, latest: -Infinity };
-    for (const [taskType, stats] of byTaskType) {
-      if (!allow(taskType)) continue;
-      const isBetter = stats.count > best.count
-        || (stats.count === best.count && stats.latest > best.latest);
-      if (isBetter) {
-        best = stats;
-        bestTaskType = taskType;
-      }
-    }
-    return bestTaskType;
-  };
-
-  for (const [sessionId, byTaskType] of perSession) {
-    // Work-shaped first; a mechanism label only when there is nothing else.
-    const bestTaskType = pickBest(byTaskType, (t) => !MECHANISM_TASK_TYPES.has(t))
-      ?? pickBest(byTaskType, () => true);
-    if (bestTaskType !== null) sessionTaskType.set(sessionId, bestTaskType);
+  // Postgres takes at most 65,535 values in one query, and a big hub has more
+  // sessions than that in a quarter, so ask in batches. The database applies the
+  // rule (sessionKindSql) and sends back one row per session, not every label.
+  const exec = client as unknown as { execute: (q: SQL) => Promise<{ rows: unknown[] }> };
+  for (let i = 0; i < sessionIds.length; i += SESSION_ID_BATCH) {
+    const part = sessionIds.slice(i, i + SESSION_ID_BATCH);
+    const rows = (await exec.execute(sessionKindSql(sql.join(part.map(id => sql`${id}`), sql`, `)))).rows as SessionKindRow[];
+    for (const r of rows) sessionTaskType.set(r.session_id, r.task_type);
   }
 
   return sessionTaskType;
 }
+
+/** Session IDs per query in buildSessionTaskTypeMap, well under Postgres's 65,535. */
+const SESSION_ID_BATCH = 1000;
 
 async function buildCoworkModelEfficiency(period: string, surface: 'cowork' | 'chatgpt' = 'cowork'): Promise<ModelEfficiencyReport> {
   const client = await getTypedClient();

@@ -9,6 +9,7 @@
 import { useEffect, useState } from 'react';
 import Link from 'next/link';
 import { Frame, Track } from '@/components/pulse/WorkPulseOverview';
+import { Muted, LOAD_FAILED } from '@/components/precision/ui';
 
 export interface SoleRow { kind: 'skill' | 'connector'; name: string; tag: string; uses: number; who: string | null; department: string | null }
 export interface UnusedRow { id: number; name: string; kind: string; author: string | null; claimed: boolean; lastUsed: number | null }
@@ -39,7 +40,11 @@ function Stuck({ rows }: { rows: SoleRow[] }) {
 }
 
 function Unused({ rows, of }: { rows: UnusedRow[]; of: number }) {
-  if (of === 0) return null;
+  if (of === 0) return (
+    <Frame title="Used by nobody" period="Last 30 days">
+      <Muted>Nobody has claimed a skill or connector yet, so there is nothing to check.</Muted>
+    </Frame>
+  );
   const never = rows.filter(r => r.lastUsed === null).length;
   return (
     <Frame
@@ -65,16 +70,23 @@ function Unused({ rows, of }: { rows: UnusedRow[]; of: number }) {
   );
 }
 
-/** Both cards, one above the other in the board's right column; nothing at all until the figures arrive or if they cannot be read. */
+/** Both cards, one above the other in the board's right column. Loading or failed, each card keeps its place and says which. */
 export default function ToolRiskPanels() {
   const [data, setData] = useState<{ sole: SoleRow[]; unused: UnusedRow[]; unusedOf: number } | null>(null);
+  const [failed, setFailed] = useState(false);
   useEffect(() => {
     fetch('/api/pulse/skills-overview')
-      .then(r => (r.ok ? r.json() : null))
-      .then(d => { if (d) setData({ sole: d.sole ?? [], unused: d.unused ?? [], unusedOf: d.unusedOf ?? 0 }); })
-      .catch(() => {});
+      .then(r => { if (!r.ok) throw new Error(String(r.status)); return r.json(); })
+      .then(d => setData({ sole: d.sole ?? [], unused: d.unused ?? [], unusedOf: d.unusedOf ?? 0 }))
+      .catch(() => setFailed(true));
   }, []);
-  if (!data) return null;
+  if (!data) return (
+    <div className="flex flex-col gap-4 min-w-0">
+      {['Stuck with one person', 'Used by nobody'].map(t => (
+        <Frame key={t} title={t} period="Last 30 days"><Muted>{failed ? LOAD_FAILED : 'Loading…'}</Muted></Frame>
+      ))}
+    </div>
+  );
   return (
     <div className="flex flex-col gap-4 min-w-0">
       <Stuck rows={data.sole} />

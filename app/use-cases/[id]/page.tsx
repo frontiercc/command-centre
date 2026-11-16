@@ -13,7 +13,7 @@ import SpreadPanel, { type SpreadData } from '@/components/usecases/SpreadPanel'
 import ImpactPanel, { type UseCaseImpact, type ImpactSummary } from '@/components/usecases/ImpactPanel';
 import SkillDraftPanel, { type SkillDraftView } from '@/components/usecases/SkillDraftPanel';
 import { buildActivateEvidenceLine, tierDepthLabel, humaniseMatchedSignals } from '@/lib/usecases/activate-evidence-format';
-import { PageBody, Toolbar, Panel, PanelFoot, SubHead, T, Tag, Pill, B, Notice, Empty, Muted, cx } from '@/components/precision/ui';
+import { PageBody, Toolbar, Panel, PanelFoot, SubHead, T, Tag, Pill, B, Notice, Empty, Muted, cx, LOAD_FAILED } from '@/components/precision/ui';
 import { useConnectedProducts } from '@/components/shared/VendorSwitch';
 import { labelForUseCaseSurface } from '@/lib/usecases/dept-boxes';
 
@@ -490,17 +490,21 @@ export default function UseCaseDetailPage() {
               )}
             </Panel>
 
-            {uc.status === 'confirmed' && uc.skillDraft && (
+            {uc.status === 'confirmed' && uc.skillDraft ? (
               <SkillDraftPanel
                 key={uc.id}
                 view={uc.skillDraft}
                 useCaseId={uc.id}
                 onChanged={v => setUc(prev => (prev ? { ...prev, skillDraft: v } : prev))}
               />
+            ) : (
+              <Panel title="Skill">
+                <Muted>{uc.status === 'confirmed' ? LOAD_FAILED : uc.status === 'archived' ? 'This use case is archived.' : 'Confirm this use case first.'}</Muted>
+              </Panel>
             )}
 
             {uc.spread !== undefined && (
-              <SpreadPanel spread={uc.spread} />
+              <SpreadPanel spread={uc.spread} archived={uc.status === 'archived'} />
             )}
           </div>
 
@@ -625,7 +629,8 @@ export default function UseCaseDetailPage() {
               )}
             </Panel>
 
-            {(uc.painPoint || uc.valueHypothesis || uc.baselineNote || uc.kpiNote || uc.captureMethod === 'process_mined') && (
+            {/* Always shown: an empty field says Not set. */}
+            {(
               <Panel
                 title="Canvas"
                 right={!editingCanvas ? (

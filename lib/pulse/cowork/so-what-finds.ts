@@ -330,18 +330,42 @@ export function timeFreed(
   return out.sort((a, b) => b.hoursAMonth - a.hoursAMonth);
 }
 
+/**
+ * One formatter per timezone. Building an Intl.DateTimeFormat is slow (it loads the timezone's
+ * rules), and building one per prompt made the evenings card most of So What's wait.
+ */
+const hourFormatters = new Map<string, Intl.DateTimeFormat>();
+function hourFormatter(timezone: string): Intl.DateTimeFormat {
+  let f = hourFormatters.get(timezone);
+  if (!f) {
+    f = new Intl.DateTimeFormat('en-GB', { timeZone: timezone, weekday: 'short', hour: 'numeric', hourCycle: 'h23' });
+    hourFormatters.set(timezone, f);
+  }
+  return f;
+}
+
 /** Whether a moment was out of hours in a timezone: a weekday evening or night, or the weekend. */
 export function outOfHours(epochS: number, timezone: string): boolean {
-  const parts = new Intl.DateTimeFormat('en-GB', { timeZone: timezone, weekday: 'short', hour: 'numeric', hourCycle: 'h23' })
-    .formatToParts(new Date(epochS * 1000));
+  const parts = hourFormatter(timezone).formatToParts(new Date(epochS * 1000));
   const weekday = parts.find(p => p.type === 'weekday')?.value ?? '';
   const hour = Number(parts.find(p => p.type === 'hour')?.value ?? 12);
   return weekday === 'Sat' || weekday === 'Sun' || hour < DAY_STARTS || hour >= DAY_ENDS;
 }
 
+/** Every timezone's offset is a whole number of 15 minutes, so a 15-minute slot is all in or all out of hours. */
+const SLOT_SECS = 15 * 60;
+
 /** Teams doing far more of their AI work out of hours than the organisation. Counts only, never a person. */
 export function evenings(rows: PromptRow[], timezone: string, kept: Kept = keepNone): Evenings[] {
-  const late = rows.map(r => outOfHours(n(r.occurred_at), timezone));
+  // Each 15-minute slot is worked out once: a busy hub has thousands of prompts in the same few slots.
+  const bySlot = new Map<number, boolean>();
+  const late = rows.map(r => {
+    const at = n(r.occurred_at);
+    const slot = Math.floor(at / SLOT_SECS);
+    let v = bySlot.get(slot);
+    if (v === undefined) { v = outOfHours(slot * SLOT_SECS, timezone); bySlot.set(slot, v); }
+    return v;
+  });
   const orgShare = rows.length > 0 ? late.filter(Boolean).length / rows.length : 0;
   const by = new Map<string, { prompts: number; late: number; people: Set<string>; latePeople: Set<string> }>();
   rows.forEach((r, i) => {

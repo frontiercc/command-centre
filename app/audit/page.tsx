@@ -397,6 +397,7 @@ export default function AuditPage() {
   const searchParams = useSearchParams();
   const [events, setEvents] = useState<AuditEvent[]>([]);
   const [loading, setLoading] = useState(true);
+  const [failed, setFailed] = useState(false);
   // Set when /api/events refuses the caller (anyone but admin or manager).
   // The guard above also sends them elsewhere; this keeps the page from
   // ever showing a crash while that happens.
@@ -499,6 +500,8 @@ export default function AuditPage() {
           setNoAccess(true);
           return [];
         }
+        if (!r.ok) throw new Error(String(r.status));
+        setFailed(false);
         return r.json();
       })
       .then((data: unknown) => {
@@ -512,7 +515,7 @@ export default function AuditPage() {
         }
         setHasMore(hasMoreRows);
       })
-      .catch(console.error)
+      .catch(e => { console.error(e); setFailed(true); })
       .finally(() => setLoading(false));
   }, [product, sourceFilter, userFilter, departmentFilter, flaggedOnly, dateFrom, dateTo, searchDebounced, offset]);
 
@@ -708,6 +711,8 @@ export default function AuditPage() {
 
         {loading ? (
           <LoadingSpinner />
+        ) : failed ? (
+          <Notice tone="error" title="Couldn’t load this.">Try refreshing the page.</Notice>
         ) : events.length === 0 ? (
           // A search or filter that matches nothing is not an empty log.
           filtersActive ? (

@@ -21,9 +21,9 @@ import { buildClassifierUserMessage, type UserHistory } from '../../lib/pulse/pr
 vi.mock('@anthropic-ai/sdk', () => {
   const mockCreate = vi.fn();
   return {
-    default: vi.fn().mockImplementation(() => ({
+    default: vi.fn().mockImplementation(function () { return ({
       messages: { create: mockCreate },
-    })),
+    }); }),
     __mockCreate: mockCreate,
   };
 });

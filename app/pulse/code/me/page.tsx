@@ -20,7 +20,7 @@ import type { PulsePeriod } from '@/lib/pulse/period-shape';
 import type { TierNames } from '@/lib/pulse/tier-names';
 import Sparkline from '@/components/pulse/Sparkline';
 import PriorPeriodBadge, { priorPeriodChange } from '@/components/pulse/code/PriorPeriodBadge';
-import { PageBody, Toolbar, Panel, Tag, Empty, Muted, B } from '@/components/precision/ui';
+import { PageBody, Toolbar, Panel, Tag, Empty, Muted, Notice, B, LOAD_FAILED } from '@/components/precision/ui';
 import { useVendor, useOpenAiOnly, VendorSwitch } from '@/components/shared/VendorSwitch';
 import { DEVELOPER_PULSE_VENDOR_LABELS, type Vendor } from '@/lib/dashboard/vendor';
 import { UNLINKED_TITLE } from '@/lib/pulse/unlinked';
@@ -154,6 +154,7 @@ function MyCodePulseContent() {
   // One period for the page, as on Work Pulse.
   const [period, setPeriod] = useState<PulsePeriod>('quarter');
   const [loading, setLoading] = useState(true);
+  const [failed, setFailed] = useState(false);
   const [vendor, setVendor, vendorReady] = useVendor();
   const openaiOnly = useOpenAiOnly();
   // The view: Codex's own when it is the only coding tool connected.
@@ -164,9 +165,9 @@ function MyCodePulseContent() {
     const qs = new URLSearchParams({ vendor });
     if (viewUserId) qs.set('userId', viewUserId);
     fetch(`/api/pulse/code/me?${qs.toString()}&period=${period}`)
-      .then(r => r.json())
-      .then(setData)
-      .catch(() => {})
+      .then(r => { if (!r.ok) throw new Error(String(r.status)); return r.json(); })
+      .then(d => { setData(d); setFailed(false); })
+      .catch(() => setFailed(true))
       .finally(() => setLoading(false));
   }, [viewUserId, vendor, vendorReady, period]);
 
@@ -185,7 +186,10 @@ function MyCodePulseContent() {
             : (viewUserId ? 'Per-user Claude Code activity' : 'Your Claude Code activity, spend, and autonomy')}
       />
       <PageBody className="dash-compact">
-        {!data?.userId ? (
+        {failed ? (
+          // A failed load is said as one, never shown as an unlinked account.
+          <Notice tone="error" title="Couldn’t load this page.">Try refreshing the page.</Notice>
+        ) : !data?.userId ? (
           <Empty title={UNLINKED_TITLE} />
         ) : (
           <>
@@ -203,7 +207,7 @@ function MyCodePulseContent() {
             )}
 
             {/* 1. The coding work of the period */}
-            {data.periodWork && (
+            {data.periodWork ? (
               <CodeWorkPanel
                 w={data.periodWork}
                 who={who}
@@ -211,7 +215,7 @@ function MyCodePulseContent() {
                 onPeriod={setPeriod}
                 product={openaiOnly ? 'Codex' : data.codexPresent && vendor === 'all' ? 'Claude Code and Codex' : vendor === 'openai' ? 'Codex' : 'Claude Code'}
               />
-            )}
+            ) : <Panel title={who.you ? 'Your coding work' : `${who.name}'s coding work`}><Muted>{LOAD_FAILED}</Muted></Panel>}
 
             {/* 2. Best work this week */}
             <CodeBestWork s={data.bestSession ?? null} who={who} names={data.tierNames ?? undefined} />

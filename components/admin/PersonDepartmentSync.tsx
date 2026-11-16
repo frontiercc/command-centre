@@ -10,7 +10,7 @@
  * sync and has no changes to show for this person.
  */
 import { useCallback, useEffect, useState } from 'react';
-import { Panel, Muted, T, B } from '@/components/precision/ui';
+import { Panel, Muted, T, B, LOAD_FAILED } from '@/components/precision/ui';
 import { useToast } from '@/components/shared/ToastProvider';
 
 interface Change { from: string | null; to: string | null; source: string; changedAt: number }
@@ -39,13 +39,17 @@ export default function PersonDepartmentSync({ userId, version }: {
   const { showToast } = useToast();
   const [detail, setDetail] = useState<Detail | null>(null);
   const [returning, setReturning] = useState(false);
+  const [failed, setFailed] = useState(false);
 
   const load = useCallback(async () => {
     try {
       const res = await fetch(`/api/admin/department-sync/person?userId=${encodeURIComponent(userId)}`);
-      setDetail(res.ok ? await res.json() as Detail : null);
+      if (!res.ok) throw new Error(String(res.status));
+      setDetail(await res.json() as Detail);
+      setFailed(false);
     } catch {
       setDetail(null);
+      setFailed(true);
     }
   }, [userId]);
 
@@ -69,7 +73,9 @@ export default function PersonDepartmentSync({ userId, version }: {
     }
   };
 
-  if (!detail || (!detail.syncActive && detail.history.length === 0)) return null;
+  if (!detail) return failed ? <Panel title="Department source"><Muted>{LOAD_FAILED}</Muted></Panel> : null;
+  // Directory sync off and nothing in its history: the feature is off for this person, so no panel.
+  if (!detail.syncActive && detail.history.length === 0) return null;
 
   return (
     <Panel title="Department source" flush>

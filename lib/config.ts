@@ -314,7 +314,6 @@ export interface AppConfig {
   useCasesAtRiskQuietWeeks: string;
   useCasesNotSeenQuietWeeks: string;
   // FinOps v2
-  financeInsightModel: string;
   financeDriftAlertThresholdPct: string;
   financeEnterpriseMock: string;
   // Compliance API (Enterprise)
@@ -564,7 +563,6 @@ export const CONFIG_KEYS: Record<keyof AppConfig, string> = {
   useCasesAdoptedMinUsers: 'use_cases_adopted_min_users',
   useCasesAtRiskQuietWeeks: 'use_cases_at_risk_quiet_weeks',
   useCasesNotSeenQuietWeeks: 'use_cases_not_seen_quiet_weeks',
-  financeInsightModel: 'finance_insight_model',
   financeDriftAlertThresholdPct: 'finance_drift_alert_threshold_pct',
   financeEnterpriseMock: 'finance_enterprise_mock',
   complianceAccessKey: 'compliance_access_key',
@@ -983,7 +981,6 @@ export async function getAllConfig(): Promise<AppConfig> {
     useCasesAdoptedMinUsers: resolve('useCasesAdoptedMinUsers', '2'),
     useCasesAtRiskQuietWeeks: resolve('useCasesAtRiskQuietWeeks', '2'),
     useCasesNotSeenQuietWeeks: resolve('useCasesNotSeenQuietWeeks', '6'),
-    financeInsightModel: resolve('financeInsightModel', 'claude-haiku-5-5'),
     financeDriftAlertThresholdPct: resolve('financeDriftAlertThresholdPct', '10'),
     financeEnterpriseMock: resolve('financeEnterpriseMock', 'false'),
     complianceAccessKey: resolve('complianceAccessKey'),

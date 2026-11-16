@@ -129,6 +129,18 @@ describe('buildSessionTaskTypeMap', () => {
     expect(m.has('s6')).toBe(false);
   });
 
+  it('handles more session ids than Postgres takes in one query', async () => {
+    // Postgres refuses more than 65,535 values in one query. A big hub has
+    // more sessions than that in 13 weeks; Work Pulse lost its panel.
+    await session('first', [['analysis', 1]]);
+    await session('last', [['synthesis', 1]]);
+    const ids = ['first', ...Array.from({ length: 70_000 }, (_, i) => `none-${i}`), 'last'];
+    const m = await collapse(ids);
+    expect(m.get('first')).toBe('analysis');
+    expect(m.get('last')).toBe('synthesis');
+    expect(m.size).toBe(2);
+  });
+
   it('returns an empty map for no session ids, without querying', async () => {
     const m = await collapse([]);
     expect(m.size).toBe(0);

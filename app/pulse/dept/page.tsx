@@ -9,7 +9,7 @@ import TopBar from '@/components/layout/TopBar';
 import LoadingSpinner from '@/components/shared/LoadingSpinner';
 import {
   WorkPanel, TaskList, DeeperPanel, ByHandPanel, PeoplePanel, ProducedPanel, ColleagueToolsPanel,
-  CapabilitiesPanel, SpendPanel,
+  CapabilitiesPanel, SpendPanel, EmptyPeriodPanels, SpendFailed,
   type ByHand, type MonthSpend, type PersonRow, type Who, type DrillKind,
 } from '@/components/pulse/MyPulsePanels';
 import { Frame } from '@/components/pulse/WorkPulseOverview';
@@ -29,6 +29,8 @@ import { useAskPageNote } from '@/components/ask/useAskAvailable';
 // Based on DeptPulseData from app/pulse/dept/[dept]/page.tsx (a redirect-only
 // legacy page) but intentionally diverges: `delegation?` exists only here.
 interface DeptData {
+  /** Parts of the response that failed to build, so their panels say so. */
+  failed?: string[];
   humanTime?: ByHand | null;
   period?: MyPeriod | null;
   memberRows?: PersonRow[];
@@ -113,12 +115,13 @@ export default function DeptPickerPage() {
   // refetches quietly and swaps in place, matching the CIO page, so the pill
   // click does not blank the whole page or lose the scroll position.
   const loadedDeptRef = useRef<string | null>(null);
-  const loadDept = useCallback((dept: string) => {
+  const loadDept = useCallback((dept: string, fresh = false) => {
     if (!vendorReady) return; // the saved view is read after the page loads
     if (!dept) return;
     if (loadedDeptRef.current !== dept) setDataLoading(true);
     setError(null);
-    fetch(`/api/pulse/dept/${encodeURIComponent(dept)}?weeks=${delegationWeeks}&vendor=${vendor}&period=${period}`)
+    // `fresh` after an action on the page, so it shows the change, not the kept figures.
+    fetch(`/api/pulse/dept/${encodeURIComponent(dept)}?weeks=${delegationWeeks}&vendor=${vendor}&period=${period}${fresh ? '&fresh=1' : ''}`)
       .then(async r => {
         if (r.ok) return r.json();
         // A refusal says why, so nobody retries what can never load; the
@@ -253,18 +256,27 @@ export default function DeptPickerPage() {
                       items={d.frontier?.capabilities ?? []}
                       pending={d.frontier?.capabilityPending ?? 0}
                       canReview={d.frontierAccess?.canReview ?? false}
-                      onChanged={() => loadDept(selectedDept)}
+                      onChanged={() => loadDept(selectedDept, true)}
                     />
                     {d.spendThisMonth
                       ? <SpendPanel s={d.spendThisMonth} product={product} who={who} reviewHref={null} />
-                      : <ColleagueToolsPanel q={q} who={who} department={d.dept} period={period} team />}
+                      : (d.failed ?? []).includes('spend') ? <SpendFailed who={who} /> : null}
                   </div>
 
                   {/* 11. What colleagues elsewhere use */}
-                  {d.spendThisMonth && <ColleagueToolsPanel q={q} who={who} department={d.dept} period={period} team />}
+                  <ColleagueToolsPanel q={q} who={who} department={d.dept} period={period} team />
                 </>
               ) : (
-                <Notice tone="info" title="No work yet.">Nothing has been recorded for this department yet.</Notice>
+                // No work yet, or it failed to load: every panel keeps its place and says which.
+                <>
+                  <EmptyPeriodPanels who={who} failed={(d.failed ?? []).includes('period')} team />
+                  <FrontierHero view={d.frontier} canOpenUseCases={d.frontierAccess?.canOpenUseCases ?? false} names={names} />
+                  <ByHandPanel h={d.humanTime} who={who} tool={product === 'Claude and ChatGPT' ? 'AI' : product} surface="cowork" />
+                  <PeoplePanel rows={d.memberRows ?? []} dept={d.dept} names={names} thenVsNow={thenVsNow} />
+                  {d.spendThisMonth
+                    ? <SpendPanel s={d.spendThisMonth} product={product} who={who} reviewHref={null} />
+                    : (d.failed ?? []).includes('spend') ? <SpendFailed who={who} /> : null}
+                </>
               )}
 
               {/* 10. The department's briefing */}
@@ -274,7 +286,7 @@ export default function DeptPickerPage() {
                 period={
                   <span className="inline-flex items-center gap-2">
                     {d.deptBriefing && new Date(d.deptBriefing.generated_at * 1000).toLocaleDateString('en-GB', { day: 'numeric', month: 'long', year: 'numeric' })}
-                    <GenerateBriefingButton type="dept" dept={d.dept} onComplete={() => loadDept(selectedDept)} />
+                    <GenerateBriefingButton type="dept" dept={d.dept} onComplete={() => loadDept(selectedDept, true)} />
                   </span>
                 }
               >

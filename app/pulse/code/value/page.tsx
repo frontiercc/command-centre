@@ -97,9 +97,21 @@ export default function CodeValuePage() {
         ) : data && !data.enabled ? (
           <Empty title="The Value view is turned off">An administrator can enable it in Admin → Developer Pulse → Value.</Empty>
         ) : !hasData ? (
-          <Panel title="Value" right={<Tag tone="judged">Estimate</Tag>}>
-            <Muted>Not enough data yet. Value and ROI appear once your team has more measured Claude Code usage.</Muted>
-          </Panel>
+          // Not enough measured work yet: every panel keeps its place and says so.
+          <>
+            {[
+              ['Industry benchmark model', 'judged', 'Estimate'],
+              ['Time saved', 'judged', 'Estimate'],
+              ['Observed signal', 'judged', 'Beta'],
+              ['Measured, not estimated', 'measured', 'Measured'],
+              ['Unit economics', 'measured', 'Measured'],
+              ['Calibrations', null, null],
+            ].map(([title, tone, tag]) => (
+              <Panel key={title} title={title} right={tag ? <Tag tone={tone as 'judged' | 'measured'}>{tag}</Tag> : undefined}>
+                <Muted>Not enough measured coding work yet. These fill in as your team uses {codexView ? 'Codex' : 'Claude Code'} more.</Muted>
+              </Panel>
+            ))}
+          </>
         ) : (
           <>
             {/* Estimate hero — violet */}
@@ -131,7 +143,7 @@ export default function CodeValuePage() {
             </Panel>
 
             {/* Time Saved (bottom-up estimate) — violet, a second method sitting beside the top-down one */}
-            {data?.timeSaved != null && (
+            {data?.timeSaved != null ? (
               <Panel title="Time saved" right={<Tag tone="judged">Estimate</Tag>} flush>
                 <div className="p-4 flex flex-col gap-1.5">
                   <span className="text-[24px] leading-7 font-semibold tracking-[-0.02em] tabular-nums text-[#1F6F8B]">
@@ -155,10 +167,10 @@ export default function CodeValuePage() {
                   Coding work only: pull requests and commits{data.split ? ' from Claude Code and Codex' : ''} × your minutes-per-task assumptions. Claude Cowork and Claude Chat work is on Work Pulse. Assumptions are editable in Admin → Developer Pulse → Value.
                 </PanelFoot>
               </Panel>
-            )}
+            ) : <Panel title="Time saved" right={<Tag tone="judged">Estimate</Tag>}><Muted>No pull requests or commits measured yet.</Muted></Panel>}
 
             {/* Observed signal (beta) — violet, correlation only, shown beside (never mixed into) the benchmark headline */}
-            {data?.observedLift != null && (
+            {data?.observedLift != null ? (
               <Panel title="Observed signal" right={<Tag tone="judged">Beta</Tag>}>
                 <div className="flex flex-col gap-2">
                   <p className="m-0 text-[20px] leading-7 font-semibold tabular-nums text-[#1F6F8B]">
@@ -171,7 +183,7 @@ export default function CodeValuePage() {
                   </p>
                 </div>
               </Panel>
-            )}
+            ) : <Panel title="Observed signal" right={<Tag tone="judged">Beta</Tag>}><Muted>{codexView ? "Codex doesn't send this." : 'Needs more weeks of measured work to compare.'}</Muted></Panel>}
 
             {/* Measured anchor — blue (Claude Code plus Codex when shown, each part under the figure) */}
             <Panel title="Measured, not estimated" right={<Tag tone="measured">Measured</Tag>} flush>

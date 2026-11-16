@@ -7,7 +7,7 @@ import { useEffect, useState } from 'react';
 import GenerateBriefingButton from '@/components/pulse/GenerateBriefingButton';
 import CapabilityQueue from '@/components/pulse/CapabilityQueue';
 import PsrBaselines from '@/components/pulse/admin/PsrBaselines';
-import { Panel, Figure, B, cx } from '@/components/precision/ui';
+import { Panel, Figure, B, cx, Muted, LOAD_FAILED } from '@/components/precision/ui';
 import { ToggleRow, Field, SaveMsg } from '@/components/admin/precision-admin';
 
 interface ModuleConfig {
@@ -206,7 +206,7 @@ export default function OverviewTab({
       </Panel>
 
       {/* Stats */}
-      {stats && (
+      {stats ? (
         <Panel title="Module status" flush>
           <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 [&>*]:border-[#EAEAEA] [&>*]:border-t [&>*]:border-l -mt-px -ml-px">
             {[
@@ -220,7 +220,7 @@ export default function OverviewTab({
             ))}
           </div>
         </Panel>
-      )}
+      ) : <Panel title="Module status"><Muted>{LOAD_FAILED}</Muted></Panel>}
 
       {/* On-demand briefings */}
       <Panel title="Generate briefings now" subtitle="Briefings are generated automatically. Use these controls to regenerate immediately." flush>

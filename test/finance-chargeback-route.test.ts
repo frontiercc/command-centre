@@ -13,10 +13,6 @@ vi.mock('@/lib/config', () => ({
   getConfigValue: () => undefined,
 }));
 
-vi.mock('@/lib/finance/insight-narrative', () => ({
-  generateInsightNarrative: async () => ({ text: null }),
-}));
-
 vi.mock('@/lib/auth/admin-auth', async (orig) => {
   const actual = await orig<typeof import('@/lib/auth/admin-auth')>();
   return {

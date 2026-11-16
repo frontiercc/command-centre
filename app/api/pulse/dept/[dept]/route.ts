@@ -40,6 +40,8 @@ import { REPEAT_MIN_PROMPTS } from '@/lib/pulse/cowork/coaching-figures';
 import { MECHANISM_TASK_TYPES } from '@/lib/finance/model-efficiency';
 import { kindLabel } from '@/lib/pulse/cowork/coaching-words';
 import { soleWorkByPerson } from '@/lib/pulse/sole-work';
+import { cachedWorkPulse } from '@/lib/pulse/work-pulse-cache';
+import { errorResponse } from '@/lib/api/errors';
 
 export const dynamic = 'force-dynamic';
 
@@ -77,6 +79,20 @@ export async function GET(
       return NextResponse.json({ error: 'Forbidden' }, { status: 403 });
     }
   }
+  try {
+    const sp = request.nextUrl.searchParams;
+    // Built once per team, view, window and viewer (the best-work boxes show admins and managers
+    // more, and mark the viewer's own work), then kept for five minutes and refreshed in the
+    // background (lib/pulse/work-pulse-cache.ts). A result with a part that failed is not kept.
+    const key = ['dept', dept, sp.get('vendor') ?? '', sp.get('weeks') ?? '', sp.get('period') ?? '', session.role ?? '', session.email ?? ''].join('\u0000');
+    const body = await cachedWorkPulse(key, () => buildDept(dept, request, session), { keep: b => b.failed.length === 0, force: sp.get('fresh') === '1' });
+    return NextResponse.json(body);
+  } catch (err) {
+    return errorResponse('pulse/dept', err);
+  }
+}
+
+async function buildDept(dept: string, request: NextRequest, session: Awaited<ReturnType<typeof getAdminSession>>) {
   const client = await getTypedClient();
   const now = Math.floor(Date.now() / 1000);
 
@@ -123,7 +139,8 @@ export async function GET(
   );
 
   if (memberIds.length === 0) {
-    return NextResponse.json({
+    return {
+      failed: [] as string[],
       dept,
       members: [],
       metrics: null,
@@ -131,7 +148,7 @@ export async function GET(
       concentrationDetail: [],
       skillConcentration: [],
       frontier: null,
-    });
+    };
   }
 
   const memberIdsSql = sql.join(memberIds.map(id => sql`${id}`), sql`, `);
@@ -314,6 +331,8 @@ export async function GET(
 
   // Frontier boxes + feed. Own try/catch so a failure hides
   // the boxes, not the page.
+  // Parts that failed to build: their panels say they couldn't load, never look empty.
+  const failed: string[] = [];
   let frontier = null;
   try {
     frontier = await buildFrontierView({ dept }, now, {
@@ -322,6 +341,7 @@ export async function GET(
     }, vendor);
   } catch (err) {
     console.error('[pulse/dept] frontier view failed', err);
+    failed.push('frontier');
   }
 
   const deptBriefingRows = await client
@@ -432,6 +452,7 @@ export async function GET(
     });
   } catch (err) {
     console.error('[pulse/dept] period failed', err);
+    failed.push('period');
   }
 
   // Each person in plain numbers over the same window: how much of their work reached the top
@@ -471,9 +492,11 @@ export async function GET(
     spendThisMonth = await monthSpend(memberIds, vendor, now);
   } catch (err) {
     console.error('[pulse/dept] month spend failed', err);
+    failed.push('spend');
   }
 
-  return NextResponse.json({
+  return {
+    failed,
     humanTime,
     period,
     spendThisMonth,
@@ -498,5 +521,5 @@ export async function GET(
     docSessions,
     delegation: { window: delegationWindow, bands, bandsDataWeeks, people },
     coaching: { prompts: coachingPrompts },
-  });
+  };
 }

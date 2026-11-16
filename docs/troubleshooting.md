@@ -126,6 +126,11 @@ Back up the database, and keep a copy of `.env` with it: stored secrets, such as
 docker compose exec -T postgres pg_dump -U ccc -d ccc > command-centre-backup.sql
 ```
 
+### Upgrading from 1.4.0 to 1.4.1
+
+- **Nothing to do.** 1.4.1 adds no tables or columns, so you can go back to 1.4.0 without restoring a backup.
+- **One setting is gone.** The model for the FinOps AI summary did nothing, because the summary is written in code, so it has been removed. Any value you set is ignored.
+
 ### Upgrading from 1.3.0 to 1.4.0
 
 - **Back up first.** On its first start, 1.4.0 adds six tables and columns to the database (migrations 0050 to 0055: Team Coaching actions, So What decisions, the names of files ChatGPT and Claude Chat replies list, and the Ask the data question log). Nothing existing is rewritten, but updates go forward only, so going back means restoring the backup.

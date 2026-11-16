@@ -11,9 +11,9 @@ import { createTestDatabase } from './helpers/db';
 vi.mock('@anthropic-ai/sdk', () => {
   const mockCreate = vi.fn();
   return {
-    default: vi.fn().mockImplementation(() => ({
+    default: vi.fn().mockImplementation(function () { return ({
       messages: { create: mockCreate },
-    })),
+    }); }),
     __mockCreate: mockCreate,
   };
 });

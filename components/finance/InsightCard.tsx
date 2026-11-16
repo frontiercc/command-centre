@@ -5,10 +5,10 @@
  * FinOps "This month in cost" insight card.
  *
  * Renders the server-computed deterministic facts (`lib/finance/insights.ts`
- * `buildInsightFacts`) as plain-language bullets, plus — when present — the
- * grounded LLM narrative (`lib/finance/insight-narrative.ts`), clearly
- * labelled as generated. Both are computed server-side and passed straight
- * through; this component does no recomputation and never invents numbers.
+ * `buildInsightFacts`) as plain-language bullets, plus the summary sentence
+ * written in code from the same facts (`composeInsightNarrative`). No AI writes
+ * either. Both are computed server-side and passed straight through; this
+ * component does no recomputation and never invents numbers.
  */
 import { Panel, Tag, Muted } from '@/components/precision/ui';
 

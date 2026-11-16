@@ -413,7 +413,7 @@ function Highlights({ entries, recentEntries, deptPicks, userDept }: {
     return () => clearInterval(t);
   }, [paused, slides.length, keys]);
 
-  if (!slides.length) return null;
+  if (!slides.length) return <Panel title="Highlights"><Muted>Nothing to highlight yet. New, popular and unclaimed skills and connectors show here.</Muted></Panel>;
 
   const cur = slides.find(s => s.key === slideKey) ?? slides[0];
 
@@ -584,7 +584,7 @@ function LeaderboardSidebar({
   userRank: UserRank | null;
 }) {
   const [hoveredId, setHoveredId] = useState<string | null>(null);
-  if (!users.length) return null;
+  if (!users.length) return <Panel title="Leaderboard" subtitle="Skill and connector uses, all time"><Muted>No skill or connector uses yet.</Muted></Panel>;
   return (
     <Panel title="Leaderboard" subtitle="Skill and connector uses, all time" flush>
       {users.map((u, i) => {
@@ -710,7 +710,7 @@ function SkillsToTry({ skills }: { skills: SkillToTry[] }) {
 // ── Department breakdown ─────────────────────────────────────────────────────
 
 function DeptBreakdown({ rows }: { rows: DeptRow[] }) {
-  if (!rows.length) return null;
+  if (!rows.length) return <Panel title="By department" subtitle="Skill and connector usage across your organisation"><Muted>No skill or connector uses by department yet.</Muted></Panel>;
   const max = rows[0]?.total_uses ?? 1;
 
   return (
@@ -844,7 +844,7 @@ function InstallPanel({ entry, onClose, align = 'left' }: { entry: LibraryEntry;
 
 function AnthropicCatalog({ entries, onVote }: { entries: LibraryEntry[]; onVote: (id: number) => void }) {
   const [openId, setOpenId] = useState<number | null>(null);
-  if (!entries.length) return null;
+  if (!entries.length) return <Panel title="Explore from Anthropic"><Muted>No skills from Anthropic to show.</Muted></Panel>;
   return (
     <section className="bg-white border border-[#EAEAEA] rounded-[14px] min-w-0" onClick={() => setOpenId(null)}>
       <div className="flex items-center gap-x-3 gap-y-1 flex-wrap px-4 py-3 border-b border-[#EAEAEA]">
@@ -946,6 +946,7 @@ export default function LibraryPage() {
   const searchParams = useSearchParams();
   const [data, setData] = useState<LibraryData | null>(null);
   const [loading, setLoading] = useState(true);
+  const [failed, setFailed] = useState(false);
   const [bannerDismissed, setBannerDismissed] = useState(false);
   const [typeFilter, setTypeFilter] = useState('');
   const [claimedFilter, setClaimedFilter] = useState(() => searchParams.get('claimed') ?? '');
@@ -966,7 +967,13 @@ export default function LibraryPage() {
     if (q)             p.set('q', q);
     try {
       const res = await fetch(`/api/library?${p}`);
-      if (res.ok) setData(await res.json());
+      if (!res.ok) throw new Error(String(res.status));
+      setData(await res.json());
+      setFailed(false);
+    } catch {
+      // A failed load says so, and never leaves the last filter's entries on show.
+      setData(null);
+      setFailed(true);
     } finally {
       setLoading(false);
     }
@@ -1036,6 +1043,8 @@ export default function LibraryPage() {
             Submit a skill
           </button>
         </Toolbar>
+
+        {!loading && failed && <Notice tone="error" title="Couldn’t load the board.">Try refreshing the page.</Notice>}
 
         {/* Headline figures */}
         {data && <HeadlineStrip data={data} />}

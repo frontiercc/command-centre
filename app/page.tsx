@@ -13,7 +13,7 @@ import LoadingSpinner from '@/components/shared/LoadingSpinner';
 import AiBriefing from '@/components/dashboard/AiBriefing';
 import { DataSourceIndicator } from '@/components/dashboard/DataSourceIndicator';
 import Link from 'next/link';
-import { PageBody, Toolbar, Strip, Panel, Tag, Notice, B } from '@/components/precision/ui';
+import { PageBody, Toolbar, Strip, Panel, Tag, Notice, B, Muted, LOAD_FAILED } from '@/components/precision/ui';
 import { useVendor, VendorSwitch, formatSplit } from '@/components/shared/VendorSwitch';
 import { PRODUCTS, dashboardProducts, type Vendor, type VendorSplit, type ProductCounts, type ProductId } from '@/lib/dashboard/vendor';
 import PulseBand from '@/components/pulse/PulseBand';
@@ -136,7 +136,8 @@ export default function DashboardPage() {
   const [refreshKey, setRefreshKey] = useState(0);
   const [briefingRefreshKey, setBriefingRefreshKey] = useState(0);
   const [, setTick] = useState(0);
-  const [pulseEnabled, setPulseEnabled] = useState(false);
+  // Admin → Work Pulse on or off; 'failed' when the setting could not be read.
+  const [pulseEnabled, setPulseEnabled] = useState<boolean | 'failed'>(false);
   // The vendor switch, remembered per browser and shared with Work Pulse.
   const [vendor, setVendor, vendorReady] = useVendor();
 
@@ -167,7 +168,7 @@ export default function DashboardPage() {
     fetch('/api/config')
       .then(r => r.ok ? r.json() : Promise.reject())
       .then(d => setPulseEnabled(!!d.pulseEnabled))
-      .catch(() => {});
+      .catch(() => setPulseEnabled('failed'));
   }, []);
 
 
@@ -335,10 +336,15 @@ export default function DashboardPage() {
         </div>
 
         {/* Work Pulse band with the Developer Pulse strip nested directly below its signal strip */}
-        {pulseEnabled ? (
+        {pulseEnabled === true ? (
           <PulseBand vendor={vendor} showVendor={data.openaiPresent}>
             <CodePulseBand vendor={vendor} />
           </PulseBand>
+        ) : pulseEnabled === 'failed' ? (
+          <>
+            <Panel title="Work Pulse"><Muted>{LOAD_FAILED}</Muted></Panel>
+            <CodePulseBand vendor={vendor} />
+          </>
         ) : (
           <CodePulseBand vendor={vendor} />
         )}

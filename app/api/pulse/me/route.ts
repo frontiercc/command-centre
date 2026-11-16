@@ -35,6 +35,9 @@ import { monthSpend } from '@/lib/finance/month-spend';
 // floor → the status reads "under review" rather than asserting a verdict.
 const KAPPA_FLOOR = 0.6;
 
+import { cachedWorkPulse } from '@/lib/pulse/work-pulse-cache';
+import { errorResponse } from '@/lib/api/errors';
+
 export const dynamic = 'force-dynamic';
 
 // ─── Raw-execution facade (mirrors lib/db/queries.ts's rawAll) ────────────────
@@ -121,11 +124,34 @@ export async function GET(request: NextRequest) {
     });
   }
 
+  try {
+    const sp = request.nextUrl.searchParams;
+    // Kept per person, view, period and viewer for five minutes (lib/pulse/work-pulse-cache.ts):
+    // what a viewer may see of someone (spend, by-hand time, best work) depends on who they are.
+    // ?fresh=1 after an action on the page. A result with a part that failed is not kept.
+    const key = ['me', userId, sp.get('vendor') ?? '', sp.get('period') ?? '', session.role ?? '', session.email ?? ''].join('\u0000');
+    const forUser = userId;
+    const { promptRead, ...body } = await cachedWorkPulse(key, () => buildMe(sp, session, forUser, resolveMyUserId), { keep: b => b.failed.length === 0, force: sp.get('fresh') === '1' });
+    // Every visit that shows someone else's prompt text is recorded, whether kept or built.
+    if (promptRead) await logPromptRead(request, session, 'pulse/me/capability-candidates');
+    return NextResponse.json(body);
+  } catch (err) {
+    return errorResponse('pulse/me', err);
+  }
+}
+
+async function buildMe(
+  searchParams: URLSearchParams,
+  session: Awaited<ReturnType<typeof getAdminSession>>,
+  userId: string,
+  resolveMyUserId: () => Promise<string | null>,
+) {
+  const client = await getTypedClient();
   const now = Math.floor(Date.now() / 1000);
 
   // The Claude / OpenAI switch: a vendor view reads the aggregator's per-vendor
   // figures and narrows classifications, skills and connectors by source.
-  const vendor = await visibleVendor(request.nextUrl.searchParams.get('vendor'));
+  const vendor = await visibleVendor(searchParams.get('vendor'));
   const pmv = schema.pulseMetricsVendor;
   const pm = vendor === 'all' ? schema.pulseMetrics : pmv as unknown as typeof schema.pulseMetrics;
   const pmOnly = vendor === 'all' ? sql`TRUE` : eq(pmv.vendor, vendor);
@@ -304,7 +330,7 @@ export async function GET(request: NextRequest) {
   const isSelf = userId === (await resolveMyUserId());
   const otherSeesPrompt = !isSelf && pendingCandidates.length > 0
     && (await promptTextVisibleFor(session, [userId])).has(userId);
-  if (otherSeesPrompt) await logPromptRead(request, session, 'pulse/me/capability-candidates');
+  // Recorded by the request on every visit, whether the figures were kept or built.
   const capabilitiesDetail = {
     count: confirmedCapabilitiesCount,
     confirmed: confirmedList,
@@ -318,6 +344,8 @@ export async function GET(request: NextRequest) {
 
   // Frontier boxes: best recent work, step-ups, capabilities.
   // Own try/catch so a failure hides the boxes, not the page.
+  // Parts that failed to build: their panels say they couldn't load, never look empty.
+  const failed: string[] = [];
   let frontier = null;
   try {
     frontier = await buildFrontierView({ userId }, now, {
@@ -326,6 +354,7 @@ export async function GET(request: NextRequest) {
     }, vendor);
   } catch (err) {
     console.error('[pulse/me] frontier view failed', err);
+    failed.push('frontier');
   }
 
   // Gate: OTI status copy stays "under review" until the audit clears the floor.
@@ -343,13 +372,14 @@ export async function GET(request: NextRequest) {
 
   // The page's one period: this week, this month or this quarter. Own try/catch so a failure
   // hides the panels, not the page.
-  const asked = request.nextUrl.searchParams.get('period');
+  const asked = searchParams.get('period');
   const period: PulsePeriod = asked === 'week' || asked === 'month' || asked === 'quarter' ? asked : 'quarter';
   let periodData: MyPeriod | null = null;
   try {
     periodData = await buildMyPeriod({ userId, department, vendor, nowS: now, period, showHumanTime: seesPerson, humanTimeOn: await humanTimeOn('cowork') });
   } catch (err) {
     console.error('[pulse/me] period failed', err);
+    failed.push('period');
   }
   // A person's spend: admins and managers for anyone, everyone else only their own.
   let spendThisMonth: Awaited<ReturnType<typeof monthSpend>> | null = null;
@@ -357,9 +387,12 @@ export async function GET(request: NextRequest) {
     if (seesPerson) spendThisMonth = await monthSpend([userId], vendor, now);
   } catch (err) {
     console.error('[pulse/me] month spend failed', err);
+    failed.push('spend');
   }
 
-  return NextResponse.json({
+  return {
+    promptRead: otherSeesPrompt,
+    failed,
     tierNames: await getTierNames(),
     humanTime,
     period: periodData,
@@ -381,5 +414,5 @@ export async function GET(request: NextRequest) {
     otiUnderReview,
     vendor,
     openaiPresent,
-  });
+  };
 }

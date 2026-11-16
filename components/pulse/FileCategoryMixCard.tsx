@@ -14,7 +14,7 @@
  * Renders nothing when there is no data, so a deployment with no uploads shows
  * no empty shell.
  */
-import { Panel, BarRow, Tag } from '@/components/precision/ui';
+import { Panel, BarRow, Tag, Muted } from '@/components/precision/ui';
 
 export interface FileCategoryMixItem {
   category: string;
@@ -24,7 +24,7 @@ export interface FileCategoryMixItem {
 }
 
 export default function FileCategoryMixCard({ items }: { items: FileCategoryMixItem[] }) {
-  if (items.length === 0) return null;
+  if (items.length === 0) return <Panel title="Files by category" right={<Tag tone="measured">Measured</Tag>}><Muted>No categorised files in this period yet.</Muted></Panel>;
   return (
     <Panel title="Files by category" right={<Tag tone="measured">Measured</Tag>} flush>
       <div className="py-1">

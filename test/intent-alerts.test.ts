@@ -7,7 +7,7 @@ import type { TestSql } from './helpers/sql';
 
 // ── Mocks ──
 vi.mock('@anthropic-ai/sdk', () => ({
-  default: vi.fn(() => ({
+  default: vi.fn().mockImplementation(function () { return ({
     messages: { create: vi.fn().mockResolvedValue({
       content: [{ type: 'text', text: JSON.stringify({
         severity: 'high',
@@ -15,7 +15,7 @@ vi.mock('@anthropic-ai/sdk', () => ({
         recommended_action: 'Review with line manager.',
       })}],
     })},
-  })),
+  }); }),
 }));
 
 vi.mock('@/lib/config', () => ({

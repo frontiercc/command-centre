@@ -9,7 +9,7 @@
  * on a typical day (the 7-day average of daily users). Above 60 people a dot stands for several.
  */
 import { useEffect, useState } from 'react';
-import { Panel, Tag } from '@/components/precision/ui';
+import { Panel, Tag, Muted, LOAD_FAILED } from '@/components/precision/ui';
 import { PRODUCT_COLOR } from '@/lib/ui/chart-colours';
 import { dashboardProducts, productsShown, type ProductId, type Vendor } from '@/lib/dashboard/vendor';
 
@@ -38,7 +38,11 @@ export default function StickinessCard({ vendor = 'all', openaiPresent = false, 
       .finally(() => setLoading(false));
   }, []);
 
-  if (loading || !data) return null;
+  if (loading || !data) return (
+    <Panel title="How often do people come back?" badge={<Tag tone="measured">Measured</Tag>} right={<span className="text-[13px] text-[#8F8F8F]">Last 30 days</span>} className="h-full">
+      <Muted>{loading ? 'Loading…' : LOAD_FAILED}</Muted>
+    </Panel>
+  );
 
   const rows = dashboardProducts(productsShown(vendor, openaiPresent), officeShown)
     .map(p => ({ ...p, s: data.products[p.id] }))

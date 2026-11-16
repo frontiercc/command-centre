@@ -9,7 +9,7 @@ import { createTestDatabase } from './helpers/db';
 import type { TestSql } from './helpers/sql';
 
 vi.mock('@anthropic-ai/sdk', () => ({
-  default: vi.fn().mockImplementation(() => ({ messages: { create: vi.fn() } })),
+  default: vi.fn().mockImplementation(function () { return ({ messages: { create: vi.fn() } }); }),
 }));
 
 vi.mock('@/lib/auth/admin-auth', async (orig) => {

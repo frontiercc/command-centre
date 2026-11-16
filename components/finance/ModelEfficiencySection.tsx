@@ -29,7 +29,7 @@ import type {
   Surface,
 } from '@/lib/finance/model-efficiency';
 import { formatModelLabel } from '@/lib/pulse/code/model-label';
-import { Panel, Tag, Pill, T, Segmented, Notice, Muted, SubHead, cx } from '@/components/precision/ui';
+import { Panel, Tag, Pill, T, Segmented, Notice, Muted, SubHead, cx, LOAD_FAILED } from '@/components/precision/ui';
 import { useConnectedProducts } from '@/components/shared/VendorSwitch';
 
 /** A surface's name in this box. With OpenAI connected, Claude's say Claude. */
@@ -387,6 +387,7 @@ export default function ModelEfficiencySection({ period }: { period: string }) {
   const [report, setReport] = useState<ModelEfficiencyReport | null>(null);
   const [loading, setLoading] = useState(true);
   const [notEnabled, setNotEnabled] = useState(false);
+  const [failed, setFailed] = useState(false);
   const [expandedKey, setExpandedKey] = useState<string | null>(null);
 
   useEffect(() => {
@@ -405,12 +406,12 @@ export default function ModelEfficiencySection({ period }: { period: string }) {
       .then((data: ModelEfficiencyReport) => {
         if (cancelled) return;
         setNotEnabled(false);
+        setFailed(false);
         setReport(data);
       })
-      .catch(() => {
-        // Graceful: on 404 (dormant) or any transient failure, the section
-        // simply shows nothing new rather than an error banner. `notEnabled`
-        // hides the whole section; other failures just leave `report` stale/null.
+      .catch((e: Error) => {
+        // Off (404): `notEnabled` hides the whole section. Any other failure: the panel says so.
+        if (!cancelled && e.message !== 'not enabled') { setReport(null); setFailed(true); }
       })
       .finally(() => {
         if (!cancelled) setLoading(false);
@@ -421,7 +422,7 @@ export default function ModelEfficiencySection({ period }: { period: string }) {
   }, [surface, period]);
 
   if (notEnabled) return null;
-  if (!report && !loading) return null;
+  if (!report && !loading) return <Panel title="Model efficiency"><Muted>{failed ? LOAD_FAILED : 'Nothing to show for this month yet.'}</Muted></Panel>;
 
   const belowVolumeKeys = new Set((report?.belowVolume ?? []).map((b) => b.key));
   const opportunities = (report?.activities ?? []).filter((a) => a.flag && !a.flag.suppressedReason);

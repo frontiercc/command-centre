@@ -73,7 +73,10 @@ export default function ShippingAlignmentChart({ series, children, codexPresent 
   view?: 'all' | 'claude' | 'openai';
 }) {
   if (series.length === 0) {
-    return children ? <Panel title="Shipping alignment" subtitle="30 days" flush>{children}</Panel> : null;
+    // GitHub is connected (the Overview only shows this panel then), but nothing has synced yet.
+    return children
+      ? <Panel title="Shipping alignment" subtitle="30 days" flush>{children}</Panel>
+      : <Panel title="Shipping alignment" subtitle="30 days"><Muted>No GitHub commit stats synced for the last 30 days yet.</Muted></Panel>;
   }
 
   const tab: 'all' | 'claude' | 'openai' = view ?? (openaiOnly ? 'openai' : codexPresent ? 'all' : 'claude');

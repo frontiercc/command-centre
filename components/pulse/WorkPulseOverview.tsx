@@ -10,7 +10,7 @@
  */
 import Link from 'next/link';
 import { useEffect, useState, type ReactNode } from 'react';
-import { Tag, B } from '@/components/precision/ui';
+import { Tag, B, Muted, LOAD_FAILED } from '@/components/precision/ui';
 import { DASH, shareWords, cap } from '@/components/dashboard/QuestionCard';
 import { cleanTitle } from '@/components/pulse/CapabilityLog';
 import type { ByProductData } from '@/components/pulse/ByProductPanel';
@@ -58,7 +58,7 @@ export const linkCls = 'text-[#1F6F8B] font-medium hover:underline';
 
 /* ── 2: Use cases to act on next ───────────────────────────────── */
 
-export function UseCasesNext({ boxes, items }: { boxes: DeptProcessBoxItem[]; items: ActNextItem[] }) {
+export function UseCasesNext({ boxes, items, failed = false }: { boxes: DeptProcessBoxItem[]; items: ActNextItem[]; failed?: boolean }) {
   type Row = { key: string; title: string; detail: string; kind: string; reach: number; href: string; action: string };
   const rows: Row[] = [
     ...boxes.flatMap(b => b.suggestions.map(s => ({
@@ -70,7 +70,11 @@ export function UseCasesNext({ boxes, items }: { boxes: DeptProcessBoxItem[]; it
       key: `c-${n}`, title: i.title, detail: i.detail, kind: 'COACHING', reach: i.reach, href: i.href, action: 'See who',
     })),
   ].sort((a, b) => b.reach - a.reach);
-  if (rows.length === 0) return null;
+  if (rows.length === 0) return (
+    <Frame title="Use cases to act on next" period="Updated weekly">
+      <Muted>{failed ? LOAD_FAILED : 'Nothing to act on yet. Work that repeats, and people who could use coaching, show here.'}</Muted>
+    </Frame>
+  );
   const shown = rows.slice(0, 5);
   const first = shown[0];
   return (
@@ -140,8 +144,12 @@ export function BiggerJobs({ weeks, departments, product, window, onWindow, name
 /* ── 4: Which departments do the deepest work? ───────────────────── */
 
 export function DeptRealWork({ rows, floorPct, names }: { rows: Array<{ dept: string; share: number; tasks: number }>; floorPct: number | null; names?: TierNames }) {
-  if (rows.length === 0) return null;
   const deep = deepWords(names);
+  if (rows.length === 0) return (
+    <Frame title={`Which departments are doing ${deep} work?`} judged period="Last 4 weeks">
+      <Muted>No department has classified tasks in the last 4 weeks yet.</Muted>
+    </Frame>
+  );
   const floor = floorPct !== null ? floorPct / 100 : null;
   const below = floor === null ? [] : rows.filter(r => r.share < floor);
   const top = rows[0];
@@ -175,8 +183,12 @@ export function DeptRealWork({ rows, floorPct, names }: { rows: Array<{ dept: st
 
 /* ── 5: What did the work produce? ──────────────────────────────── */
 
-export function Produced({ output, human }: { output: SessionOutputReport | null | undefined; human: HumanTimeSummary | null | undefined }) {
-  if (!output?.hasData) return null;
+export function Produced({ output, human, loading = false }: { output: SessionOutputReport | null | undefined; human: HumanTimeSummary | null | undefined; loading?: boolean }) {
+  if (!output?.hasData) return (
+    <Frame title="What did the work produce?" period="Last quarter">
+      <Muted>{loading ? 'Loading…' : !output ? LOAD_FAILED : 'No sessions in the last quarter yet.'}</Muted>
+    </Frame>
+  );
   const kinds = [...(output.byTaskType ?? [])].sort((a, b) => b.rate - a.rate);
   const shown = kinds.slice(0, 5);
   const ratio = human?.ratio ?? null;
@@ -219,8 +231,12 @@ export function Produced({ output, human }: { output: SessionOutputReport | null
 
 /* ── 6: Which products are people using? ─────────────────────────── */
 
-export function Products({ data, names }: { data: ByProductData | null | undefined; names?: TierNames }) {
-  if (!data) return null;
+export function Products({ data, names, loading = false }: { data: ByProductData | null | undefined; names?: TierNames; loading?: boolean }) {
+  if (!data) return (
+    <Frame title="Which products are people using?" period="Last 30 days">
+      <Muted>{loading ? 'Loading…' : LOAD_FAILED}</Muted>
+    </Frame>
+  );
   const label = (p: string) => (p === 'claude_chat' ? 'Claude Chat' : p === 'chatgpt' ? 'ChatGPT' : p === 'cowork' ? 'Claude Cowork' : PRODUCT_LABEL[p as WorkProduct] ?? p);
   const family = (p: string) => (p === 'claude_chat' || p === 'chatgpt' || p === 'cowork' ? null : PRODUCT_FAMILY[p as WorkProduct] ?? null);
   const rows = data.rows.filter(r => r.product !== 'all');

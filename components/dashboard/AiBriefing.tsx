@@ -145,10 +145,15 @@ export default function AiBriefing({ refreshKey, coversBoth = false }: { refresh
 
   if (error || !data) {
     return (
+      <>
       <Panel title="Intelligence briefing" badge={BADGE}>
         {/* A missing key is handled by the dashboard itself; reaching here means generation failed. */}
         <Muted>The briefing could not be generated just now. Use Refresh to try again.</Muted>
       </Panel>
+      <Panel title="AI recommendations" badge={<Tag tone="judged">AI-judged</Tag>}>
+        <Muted>The recommendations come with the briefing, so there are none until it is generated. Use Refresh to try again.</Muted>
+      </Panel>
+      </>
     );
   }
 

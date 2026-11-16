@@ -153,6 +153,14 @@ export async function readWorkSessions(opts: { since: number; until?: number; ve
         FROM cowork_messages cm
         WHERE cm.surface = 'chat' AND cm.message_type = 'cowork_user_message'
           AND cm.session_id IS NOT NULL AND cm.user_id IS NOT NULL
+          -- Only conversations with a prompt in the window (the surface and time index finds them),
+          -- so the grouping below reads those, not every conversation ever held. A conversation
+          -- whose last prompt is in the window always has one there, so the answer is the same.
+          AND cm.session_id IN (
+            SELECT w.session_id FROM cowork_messages w
+            WHERE w.surface = 'chat' AND w.message_type = 'cowork_user_message'
+              AND w.occurred_at >= ${opts.since} AND w.occurred_at < ${until}
+          )
         GROUP BY cm.session_id
         HAVING MAX(cm.occurred_at) >= ${opts.since} AND MAX(cm.occurred_at) < ${until}
       ) c ${people(sql`c.user_id`)}

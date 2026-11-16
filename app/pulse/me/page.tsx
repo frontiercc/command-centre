@@ -15,13 +15,15 @@ import FrontierHero from '@/components/pulse/FrontierHero';
 import GenerateBriefingButton from '@/components/pulse/GenerateBriefingButton';
 import { cleanTitle } from '@/components/pulse/CapabilityLog';
 import { Frame } from '@/components/pulse/WorkPulseOverview';
-import { WorkPanel, TaskList, DeeperPanel, ByHandPanel, ProducedPanel, ColleagueToolsPanel, SpendPanel, type ByHand, type MonthSpend, type Who, type DrillKind } from '@/components/pulse/MyPulsePanels';
-import { PageBody, Toolbar, Notice, Dot, B, C } from '@/components/precision/ui';
+import { WorkPanel, TaskList, DeeperPanel, ByHandPanel, ProducedPanel, ColleagueToolsPanel, SpendPanel, EmptyPeriodPanels, SpendFailed, type ByHand, type MonthSpend, type Who, type DrillKind } from '@/components/pulse/MyPulsePanels';
+import { PageBody, Toolbar, Notice, Dot, B, C, Muted } from '@/components/precision/ui';
 import { useVendor, useOpenAiOnly, VendorSwitch } from '@/components/shared/VendorSwitch';
 import { WORK_PULSE_VENDOR_LABELS } from '@/lib/dashboard/vendor';
 import { UNLINKED_TITLE } from '@/lib/pulse/unlinked';
 
 interface PersonalPulseData {
+  /** Parts of the response that failed to build, so their panels say so. */
+  failed?: string[];
   humanTime?: ByHand | null;
   period?: MyPeriod | null;
   tierNames?: TierNames | null;
@@ -85,8 +87,10 @@ export default function PersonalPulsePage() {
     const meUrl = viewingUserId
       ? `/api/pulse/me?userId=${encodeURIComponent(viewingUserId)}&vendor=${vendor}&period=${period}`
       : `/api/pulse/me?vendor=${vendor}&period=${period}`;
+    // After confirming work or generating the paragraph (refreshKey moved), ask for fresh figures.
+    const meFetch = refreshKey > 0 ? `${meUrl}&fresh=1` : meUrl;
     Promise.all([
-      fetch(meUrl).then(r => { if (!r.ok) throw new Error("Couldn't load this page. Try again."); return r.json(); }),
+      fetch(meFetch).then(r => { if (!r.ok) throw new Error("Couldn't load this page. Try again."); return r.json(); }),
       fetch('/api/pulse/user-prefs').then(r => r.ok ? r.json() : { pulse_start_at: null }),
     ])
       .then(([meData, prefs]) => {
@@ -191,13 +195,25 @@ export default function PersonalPulsePage() {
             </div>
 
             {/* 6 */}
-            {data.spendThisMonth && <SpendPanel s={data.spendThisMonth} product={product} who={who} reviewHref={reviewHref} />}
+            {data.spendThisMonth
+              ? <SpendPanel s={data.spendThisMonth} product={product} who={who} reviewHref={reviewHref} />
+              : (data.failed ?? []).includes('spend') ? <SpendFailed who={who} /> : null}
           </>
         ) : (
           // Not matched to anyone's activity yet: say how it gets linked. Matched, but no work: say so.
           !data.userId && who.you
             ? <Notice tone="info" title={UNLINKED_TITLE} />
-            : <Notice tone="info" title="No work yet.">Nothing has been recorded for {who.you ? 'you' : 'this person'} yet.</Notice>
+            : (
+              // No work yet, or it failed to load: every panel keeps its place and says which.
+              <>
+                <EmptyPeriodPanels who={who} failed={(data.failed ?? []).includes('period')} />
+                <FrontierHero view={data.frontier} canOpenUseCases={data.frontierAccess?.canOpenUseCases ?? false} names={data.tierNames ?? undefined} />
+                <ByHandPanel h={data.humanTime} who={who} tool={product === 'Claude and ChatGPT' ? 'AI' : product} surface="cowork" />
+                {data.spendThisMonth
+                  ? <SpendPanel s={data.spendThisMonth} product={product} who={who} reviewHref={reviewHref} />
+                  : (data.failed ?? []).includes('spend') ? <SpendFailed who={who} /> : null}
+              </>
+            )
         )}
 
         {/* 6. The week, in a paragraph: only for a sign-in linked to someone's activity, since
@@ -224,7 +240,7 @@ export default function PersonalPulsePage() {
         </Frame>}
 
         {/* New ways of working waiting for review */}
-        {pending.length > 0 && (
+        {pending.length === 0 ? <Frame id="to-review" title="Waiting for review"><Muted>Nothing waiting for review.</Muted></Frame> : (
           <Frame id="to-review" title="Waiting for review" period={`${pending.length} new ${pending.length === 1 ? 'way' : 'ways'} of working`}
             answer={<>Claude thinks {who.you ? 'you' : 'they'} may have started {pending.length === 1 ? 'a new way of working' : 'new ways of working'}. Confirm to track {pending.length === 1 ? 'it' : 'them'}.</>}>
             {pending.map(c => (

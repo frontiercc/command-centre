@@ -484,6 +484,8 @@ function SpendReviewIndex() {
           </div>
           <PanelFoot>Approve or deny the request in claude.ai Organisation settings.</PanelFoot>
         </Panel>
+  ) : limitsOn ? (
+        <Panel title="Requests for more usage"><Muted>No requests for more usage.</Muted></Panel>
   ) : null;
   const rereadNotice = s && s.orgRereadShare !== null && s.orgRereadShare >= 0.3 ? (
         <Notice tone="info" title={`${pct(s.orgRereadShare)} of the month's ${data?.openai ? 'Claude ' : ''}spend is Claude re-reading earlier conversation on every message.`}>
@@ -679,14 +681,18 @@ function SpendReviewIndex() {
               </Strip>
             )}
 
-            {data.people.length > 0 && <BetterRoutes people={data.people} period={period} openai={!!data.openai} />}
+            {data.people.length > 0
+              ? <BetterRoutes people={data.people} period={period} openai={!!data.openai} />
+              : <Panel title="Better routes, proven savings first"><Muted>No one has spend this month yet.</Muted></Panel>}
             {requestsPanel}
             {rereadNotice}
 
             {/* Shown even with every board empty, so the board can say why. */}
-            {boards.length > 0 && data.people.length > 0 && (
+            {boards.length > 0 && (
               <Fold title="Most efficient" sub="Lower cost than colleagues for the same kinds of work, with work as deep as theirs">
-                <EfficiencyBoard boards={boards} period={period} top={data.topTier ?? topTierName(null, null)} />
+                {data.people.length > 0
+                  ? <EfficiencyBoard boards={boards} period={period} top={data.topTier ?? topTierName(null, null)} />
+                  : <Panel><Muted>No one has spend this month yet.</Muted></Panel>}
               </Fold>
             )}
 

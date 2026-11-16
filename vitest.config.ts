@@ -21,6 +21,9 @@ export default defineConfig({
     testTimeout: 30_000,
     hookTimeout: 30_000,
   },
+  // tsconfig keeps JSX as written for Next.js; tests compile it with React's
+  // automatic runtime instead (vitest 4 follows tsconfig otherwise and cannot read it).
+  oxc: { jsx: { runtime: 'automatic' } },
   resolve: {
     alias: {
       '@': path.resolve(__dirname, '.'),

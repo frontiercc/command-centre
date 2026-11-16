@@ -25,6 +25,9 @@ import { vendorClause, workPulseToolClause, personPerProduct, vendorExpr } from 
 import { messageVendor } from '@/lib/pulse/vendor-filter';
 import { isWorkPulseSurface } from '@/lib/pulse/work-surfaces';
 import { orgSummaryWindow } from '@/lib/pulse/org-window';
+import { cachedWorkPulse } from '@/lib/pulse/work-pulse-cache';
+import { errorResponse } from '@/lib/api/errors';
+import type { Vendor } from '@/lib/dashboard/vendor';
 
 export const dynamic = 'force-dynamic';
 
@@ -50,11 +53,27 @@ export async function GET(request: NextRequest) {
   if (!canAccessOrgOverview(session.role)) {
     return NextResponse.json({ error: 'Forbidden' }, { status: 403 });
   }
+  try {
+    const vendor = await visibleVendor(request.nextUrl.searchParams.get('vendor'));
+    const quarterly = request.nextUrl.searchParams.get('window') === 'quarter';
+    // Organisation-wide and the same for every viewer the role check lets in, so built once and
+    // kept for five minutes, then refreshed in the background (lib/pulse/work-pulse-cache.ts).
+    // A result with a section that failed to build is shown but not kept.
+    const body = await cachedWorkPulse(
+      `org-summary:${vendor}:${quarterly ? 'quarter' : '30d'}`,
+      () => buildOrgSummary(vendor, quarterly),
+      { keep: b => b.sessionOutput !== null && b.byProduct !== null, force: request.nextUrl.searchParams.get('fresh') === '1' },
+    );
+    return NextResponse.json(body);
+  } catch (err) {
+    return errorResponse('pulse/org-summary', err);
+  }
+}
 
+async function buildOrgSummary(vendor: Vendor, quarterly: boolean) {
   const client = await getTypedClient();
   // The vendor switch narrows every figure here: the four signals read the
   // aggregator's per-vendor figures (pulse_metrics_vendor) in a vendor view.
-  const vendor = await visibleVendor(request.nextUrl.searchParams.get('vendor'));
   const pm = schema.pulseMetrics;
   const pmv = schema.pulseMetricsVendor;
   const mt = vendor === 'all' ? pm : pmv as unknown as typeof pm;
@@ -206,7 +225,6 @@ export async function GET(request: NextRequest) {
   // the 8 completed Monday-UTC weeks; a week with no figure is null, never 0.
   // Work Pulse asks for the last quarter (?window=quarter): the 13 completed weeks against the
   // 13 before. The Dashboard keeps the last 30 days against the 30 before, with 8 weeks of trend.
-  const quarterly = request.nextUrl.searchParams.get('window') === 'quarter';
   const sixtyDaysAgo = now - 60 * 24 * 3600;
   // The same window the "See who" lists read (lib/pulse/org-window.ts).
   const win = orgSummaryWindow(now, quarterly);
@@ -289,6 +307,18 @@ export async function GET(request: NextRequest) {
     WHERE cm.user_id IS NOT NULL AND cm.occurred_at >= ${bStart} AND cm.occurred_at < ${bEnd}
       AND ${isWorkPulseSurface(sql`cm.surface`, true)} AND ${sql.raw(vendorClause(vendor, 'cm.'))}
   `);
+  // In the All view, the same count for Claude and for ChatGPT, so the page can say how the
+  // product users split (someone using both counts in each).
+  const activeByVendorRows = vendor !== 'all' ? [] : await rawAll<{ vendor: string; n: number | string }>(client, sql`
+    SELECT ${sql.raw(vendorExpr('cm.'))} AS vendor, COUNT(DISTINCT cm.user_id) AS n FROM cowork_messages cm
+    WHERE cm.user_id IS NOT NULL AND cm.occurred_at >= ${bStart} AND cm.occurred_at < ${bEnd}
+      AND ${isWorkPulseSurface(sql`cm.surface`, true)}
+    GROUP BY 1
+  `);
+  const activePeopleByVendor30d = vendor !== 'all' ? null : {
+    claude: Number(activeByVendorRows.find(r => r.vendor === 'claude')?.n ?? 0),
+    openai: Number(activeByVendorRows.find(r => r.vendor === 'openai')?.n ?? 0),
+  };
   // People who handed over meaningful or frontier work in the last 30 days, weekly counts of
   // the same, and how many people do half of all frontier work (counts only, no names).
   const deepPeopleRow = await rawGet<{ n: number | string }>(client, sql`
@@ -362,9 +392,10 @@ export async function GET(request: NextRequest) {
     skillSpread: await spread('cowork_skill_invocations', 'skill_name'),
     connectorSpread: await spread('cowork_mcp_invocations', 'mcp_server'),
     activePeople30d: Number(activePeopleRow?.n ?? 0),
+    activePeopleByVendor30d,
   };
 
-  return NextResponse.json({
+  return {
     tierNames: await getTierNames(),
     dashboard,
     signalCards: {
@@ -383,5 +414,5 @@ export async function GET(request: NextRequest) {
     sessionOutput,
     byProduct,
     humanTime,
-  });
+  };
 }

@@ -29,6 +29,9 @@ import { type Vendor } from '@/lib/dashboard/vendor';
 import { hasOpenAiData } from '@/lib/dashboard/queries';
 import { messageVendor } from '@/lib/pulse/vendor-filter';
 
+import { cachedWorkPulse } from '@/lib/pulse/work-pulse-cache';
+import { errorResponse } from '@/lib/api/errors';
+
 export const dynamic = 'force-dynamic';
 
 export async function GET(request: NextRequest) {
@@ -36,7 +39,23 @@ export async function GET(request: NextRequest) {
   if (!session.authenticated || !canAccessOrgOverview(session.role)) {
     return NextResponse.json({ error: 'Forbidden' }, { status: 403 });
   }
+  try {
+    const sp = request.nextUrl.searchParams;
+    // Kept per view, window and viewer for five minutes (lib/pulse/work-pulse-cache.ts): the
+    // act-next list follows the role, and the capability log's prompt text follows the viewer's
+    // role and department (gateContentRead). ?fresh=1 after an action on the page. A result with
+    // a part that failed is not kept.
+    const key = ['cio', sp.get('vendor') ?? '', sp.get('weeks') ?? '', session.role ?? '', session.department ?? '', session.email ?? ''].join('\u0000');
+    const { promptRead, ...body } = await cachedWorkPulse(key, () => buildCio(session, sp), { keep: b => b.failed.length === 0, force: sp.get('fresh') === '1' });
+    // Every visit that shows prompt text is recorded, whether the figures were kept or built.
+    if (promptRead) await logPromptRead(request, session, 'pulse/cio/capability-log');
+    return NextResponse.json(body);
+  } catch (err) {
+    return errorResponse('pulse/cio', err);
+  }
+}
 
+async function buildCio(session: Awaited<ReturnType<typeof getAdminSession>>, searchParams: URLSearchParams) {
   const client = await getTypedClient();
   const now = Math.floor(Date.now() / 1000);
   const sevenDaysAgo = now - 7 * 24 * 3600;
@@ -54,7 +73,7 @@ export async function GET(request: NextRequest) {
   // The Claude / OpenAI switch. 'all' reads every product, as before; a vendor
   // narrows classifications by their prompt's source and reads the aggregator's
   // per-vendor figures (pulse_metrics_vendor).
-  const vendor = await visibleVendor(request.nextUrl.searchParams.get('vendor'));
+  const vendor = await visibleVendor(searchParams.get('vendor'));
   const openaiPresent = await visibleOpenAi(hasOpenAiData());
 
   // Same columns in both tables, so a vendor view reads pulse_metrics_vendor
@@ -229,13 +248,14 @@ export async function GET(request: NextRequest) {
   const promptVisible = await promptTextVisibleFor(session, capabilityRows.map(r => r.user_id));
   const capabilityLog = capabilityRows.map(r =>
     r.user_id && promptVisible.has(r.user_id) ? r : { ...r, body: null, content_preview: null });
-  if (promptVisible.size > 0) await logPromptRead(request, session, 'pulse/cio/capability-log');
+  // Whether this viewer is shown prompt text: recorded by the request on every visit, kept or not.
+  const promptRead = promptVisible.size > 0;
 
   const wm = metricsFor(vendor);
 
   // ── Delegation depth over time ────────────────────────────────────────────
   // Weekly 'function'-scope rows per department; current week excluded.
-  const weeksParamRaw = Number(request.nextUrl.searchParams.get('weeks'));
+  const weeksParamRaw = Number(searchParams.get('weeks'));
   const delegationWindow = ([13, 26, 52] as const).includes(weeksParamRaw as 13 | 26 | 52)
     ? (weeksParamRaw as 13 | 26 | 52) : 26;
   // weekStarts ends with the current (partial) week — take the N before it.
@@ -328,11 +348,15 @@ export async function GET(request: NextRequest) {
   });
 
   // ── Act-next list (Workflow Impact) — additive, never blocks the page ──
+  // Parts that failed to build: their panels say they couldn't load, never look empty.
+  const failed: string[] = [];
   let actNext: ActNextRow[] = [];
   try {
     actNext = await buildActNext(session.role ?? 'viewer', now);
-  } catch {
+  } catch (e) {
+    console.error('[pulse/cio] act-next failed', e);
     actNext = [];
+    failed.push('actNext');
   }
 
   // ── Department process boxes (Department Process Transformation) —
@@ -350,15 +374,19 @@ export async function GET(request: NextRequest) {
       suggestions: box.suggestions.map(s => ({ id: s.id, title: s.title, people: s.canvas?.people ?? null })),
       groups: box.groups.map(g => ({ surface: g.surface, label: g.label, suggestions: g.suggestions.map(s => ({ id: s.id, title: s.title })) })),
     }));
-  } catch {
+  } catch (e) {
+    console.error('[pulse/cio] department processes failed', e);
     deptProcesses = [];
+    failed.push('deptProcesses');
   }
 
   const realWorkFloorRaw = await getConfigValue('targetDeptRealWorkPct');
 
-  return NextResponse.json({
+  return {
+    promptRead,
     vendor,
     openaiPresent,
+    failed,
     adoptionHero: { ...hero, concentrationPct },
     signalCards,
     briefing: briefing ?? null,
@@ -395,5 +423,5 @@ export async function GET(request: NextRequest) {
       const n = Number(realWorkFloorRaw);
       return realWorkFloorRaw === '' ? 33 : Number.isFinite(n) && n > 0 && n <= 100 ? n : null;
     })(),
-  });
+  };
 }

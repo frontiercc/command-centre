@@ -11,7 +11,7 @@
  */
 import { useEffect, useState } from 'react';
 import Link from 'next/link';
-import { Panel, Tag, Muted, Empty, Segmented } from '@/components/precision/ui';
+import { Panel, Tag, Muted, Empty, Segmented, LOAD_FAILED } from '@/components/precision/ui';
 import { WORK_PULSE_VENDOR_LABELS, type Vendor } from '@/lib/dashboard/vendor';
 import { useOpenAiOnly } from '@/components/shared/VendorSwitch';
 import { useSessionRole } from '@/components/shared/useSessionRole';
@@ -43,6 +43,8 @@ export interface OrgSummary {
     connectorSpread: { total: number; rows: SpreadRow[] };
     /** Counted once per product used, so All is Claude plus ChatGPT. */
     activePeople30d: number;
+    /** All view only: the same count for Claude and for ChatGPT (someone using both counts in each). */
+    activePeopleByVendor30d?: { claude: number; openai: number } | null;
     deepPeople30d?: number;
     deepPeopleWeeks?: number[];
     frontierPeople30d?: number;
@@ -203,7 +205,7 @@ function formatName(kind: 'skills' | 'connectors', name: string): string {
   return kind === 'skills' ? name.replace(':', ' · ') : name.replace(/^mcp__/, '').replace(/_/g, ' ');
 }
 
-function SpreadPanel({ skills, connectors, activePeople }: { skills: { total: number; rows: SpreadRow[] }; connectors: { total: number; rows: SpreadRow[] }; activePeople: number }) {
+function SpreadPanel({ skills, connectors, activePeople, split }: { skills: { total: number; rows: SpreadRow[] }; connectors: { total: number; rows: SpreadRow[] }; activePeople: number; split?: { claude: number; openai: number } | null }) {
   const [kind, setKind] = useState<'skills' | 'connectors'>('skills');
   const list = kind === 'skills' ? skills : connectors;
   const one = kind === 'skills' ? 'skill' : 'connector';
@@ -251,6 +253,7 @@ function SpreadPanel({ skills, connectors, activePeople }: { skills: { total: nu
         </div>
       )}
       <p className="m-0 mt-3 pt-2.5 border-t border-dashed border-[#EAEAEA] text-[12px] text-[#8F8F8F]">
+        {split && split.openai > 0 ? `${activePeople.toLocaleString('en-GB')} product users: ${split.claude.toLocaleString('en-GB')} on Claude, ${split.openai.toLocaleString('en-GB')} on ChatGPT (someone using both counts in each). ` : ''}
         Bars count the people using each {one}, not how often it was used, so one that is spreading stands out. Change is against the 30 days before; new means first used in the last 30 days.
         {list.total > rows.length ? ` Top ${rows.length} of ${list.total} shown.` : ''} <Link href="/library" className="text-[#1F6F8B] font-medium hover:underline">See all on the S&amp;C Board</Link>
       </p>
@@ -270,12 +273,13 @@ export default function PulseBand({ children, vendor = 'all', showVendor = false
   const openaiOnly = useOpenAiOnly();
   const [data, setData] = useState<OrgSummary | null>(null);
   const [loading, setLoading] = useState(true);
+  const [failed, setFailed] = useState(false);
 
   useEffect(() => {
     fetch(`/api/pulse/org-summary?vendor=${vendor}`)
       .then(r => r.ok ? r.json() : Promise.reject())
-      .then(setData)
-      .catch(() => setData(null))
+      .then(d => { setData(d); setFailed(false); })
+      .catch(() => { setData(null); setFailed(true); })
       .finally(() => setLoading(false));
   }, [vendor]);
 
@@ -288,7 +292,8 @@ export default function PulseBand({ children, vendor = 'all', showVendor = false
   return (
     <div className="flex flex-col gap-4">
       {loading && <Panel><Muted>Loading Work Pulse…</Muted></Panel>}
-      {!loading && !hasData && <Empty title="No Work Pulse data yet">Work appears here once Claude has classified it.</Empty>}
+      {!loading && failed && <Panel title="Work Pulse"><Muted>{LOAD_FAILED}</Muted></Panel>}
+      {!loading && !failed && !hasData && <Empty title="No Work Pulse data yet">Work appears here once Claude has classified it.</Empty>}
       {(loading || !hasData) && children}
 
       {!loading && hasData && data && (
@@ -306,7 +311,7 @@ export default function PulseBand({ children, vendor = 'all', showVendor = false
           {children}
 
           {data.dashboard && (
-            <SpreadPanel skills={data.dashboard.skillSpread} connectors={data.dashboard.connectorSpread} activePeople={data.dashboard.activePeople30d} />
+            <SpreadPanel skills={data.dashboard.skillSpread} connectors={data.dashboard.connectorSpread} activePeople={data.dashboard.activePeople30d} split={data.dashboard.activePeopleByVendor30d} />
           )}
         </>
       )}

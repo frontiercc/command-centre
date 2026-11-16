@@ -140,7 +140,7 @@ export default function AuditTab() {
       {msg && <p className="m-0 text-[13px] text-[#666666]">{msg}</p>}
 
       {/* History */}
-      {history.length > 0 && (
+      {history.length > 0 ? (
         <Panel title="Scored cycles" flush>
           <table className={T.table}>
             <thead>
@@ -163,7 +163,7 @@ export default function AuditTab() {
             </tbody>
           </table>
         </Panel>
-      )}
+      ) : <Panel title="Scored cycles"><Muted>No cycles scored yet.</Muted></Panel>}
     </div>
   );
 }

@@ -66,10 +66,6 @@ vi.mock('@/lib/retention/cleanup', () => ({ runRetentionCleanup: vi.fn().mockRes
 vi.mock('@/lib/db/admin-queries', () => ({ deleteExpiredSessions: vi.fn().mockResolvedValue(0) }));
 vi.mock('@/lib/pulse/classifier', () => ({ runClassifierJob: vi.fn().mockResolvedValue(undefined) }));
 vi.mock('@/lib/pulse/audit/cycle', () => ({ runAuditDrawJob: vi.fn().mockResolvedValue({ drawn: false, period: '' }) }));
-vi.mock('@/lib/pulse/skills-discover', () => ({
-  getDiscoverCache: vi.fn().mockResolvedValue({ is_stale: false }),
-  runSkillsDiscover: vi.fn().mockResolvedValue(undefined),
-}));
 vi.mock('@/lib/pulse/aggregator', () => ({
   runHourlyAggregation: vi.fn().mockResolvedValue(undefined),
   runDailyAggregation: vi.fn().mockResolvedValue(undefined),

@@ -20,7 +20,7 @@ vi.mock('@/lib/auth/admin-auth', () => ({
   canAccessPulseAdmin: (role?: string) => role === 'admin' || role === 'manager',
 }));
 
-let generateImpactSummaryMock: ReturnType<typeof vi.fn>;
+let generateImpactSummaryMock: ReturnType<typeof vi.fn<(...args: unknown[]) => unknown>>;
 vi.mock('@/lib/usecases/impact-summary', async (importActual) => {
   const actual = await importActual<typeof import('@/lib/usecases/impact-summary')>();
   return {
