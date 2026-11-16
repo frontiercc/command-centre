@@ -10,7 +10,7 @@ import LoadingSpinner from '@/components/shared/LoadingSpinner';
 import { ALL_CATEGORIES, CATEGORY_LABELS, alertTypeLabel, categoryForType } from '@/lib/alerts/categories';
 import { useCorePlatformGuard } from '@/components/shared/useCorePlatformGuard';
 import { useSessionRole } from '@/components/shared/useSessionRole';
-import { PageBody, Panel, Segmented, Chip, Dot, Pill, Empty, B, SEVERITY_COLOR } from '@/components/precision/ui';
+import { PageBody, Panel, Segmented, Chip, Dot, Pill, Empty, Notice, B, SEVERITY_COLOR } from '@/components/precision/ui';
 
 interface Alert {
   id: string;
@@ -51,6 +51,7 @@ export default function AlertsPage() {
   const isAdmin = useSessionRole() === 'admin';
   const [alerts, setAlerts] = useState<Alert[]>([]);
   const [loading, setLoading] = useState(true);
+  const [failed, setFailed] = useState(false);
   const [filter, setFilter] = useState('');
   const [category, setCategory] = useState('');
   const [expandedId, setExpandedId] = useState<string | null>(null);
@@ -66,9 +67,9 @@ export default function AlertsPage() {
     if (category) params.set('category', category);
     const qs = params.toString();
     fetch(`/api/alerts${qs ? `?${qs}` : ''}`)
-      .then(r => r.json())
-      .then(setAlerts)
-      .catch(console.error)
+      .then(r => { if (!r.ok) throw new Error(String(r.status)); return r.json(); })
+      .then(d => { setAlerts(d); setFailed(false); })
+      .catch(e => { console.error(e); setFailed(true); })
       .finally(() => setLoading(false));
   }, [filter, category]);
 
@@ -211,6 +212,8 @@ export default function AlertsPage() {
 
         {loading ? (
           <LoadingSpinner />
+        ) : failed ? (
+          <Notice tone="error" title="Couldn’t load this.">Try refreshing the page.</Notice>
         ) : alerts.length === 0 ? (
           <Empty title="No alerts">
             No alerts generated. The AI analysis will run when events are available.

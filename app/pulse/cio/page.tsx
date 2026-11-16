@@ -14,7 +14,7 @@ import CapabilityLog from '@/components/pulse/CapabilityLog';
 import GenerateBriefingButton from '@/components/pulse/GenerateBriefingButton';
 import type { BandSegment, PersonDelegation } from '@/components/pulse/DelegationBands';
 import type { ActNextItem, DeptProcessBoxItem } from '@/components/pulse/ActNextPanel';
-import { PageBody, Toolbar, Panel, Tag, Muted, Notice, B } from '@/components/precision/ui';
+import { PageBody, Toolbar, Panel, Tag, Muted, Notice, B, LOAD_FAILED } from '@/components/precision/ui';
 import type { SessionOutputReport } from '@/components/pulse/SessionOutputCard';
 import type { HumanTimeSummary } from '@/components/pulse/HumanTimeCard';
 import { useVendor, useOpenAiOnly, VendorSwitch } from '@/components/shared/VendorSwitch';
@@ -78,6 +78,8 @@ interface CioData {
   };
   actNext?: ActNextItem[];
   deptProcesses?: DeptProcessBoxItem[];
+  /** Parts of the response that failed to build, so their panels say so. */
+  failed?: string[];
   deptRealWork?: Array<{ dept: string; share: number; tasks: number }>;
   realWorkFloorPct?: number | null;
 }
@@ -103,6 +105,7 @@ export default function CioPulsePage() {
   const [copied, setCopied] = useState(false);
   const [orgSummary, setOrgSummary] = useState<OrgSummarySlice | null>(null);
   const [orgFull, setOrgFull] = useState<PulseOrgSummary | null>(null);
+  const [orgState, setOrgState] = useState<'loading' | 'failed' | 'ok'>('loading');
   const [delegationWeeks, setDelegationWeeks] = useState<13 | 26 | 52>(13);
   // The All / Claude / OpenAI switch, shared with the dashboard.
   const [vendor, setVendor, vendorReady] = useVendor();
@@ -122,10 +125,17 @@ export default function CioPulsePage() {
 
   useEffect(() => {
     if (!vendorReady) return; // the saved view is read after the page loads
+    setOrgState('loading');
     fetch(`/api/pulse/org-summary?vendor=${vendor}&window=quarter`)
       .then(r => r.ok ? r.json() : null)
-      .then(d => { if (d) setOrgFull(d); if (d) setOrgSummary({ sessionOutput: d.sessionOutput ?? null, byProduct: d.byProduct ?? null, humanTime: d.humanTime ?? null }); })
-      .catch(() => {});
+      .then(d => {
+        // Failed: clear the last view's figures so they are never shown under this view's name.
+        if (!d) { setOrgFull(null); setOrgSummary(null); setOrgState('failed'); return; }
+        setOrgFull(d);
+        setOrgSummary({ sessionOutput: d.sessionOutput ?? null, byProduct: d.byProduct ?? null, humanTime: d.humanTime ?? null });
+        setOrgState('ok');
+      })
+      .catch(() => { setOrgFull(null); setOrgSummary(null); setOrgState('failed'); });
   }, [refreshKey, vendor, vendorReady]);
 
 
@@ -167,10 +177,12 @@ export default function CioPulsePage() {
         )}
 
         {/* 1. What the signals are telling you */}
-        {orgFull && <WorkPulsePanel data={orgFull} product={product} title="What the signals are telling you" actions />}
+        {orgFull
+          ? <WorkPulsePanel data={orgFull} product={product} title="What the signals are telling you" actions />
+          : <Panel title="What the signals are telling you"><Muted>{orgState === 'failed' ? LOAD_FAILED : 'Loading…'}</Muted></Panel>}
 
         {/* 2. Use cases to act on next */}
-        <UseCasesNext boxes={data.deptProcesses ?? []} items={data.actNext ?? []} />
+        <UseCasesNext boxes={data.deptProcesses ?? []} items={data.actNext ?? []} failed={(data.failed ?? []).some(f => f === 'actNext' || f === 'deptProcesses')} />
 
         {/* 3. Are people handing Claude bigger jobs? */}
         <BiggerJobs
@@ -187,10 +199,10 @@ export default function CioPulsePage() {
         <div className="grid grid-cols-1 xl:grid-cols-2 gap-4 items-start">
           <div className="flex flex-col gap-4 min-w-0">
             <DeptRealWork rows={data.deptRealWork ?? []} floorPct={data.realWorkFloorPct ?? null} names={orgFull?.tierNames ?? undefined} />
-            <Produced output={orgSummary?.sessionOutput} human={orgSummary?.humanTime} />
+            <Produced output={orgSummary?.sessionOutput} human={orgSummary?.humanTime} loading={orgState === 'loading'} />
           </div>
           <div className="flex flex-col gap-4 min-w-0">
-            <Products data={orgSummary?.byProduct} names={orgFull?.tierNames ?? undefined} />
+            <Products data={orgSummary?.byProduct} names={orgFull?.tierNames ?? undefined} loading={orgState === 'loading'} />
             <NewWaysOfWorking confirmedTotal={data.signalCards.psr} confirmedRecent={orgFull?.dashboard?.capabilitiesRecent ?? 0} vendor={vendor} />
           </div>
         </div>

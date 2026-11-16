@@ -8,7 +8,7 @@
  * Renders nothing when the feature is off or no session carries both figures.
  */
 import { codeWorkTypeLabel } from '@/lib/pulse/code/work-type-labels';
-import { Panel, Tag, Bar, SubHead } from '@/components/precision/ui';
+import { Panel, Tag, Bar, SubHead, Muted } from '@/components/precision/ui';
 
 export interface HumanTimeRow { kind: string; sessions: number; humanMinutes: number; claudeMinutes: number }
 export interface HumanTimeSummary {
@@ -55,10 +55,16 @@ export default function HumanTimeCard({ summary, surface, scope, className = '',
    */
   view?: 'all' | 'claude' | 'openai';
 }) {
-  if (!summary || summary.sessions === 0) return null;
+  // Off, or not this viewer's to see: no card. On with no sessions: say so.
+  if (!summary) return null;
   const name = view === 'openai'
     ? (surface === 'cowork' ? 'ChatGPT' : 'Codex')
     : view === 'all' && (surface === 'code' || summary.byProduct) ? 'AI' : 'Claude';
+  if (summary.sessions === 0) return (
+    <Panel title={`By hand vs with ${name}`} className={className}>
+      <Muted>No sessions with a by-hand estimate yet.</Muted>
+    </Panel>
+  );
   // Cowork's active time includes the person working alongside the assistant.
   const claudeLabel = surface === 'cowork' ? `hours with ${name}` : `hours of ${name} time`;
   const subtitle = surface === 'cowork'

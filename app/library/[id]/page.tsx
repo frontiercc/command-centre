@@ -102,6 +102,7 @@ export default function LibraryDetailPage({ params }: { params: Promise<{ id: st
   const router = useRouter();
   const [entry, setEntry] = useState<EntryDetail | null>(null);
   const [loading, setLoading] = useState(true);
+  const [failed, setFailed] = useState(false);
   const [copied, setCopied] = useState(false);
   const [id, setId] = useState<string>('');
   const [editing, setEditing] = useState(false);
@@ -121,9 +122,14 @@ export default function LibraryDetailPage({ params }: { params: Promise<{ id: st
   useEffect(() => {
     if (!id) return;
     fetch(`/api/library/${id}`)
-      .then(r => r.ok ? r.json() : Promise.reject())
-      .then(setEntry)
-      .catch(() => router.push('/library'))
+      .then(r => {
+        // Gone from the board: back to the board. Any other failure: the page says so.
+        if (r.status === 404) { router.push('/library'); return null; }
+        if (!r.ok) throw new Error(String(r.status));
+        return r.json();
+      })
+      .then(d => { if (d) setEntry(d); })
+      .catch(() => setFailed(true))
       .finally(() => setLoading(false));
   }, [id, router]);
 
@@ -209,7 +215,12 @@ export default function LibraryDetailPage({ params }: { params: Promise<{ id: st
       <LoadingSpinner />
     </>
   );
-  if (!entry) return null;
+  if (!entry) return failed ? (
+    <>
+      <TopBar title="S&C Board" />
+      <PageBody><Notice tone="error" title="Couldn’t load this entry.">Try refreshing the page.</Notice></PageBody>
+    </>
+  ) : null;
 
   const isTrending = entry.stats.trend_pct >= 20;
   const maxDay = Math.max(...entry.daily_counts.map(d => d.cnt), 1);
@@ -489,7 +500,7 @@ export default function LibraryDetailPage({ params }: { params: Promise<{ id: st
             </Panel>
 
             {/* Powers these workflows */}
-            {entry.usedInWorkflows && entry.usedInWorkflows.length > 0 && (
+            {entry.usedInWorkflows && entry.usedInWorkflows.length > 0 ? (
               <Panel title="Powers these workflows" flush>
                 {entry.usedInWorkflows.map(wf => {
                   const pill = LIFECYCLE_PILL[wf.lifecycle] ?? LIFECYCLE_PILL.not_seen;
@@ -513,7 +524,7 @@ export default function LibraryDetailPage({ params }: { params: Promise<{ id: st
                   );
                 })}
               </Panel>
-            )}
+            ) : <Panel title="Powers these workflows"><Muted>Not part of any workflow yet.</Muted></Panel>}
 
             {/* 7-day usage */}
             <Panel title="Usage, last 7 days" right={<Tag tone="measured">Measured</Tag>} flush>
@@ -529,7 +540,7 @@ export default function LibraryDetailPage({ params }: { params: Promise<{ id: st
             </Panel>
 
             {/* Invocation type */}
-            {entry.stats.total_invocations > 0 && agentPct !== null && (
+            {entry.stats.total_invocations > 0 && agentPct !== null ? (
               <Panel
                 title="How it's invoked"
                 subtitle={agentPct > 50 ? `${triggeredBy(entry.products)} triggers this more than users do` : undefined}
@@ -538,7 +549,7 @@ export default function LibraryDetailPage({ params }: { params: Promise<{ id: st
                 <BarRow label={<><LineIcon d={ICON.agent} className="inline-block align-[-2px] mr-1.5 text-[#8F8F8F]" />Agent-chained</>} value={`${agentPct}%`} pct={agentPct} tone="measured" />
                 <BarRow label={<><LineIcon d={ICON.user} className="inline-block align-[-2px] mr-1.5 text-[#8F8F8F]" />User-typed</>} value={`${100 - agentPct}%`} pct={100 - agentPct} tone="measured" />
               </Panel>
-            )}
+            ) : <Panel title="How it's invoked"><Muted>{entry.stats.total_invocations === 0 ? 'Not used yet, so there is nothing to split.' : 'Not measured.'}</Muted></Panel>}
           </div>
 
           <div className="flex flex-col gap-4 min-w-0">
@@ -546,7 +557,7 @@ export default function LibraryDetailPage({ params }: { params: Promise<{ id: st
             <Panel title="Install">{installBody}</Panel>
 
             {/* Used by */}
-            {entry.top_users.length > 0 && (
+            {entry.top_users.length > 0 ? (
               <Panel title="Used by" subtitle={<span className="tabular-nums">{entry.top_users.length}</span>}>
                 <div className="flex flex-wrap gap-1.5">
                   {entry.top_users.slice(0, 8).map(u => (
@@ -564,7 +575,7 @@ export default function LibraryDetailPage({ params }: { params: Promise<{ id: st
                   )}
                 </div>
               </Panel>
-            )}
+            ) : <Panel title="Used by"><Muted>No one has used it yet.</Muted></Panel>}
           </div>
         </div>
       </PageBody>

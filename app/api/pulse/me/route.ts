@@ -318,6 +318,8 @@ export async function GET(request: NextRequest) {
 
   // Frontier boxes: best recent work, step-ups, capabilities.
   // Own try/catch so a failure hides the boxes, not the page.
+  // Parts that failed to build: their panels say they couldn't load, never look empty.
+  const failed: string[] = [];
   let frontier = null;
   try {
     frontier = await buildFrontierView({ userId }, now, {
@@ -326,6 +328,7 @@ export async function GET(request: NextRequest) {
     }, vendor);
   } catch (err) {
     console.error('[pulse/me] frontier view failed', err);
+    failed.push('frontier');
   }
 
   // Gate: OTI status copy stays "under review" until the audit clears the floor.
@@ -350,6 +353,7 @@ export async function GET(request: NextRequest) {
     periodData = await buildMyPeriod({ userId, department, vendor, nowS: now, period, showHumanTime: seesPerson, humanTimeOn: await humanTimeOn('cowork') });
   } catch (err) {
     console.error('[pulse/me] period failed', err);
+    failed.push('period');
   }
   // A person's spend: admins and managers for anyone, everyone else only their own.
   let spendThisMonth: Awaited<ReturnType<typeof monthSpend>> | null = null;
@@ -357,9 +361,11 @@ export async function GET(request: NextRequest) {
     if (seesPerson) spendThisMonth = await monthSpend([userId], vendor, now);
   } catch (err) {
     console.error('[pulse/me] month spend failed', err);
+    failed.push('spend');
   }
 
   return NextResponse.json({
+    failed,
     tierNames: await getTierNames(),
     humanTime,
     period: periodData,

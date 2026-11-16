@@ -161,12 +161,13 @@ export default function AdminFilesPage() {
           </form>
         </Toolbar>
 
-        {/* Files by category. Org-wide over the selected day range, so it is HIDDEN while a department filter is
-            applied: showing an org mix above a filtered list would read as the
-            filtered figure. */}
-        {!deptFilter && categoryMix.length > 0 && (
+        {/* Files by category. Org-wide over the selected day range, so with a department filter on it
+            says it isn't available rather than read as the filtered figure. */}
+        {(
           <div className="max-w-md">
-            <FileCategoryMixCard items={categoryMix} />
+            {deptFilter
+              ? <Panel title="Files by category"><p className="m-0 text-[13px] text-[#8F8F8F]">Not available with a department filter.</p></Panel>
+              : <FileCategoryMixCard items={categoryMix} />}
           </div>
         )}
 

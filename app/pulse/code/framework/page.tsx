@@ -107,7 +107,7 @@ export default function FrameworkPage() {
         </div>
 
         {/* Optional DX overlay (real framework numbers) */}
-        {data.dx?.data && (
+        {data.dx?.data ? (
           <Panel
             title="Your DX numbers"
             right={isMock ? <Tag>Demo data</Tag> : undefined}
@@ -129,7 +129,10 @@ export default function FrameworkPage() {
               <Figure label="DXI" value={data.dx.data.dxi ?? 'Not measured'} />
             </FigureGrid>
           </Panel>
-        )}
+        ) : data.dx?.source === 'live' ? (
+          // A DX key is set, so the panel shows, but the live DX connection returned nothing.
+          <Panel title="Your DX numbers"><Muted>Couldn’t get your numbers from DX. The live DX connection isn’t finished yet.</Muted></Panel>
+        ) : null}
       </PageBody>
     </>
   );

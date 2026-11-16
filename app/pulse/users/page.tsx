@@ -15,16 +15,19 @@ import { cleanTitle } from '@/components/pulse/CapabilityLog';
 import { Frame } from '@/components/pulse/WorkPulseOverview';
 import {
   WorkPanel, TaskList, DeeperPanel, ByHandPanel, ProducedPanel, ColleagueToolsPanel, SpendPanel,
+  EmptyPeriodPanels, SpendFailed,
   type ByHand, type MonthSpend, type Who, type DrillKind,
 } from '@/components/pulse/MyPulsePanels';
 import type { MyPeriod, PulsePeriod } from '@/lib/pulse/period-shape';
 import type { TierNames } from '@/lib/pulse/tier-names';
-import { PageBody, Toolbar, Notice, B, cx } from '@/components/precision/ui';
+import { PageBody, Toolbar, Notice, B, cx, Muted } from '@/components/precision/ui';
 import { useVendor, useOpenAiOnly, VendorSwitch } from '@/components/shared/VendorSwitch';
 import { WORK_PULSE_VENDOR_LABELS } from '@/lib/dashboard/vendor';
 import { deepShareOf, deepWords, withTierNames } from '@/lib/pulse/tier-names';
 
 interface PersonalPulseData {
+  /** Parts of the response that failed to build, so their panels say so. */
+  failed?: string[];
   humanTime?: ByHand | null;
   period?: MyPeriod | null;
   tierNames?: TierNames | null;
@@ -274,10 +277,20 @@ export default function UsersPickerPage() {
                   </div>
 
                   {/* 7 */}
-                  {d.spendThisMonth && <SpendPanel s={d.spendThisMonth} product={product} who={who} reviewHref={reviewHref} />}
+                  {d.spendThisMonth
+                    ? <SpendPanel s={d.spendThisMonth} product={product} who={who} reviewHref={reviewHref} />
+                    : (d.failed ?? []).includes('spend') ? <SpendFailed who={who} /> : null}
                 </>
               ) : (
-                <Notice tone="info" title="No work yet.">Nothing has been recorded for this person yet.</Notice>
+                // No work yet, or it failed to load: every panel keeps its place and says which.
+                <>
+                  <EmptyPeriodPanels who={who} failed={(d.failed ?? []).includes('period')} />
+                  <FrontierHero view={d.frontier} canOpenUseCases={d.frontierAccess?.canOpenUseCases ?? false} names={d.tierNames ?? undefined} />
+                  <ByHandPanel h={d.humanTime} who={who} tool={product === 'Claude and ChatGPT' ? 'AI' : product} surface="cowork" />
+                  {d.spendThisMonth
+                    ? <SpendPanel s={d.spendThisMonth} product={product} who={who} reviewHref={reviewHref} />
+                    : (d.failed ?? []).includes('spend') ? <SpendFailed who={who} /> : null}
+                </>
               )}
 
               {/* 8. Their week, in a paragraph */}
@@ -302,7 +315,7 @@ export default function UsersPickerPage() {
               </Frame>
 
               {/* New ways of working waiting for review */}
-              {pending.length > 0 && (
+              {pending.length === 0 ? <Frame id="to-review" title="Waiting for review"><Muted>Nothing waiting for review.</Muted></Frame> : (
                 <Frame id="to-review" title="Waiting for review" period={`${pending.length} new ${pending.length === 1 ? 'way' : 'ways'} of working`}
                   answer={<>Claude thinks {who.name} may have started {pending.length === 1 ? 'a new way of working' : 'new ways of working'}.</>}>
                   {pending.map(c => (

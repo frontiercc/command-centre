@@ -9,7 +9,7 @@ import TopBar from '@/components/layout/TopBar';
 import LoadingSpinner from '@/components/shared/LoadingSpinner';
 import { type SurfaceSummary, type SurfaceSpend } from '@/components/finance/SurfaceTiles';
 import {
-  SpendTrendCard, ProjectionCard, ConcentrationCard, concentrationOfTotal, projectionShown, type SpendTrend,
+  SpendTrendCard, ProjectionCard, ConcentrationCard, projectionShown, type SpendTrend,
 } from '@/components/finance/FinopsCharts';
 import Leaderboard, { type LeaderboardEntry } from '@/components/finance/Leaderboard';
 import InsightCard, { type InsightFacts } from '@/components/finance/InsightCard';
@@ -17,7 +17,7 @@ import ModelEfficiencySection from '@/components/finance/ModelEfficiencySection'
 import OfficeSpendPanel, { type OfficeSpendData } from '@/components/finance/OfficeSpendPanel';
 import WhereItGoes from '@/components/finance/WhereItGoes';
 import FinopsFold from '@/components/finance/FinopsFold';
-import { PageBody, Toolbar, Panel, Strip, Figure, Tag, Pill, T, B, Notice, Empty, Bar, cx } from '@/components/precision/ui';
+import { PageBody, Toolbar, Panel, Strip, Figure, Tag, Pill, T, B, Notice, Empty, Bar, cx, Muted, LOAD_FAILED } from '@/components/precision/ui';
 import { MIN_PROJECTION_DAYS } from '@/lib/finance/finops-projection';
 import { useOpenAiOnly } from '@/components/shared/VendorSwitch';
 import { useAskPageNote } from '@/components/ask/useAskAvailable';
@@ -54,6 +54,8 @@ interface ChargebackCentre {
 }
 
 interface ChargebackReport {
+  /** Parts the route could not build (seats, office): their panels say so. */
+  failed?: string[];
   period: string;
   periodStart: number;
   periodEnd: number;
@@ -327,7 +329,8 @@ export default function CostChargebackPage() {
   const [openCentres, setOpenCentres] = useState<Set<string>>(() => new Set());
   const [allCentreRows, setAllCentreRows] = useState(false);
   /** People with a better route this month, from Spend Review. null hides Where to save. */
-  const [peopleWithRoutes, setPeopleWithRoutes] = useState<number | null>(null);
+  // Spend Review's count; null while loading or when Spend Review is off or not this role's; 'failed' on an error.
+  const [peopleWithRoutes, setPeopleWithRoutes] = useState<number | null | 'failed'>(null);
   // Only OpenAI connected: no Claude tiles, columns or notes.
   const openaiOnly = useOpenAiOnly();
 
@@ -378,13 +381,18 @@ export default function CostChargebackPage() {
     let cancelled = false;
     setPeopleWithRoutes(null);
     fetch(`/api/finance/spend-review?period=${encodeURIComponent(period)}`)
-      .then(r => (r.ok ? r.json() : null))
-      .then(d => {
-        if (cancelled) return;
-        const n = d?.summary?.peopleWithRoutes;
-        setPeopleWithRoutes(typeof n === 'number' ? n : null);
+      .then(r => {
+        // Off (404) or not this role's (403): no panel. Any other failure: the panel says so.
+        if (r.status === 404 || r.status === 403) return null;
+        if (!r.ok) throw new Error(String(r.status));
+        return r.json();
       })
-      .catch(() => {});
+      .then(d => {
+        if (cancelled || d === null) return;
+        const n = d?.summary?.peopleWithRoutes;
+        setPeopleWithRoutes(typeof n === 'number' ? n : 'failed');
+      })
+      .catch(() => { if (!cancelled) setPeopleWithRoutes('failed'); });
     return () => { cancelled = true; };
   }, [period, allowed]);
 
@@ -495,8 +503,11 @@ export default function CostChargebackPage() {
 
   const unallocatedPeople = report.unallocated.users.length;
   const seatsShown = (report.chatgptSeats != null && isCurrentMonth) || (report.seats != null && isCurrentMonth && claudeShown);
+  // Seats known but a past month, or failed to load: the fold still shows and says which.
+  const seatsFailed = (report.failed ?? []).includes('seats');
+  const seatsKnown = report.chatgptSeats != null || (report.seats != null && claudeShown);
+  const officeFailed = (report.failed ?? []).includes('office');
   const officeShown = !!report.office && report.office.byProduct.length > 0;
-  const concentrationShown = concentrationOfTotal(report.costCentres, report.grandTotalUsd) !== null;
   const estimateTag = <Tag tone="judged">Estimate</Tag>;
 
   return (
@@ -630,7 +641,7 @@ export default function CostChargebackPage() {
             )}
 
             {/* 3. Cost centres, Unallocated last */}
-            {centrePanelShown && (
+            {centrePanelShown ? (
               <>
                 {closeError && <Notice tone="error">{closeError}</Notice>}
                 <Panel
@@ -706,10 +717,10 @@ export default function CostChargebackPage() {
                   )}
                 </Panel>
               </>
-            )}
+            ) : !isEmpty ? <Panel title="By cost centre"><Muted>No spend is set against a cost centre this month.</Muted></Panel> : null}
 
             {/* 4. Where to save: Spend Review's count, for the same month */}
-            {peopleWithRoutes !== null && (
+            {typeof peopleWithRoutes === 'number' ? (
               <Panel
                 title="Where to save"
                 badge={estimateTag}
@@ -721,7 +732,7 @@ export default function CostChargebackPage() {
                     : `${peopleWithRoutes} ${peopleWithRoutes === 1 ? 'person has' : 'people have'} a better route for their work: a skill, connector or model colleagues use for the same work.`}
                 </p>
               </Panel>
-            )}
+            ) : peopleWithRoutes === 'failed' ? <Panel title="Where to save" badge={estimateTag}><Muted>{LOAD_FAILED}</Muted></Panel> : null}
 
             {/* 5. Detail, folded */}
             <FinopsFold title="Spend trend and month-end projection">
@@ -742,14 +753,14 @@ export default function CostChargebackPage() {
             </FinopsFold>
 
             {/* Claude in Office and Google: an estimate, never in the totals */}
-            {officeShown && (
+            {officeShown ? (
               <FinopsFold title="Claude in Office and Google (estimate)">
                 <OfficeSpendPanel data={report.office} />
               </FinopsFold>
-            )}
+            ) : officeFailed ? <FinopsFold title="Claude in Office and Google (estimate)"><Panel><Muted>{LOAD_FAILED}</Muted></Panel></FinopsFold> : null}
 
-            <FinopsFold title={concentrationShown ? 'This month in cost and spend concentration' : 'This month in cost'}>
-              <div className={cx('grid grid-cols-1 gap-4', concentrationShown && 'lg:grid-cols-[minmax(0,3fr)_minmax(0,2fr)]')}>
+            <FinopsFold title="This month in cost and spend concentration">
+              <div className="grid grid-cols-1 gap-4 lg:grid-cols-[minmax(0,3fr)_minmax(0,2fr)]">
                 <InsightCard insight={report.insight ?? null} dataQualityNotes={dataQualityNotes} />
                 <ConcentrationCard costCentres={report.costCentres} grandTotalUsd={report.grandTotalUsd} openaiOnly={openaiOnly} />
               </div>
@@ -759,7 +770,7 @@ export default function CostChargebackPage() {
               <Leaderboard leaderboard={report.leaderboard ?? []} period={period} openaiOnly={openaiOnly} />
             </FinopsFold>
 
-            {seatsShown && (
+            {seatsShown ? (
               <FinopsFold title="Seats and licences">
                 <Panel>
                   <div className="flex flex-col gap-2 text-[13px]">
@@ -795,7 +806,7 @@ export default function CostChargebackPage() {
                   </div>
                 </Panel>
               </FinopsFold>
-            )}
+            ) : seatsKnown || seatsFailed ? <FinopsFold title="Seats and licences"><Panel><Muted>{isCurrentMonth ? LOAD_FAILED : 'Only for the current month.'}</Muted></Panel></FinopsFold> : null}
           </>
         )}
       </PageBody>

@@ -13,7 +13,7 @@ import ProcessCanvasCard from '@/components/usecases/ProcessCanvasCard';
 import type { ProcessCanvas } from '@/lib/usecases/suggestion-store';
 import { surfaceLabels, surfaceOf } from '@/lib/usecases/dept-boxes';
 import { useConnectedProducts } from '@/components/shared/VendorSwitch';
-import { PageBody, Toolbar, Panel, PanelFoot, T, Tag, Pill, B, Notice, Empty, Bar, cx } from '@/components/precision/ui';
+import { PageBody, Toolbar, Panel, PanelFoot, T, Tag, Pill, B, Notice, Empty, Bar, cx, Muted, LOAD_FAILED } from '@/components/precision/ui';
 
 interface UseCase {
   id: string;
@@ -134,6 +134,7 @@ export default function UseCasesRegisterPage() {
   const [linkedUserId, setLinkedUserId] = useState<string | null>(null);
 
   const [suggestions, setSuggestions] = useState<SuggestionDraft[] | null>(null);
+  const [suggestionsFailed, setSuggestionsFailed] = useState(false);
   const [actingId, setActingId] = useState<string | null>(null);
   const [refreshing, setRefreshing] = useState(false);
   const [openSuggestionId, setOpenSuggestionId] = useState<string | null>(null);
@@ -171,8 +172,8 @@ export default function UseCasesRegisterPage() {
         if (!r.ok) throw new Error("Couldn't load this page. Try again.");
         return r.json();
       })
-      .then((data: SuggestionDraft[]) => setSuggestions(data))
-      .catch(() => setSuggestions([]));
+      .then((data: SuggestionDraft[]) => { setSuggestions(data); setSuggestionsFailed(false); })
+      .catch(() => { setSuggestions([]); setSuggestionsFailed(true); });
   };
 
   useEffect(() => {
@@ -328,7 +329,8 @@ export default function UseCasesRegisterPage() {
   const grouped = STATUS_ORDER
     .map(status => ({ status, items: filtered.filter(uc => uc.status === status) }))
     .filter(g => showArchived || g.status !== 'archived')
-    .filter(g => g.items.length > 0);
+    // An empty group still shows, saying so, unless nothing matches at all (the message above says that).
+    .filter(g => g.items.length > 0 || filtered.length > 0);
 
   return (
     <>
@@ -342,7 +344,7 @@ export default function UseCasesRegisterPage() {
 
         {error && <Notice tone="error">{error}</Notice>}
 
-        {visibleSuggestions.length > 0 && (
+        {suggestions !== null && (
           <Panel
             title="Suggested use cases"
             badge={<Tag tone="judged">AI-suggested</Tag>}
@@ -354,6 +356,9 @@ export default function UseCasesRegisterPage() {
             }
             flush
           >
+            {visibleSuggestions.length === 0 ? (
+              <div className="p-4"><Muted>{suggestionsFailed ? LOAD_FAILED : 'No suggestions yet. Use Refresh suggestions to look for some.'}</Muted></div>
+            ) : (<>
             <div className="px-4 pt-3 pb-1 flex flex-wrap gap-1.5">
               {chips.map(c => (
                 <button
@@ -426,6 +431,7 @@ export default function UseCasesRegisterPage() {
             <PanelFoot>
               Claude&apos;s read of your telemetry: review before adding. Counts are measured; the grouping and wording are Claude&apos;s.
             </PanelFoot>
+            </>)}
           </Panel>
         )}
 
@@ -473,7 +479,11 @@ export default function UseCasesRegisterPage() {
           </Empty>
         )}
 
-        {grouped.map(group => (
+        {grouped.map(group => group.items.length === 0 ? (
+          <Panel key={group.status} title={STATUS_LABEL[group.status]} subtitle={<span className="tabular-nums">0</span>}>
+            <Muted>{(useCases ?? []).some(uc => uc.status === group.status) ? 'None match these filters.' : `No ${STATUS_LABEL[group.status].toLowerCase()} use cases yet.`}</Muted>
+          </Panel>
+        ) : (
           <Panel
             key={group.status}
             title={STATUS_LABEL[group.status]}

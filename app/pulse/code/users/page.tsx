@@ -17,7 +17,7 @@ import {
 } from '@/components/pulse/code/CodePulsePanels';
 import type { PulsePeriod } from '@/lib/pulse/period-shape';
 import type { TierNames } from '@/lib/pulse/tier-names';
-import { PageBody, Toolbar, Panel, Tag, Empty, Muted, B, cx } from '@/components/precision/ui';
+import { PageBody, Toolbar, Panel, Tag, Empty, Muted, Notice, B, cx, LOAD_FAILED } from '@/components/precision/ui';
 import { useVendor, useOpenAiOnly, VendorSwitch } from '@/components/shared/VendorSwitch';
 import { DEVELOPER_PULSE_VENDOR_LABELS, type Vendor } from '@/lib/dashboard/vendor';
 import { useSessionRole } from '@/components/shared/useSessionRole';
@@ -86,6 +86,7 @@ function CodeUsersContent() {
   const [usersLoading, setUsersLoading] = useState(true);
   const [data, setData] = useState<UserData | null>(null);
   const [dataLoading, setDataLoading] = useState(false);
+  const [dataFailed, setDataFailed] = useState(false);
   // One period for the page, as on Work Pulse.
   const [period, setPeriod] = useState<PulsePeriod>('quarter');
 
@@ -132,10 +133,11 @@ function CodeUsersContent() {
     if (!vendorReady) return; // the saved view is read after the page loads
     if (!userId) return;
     setDataLoading(true);
+    setDataFailed(false);
     fetch(`/api/pulse/code/me?userId=${encodeURIComponent(userId)}&vendor=${vendor}&period=${period}`)
-      .then(r => r.json())
+      .then(r => { if (!r.ok) throw new Error(String(r.status)); return r.json(); })
       .then(setData)
-      .catch(() => {})
+      .catch(() => { setData(null); setDataFailed(true); })
       .finally(() => setDataLoading(false));
   }, [vendor, vendorReady, period]);
 
@@ -204,6 +206,10 @@ function CodeUsersContent() {
           </Empty>
         )}
 
+        {!dataLoading && !notInView && dataFailed && (
+          <Notice tone="error" title="Couldn’t load this person.">Try refreshing the page.</Notice>
+        )}
+
         {!dataLoading && !notInView && data && (
           !data.userId ? (
             <Empty title={openaiOnly ? 'No Codex activity for this user yet' : codexPresent ? 'No coding activity for this user yet' : 'No Claude Code activity for this user yet'}>
@@ -211,7 +217,7 @@ function CodeUsersContent() {
             </Empty>
           ) : (
             <>
-              {data.periodWork && (
+              {data.periodWork ? (
                 <CodeWorkPanel
                   w={data.periodWork}
                   who={who}
@@ -219,7 +225,7 @@ function CodeUsersContent() {
                   onPeriod={setPeriod}
                   product={openaiOnly ? 'Codex' : codexPresent && vendor === 'all' ? 'Claude Code and Codex' : vendor === 'openai' ? 'Codex' : 'Claude Code'}
                 />
-              )}
+              ) : <Panel title={`${who.name}'s coding work`}><Muted>{LOAD_FAILED}</Muted></Panel>}
 
               <CodeBestWork s={data.bestSession ?? null} who={who} names={data.tierNames ?? undefined} />
 

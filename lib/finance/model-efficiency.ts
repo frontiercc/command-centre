@@ -751,15 +751,21 @@ export async function buildSessionTaskTypeMap(
   const cm = schema.coworkMessages;
   const pc = schema.pulseClassifications;
 
-  const classRows = (await client
-    .select({
-      session_id: cm.session_id,
-      task_type: pc.task_type,
-      occurred_at: cm.occurred_at,
-    })
-    .from(pc)
-    .innerJoin(cm, eq(cm.id, pc.cowork_message_id))
-    .where(inArray(cm.session_id, sessionIds))) as CoworkClassificationRow[];
+  // Postgres takes at most 65,535 values in one query, and a big hub has more
+  // sessions than that in a quarter. Ask in batches; a session's rows all come
+  // back in the same batch, so the collapse below is unchanged.
+  const classRows: CoworkClassificationRow[] = [];
+  for (let i = 0; i < sessionIds.length; i += SESSION_ID_BATCH) {
+    classRows.push(...(await client
+      .select({
+        session_id: cm.session_id,
+        task_type: pc.task_type,
+        occurred_at: cm.occurred_at,
+      })
+      .from(pc)
+      .innerJoin(cm, eq(cm.id, pc.cowork_message_id))
+      .where(inArray(cm.session_id, sessionIds.slice(i, i + SESSION_ID_BATCH)))) as CoworkClassificationRow[]);
+  }
 
   // Per session: count occurrences of each task_type, tracking the latest
   // occurred_at seen for that task_type (for the tie-break).
@@ -804,6 +810,9 @@ export async function buildSessionTaskTypeMap(
 
   return sessionTaskType;
 }
+
+/** Session IDs per query in buildSessionTaskTypeMap, well under Postgres's 65,535. */
+const SESSION_ID_BATCH = 1000;
 
 async function buildCoworkModelEfficiency(period: string, surface: 'cowork' | 'chatgpt' = 'cowork'): Promise<ModelEfficiencyReport> {
   const client = await getTypedClient();

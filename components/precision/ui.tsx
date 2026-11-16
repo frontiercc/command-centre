@@ -381,6 +381,12 @@ export function Empty({ title, children, action, icon }: { title: ReactNode; chi
   );
 }
 
+/**
+ * What a panel says when its figures could not be loaded. A panel on a feature
+ * that is switched on never hides: it says this, or that there is nothing yet.
+ */
+export const LOAD_FAILED = 'Couldn’t load this. Try refreshing the page.';
+
 /** Small italic-free placeholder line used inside panels. */
 export function Muted({ children }: { children: ReactNode }) {
   return <p className="m-0 text-[13px] text-[#8F8F8F]">{children}</p>;

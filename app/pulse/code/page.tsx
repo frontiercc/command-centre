@@ -18,6 +18,7 @@ import Sparkline from '@/components/pulse/Sparkline';
 import PriorPeriodBadge, { priorPeriodChange } from '@/components/pulse/code/PriorPeriodBadge';
 import HumanTimeCard, { type HumanTimeSummary } from '@/components/pulse/HumanTimeCard';
 import { displayDefinition } from '@/lib/pulse/code/work-type-labels';
+import { MIN_SPENDERS_FOR_CONCENTRATION } from '@/lib/pulse/code/concentration';
 import { useVendor, useOpenAiOnly, VendorSwitch, formatSplit } from '@/components/shared/VendorSwitch';
 import { DEVELOPER_PULSE_VENDOR_LABELS, type Vendor } from '@/lib/dashboard/vendor';
 import {
@@ -305,15 +306,17 @@ function LanguageMixCard({ items }: { items: Array<{ language: string; edits: nu
  * that includes Codex. Null in the Codex view. Cost per commit and per pull request
  * live on Value's Unit economics, not here.
  */
-function EfficiencyCard({ metrics, claude }: { metrics: CodeMetricsRow | null; claude: CodeMetricsRow | null }) {
-  if (!metrics) return null;
+function EfficiencyCard({ metrics, claude, codexView = false }: { metrics: CodeMetricsRow | null; claude: CodeMetricsRow | null; codexView?: boolean }) {
+  const empty = (text: string) => <Panel title="Efficiency" subtitle="30 days"><Muted>{text}</Muted></Panel>;
+  if (codexView) return empty("Codex doesn't send this.");
+  if (!metrics) return empty('No activity in the last 30 days yet.');
   const c = claude;
   const engagedHours = c ? ((c.active_time_user_s ?? 0) + (c.active_time_cli_s ?? 0)) / 3600 : 0;
   const accepts = c?.edit_accept_count ?? 0;
   const linesPerHour = c && engagedHours > 0 ? Math.round((c.lines_added ?? 0) / engagedHours) : null;
   const tokensPerAccept = c && accepts > 0 ? (c.input_tokens + c.output_tokens) / accepts : null;
   // Nothing to show until the productivity metrics arrive.
-  if (linesPerHour == null && tokensPerAccept == null) return null;
+  if (linesPerHour == null && tokensPerAccept == null) return empty("Not measured yet. Lines and accepted edits arrive with Claude Code's productivity metrics.");
   const cells = [
     { label: 'Lines per engaged hour', value: linesPerHour == null ? 'Not measured' : linesPerHour.toLocaleString() },
     { label: 'Tokens per accepted edit', value: tokensPerAccept == null ? 'Not measured' : formatTokens(Math.round(tokensPerAccept)) },
@@ -328,7 +331,11 @@ function EfficiencyCard({ metrics, claude }: { metrics: CodeMetricsRow | null; c
 }
 
 function SpendConcentrationCard({ data }: { data: OrgSummary['spendConcentration'] }) {
-  if (!data) return null;
+  if (!data) return (
+    <Panel title="Spend concentration" subtitle="30 days">
+      <Muted>Needs at least {MIN_SPENDERS_FOR_CONCENTRATION} people with spend in the last 30 days to say.</Muted>
+    </Panel>
+  );
   return (
     <Panel title="Spend concentration" subtitle="30 days" flush>
       <div className="px-4 pt-3">
@@ -395,8 +402,10 @@ export default function CodePulseOverviewPage() {
   const hasRepoData = !!data && ((data.metrics?.repo_count ?? 0) > 0 || (data.activeRepos?.length ?? 0) > 0 || (data.darkRepos?.length ?? 0) > 0);
   const repoOrLanguage = hasRepoData
     ? <RepoCoverageList active={data?.activeRepos ?? []} dark={data?.darkRepos ?? []} githubTotals={data?.githubOverlay?.totalCommits30dByRepo} />
-    // Codex sends no edit decisions, so its view has no Language mix card.
-    : openaiOnly || (vendor === 'openai' && data?.codexPresent) ? null : <LanguageMixCard items={data?.languageMix ?? []} />;
+    // Codex sends no edit decisions, so its view says so in the Language mix card's place.
+    : openaiOnly || (vendor === 'openai' && data?.codexPresent)
+      ? <Panel title="Language mix" subtitle="30 days"><Muted>Codex doesn&apos;t send this.</Muted></Panel>
+      : <LanguageMixCard items={data?.languageMix ?? []} />;
 
   const hasWorkMix = data?.workMix !== null && data?.workMix !== undefined;
   const codexPresent = data?.codexPresent ?? false;
@@ -560,7 +569,7 @@ export default function CodePulseOverviewPage() {
               </div>
             </div>
 
-            {((data?.skillLeverage?.length ?? 0) > 0 || (data?.agentLeverage?.length ?? 0) > 0) && (
+            {((data?.skillLeverage?.length ?? 0) > 0 || (data?.agentLeverage?.length ?? 0) > 0) ? (
               <Panel
                 title={codexPresent ? 'Leverage: Claude Code spend by skill and subagent' : 'Leverage: spend by skill and subagent'}
                 subtitle="30 days"
@@ -595,13 +604,13 @@ export default function CodePulseOverviewPage() {
                   </div>
                 </div>
               </Panel>
-            )}
+            ) : <Panel title={codexPresent ? 'Leverage: Claude Code spend by skill and subagent' : 'Leverage: spend by skill and subagent'} subtitle="30 days"><Muted>{view === 'openai' ? "Codex doesn't send this." : 'No spend on skills or subagents in the last 30 days yet.'}</Muted></Panel>}
 
-            <EfficiencyCard metrics={data!.metrics} claude={claudeRow} />
+            <EfficiencyCard metrics={data!.metrics} claude={claudeRow} codexView={view === 'openai'} />
 
             <SpendConcentrationCard data={data?.spendConcentration ?? null} />
 
-            {(data?.highFrictionSessions?.length ?? 0) > 0 && (
+            {(data?.highFrictionSessions?.length ?? 0) > 0 ? (
               <Panel title="High-friction sessions" subtitle="Last 7 days" flush>
                 <div className="px-4 pt-3 pb-2">
                   <Muted>Sessions where over a quarter of tool actions failed: a coaching signal, not a fault list.</Muted>
@@ -621,7 +630,7 @@ export default function CodePulseOverviewPage() {
                   ))}
                 </ul>
               </Panel>
-            )}
+            ) : <Panel title="High-friction sessions" subtitle="Last 7 days"><Muted>No high-friction sessions in the last 7 days.</Muted></Panel>}
 
             <Muted>
               The Work mix, the By hand estimate and the AI summary are judged; everything else is measured from

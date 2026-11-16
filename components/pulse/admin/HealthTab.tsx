@@ -4,7 +4,7 @@
 'use client';
 
 import { useEffect, useState } from 'react';
-import { Panel, Strip, Figure, Muted, Notice, Tag, Pill, B, T, cx } from '@/components/precision/ui';
+import { Panel, Strip, Figure, Muted, Notice, Tag, Pill, B, T, cx, LOAD_FAILED } from '@/components/precision/ui';
 import { PRODUCTS } from '@/lib/dashboard/vendor';
 import { SaveMsg } from '@/components/admin/precision-admin';
 import { shownContent } from '@/lib/retention/marker';
@@ -351,15 +351,16 @@ interface GovernanceHealthData {
 
 function GovernanceHealthSection() {
   const [gov, setGov] = useState<GovernanceHealthData | null>(null);
+  const [govFailed, setGovFailed] = useState(false);
 
   useEffect(() => {
     fetch('/api/pulse/governance-health')
       .then(r => r.ok ? r.json() : Promise.reject())
       .then(setGov)
-      .catch(() => setGov(null));
+      .catch(() => { setGov(null); setGovFailed(true); });
   }, []);
 
-  if (!gov) return null;
+  if (!gov) return <Panel title="Governance health"><Muted>{govFailed ? LOAD_FAILED : 'Loading…'}</Muted></Panel>;
   const critical = gov.thresholds?.critical ?? 0.3;
   const warning = gov.thresholds?.warning ?? 0.5;
   const state: 'bad' | 'warn' | 'good' =

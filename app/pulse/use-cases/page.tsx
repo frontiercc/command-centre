@@ -9,7 +9,7 @@ import TopBar from '@/components/layout/TopBar';
 import LoadingSpinner from '@/components/shared/LoadingSpinner';
 import { useSessionRole } from '@/components/shared/useSessionRole';
 import {
-  PageBody, Toolbar, Panel, PanelFoot, Strip, Figure, T, Tag, Pill, Notice, Empty, Spark, cx,
+  PageBody, Toolbar, Panel, PanelFoot, Strip, Figure, T, Tag, Pill, Notice, Empty, Spark, cx, Muted,
 } from '@/components/precision/ui';
 
 interface GovernanceBet {
@@ -242,7 +242,11 @@ function BetsPanel({ bets, minutesPerSession }: { bets: GovernanceBet[]; minutes
 }
 
 function WorkflowsByLifecycle({ workflows, total }: { workflows: GovernanceWorkflow[]; total: number }) {
-  if (workflows.length === 0) return null;
+  if (workflows.length === 0) return (
+    <Panel title="Other confirmed use cases" subtitle="Everything confirmed that is not marked as a strategic bet, grouped by lifecycle">
+      <Muted>No other confirmed use cases yet.</Muted>
+    </Panel>
+  );
   const groups = LIFECYCLE_ORDER
     .map(lifecycle => ({ lifecycle, workflows: workflows.filter(wf => wf.lifecycle === lifecycle) }))
     .filter(g => g.workflows.length > 0);

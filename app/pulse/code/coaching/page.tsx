@@ -11,14 +11,14 @@ import { Suspense, useCallback, useEffect, useState } from 'react';
 import { useSearchParams } from 'next/navigation';
 import TopBar from '@/components/layout/TopBar';
 import LoadingSpinner from '@/components/shared/LoadingSpinner';
-import { PageBody, Toolbar, Notice, B, cx } from '@/components/precision/ui';
+import { PageBody, Toolbar, Notice, B, cx, Muted } from '@/components/precision/ui';
 import { Frame, Track, linkCls } from '@/components/pulse/WorkPulseOverview';
 import { tierNamesOr } from '@/lib/pulse/tier-names';
 import CoachingDone from '@/components/pulse/CoachingDone';
 import { BEYOND_QUICK } from '@/lib/pulse/code/coaching-words';
 import type { CoachingPlan, PlanAction } from '@/lib/pulse/code/team-coaching';
 
-interface Data { teams: string[]; department: string | null; plan: CoachingPlan | null; checkAfterDays: number }
+interface Data { teams: string[]; department: string | null; plan: CoachingPlan | null; checkAfterDays: number; /** Off hides What it freed. */ humanTimeOn?: boolean }
 
 const pct = (v: number | null) => (v === null ? 'not measured' : `${Math.round(v * 100)}%`);
 
@@ -171,7 +171,7 @@ function TeamCoaching() {
               </Frame>
             </div>
 
-            {plan.figures.freed && (
+            {plan.figures.freed ? (
               <Frame
                 title="What it freed"
                 tag="AI estimate"
@@ -192,7 +192,7 @@ function TeamCoaching() {
                   </div>
                 ))}
               </Frame>
-            )}
+            ) : (data?.humanTimeOn ?? true) ? <Frame title="What it freed" tag="AI estimate" period="Last 30 days"><Muted>No sessions with a by-hand estimate in the last 30 days yet.</Muted></Frame> : null}
 
             <Frame
               title="What to try"
@@ -234,7 +234,7 @@ function TeamCoaching() {
               ))}
             </Frame>
 
-            {plan.pastActions.length > 0 && (
+            {plan.pastActions.length > 0 ? (
               <Frame
                 title="Done before"
                 period={`${plan.pastActions.length} ${plan.pastActions.length === 1 ? 'action' : 'actions'}`}
@@ -247,7 +247,7 @@ function TeamCoaching() {
                   </div>
                 ))}
               </Frame>
-            )}
+            ) : <Frame title="Done before"><Muted>Nothing done before yet. Actions you mark done move here once their figure has moved.</Muted></Frame>}
           </>
         )}
       </PageBody>

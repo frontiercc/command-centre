@@ -12,7 +12,7 @@
 import Link from 'next/link';
 import { useEffect, useState } from 'react';
 import { QuestionCard, shareWords, cap } from '@/components/dashboard/QuestionCard';
-import { B } from '@/components/precision/ui';
+import { B, Muted, LOAD_FAILED } from '@/components/precision/ui';
 import { Frame, Track, linkCls } from '@/components/pulse/WorkPulseOverview';
 import {
   depthColumns, depthSentence, gridSentence, DepthChart, DepthSwitch, TierGrid, TierLegend,
@@ -177,7 +177,13 @@ export interface ByHand {
 export function ByHandPanel({ h, who, onSeeSessions, tool = 'Claude', surface = 'code' }: {
   h: ByHand | null | undefined; who: Who; onSeeSessions?: () => void; tool?: string; surface?: 'code' | 'cowork';
 }) {
-  if (!h || h.sessions === 0) return null;
+  // Off, or not this viewer's to see: no panel. On with no sessions: say so.
+  if (!h) return null;
+  if (h.sessions === 0) return (
+    <Frame title={`By hand vs with ${tool}`}>
+      <Muted>No sessions with a by-hand estimate yet.</Muted>
+    </Frame>
+  );
   const whose = who.you ? 'your work' : `${who.name}'s work`;
   const longer = h.ratio === null ? null
     : h.ratio >= 1.8 && h.ratio < 2.5 ? 'about twice as long'
@@ -366,7 +372,11 @@ export function PeoplePanel({ rows, dept, names, thenVsNow }: {
   // Users refuses viewers, so a viewer sees names without a link.
   const role = useSessionRole();
   const canOpen = role !== '' && role !== 'viewer';
-  if (rows.length === 0) return null;
+  if (rows.length === 0) return (
+    <Frame title={`Who is in ${dept}`}>
+      <Muted>No one in {dept} has any activity yet.</Muted>
+    </Frame>
+  );
   const tiers = tierList(names);
   const top = rows[0];
   const quiet = rows.filter(r => r.all === 0);
@@ -570,4 +580,24 @@ export function SpendPanel({ s, product, who, reviewHref }: { s: MonthSpend; pro
       ))}
     </Frame>
   );
+}
+
+/**
+ * The period panels when there is nothing to put in them: no work recorded yet, or it
+ * failed to load. Each keeps its place on the page and says which.
+ */
+export function EmptyPeriodPanels({ who, failed, team = false }: { who: Who; failed: boolean; team?: boolean }) {
+  const msg = failed ? LOAD_FAILED : `Nothing has been recorded for ${who.you ? 'you' : who.name} yet.`;
+  const titles = [
+    who.you ? 'Your work' : `${who.name}'s work`,
+    `Is ${poss(who)} work getting deeper?`,
+    who.you ? 'What you produced' : 'What they produced',
+    team ? 'Skills and connectors other teams use' : 'Skills and connectors colleagues use',
+  ];
+  return <>{titles.map(t => <Frame key={t} title={t}><Muted>{msg}</Muted></Frame>)}</>;
+}
+
+/** The spend panel when its figures failed to load. */
+export function SpendFailed({ who }: { who: Who }) {
+  return <Frame title={who.you ? 'Your spend' : 'Their spend'}><Muted>{LOAD_FAILED}</Muted></Frame>;
 }

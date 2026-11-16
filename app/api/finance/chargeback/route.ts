@@ -79,10 +79,12 @@ export async function GET(request: NextRequest) {
   // Additive, never-throwing: a seats-computation failure must never break
   // the chargeback report. Never touches grandTotalUsd/buildChargeback/close
   // snapshots — computed here, not in lib/finance/chargeback.ts.
-  const seats = await getSeatsSummary(nowS).catch(() => null);
+  // Parts that failed to build: their panels say they couldn't load, never vanish.
+  const failed: string[] = [];
+  const seats = await getSeatsSummary(nowS).catch(() => { failed.push('seats'); return null; });
   // The ChatGPT licence: OpenAI charges it per seat, apart from usage, so it
   // sits beside the usage figures and is never added to grandTotalUsd.
-  const chatgptSeats = (await openaiShown()) ? await getChatgptSeatsSummary(nowS).catch(() => null) : null;
+  const chatgptSeats = (await openaiShown()) ? await getChatgptSeatsSummary(nowS).catch(() => { failed.push('seats'); return null; }) : null;
 
   // Claude in Office: an estimate from tokens (Office sends no cost), shown
   // beside the surfaces and never part of grandTotalUsd, a cost centre, a
@@ -93,8 +95,8 @@ export async function GET(request: NextRequest) {
   // Admin → Work Pulse "Show Claude in Office" off hides the panel.
   const officeShown = (await getAllConfig()).claudeInOfficeShown !== 'false';
   const office = officeShown
-    ? await officeSpendByUser(start, end).then(rows => summariseOfficeSpend(rows, { allApps: true })).catch(() => null)
+    ? await officeSpendByUser(start, end).then(rows => summariseOfficeSpend(rows, { allApps: true })).catch(() => { failed.push('office'); return null; })
     : null;
 
-  return NextResponse.json({ ...current, projection, projectionByVendor, insight, seats, chatgptSeats, office });
+  return NextResponse.json({ ...current, projection, projectionByVendor, insight, seats, chatgptSeats, office, failed });
 }

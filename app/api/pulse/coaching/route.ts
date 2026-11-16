@@ -18,6 +18,7 @@ import { listDoneActions } from '@/lib/pulse/coaching-store';
 import { coachingScope } from '@/lib/pulse/coaching-scope';
 import { visibleOpenAi, visibleVendor } from '@/lib/sources/openai-visibility';
 import { hasOpenAiData } from '@/lib/dashboard/queries';
+import { humanTimeOn } from '@/lib/pulse/human-time-flags';
 
 export const dynamic = 'force-dynamic';
 
@@ -49,6 +50,7 @@ export async function GET(request: NextRequest) {
     return NextResponse.json({
       teams: scope.teams, department: scope.department, plan, checkAfterDays: CHECK_AFTER_DAYS,
       openaiPresent: await visibleOpenAi(hasOpenAiData()),
+      humanTimeOn: await humanTimeOn('cowork'),
     });
   } catch (err) {
     return errorResponse('pulse/coaching', err);

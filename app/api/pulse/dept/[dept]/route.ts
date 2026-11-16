@@ -314,6 +314,8 @@ export async function GET(
 
   // Frontier boxes + feed. Own try/catch so a failure hides
   // the boxes, not the page.
+  // Parts that failed to build: their panels say they couldn't load, never look empty.
+  const failed: string[] = [];
   let frontier = null;
   try {
     frontier = await buildFrontierView({ dept }, now, {
@@ -322,6 +324,7 @@ export async function GET(
     }, vendor);
   } catch (err) {
     console.error('[pulse/dept] frontier view failed', err);
+    failed.push('frontier');
   }
 
   const deptBriefingRows = await client
@@ -432,6 +435,7 @@ export async function GET(
     });
   } catch (err) {
     console.error('[pulse/dept] period failed', err);
+    failed.push('period');
   }
 
   // Each person in plain numbers over the same window: how much of their work reached the top
@@ -471,9 +475,11 @@ export async function GET(
     spendThisMonth = await monthSpend(memberIds, vendor, now);
   } catch (err) {
     console.error('[pulse/dept] month spend failed', err);
+    failed.push('spend');
   }
 
   return NextResponse.json({
+    failed,
     humanTime,
     period,
     spendThisMonth,

@@ -248,7 +248,11 @@ export function concentrationOfTotal(centres: ProductRow[], grandTotalUsd: numbe
 
 export function ConcentrationCard({ costCentres, grandTotalUsd, openaiOnly }: { costCentres: ProductRow[]; grandTotalUsd: number; openaiOnly: boolean }) {
   const tiers = concentrationOfTotal(costCentres, grandTotalUsd);
-  if (!tiers) return null;
+  if (!tiers) return (
+    <Panel title="Spend concentration" subtitle="Share of total spend by top cost centres">
+      <Muted>Too few cost centres with spend this month to say.</Muted>
+    </Panel>
+  );
   const products = productsPresent(costCentres.map(partsOfRow), { openaiOnly });
   return (
     <Panel title="Spend concentration" subtitle="Share of total spend by top cost centres" flush>

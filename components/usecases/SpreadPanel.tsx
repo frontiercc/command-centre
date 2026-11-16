@@ -25,8 +25,9 @@ interface SpreadCandidate { userId: string; displayName: string; matchedSignal: 
 interface SpreadDept { dept: string; adopterCount: number; users: SpreadCandidate[]; more: number }
 export type SpreadData = { departments: SpreadDept[] } | { unsupported: 'no_skill' } | null;
 
-export default function SpreadPanel({ spread }: { spread: SpreadData }) {
-  if (!spread) return null;
+export default function SpreadPanel({ spread, archived = false }: { spread: SpreadData; archived?: boolean }) {
+  // Spread is worked out for confirmed use cases only.
+  if (!spread) return <Panel title="Spread opportunities"><Muted>{archived ? 'This use case is archived.' : 'Confirm this use case first.'}</Muted></Panel>;
 
   if ('unsupported' in spread) {
     return (

@@ -328,11 +328,15 @@ export async function GET(request: NextRequest) {
   });
 
   // ── Act-next list (Workflow Impact) — additive, never blocks the page ──
+  // Parts that failed to build: their panels say they couldn't load, never look empty.
+  const failed: string[] = [];
   let actNext: ActNextRow[] = [];
   try {
     actNext = await buildActNext(session.role ?? 'viewer', now);
-  } catch {
+  } catch (e) {
+    console.error('[pulse/cio] act-next failed', e);
     actNext = [];
+    failed.push('actNext');
   }
 
   // ── Department process boxes (Department Process Transformation) —
@@ -350,8 +354,10 @@ export async function GET(request: NextRequest) {
       suggestions: box.suggestions.map(s => ({ id: s.id, title: s.title, people: s.canvas?.people ?? null })),
       groups: box.groups.map(g => ({ surface: g.surface, label: g.label, suggestions: g.suggestions.map(s => ({ id: s.id, title: s.title })) })),
     }));
-  } catch {
+  } catch (e) {
+    console.error('[pulse/cio] department processes failed', e);
     deptProcesses = [];
+    failed.push('deptProcesses');
   }
 
   const realWorkFloorRaw = await getConfigValue('targetDeptRealWorkPct');
@@ -359,6 +365,7 @@ export async function GET(request: NextRequest) {
   return NextResponse.json({
     vendor,
     openaiPresent,
+    failed,
     adoptionHero: { ...hero, concentrationPct },
     signalCards,
     briefing: briefing ?? null,

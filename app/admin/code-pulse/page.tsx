@@ -15,7 +15,7 @@ import GithubIdentityPanel from '@/components/pulse/admin/GithubIdentityPanel';
 import { effectiveCodeHumanTime } from '@/lib/pulse/human-time';
 import { DEFAULT_CODE_CLASSIFIER_CONFIG } from '@/lib/pulse/code/classifier-prompt';
 import { codeWorkTypeLabel } from '@/lib/pulse/code/work-type-labels';
-import { PageBody, Panel, Tabs, Figure, Tag, Pill, Notice, Muted, SubHead, B, T, cx } from '@/components/precision/ui';
+import { PageBody, Panel, Tabs, Figure, Tag, Pill, Notice, Muted, SubHead, B, T, cx, LOAD_FAILED } from '@/components/precision/ui';
 import { ToggleRow, Field } from '@/components/admin/precision-admin';
 
 type Tab = 'overview' | 'github' | 'value' | 'framework' | 'rates' | 'data-quality' | 'classifier-health' | 'tiers';
@@ -402,16 +402,18 @@ function RatesPanel({ prefillModel }: { prefillModel: string | null }) {
   const [data, setData] = useState<RatesData | null>(null);
   const [rows, setRows] = useState<Array<{ model: string } & ModelRate>>([]);
   const [saving, setSaving] = useState(false);
+  const [failed, setFailed] = useState(false);
   const { showToast } = useToast();
 
   const load = () => {
     fetch('/api/pulse/code/rates')
-      .then(r => r.json())
+      .then(r => { if (!r.ok) throw new Error(String(r.status)); return r.json(); })
       .then((d: RatesData) => {
         setData(d);
+        setFailed(false);
         setRows(Object.entries(d.rates).map(([model, r]) => ({ model, ...r })));
       })
-      .catch(() => {});
+      .catch(() => setFailed(true));
   };
 
   useEffect(() => { load(); }, []);
@@ -447,7 +449,7 @@ function RatesPanel({ prefillModel }: { prefillModel: string | null }) {
     }
   };
 
-  if (!data) return <LoadingSpinner />;
+  if (!data) return failed ? <Panel title="Model rates ($/MTok)"><Muted>{LOAD_FAILED}</Muted></Panel> : <LoadingSpinner />;
 
   return (
     <Panel title="Model rates ($/MTok)" flush>
@@ -553,15 +555,16 @@ function StalenessChip({ timestamp, warnAfterHours }: { timestamp: number | stri
 
 function HealthPanel({ onAddRate }: { onAddRate: (model: string) => void }) {
   const [health, setHealth] = useState<CodeHealth | null>(null);
+  const [failed, setFailed] = useState(false);
 
   useEffect(() => {
     fetch('/api/pulse/code/health')
-      .then(r => r.json())
+      .then(r => { if (!r.ok) throw new Error(String(r.status)); return r.json(); })
       .then(setHealth)
-      .catch(() => {});
+      .catch(() => setFailed(true));
   }, []);
 
-  if (!health) return <LoadingSpinner />;
+  if (!health) return failed ? <Panel title="Data quality"><Muted>{LOAD_FAILED}</Muted></Panel> : <LoadingSpinner />;
 
   const allClear = health.unpricedModels.length === 0
     && health.estimatedModels.length === 0
@@ -1005,7 +1008,7 @@ function CodePulseAdminContent() {
             })()}
 
             {/* Module status */}
-            {clf && (
+            {clf ? (
               <Panel title="Module status" flush>
                 <PanelFigures cols={3}>
                   <Figure label="Briefings generated" value={String(clf.briefings)} />
@@ -1020,7 +1023,7 @@ function CodePulseAdminContent() {
                   />
                 </PanelFigures>
               </Panel>
-            )}
+            ) : <Panel title="Module status"><Muted>{LOAD_FAILED}</Muted></Panel>}
           </div>
         )}
 

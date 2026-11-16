@@ -151,7 +151,7 @@ export default function UserDrillDown({ userId }: { userId: string }) {
       </Panel>
 
       {/* Metrics */}
-      {m && (() => {
+      {m ? (() => {
         // Described, never scored: the share of their judged tasks that were meaningful or
         // frontier, then and a week before, and the new ways of working they started.
         const now = deepShareOf(m.tier_1_count, m.tier_2_count, m.tier_3_count);
@@ -168,7 +168,7 @@ export default function UserDrillDown({ userId }: { userId: string }) {
             </p>
           </Panel>
         );
-      })()}
+      })() : <Panel title="Their work"><Muted>No activity recorded for this person yet.</Muted></Panel>}
 
       {/* Classification history */}
       <Panel

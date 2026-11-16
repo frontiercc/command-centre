@@ -8,7 +8,7 @@
 // work and the top three sessions, each naming who.
 import type { FrontierView } from '@/lib/pulse/frontier-view';
 import WorkDetail, { kindLabel } from '@/components/pulse/frontier/WorkDetail';
-import { Panel, Tag, Muted } from '@/components/precision/ui';
+import { Panel, Tag, Muted, LOAD_FAILED } from '@/components/precision/ui';
 import { tierNamesOr, type TierNames } from '@/lib/pulse/tier-names';
 
 interface FrontierHeroProps {
@@ -29,7 +29,8 @@ function EmptyHero({ text }: { text: string }) {
 }
 
 export default function FrontierHero({ view, canOpenUseCases, names }: FrontierHeroProps) {
-  if (!view) return null;
+  // The view is only missing when it failed to build.
+  if (!view) return <EmptyHero text={LOAD_FAILED} />;
   const t = tierNamesOr(names);
   const tierName = (n: number) => (n === 3 ? t.t3 : n === 2 ? t.t2 : t.t1);
 

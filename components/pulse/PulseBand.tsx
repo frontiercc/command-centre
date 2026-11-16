@@ -11,7 +11,7 @@
  */
 import { useEffect, useState } from 'react';
 import Link from 'next/link';
-import { Panel, Tag, Muted, Empty, Segmented } from '@/components/precision/ui';
+import { Panel, Tag, Muted, Empty, Segmented, LOAD_FAILED } from '@/components/precision/ui';
 import { WORK_PULSE_VENDOR_LABELS, type Vendor } from '@/lib/dashboard/vendor';
 import { useOpenAiOnly } from '@/components/shared/VendorSwitch';
 import { useSessionRole } from '@/components/shared/useSessionRole';
@@ -270,12 +270,13 @@ export default function PulseBand({ children, vendor = 'all', showVendor = false
   const openaiOnly = useOpenAiOnly();
   const [data, setData] = useState<OrgSummary | null>(null);
   const [loading, setLoading] = useState(true);
+  const [failed, setFailed] = useState(false);
 
   useEffect(() => {
     fetch(`/api/pulse/org-summary?vendor=${vendor}`)
       .then(r => r.ok ? r.json() : Promise.reject())
-      .then(setData)
-      .catch(() => setData(null))
+      .then(d => { setData(d); setFailed(false); })
+      .catch(() => { setData(null); setFailed(true); })
       .finally(() => setLoading(false));
   }, [vendor]);
 
@@ -288,7 +289,8 @@ export default function PulseBand({ children, vendor = 'all', showVendor = false
   return (
     <div className="flex flex-col gap-4">
       {loading && <Panel><Muted>Loading Work Pulse…</Muted></Panel>}
-      {!loading && !hasData && <Empty title="No Work Pulse data yet">Work appears here once Claude has classified it.</Empty>}
+      {!loading && failed && <Panel title="Work Pulse"><Muted>{LOAD_FAILED}</Muted></Panel>}
+      {!loading && !failed && !hasData && <Empty title="No Work Pulse data yet">Work appears here once Claude has classified it.</Empty>}
       {(loading || !hasData) && children}
 
       {!loading && hasData && data && (

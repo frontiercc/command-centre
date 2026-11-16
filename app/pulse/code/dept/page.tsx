@@ -13,7 +13,7 @@ import { DepthPanel, ByHandPanel, type ByHand, type Who } from '@/components/pul
 import { CodeWorkPanel, CodeWorkMix, type CodePeriodWork, type CodeWorkMixRow } from '@/components/pulse/code/CodePulsePanels';
 import type { PulsePeriod } from '@/lib/pulse/period-shape';
 import type { TierNames } from '@/lib/pulse/tier-names';
-import { PageBody, Toolbar, Panel, Notice, Empty, B, cx } from '@/components/precision/ui';
+import { PageBody, Toolbar, Panel, Notice, Empty, Muted, B, cx, LOAD_FAILED } from '@/components/precision/ui';
 import { useVendor, useOpenAiOnly, VendorSwitch } from '@/components/shared/VendorSwitch';
 import { DEVELOPER_PULSE_VENDOR_LABELS } from '@/lib/dashboard/vendor';
 
@@ -159,7 +159,7 @@ function DeptContent() {
 
         {!detailLoading && !notInView && detail && (
           <>
-            {detail.periodWork && (
+            {detail.periodWork ? (
               <CodeWorkPanel
                 w={detail.periodWork}
                 who={who(detail.dept)}
@@ -167,7 +167,7 @@ function DeptContent() {
                 onPeriod={setPeriod}
                 product={openaiOnly ? 'Codex' : codexPresent && vendor === 'all' ? 'Claude Code and Codex' : vendor === 'openai' ? 'Codex' : 'Claude Code'}
               />
-            )}
+            ) : <Panel title={`${detail.dept}'s coding work`}><Muted>{LOAD_FAILED}</Muted></Panel>}
 
             {(detail.tierGrid?.length ?? 0) > 0 && (
               <DepthPanel

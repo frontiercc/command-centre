@@ -71,13 +71,13 @@ export default function ReportViewer({
       </div>
 
       {/* Executive summary highlight */}
-      {report.content_summary && (
+      {(
         <div className="mx-6 mt-5 border border-[#EAEAEA] bg-[#FAFAFA] rounded-[14px] px-4 py-3 flex flex-col gap-1.5">
           <div className="flex items-center gap-2">
             <h3 className="m-0 text-[14px] font-semibold text-[#0A0A0A]">Executive summary</h3>
             <Tag tone="judged">AI summary</Tag>
           </div>
-          <p className="m-0 text-[14px] text-[#333333] leading-[1.6]">{report.content_summary}</p>
+          <p className={report.content_summary ? 'm-0 text-[14px] text-[#333333] leading-[1.6]' : 'm-0 text-[13px] text-[#8F8F8F]'}>{report.content_summary || 'No summary was written for this report.'}</p>
         </div>
       )}
 

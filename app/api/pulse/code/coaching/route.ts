@@ -14,6 +14,7 @@ import { getCoachingFigures } from '@/lib/pulse/code/coaching-figures';
 import { buildCoachingPlan, CHECK_AFTER_DAYS } from '@/lib/pulse/code/team-coaching';
 import { listDoneActions } from '@/lib/pulse/coaching-store';
 import { coachingScope } from '@/lib/pulse/coaching-scope';
+import { humanTimeOn } from '@/lib/pulse/human-time-flags';
 
 export const dynamic = 'force-dynamic';
 
@@ -42,7 +43,7 @@ export async function GET(request: NextRequest) {
     const plan = scope.department
       ? buildCoachingPlan(scope.department, figures, await listDoneActions('code', scope.department), Math.floor(Date.now() / 1000))
       : null;
-    return NextResponse.json({ teams: scope.teams, department: scope.department, plan, checkAfterDays: CHECK_AFTER_DAYS });
+    return NextResponse.json({ teams: scope.teams, department: scope.department, plan, checkAfterDays: CHECK_AFTER_DAYS, humanTimeOn: await humanTimeOn('code') });
   } catch (err) {
     return errorResponse('pulse/code/coaching', err);
   }
