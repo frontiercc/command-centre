@@ -2,25 +2,24 @@
 
 Frontier Command Centre uses the open-source packages below when it runs. Development-only tools are not listed. This file is generated from package-lock.json and the installed packages by `npm run notices`, and CI checks it is current. For each package it gives the version, licence and source, the copyright lines from the package's licence file and, where the package ships one, its NOTICE file. The text of each licence follows the list.
 
-454 packages:
+414 packages:
 
 | Licence | Packages |
 |---|---|
-| MIT | 274 |
+| MIT | 247 |
 | Apache-2.0 | 119 |
-| ISC | 25 |
+| ISC | 14 |
 | LGPL-3.0-or-later | 10 |
 | BlueOak-1.0.0 | 6 |
 | BSD-2-Clause | 4 |
-| BSD-3-Clause | 4 |
 | Apache-2.0 AND LGPL-3.0-or-later | 3 |
+| BSD-3-Clause | 3 |
 | (MIT AND Zlib) | 1 |
 | (MIT OR GPL-3.0-or-later) | 1 |
 | 0BSD | 1 |
 | Apache-2.0 AND LGPL-3.0-or-later AND MIT | 1 |
 | BSD | 1 |
 | CC-BY-4.0 | 1 |
-| MIT AND ISC | 1 |
 | MIT-0 | 1 |
 | Unlicense | 1 |
 
@@ -761,12 +760,6 @@ Installed on some machines only; licence taken from package-lock.json.
 
 Licence: MIT. Source: https://github.com/nodable/val-parsers.
 
-### @reduxjs/toolkit 2.12.0
-
-Licence: MIT. Source: https://github.com/reduxjs/redux-toolkit.
-
-- Copyright (c) 2018 Mark Erikson
-
 ### @smithy/chunked-blob-reader 5.2.2
 
 Licence: Apache-2.0. Source: https://github.com/smithy-lang/smithy-typescript.
@@ -1250,18 +1243,6 @@ Licence: MIT. Source: https://github.com/StableLib/stablelib.
 
 - Copyright (C) 2016 Dmitry Chestnykh
 
-### @standard-schema/spec 1.1.0
-
-Licence: MIT. Source: https://github.com/standard-schema/standard-schema.
-
-- Copyright (c) 2024 Colin McDonnell
-
-### @standard-schema/utils 0.3.0
-
-Licence: MIT. Source: https://github.com/standard-schema/standard-schema.
-
-- Copyright (c) 2024 Fabian Hiller
-
 ### @swc/helpers 0.5.15
 
 Licence: Apache-2.0. Source: https://github.com/swc-project/swc.
@@ -1270,60 +1251,6 @@ Licence: Apache-2.0. Source: https://github.com/swc-project/swc.
 - copyright license to reproduce, prepare Derivative Works of,
 - (c) You must retain, in the Source form of any Derivative Works
 - Copyright 2024 SWC contributors.
-
-### @types/d3-array 3.2.2
-
-Licence: MIT. Source: https://github.com/DefinitelyTyped/DefinitelyTyped.
-
-- Copyright (c) Microsoft Corporation.
-
-### @types/d3-color 3.1.3
-
-Licence: MIT. Source: https://github.com/DefinitelyTyped/DefinitelyTyped.
-
-- Copyright (c) Microsoft Corporation.
-
-### @types/d3-ease 3.0.2
-
-Licence: MIT. Source: https://github.com/DefinitelyTyped/DefinitelyTyped.
-
-- Copyright (c) Microsoft Corporation.
-
-### @types/d3-interpolate 3.0.4
-
-Licence: MIT. Source: https://github.com/DefinitelyTyped/DefinitelyTyped.
-
-- Copyright (c) Microsoft Corporation.
-
-### @types/d3-path 3.1.1
-
-Licence: MIT. Source: https://github.com/DefinitelyTyped/DefinitelyTyped.
-
-- Copyright (c) Microsoft Corporation.
-
-### @types/d3-scale 4.0.9
-
-Licence: MIT. Source: https://github.com/DefinitelyTyped/DefinitelyTyped.
-
-- Copyright (c) Microsoft Corporation.
-
-### @types/d3-shape 3.1.8
-
-Licence: MIT. Source: https://github.com/DefinitelyTyped/DefinitelyTyped.
-
-- Copyright (c) Microsoft Corporation.
-
-### @types/d3-time 3.0.4
-
-Licence: MIT. Source: https://github.com/DefinitelyTyped/DefinitelyTyped.
-
-- Copyright (c) Microsoft Corporation.
-
-### @types/d3-timer 3.0.2
-
-Licence: MIT. Source: https://github.com/DefinitelyTyped/DefinitelyTyped.
-
-- Copyright (c) Microsoft Corporation.
 
 ### @types/debug 4.1.13
 
@@ -1380,12 +1307,6 @@ Licence: MIT. Source: https://github.com/DefinitelyTyped/DefinitelyTyped.
 - Copyright (c) Microsoft Corporation.
 
 ### @types/unist 3.0.3
-
-Licence: MIT. Source: https://github.com/DefinitelyTyped/DefinitelyTyped.
-
-- Copyright (c) Microsoft Corporation.
-
-### @types/use-sync-external-store 0.0.6
 
 Licence: MIT. Source: https://github.com/DefinitelyTyped/DefinitelyTyped.
 
@@ -1647,12 +1568,6 @@ Licence: ISC. Source: http://github.com/yargs/cliui.
 
 - Copyright (c) 2015, Contributors
 
-### clsx 2.1.1
-
-Licence: MIT. Source: https://github.com/lukeed/clsx.
-
-- Copyright (c) Luke Edwards <luke.edwards05@gmail.com> (lukeed.com)
-
 ### color-convert 2.0.1
 
 Licence: MIT. Source: https://github.com/Qix-/color-convert.
@@ -1704,73 +1619,6 @@ Licence: MIT. Source: https://github.com/frenic/csstype.
 
 - Copyright (c) 2017-2018 Fredrik Nicol
 
-### d3-array 3.2.4
-
-Licence: ISC. Source: https://github.com/d3/d3-array.
-
-- Copyright 2010-2023 Mike Bostock
-
-### d3-color 3.1.0
-
-Licence: ISC. Source: https://github.com/d3/d3-color.
-
-- Copyright 2010-2022 Mike Bostock
-
-### d3-ease 3.0.1
-
-Licence: BSD-3-Clause. Source: https://github.com/d3/d3-ease.
-
-- Copyright 2010-2021 Mike Bostock
-- Copyright 2001 Robert Penner
-
-### d3-format 3.1.2
-
-Licence: ISC. Source: https://github.com/d3/d3-format.
-
-- Copyright 2010-2026 Mike Bostock
-
-### d3-interpolate 3.0.1
-
-Licence: ISC. Source: https://github.com/d3/d3-interpolate.
-
-- Copyright 2010-2021 Mike Bostock
-
-### d3-path 3.1.0
-
-Licence: ISC. Source: https://github.com/d3/d3-path.
-
-- Copyright 2015-2022 Mike Bostock
-
-### d3-scale 4.0.2
-
-Licence: ISC. Source: https://github.com/d3/d3-scale.
-
-- Copyright 2010-2021 Mike Bostock
-
-### d3-shape 3.2.0
-
-Licence: ISC. Source: https://github.com/d3/d3-shape.
-
-- Copyright 2010-2022 Mike Bostock
-
-### d3-time 3.1.0
-
-Licence: ISC. Source: https://github.com/d3/d3-time.
-
-- Copyright 2010-2022 Mike Bostock
-
-### d3-time-format 4.1.0
-
-Licence: ISC. Source: https://github.com/d3/d3-time-format.
-
-- Copyright 2010-2021 Mike Bostock
-
-### d3-timer 3.0.1
-
-Licence: ISC. Source: https://github.com/d3/d3-timer.
-
-- Copyright 2010-2021 Mike Bostock
-
 ### debug 4.4.3
 
 Licence: MIT. Source: https://github.com/debug-js/debug.
@@ -1783,12 +1631,6 @@ Licence: MIT. Source: https://github.com/debug-js/debug.
 Licence: MIT. Source: https://github.com/sindresorhus/decamelize.
 
 - Copyright (c) Sindre Sorhus <sindresorhus@gmail.com> (sindresorhus.com)
-
-### decimal.js-light 2.5.1
-
-Licence: MIT. Source: https://github.com/MikeMcl/decimal.js-light.
-
-- Copyright (c) 2020 Michael Mclaughlin
 
 ### decode-named-character-reference 1.3.0
 
@@ -1834,13 +1676,6 @@ Licence: MIT. Source: https://github.com/mathiasbynens/emoji-regex.
 
 - Copyright Mathias Bynens <https://mathiasbynens.be/>
 
-### es-toolkit 1.47.0
-
-Licence: MIT. Source: https://github.com/toss/es-toolkit.
-
-- Copyright (c) 2024 Viva Republica, Inc
-- Copyright OpenJS Foundation and other contributors
-
 ### esbuild 0.28.1
 
 Licence: MIT. Source: https://github.com/evanw/esbuild.
@@ -1864,12 +1699,6 @@ Licence: MIT. Source: https://github.com/syntax-tree/estree-util-is-identifier-n
 Licence: MIT. Source: https://github.com/mysticatea/event-target-shim.
 
 - Copyright (c) 2015 Toru Nagashima
-
-### eventemitter3 5.0.4
-
-Licence: MIT. Source: https://github.com/primus/eventemitter3.
-
-- Copyright (c) 2014 Arnout Kazemier
 
 ### events 3.3.0
 
@@ -1974,18 +1803,6 @@ Licence: MIT. Source: https://github.com/calvinmetcalf/immediate.
 
 - Copyright (c) 2012 Barnesandnoble.com, llc, Donavon West, Domenic Denicola, Brian Cavalier
 
-### immer 10.2.0
-
-Licence: MIT. Source: https://github.com/immerjs/immer.
-
-- Copyright (c) 2017 Michel Weststrate
-
-### immer 11.1.8
-
-Licence: MIT. Source: https://github.com/immerjs/immer.
-
-- Copyright (c) 2017 Michel Weststrate
-
 ### inherits 2.0.4
 
 Licence: ISC. Source: https://github.com/isaacs/inherits.
@@ -1998,12 +1815,6 @@ Licence: ISC. Source: https://github.com/isaacs/inherits.
 Licence: MIT. Source: https://github.com/remarkablemark/inline-style-parser.
 
 - Copyright (c) 2012 TJ Holowaychuk <tj@vision-media.ca>
-
-### internmap 2.0.3
-
-Licence: ISC. Source: https://github.com/mbostock/internmap.
-
-- Copyright 2021 Mike Bostock
 
 ### is-alphabetical 2.0.1
 
@@ -2639,23 +2450,11 @@ Licence: MIT. Source: https://github.com/facebook/react.
 
 - Copyright (c) Facebook, Inc. and its affiliates.
 
-### react-is 16.13.1
-
-Licence: MIT. Source: https://github.com/facebook/react.
-
-- Copyright (c) Facebook, Inc. and its affiliates.
-
 ### react-markdown 10.1.0
 
 Licence: MIT. Source: https://github.com/remarkjs/react-markdown.
 
 - Copyright (c) Espen Hovlandsdal
-
-### react-redux 9.3.0
-
-Licence: MIT. Source: https://github.com/reduxjs/react-redux.
-
-- Copyright (c) 2015-present Dan Abramov
 
 ### readable-stream 2.3.8
 
@@ -2679,24 +2478,6 @@ Licence: Apache-2.0. Source: https://github.com/Yqnn/node-readdir-glob.
 - copyright license to reproduce, prepare Derivative Works of,
 - (c) You must retain, in the Source form of any Derivative Works
 - Copyright 2020 Yann Armelin
-
-### recharts 3.8.1
-
-Licence: MIT. Source: https://github.com/recharts/recharts.
-
-- Copyright (c) 2015-present recharts
-
-### redux 5.0.1
-
-Licence: MIT. Source: https://github.com/reduxjs/redux.
-
-- Copyright (c) 2015-present Dan Abramov
-
-### redux-thunk 3.1.0
-
-Licence: MIT. Source: https://github.com/reduxjs/redux-thunk.
-
-- Copyright (c) 2015-present Dan Abramov
 
 ### remark-gfm 4.0.1
 
@@ -2733,12 +2514,6 @@ Licence: MIT. Source: https://github.com/troygoode/node-require-directory.
 Licence: ISC. Source: https://github.com/yargs/require-main-filename.
 
 - Copyright (c) 2016, Contributors
-
-### reselect 5.1.1
-
-Licence: MIT. Source: https://github.com/reduxjs/reselect.
-
-- Copyright (c) 2015-2018 Reselect Contributors
 
 ### safe-buffer 5.1.2
 
@@ -2887,12 +2662,6 @@ Licence: Apache-2.0. Source: https://github.com/holepunchto/text-decoder.
 - copyright license to reproduce, prepare Derivative Works of,
 - (c) You must retain, in the Source form of any Derivative Works
 
-### tiny-invariant 1.3.3
-
-Licence: MIT. Source: https://github.com/alexreardon/tiny-invariant.
-
-- Copyright (c) 2019 Alexander Reardon
-
 ### trim-lines 3.0.1
 
 Licence: MIT. Source: https://github.com/wooorm/trim-lines.
@@ -2965,12 +2734,6 @@ Licence: MIT. Source: https://github.com/syntax-tree/unist-util-visit-parents.
 
 - Copyright (c) 2016 Titus Wormer <tituswormer@gmail.com>
 
-### use-sync-external-store 1.6.0
-
-Licence: MIT. Source: https://github.com/facebook/react.
-
-- Copyright (c) Meta Platforms, Inc. and affiliates.
-
 ### util-deprecate 1.0.2
 
 Licence: MIT. Source: https://github.com/TooTallNate/util-deprecate.
@@ -2994,10 +2757,6 @@ Licence: MIT. Source: https://github.com/vfile/vfile.
 Licence: MIT. Source: https://github.com/vfile/vfile-message.
 
 - Copyright (c) Titus Wormer <tituswormer@gmail.com>
-
-### victory-vendor 37.3.6
-
-Licence: MIT AND ISC. Source: https://github.com/FormidableLabs/victory.
 
 ### which-module 2.0.1
 
@@ -4178,35 +3937,18 @@ SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
 ### BSD-3-Clause
 
-As included with d3-ease@3.0.1.
+As included with ieee754@1.2.1.
 
 ~~~text
-All rights reserved.
+Redistribution and use in source and binary forms, with or without modification, are permitted provided that the following conditions are met:
 
-Redistribution and use in source and binary forms, with or without modification,
-are permitted provided that the following conditions are met:
+1. Redistributions of source code must retain the above copyright notice, this list of conditions and the following disclaimer.
 
-* Redistributions of source code must retain the above copyright notice, this
-  list of conditions and the following disclaimer.
+2. Redistributions in binary form must reproduce the above copyright notice, this list of conditions and the following disclaimer in the documentation and/or other materials provided with the distribution.
 
-* Redistributions in binary form must reproduce the above copyright notice,
-  this list of conditions and the following disclaimer in the documentation
-  and/or other materials provided with the distribution.
+3. Neither the name of the copyright holder nor the names of its contributors may be used to endorse or promote products derived from this software without specific prior written permission.
 
-* Neither the name of the author nor the names of contributors may be used to
-  endorse or promote products derived from this software without specific prior
-  written permission.
-
-THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND CONTRIBUTORS "AS IS" AND
-ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE IMPLIED
-WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE ARE
-DISCLAIMED. IN NO EVENT SHALL THE COPYRIGHT OWNER OR CONTRIBUTORS BE LIABLE FOR
-ANY DIRECT, INDIRECT, INCIDENTAL, SPECIAL, EXEMPLARY, OR CONSEQUENTIAL DAMAGES
-(INCLUDING, BUT NOT LIMITED TO, PROCUREMENT OF SUBSTITUTE GOODS OR SERVICES;
-LOSS OF USE, DATA, OR PROFITS; OR BUSINESS INTERRUPTION) HOWEVER CAUSED AND ON
-ANY THEORY OF LIABILITY, WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT
-(INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE OF THIS
-SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
+THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND CONTRIBUTORS "AS IS" AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE ARE DISCLAIMED. IN NO EVENT SHALL THE COPYRIGHT HOLDER OR CONTRIBUTORS BE LIABLE FOR ANY DIRECT, INDIRECT, INCIDENTAL, SPECIAL, EXEMPLARY, OR CONSEQUENTIAL DAMAGES (INCLUDING, BUT NOT LIMITED TO, PROCUREMENT OF SUBSTITUTE GOODS OR SERVICES; LOSS OF USE, DATA, OR PROFITS; OR BUSINESS INTERRUPTION) HOWEVER CAUSED AND ON ANY THEORY OF LIABILITY, WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 ~~~
 
 ### CC-BY-4.0

@@ -344,6 +344,8 @@ export interface AppConfig {
   openaiSyncCursors: string;             // job-written (JSON: event type → last file end_time)
   openaiLastSyncAt: string;              // job-written (epoch seconds)
   openaiLastSyncStats: string;           // job-written (JSON)
+  pulseFirstDatesWorkFrom: string;       // migration/retention-written (epoch seconds): Work Pulse first dates complete from here
+  pulseFirstDatesCodeFrom: string;       // migration/retention-written (epoch seconds): Developer Pulse first dates complete from here
   // Department sync from Microsoft Entra ID (1.3.0): reads each person's
   // department at sign-in and in a daily lookup. Dormant until switched on and
   // the first-run preview is applied.
@@ -587,6 +589,8 @@ export const CONFIG_KEYS: Record<keyof AppConfig, string> = {
   openaiSyncCursors: 'openai_sync_cursors',
   openaiLastSyncAt: 'openai_last_sync_at',
   openaiLastSyncStats: 'openai_last_sync_stats',
+  pulseFirstDatesWorkFrom: 'pulse_first_dates_work_from',
+  pulseFirstDatesCodeFrom: 'pulse_first_dates_code_from',
   departmentSyncEnabled: 'department_sync_enabled',
   departmentSyncMap: 'department_sync_map',
   departmentSyncAppliedAt: 'department_sync_applied_at',
@@ -1005,6 +1009,8 @@ export async function getAllConfig(): Promise<AppConfig> {
     openaiSyncCursors: resolve('openaiSyncCursors'),
     openaiLastSyncAt: resolve('openaiLastSyncAt'),
     openaiLastSyncStats: resolve('openaiLastSyncStats'),
+    pulseFirstDatesWorkFrom: resolve('pulseFirstDatesWorkFrom'),
+    pulseFirstDatesCodeFrom: resolve('pulseFirstDatesCodeFrom'),
     departmentSyncEnabled: resolve('departmentSyncEnabled', 'false'),
     departmentSyncMap: resolve('departmentSyncMap', '{}'),
     departmentSyncAppliedAt: resolve('departmentSyncAppliedAt'),

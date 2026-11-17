@@ -3,7 +3,7 @@
 // Some icon drawings in this file are from Heroicons (MIT); see THIRD-PARTY-NOTICES.md.
 
 // Department Process Transformation — the draft-canvas modal opened
-// from a DeptProcessBoxes title/Open link on app/use-cases/page.tsx. Shows
+// from a suggestion on app/use-cases/page.tsx. Shows
 // what was measured from telemetry ("What we observed"), then confirms via
 // PATCH .../suggestions/[id] {action:'add'} (no slot fields:
 // owner/baseline/measure-of-success are edited on

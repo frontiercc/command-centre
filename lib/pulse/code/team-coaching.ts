@@ -19,7 +19,7 @@
  * close together aiming at the same figure say so, since the change cannot be put down to one.
  */
 import type { CoachingFigures, TeamFigures, WorkShare } from '@/lib/pulse/code/coaching-figures';
-import { TARGET_GAP_PP } from '@/lib/pulse/code/coaching-figures';
+import { TARGET_GAP_PP, LONG_NOTHING_SHARE, ACCEPTANCE_GAP } from '@/lib/pulse/code/coaching-figures';
 import type { TierNames } from '@/lib/pulse/tier-names';
 import { BEYOND_QUICK } from '@/lib/pulse/code/coaching-words';
 import { formatModelLabel } from '@/lib/pulse/code/model-label';
@@ -29,9 +29,8 @@ import {
   type DoneRecord, type PlanAction, type Suggested, type MetricRules,
 } from '@/lib/pulse/coaching-core';
 
-export { BEYOND_QUICK } from '@/lib/pulse/code/coaching-words';
-export { CHECK_AFTER_DAYS, SAME_WITHIN, COACHING_MIN_PEOPLE } from '@/lib/pulse/coaching-core';
-export type { CoachingResult, DoneRecord, PlanAction } from '@/lib/pulse/coaching-core';
+export { CHECK_AFTER_DAYS, COACHING_MIN_PEOPLE } from '@/lib/pulse/coaching-core';
+export type { DoneRecord, PlanAction } from '@/lib/pulse/coaching-core';
 
 /** The figure an action is meant to move. */
 export type CoachingMetric = 'deep_share' | 'hardly_used_share' | `work_share:${string}`;
@@ -226,7 +225,7 @@ export function teamParts(t: TeamFigures, f: CoachingFigures): { where: string[]
   }
 
   // Long sessions that committed nothing: wrong-shaped task, or missing context.
-  if (t.longNothing && t.longNothing.long >= 4 && t.longNothing.share >= 0.25) {
+  if (t.longNothing && t.longNothing.long >= 4 && t.longNothing.share >= LONG_NOTHING_SHARE) {
     workOn.push(`${t.longNothing.sessions} of ${t.longNothing.long} sessions over an hour committed nothing.`);
     actions.push({
       key: 'long_nothing',
@@ -237,7 +236,7 @@ export function teamParts(t: TeamFigures, f: CoachingFigures): { where: string[]
   }
 
   // Edits it suggests that the team throws away.
-  if (t.editAcceptance && t.editAcceptance.org !== null && t.editAcceptance.team < t.editAcceptance.org - 0.1) {
+  if (t.editAcceptance && t.editAcceptance.org !== null && t.editAcceptance.team < t.editAcceptance.org - ACCEPTANCE_GAP) {
     workOn.push(`The team keeps ${pct(t.editAcceptance.team)} of the edits Claude Code suggests, against ${pct(t.editAcceptance.org)} across the organisation. Codex sends no edit decisions, so this is Claude Code alone.`);
     actions.push({
       key: 'edit_acceptance',

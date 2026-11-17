@@ -24,6 +24,7 @@ import { getConfigValue } from '@/lib/config';
 import { vendorClause } from '@/lib/dashboard/product-sql';
 import { skillVendor } from '@/lib/pulse/vendor-filter';
 import { isWorkPulseSurface } from '@/lib/pulse/work-surfaces';
+import { keptFirstDates, firstDatesCompleteFrom, measurableWaves } from '@/lib/pulse/first-dates';
 import { MECHANISM_TASK_TYPES } from '@/lib/finance/model-efficiency';
 import { kindLabel } from '@/lib/pulse/cowork/coaching-words';
 import {
@@ -451,14 +452,19 @@ export async function getWorkFinds(vendor: Vendor, data: WorkData, kept: Kept = 
     xs.filter((x, i) => i < top || isKept(x));
   const jobs = keptOrTop(allJobs, j => kept(`standard_job:${j.taskType}`, j.department), 2);
 
-  // Each person's first judged prompt ever, and their first meaningful one.
+  // Each person's first judged prompt ever, and their first meaningful one: the earlier of what
+  // is still stored and the dates retention kept before it deleted (lib/pulse/first-dates.ts).
   const firstRows = (await run(sql`
-    SELECT pc.user_id, MIN(cm.occurred_at) AS first_at,
-           MIN(CASE WHEN pc.tier >= 2 THEN cm.occurred_at END) AS first_deep_at
-    FROM pulse_classifications pc
-    JOIN cowork_messages cm ON cm.id = pc.cowork_message_id
-    WHERE pc.classifier_status = 'classified' AND ${onWorkPulse}
-    GROUP BY pc.user_id
+    SELECT user_id, MIN(first_at) AS first_at, MIN(first_deep_at) AS first_deep_at FROM (
+      SELECT pc.user_id, MIN(cm.occurred_at) AS first_at,
+             MIN(CASE WHEN pc.tier >= 2 THEN cm.occurred_at END) AS first_deep_at
+      FROM pulse_classifications pc
+      JOIN cowork_messages cm ON cm.id = pc.cowork_message_id
+      WHERE pc.classifier_status = 'classified' AND ${onWorkPulse}
+      GROUP BY pc.user_id
+      UNION ALL
+      ${keptFirstDates('work', vendor)}
+    ) f GROUP BY user_id
   `)) as Array<{ user_id: string; first_at: number | string; first_deep_at: number | string | null }>;
   const byMonth = new Map<string, Array<{ firstAt: number; firstDeepAt: number | null }>>();
   for (const r of firstRows) {
@@ -468,7 +474,9 @@ export async function getWorkFinds(vendor: Vendor, data: WorkData, kept: Kept = 
     list.push({ firstAt, firstDeepAt: r.first_deep_at === null ? null : n(r.first_deep_at) });
     byMonth.set(monthOf(firstAt), list);
   }
-  const waves: Wave[] = [...byMonth.entries()]
+  // A month that started before the first dates were complete is left out, never shown wrong.
+  const wavesFrom = await firstDatesCompleteFrom('work');
+  const waves: Wave[] = measurableWaves([...byMonth.entries()]
     .filter(([, ps]) => ps.length >= WAVE_MIN_PEOPLE)
     .map(([month, ps]) => {
       const weeks = ps.filter(p => p.firstDeepAt !== null).map(p => (p.firstDeepAt! - p.firstAt) / (7 * DAY)).sort((a, b) => a - b);
@@ -480,18 +488,27 @@ export async function getWorkFinds(vendor: Vendor, data: WorkData, kept: Kept = 
         weeksToHalf: weeks.length >= halfway ? Math.max(0, Math.round(weeks[halfway - 1] * 10) / 10) : null,
       };
     })
-    .sort((a, b) => b.month.localeCompare(a.month))
+    .sort((a, b) => b.month.localeCompare(a.month)), wavesFrom)
     .slice(0, 6);
 
   // People who have used it and have hardly used it since: fewer than two sessions in 90 days.
+  // Everyone who has ever sent a Work Pulse prompt, less those with two or more sessions lately.
+  // "Ever" is one index look-up per person (migration 0056), never a read of every prompt
+  // ever stored; the recent count reads only the last 90 days.
+  const everUsed = (v: 'claude' | 'openai') => sql`EXISTS (
+    SELECT 1 FROM cowork_messages cm
+    WHERE cm.user_id = u.id AND cm.message_type = 'cowork_user_message'
+      AND ${isWorkPulseSurface(sql`cm.surface`, true)} AND ${sql.raw(vendorClause(v, 'cm.'))})`;
+  const usedIt = vendor === 'all' ? sql`(${everUsed('claude')} OR ${everUsed('openai')})` : everUsed(vendor);
   const rarelyRows = (await run(sql`
-    SELECT COUNT(*) AS people FROM (
-      SELECT cm.user_id,
-             COUNT(DISTINCT CASE WHEN cm.occurred_at >= ${nowS - RARELY_USED_DAYS * DAY} THEN cm.session_id END) AS recent
-      FROM cowork_messages cm
-      WHERE cm.message_type = 'cowork_user_message' AND cm.user_id IS NOT NULL AND ${onWorkPulse}
-      GROUP BY cm.user_id
-    ) q WHERE q.recent < ${HARDLY_USED_SESSIONS}
+    SELECT (SELECT COUNT(*) FROM users u WHERE ${usedIt})
+         - (SELECT COUNT(*) FROM (
+              SELECT cm.user_id FROM cowork_messages cm
+              WHERE cm.occurred_at >= ${nowS - RARELY_USED_DAYS * DAY}
+                AND cm.message_type = 'cowork_user_message' AND cm.user_id IS NOT NULL AND ${onWorkPulse}
+              GROUP BY cm.user_id
+              HAVING COUNT(DISTINCT cm.session_id) >= ${HARDLY_USED_SESSIONS}
+            ) recent) AS people
   `)) as Array<{ people: number | string }>;
   const rarelyCount = n(rarelyRows[0]?.people);
   const seatPrice = Number(await getConfigValue('finopsSeatPriceMonthly'));

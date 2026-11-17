@@ -109,6 +109,7 @@ const COVERAGE: Record<string, { status: Status; why: string }> = {
   'code_session_stats.user_id':          { status: 'deleted', why: 'P1' },
   'code_otel_metrics.user_id':           { status: 'deleted', why: 'P1' },
   'code_session_classifications.user_id':{ status: 'deleted', why: 'P1' },
+  'pulse_first_dates.user_id':           { status: 'deleted', why: 'the first and first meaningful dates of one person, kept past retention for So What (migration 0057)' },
   'code_metrics.scope_id':               { status: 'deleted', why: 'user-scope rows only, mirrors pulse_metrics' },
   'code_metrics_vendor.scope_id':        { status: 'deleted', why: 'user-scope rows only, per-product twin of code_metrics' },
   'use_case_week_matches.user_id':       { status: 'deleted', why: 'user_id is in the PK — cannot null; junction rows go (weekly aggregates in use_case_activation_weeks survive; historical distinct-user recomputes shrink — accepted, erasure means erasure)' },

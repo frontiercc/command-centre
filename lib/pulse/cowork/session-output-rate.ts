@@ -61,9 +61,6 @@ export const OUTPUT_RATE_WEEKS = 13;
  */
 export const MIN_SESSIONS_FOR_RATE = 5;
 
-/** @deprecated Use MIN_SESSIONS_FOR_RATE — kept so no caller breaks silently. */
-export const MIN_SESSIONS_FOR_TASK_TYPE = MIN_SESSIONS_FOR_RATE;
-
 /**
  * The breakdown lists NAMED KINDS OF WORK only.
  *
@@ -102,7 +99,7 @@ export interface OutputRateByTaskType {
   taskType: string;
   sessions: number;
   produced: number;
-  /** Never null here — a row only appears once it clears MIN_SESSIONS_FOR_TASK_TYPE. */
+  /** Never null here — a row only appears once it clears MIN_SESSIONS_FOR_RATE. */
   rate: number;
 }
 

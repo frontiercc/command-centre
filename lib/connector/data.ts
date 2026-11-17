@@ -44,8 +44,6 @@ export const CONNECTOR_METRIC_ALLOWLIST = [
   ...PULSE_METRICS_SUM_ALLOWLIST,
 ] as const;
 
-export type ConnectorMetric = (typeof CONNECTOR_METRIC_ALLOWLIST)[number];
-
 /** Thrown when a caller requests a metric outside CONNECTOR_METRIC_ALLOWLIST. */
 export class InvalidMetricError extends Error {
   constructor(metric: string) {

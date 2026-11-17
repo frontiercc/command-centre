@@ -24,7 +24,7 @@ import type { Vendor } from '@/lib/dashboard/vendor';
 import { PERIOD_SHAPE, type MyPeriod, type PeriodTierWeek, type PulsePeriod } from '@/lib/pulse/period-shape';
 
 export { PERIOD_SHAPE };
-export type { MyPeriod, PulsePeriod, PeriodTierWeek } from '@/lib/pulse/period-shape';
+export type { MyPeriod, PulsePeriod } from '@/lib/pulse/period-shape';
 
 const DAY = 86400;
 const WEEK = 7 * DAY;

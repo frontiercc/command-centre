@@ -376,7 +376,10 @@ describe('OpenAI sync against the stand-in export', () => {
 
       // Remove the key the way Admin → Access & Keys does, while the run is going.
       const run = runOpenAiSyncJob({ force: true, downloadGapMs: 150, filesPerRun: 60 });
-      await new Promise(r => setTimeout(r, 900));
+      // Once the first file is stored (its position saved), not after a fixed wait: on a busy
+      // machine the run can take longer than any guess to get going.
+      const deadline = Date.now() + 60_000;
+      while (!(await getConfigValue('openaiSyncCursors')) && Date.now() < deadline) await new Promise(r => setTimeout(r, 25));
       await deleteConfigValues(['openaiAdminApiKey', 'openaiSyncCursors', 'openaiLastSyncAt', 'openaiLastSyncStats']);
       const { stats } = await run;
 

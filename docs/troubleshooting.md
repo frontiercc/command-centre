@@ -126,6 +126,12 @@ Back up the database, and keep a copy of `.env` with it: stored secrets, such as
 docker compose exec -T postgres pg_dump -U ccc -d ccc > command-centre-backup.sql
 ```
 
+### Upgrading from 1.4.1 to 1.4.2
+
+- **Back up first.** On its first start, 1.4.2 adds two indexes and one small table to the database (migrations 0056 and 0057). Nothing existing is rewritten, but updates go forward only, so going back means restoring the backup.
+- **The first start takes a little longer on a big hub** while the two indexes are built. On a test hub with five million stored prompts it took about 12 seconds.
+- **So What leaves out waves it can't measure.** Before 1.4.2, retention deleted the first dates the waves are measured from once they were older than its window (90 days unless changed). Those can't be brought back, so a wave that started before then is left out rather than shown wrong. Waves from then on are kept and show as before.
+
 ### Upgrading from 1.4.0 to 1.4.1
 
 - **Nothing to do.** 1.4.1 adds no tables or columns, so you can go back to 1.4.0 without restoring a backup.

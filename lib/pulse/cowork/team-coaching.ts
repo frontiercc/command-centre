@@ -14,7 +14,7 @@
  *  - Who to learn from: the people getting the most out of it, named.
  *  - What to try: the actions those suggest, each tied to the figure it should move.
  */
-import type { CoworkCoachingFigures, CoworkTeamFigures, KindShare } from '@/lib/pulse/cowork/coaching-figures';
+import type { CoworkCoachingFigures, CoworkTeamFigures } from '@/lib/pulse/cowork/coaching-figures';
 import { BEHIND_ORG, PRODUCED_NOTHING_SHARE } from '@/lib/pulse/cowork/coaching-figures';
 import { MEANINGFUL_WORK, kindLabel } from '@/lib/pulse/cowork/coaching-words';
 import {
@@ -22,8 +22,6 @@ import {
   type DoneRecord, type PlanAction, type Suggested, type MetricRules,
 } from '@/lib/pulse/coaching-core';
 import type { TierNames } from '@/lib/pulse/tier-names';
-
-export { MEANINGFUL_WORK } from '@/lib/pulse/cowork/coaching-words';
 
 /** The figure an action is meant to move. */
 export type CoworkMetric = 'deep_share' | 'hardly_used_share' | 'produced_nothing_share';
@@ -268,5 +266,3 @@ export function findCoworkAction(department: string, key: string, f: CoworkCoach
   const orgBaseline = action.metric ? (orgMetrics(f.org)[action.metric] ?? null) : null;
   return { action, baseline, orgBaseline };
 }
-
-export type { KindShare };

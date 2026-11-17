@@ -180,7 +180,6 @@ async function startSharedPg(serverUrl: string): Promise<PgContext> {
  * postgres:16 testcontainer by default; a per-file database on a shared
  * server when CCC_TEST_PG_URL is set (see above).
  * Caller owns teardown: `await pool.end(); await container.stop();`
- * (or just use withPostgres() below, which does this for you).
  */
 export async function startPg(): Promise<PgContext> {
   const shared = process.env.CCC_TEST_PG_URL;
@@ -190,25 +189,4 @@ export async function startPg(): Promise<PgContext> {
   await applyPgMigrations(url);
   const pool = new Pool({ connectionString: url });
   return { container, url, pool };
-}
-
-/**
- * Convenience wrapper: start a container, migrate it, hand the connection
- * string to `fn`, then always tear the container down — even if `fn` throws.
- *
- *   const rowCount = await withPostgres(async (url) => {
- *     const pool = new Pool({ connectionString: url });
- *     const { rows } = await pool.query('SELECT 1');
- *     await pool.end();
- *     return rows.length;
- *   });
- */
-export async function withPostgres<T>(fn: (url: string) => Promise<T>): Promise<T> {
-  const { container, url, pool } = await startPg();
-  try {
-    return await fn(url);
-  } finally {
-    await pool.end();
-    await container.stop();
-  }
 }

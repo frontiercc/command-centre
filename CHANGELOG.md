@@ -1,5 +1,17 @@
 # Changelog
 
+## 1.4.2 (unreleased)
+
+### Changed
+
+- So What's "used it once and hardly since" no longer reads every prompt ever stored. On a test hub with two years of activity for 5,000 people it took 17 seconds on every build; it now looks each person up in one of two new indexes, one for Claude and one for ChatGPT (migration 0056). The count is unchanged.
+- A dead-code check (knip) runs on every pull request. Its first run found 15 components that no page showed, the unused chart package recharts and a few unused functions and settings, which are gone.
+
+### Fixed
+
+- So What's waves, on Work Pulse and Developer Pulse, measured each person from their first prompt or session still stored. Once a hub was older than its retention window (90 days unless changed), everyone who started earlier looked as if they had started in the oldest month kept. Retention now keeps each person's first date and first meaningful date before it deletes anything (migration 0057), so the waves stay right. Dates only, never content, and they are erased with the person. Dates retention deleted before 1.4.2 are gone, so a wave that started before then is left out rather than shown wrong.
+- Removing the OpenAI key while a sync was running could still leave a sync position, or the last sync time and figures, saved afterwards. A key added later then carried on from the old position instead of starting again.
+
 ## 1.4.1 (2026-11-16)
 
 ### Changed
