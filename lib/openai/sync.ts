@@ -47,7 +47,7 @@ import { eq, sql } from 'drizzle-orm';
 import { getTypedClient } from '@/lib/db/client';
 import { schema } from '@/lib/db/schema';
 import { withTx } from '@/lib/db/with-tx';
-import { getConfigValue, setConfigValue } from '@/lib/config';
+import { getConfigValue, setConfigValue, deleteConfigValues } from '@/lib/config';
 import { detectPiiWithMatches, type PiiMatch } from '@/lib/pii/detect';
 import { detectIntent } from '@/lib/intent/detect';
 import { getCustomCategories } from '@/lib/intent/custom';
@@ -898,6 +898,13 @@ export async function runOpenAiSync(opts: RunOptions = {}): Promise<OpenAiSyncSt
           if (!(await keyStillSet())) { stats.keyChanged = true; break types; }
           cursors[eventType] = after;
           await setConfigValue('openaiSyncCursors', JSON.stringify(cursors));
+          // Remove can land between that check and the save. If the key has gone, take the
+          // position back out, so a key added later starts again. A new key keeps it, as on save.
+          if (!(await keyStillSet())) {
+            if (!(await getConfigValue('openaiAdminApiKey'))) await deleteConfigValues(['openaiSyncCursors']);
+            stats.keyChanged = true;
+            break types;
+          }
         }
         if (!page.has_more) break;
       }
