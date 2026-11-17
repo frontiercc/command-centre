@@ -5,7 +5,7 @@
 // last-sync time and figures the admin page shows. Does nothing, and writes
 // nothing, until an admin key and a workspace ID are saved, or while an admin
 // has paused it (openaiSyncPaused).
-import { getConfigValue, setConfigValue } from '@/lib/config';
+import { getConfigValue, setConfigValue, deleteConfigValues } from '@/lib/config';
 import { runOpenAiSync, type OpenAiSyncStats, type RunOptions } from './sync';
 import { rollupChatgptSessionTime } from '@/lib/pulse/chatgpt-session-time';
 
@@ -34,5 +34,10 @@ export async function runOpenAiSyncJob(opts?: { force?: boolean } & RunOptions):
   if (Object.values(stats.prompts).some((n) => n > 0)) await rollupChatgptSessionTime(nowS).catch(() => 0);
   await setConfigValue('openaiLastSyncAt', String(nowS));
   await setConfigValue('openaiLastSyncStats', JSON.stringify(stats));
+  // Remove can land after the run's last check and before these saves. If the key has
+  // gone, take them back out, so the status stays clear as Remove left it.
+  if (!(await getConfigValue('openaiAdminApiKey'))) {
+    await deleteConfigValues(['openaiLastSyncAt', 'openaiLastSyncStats']);
+  }
   return { skipped: false, stats };
 }
