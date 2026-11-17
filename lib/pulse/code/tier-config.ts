@@ -11,7 +11,7 @@ import {
 
 // Re-export the client-safe surface so existing import paths keep working.
 export { DEFAULT_CODE_CLASSIFIER_CONFIG, buildCodeClassifierSystemMessage } from '@/lib/pulse/code/classifier-prompt';
-export type { CodeClassifierConfig, CodeTierDefinition, CodeWorkTypeDef } from '@/lib/pulse/code/classifier-prompt';
+export type { CodeClassifierConfig } from '@/lib/pulse/code/classifier-prompt';
 
 function isValidTierDef(v: unknown): v is CodeTierDefinition {
   return !!v && typeof v === 'object' && typeof (v as { name?: unknown }).name === 'string';

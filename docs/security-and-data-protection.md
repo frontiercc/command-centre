@@ -265,6 +265,7 @@ These are not time-limited:
 - Claude Cowork, Claude Chat and ChatGPT session summaries (their attached file names are cleared once the session is past its window, in both modes);
 - the use case register and drafted skills;
 - coaching acknowledgements, So What decisions and Team Coaching actions;
+- each person's first date and first meaningful date on Work Pulse and Developer Pulse, which So What's waves are measured from (dates only, copied before retention deletes the prompts and sessions they come from);
 - Skills and Connectors Board entries;
 - both logs.
 

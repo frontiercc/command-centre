@@ -415,7 +415,6 @@ const LOOKUPS: Lookup[] = [
 ];
 
 export const LOOKUP_TOOLS: Anthropic.Tool[] = LOOKUPS.map(l => l.tool);
-export const LOOKUP_NAMES = LOOKUPS.map(l => l.tool.name);
 
 /** Pure: the arithmetic behind the calculate lookup, rounded to two decimal places. */
 export function calculate(input: Record<string, unknown>): Record<string, unknown> {

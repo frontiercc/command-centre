@@ -16,6 +16,7 @@
 import { sql, type SQL } from 'drizzle-orm';
 import { getTypedClient } from '@/lib/db/client';
 import { codeSessionVendor } from '@/lib/pulse/code/vendor-view';
+import { keptFirstDates, firstDatesCompleteFrom, measurableWaves } from '@/lib/pulse/first-dates';
 import { getCodeWorkTypeDefinitions } from '@/lib/pulse/code/tier-config';
 import { codeWorkTypeLabel } from '@/lib/pulse/code/work-type-labels';
 import { getConfigValue } from '@/lib/config';
@@ -215,16 +216,22 @@ export async function getFinds(vendor: Vendor, kept: Kept = keepNone, nowS = Mat
       .map(([id]) => id),
   );
 
-  // Each person's first session ever, and the first one they handed whole work over in.
+  // Each person's first session ever, and the first one they handed whole work over in: the
+  // earlier of what is still stored and the dates retention kept before it deleted
+  // (lib/pulse/first-dates.ts).
   const firstRows = (await run(sql`
-    SELECT css.user_id,
-           MIN(css.first_at) AS first_at,
-           MIN(CASE WHEN csc.tier >= 2 THEN css.first_at END) AS first_deep_at
-    FROM code_session_stats css
-    LEFT JOIN code_session_classifications csc
-      ON csc.session_id = css.session_id AND csc.status = 'classified'
-    WHERE ${codeSessionVendor(sql`css.session_id`, vendor)}
-    GROUP BY css.user_id
+    SELECT user_id, MIN(first_at) AS first_at, MIN(first_deep_at) AS first_deep_at FROM (
+      SELECT css.user_id,
+             MIN(css.first_at) AS first_at,
+             MIN(CASE WHEN csc.tier >= 2 THEN css.first_at END) AS first_deep_at
+      FROM code_session_stats css
+      LEFT JOIN code_session_classifications csc
+        ON csc.session_id = css.session_id AND csc.status = 'classified'
+      WHERE ${codeSessionVendor(sql`css.session_id`, vendor)}
+      GROUP BY css.user_id
+      UNION ALL
+      ${keptFirstDates('code', vendor)}
+    ) f GROUP BY user_id
   `)) as Array<{ user_id: string; first_at: number | string; first_deep_at: number | string | null }>;
 
   const byMonth = new Map<string, Array<{ firstAt: number; firstDeepAt: number | null }>>();
@@ -236,7 +243,9 @@ export async function getFinds(vendor: Vendor, kept: Kept = keepNone, nowS = Mat
     list.push({ firstAt, firstDeepAt: r.first_deep_at === null ? null : n(r.first_deep_at) });
     byMonth.set(month, list);
   }
-  const waves: Wave[] = [...byMonth.entries()]
+  // A month that started before the first dates were complete is left out, never shown wrong.
+  const wavesFrom = await firstDatesCompleteFrom('code');
+  const waves: Wave[] = measurableWaves([...byMonth.entries()]
     .filter(([, ps]) => ps.length >= WAVE_MIN_PEOPLE)
     .map(([month, ps]) => {
       const weeks = ps
@@ -251,7 +260,7 @@ export async function getFinds(vendor: Vendor, kept: Kept = keepNone, nowS = Mat
         weeksToHalf: weeks.length >= halfway ? Math.max(0, Math.round(weeks[halfway - 1] * 10) / 10) : null,
       };
     })
-    .sort((a, b) => b.month.localeCompare(a.month))
+    .sort((a, b) => b.month.localeCompare(a.month)), wavesFrom)
     .slice(0, 6);
 
   // People who were given it and have hardly used it since.

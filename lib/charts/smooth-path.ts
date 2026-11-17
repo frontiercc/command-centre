@@ -34,11 +34,3 @@ export function smoothPath(pts: ChartPoint[]): string {
   }
   return d;
 }
-
-/** Smooth path closed down to a horizontal baseline — for soft area fills under a wavy line. */
-export function smoothAreaPath(pts: ChartPoint[], baselineY: number): string {
-  if (pts.length === 0) return '';
-  const f = (v: number) => v.toFixed(1);
-  const top = smoothPath(pts);
-  return `M ${f(pts[0].x)} ${f(baselineY)} L ${top.slice(2)} L ${f(pts[pts.length - 1].x)} ${f(baselineY)} Z`;
-}

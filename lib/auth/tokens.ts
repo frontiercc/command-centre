@@ -49,20 +49,3 @@ export function timingSafeCompare(a: string, b: string): boolean {
 
   return crypto.timingSafeEqual(bufA, bufB);
 }
-
-/**
- * Mask a token for display in logs/UI.
- * Shows the prefix + first ~8 chars after the last underscore, then "••••••••".
- * Example: "ccc_enroll_Ab3xYz12qW..." → "ccc_enroll_Ab3xYz12••••••••"
- */
-export function maskToken(token: string): string {
-  const lastUnderscore = token.lastIndexOf("_");
-  if (lastUnderscore === -1) {
-    // No prefix found — show first 8 chars then mask
-    return token.slice(0, 8) + "••••••••";
-  }
-
-  const prefix = token.slice(0, lastUnderscore + 1);
-  const body = token.slice(lastUnderscore + 1);
-  return prefix + body.slice(0, 8) + "••••••••";
-}

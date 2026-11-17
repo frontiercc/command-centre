@@ -60,9 +60,6 @@ export function labelForUseCaseSurface(surface: string, connected?: { claude: bo
   return surface;
 }
 
-/** How many titles each list in a box shows; the rest are reached through Review. */
-export const TITLES_PER_GROUP = 3;
-
 export const surfaceOf = (s: BoxableSuggestion): SuggestionSurface => (s.surface === 'code' ? 'code' : 'cowork');
 
 const SURFACE_ORDER: SuggestionSurface[] = ['cowork', 'code'];

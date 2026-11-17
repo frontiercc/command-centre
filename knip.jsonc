@@ -1,0 +1,17 @@
+// Dead-code check (npm run knip, run in CI): files, packages and exports nothing uses.
+{
+  "$schema": "https://unpkg.com/knip@6/schema.json",
+  // Run directly (node, npx tsx, docker), so nothing imports them.
+  "entry": ["scripts/**/*.{cjs,mjs,ts}"],
+  // A constant or type used in its own file may stay exported; only exports used nowhere count.
+  "ignoreExportsUsedInFile": true,
+  // Two names for one value are deliberate here (a rule named for where it is used, or a
+  // module's default and named export), so they are not reported.
+  "rules": { "duplicates": "off" },
+  "ignoreDependencies": [
+    // Run by the sample data loader with npx (scripts/demo/load.cjs).
+    "tsx",
+    // A type in a JSDoc comment in postcss.config.mjs, installed with Tailwind.
+    "postcss-load-config"
+  ]
+}

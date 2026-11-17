@@ -26,4 +26,3 @@ export const auditPgSchema = { accessAuditLog: accessAuditLogPg };
 
 export const auditSchema = auditPgSchema;
 
-export default auditSchema;

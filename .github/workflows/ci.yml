@@ -23,6 +23,8 @@ jobs:
       - run: npm run lint
       # THIRD-PARTY-NOTICES.md must match the dependencies.
       - run: npm run notices -- --check
+      # Nothing left behind: files, packages and exports nothing uses.
+      - run: npm run knip
 
   test:
     name: Test (PostgreSQL)

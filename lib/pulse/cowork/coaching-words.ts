@@ -13,9 +13,3 @@ export const NEW_WAYS_OF_WORKING = 'Claude flags work that creates something reu
 export function kindLabel(taskType: string): string {
   return taskType.replace(/_/g, ' ');
 }
-
-/** The same, to start a sentence. */
-export function kindLabelCapitalised(taskType: string): string {
-  const s = kindLabel(taskType);
-  return s.charAt(0).toUpperCase() + s.slice(1);
-}

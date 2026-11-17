@@ -114,22 +114,6 @@ export function downloadLogFile(apiKey: string, scope: LogScope, fileId: string)
   });
 }
 
-/** Latest event time OpenAI holds for each type (null when it holds none). */
-export function getMaxEventTime(
-  apiKey: string,
-  scope: LogScope,
-  eventTypes: OpenAiEventType[],
-): Promise<Record<string, string | null>> {
-  return withBackoff(async () => {
-    const url = new URL(`${openAiApiBase()}${scopePath(scope)}/max_event_time`);
-    for (const t of eventTypes) url.searchParams.append('event_type', t);
-    const response = await openAiFetch(apiKey, url.toString());
-    if (!response.ok) return failWith(response);
-    const body = (await response.json()) as { max_event_time?: Record<string, string | null> };
-    return body.max_event_time ?? {};
-  });
-}
-
 /** Parses a JSONL file; a line that is not JSON is skipped and counted. */
 export function parseJsonl(text: string): { records: unknown[]; badLines: number } {
   const records: unknown[] = [];

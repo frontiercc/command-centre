@@ -19,6 +19,7 @@
     "start": "next start",
     "lint": "next lint",
     "notices": "node scripts/third-party-notices.mjs",
+    "knip": "knip",
     "test": "vitest run",
     "posttest": "node scripts/clean-testcontainers.mjs",
     "test:cleanup": "node scripts/clean-testcontainers.mjs",
@@ -40,7 +41,6 @@
     "react": "^18",
     "react-dom": "^18",
     "react-markdown": "^10.1.0",
-    "recharts": "^3.8.1",
     "remark-gfm": "^4.0.1",
     "tsx": "^4.23.15",
     "uuid": "^13.0.0"
@@ -57,6 +57,7 @@
     "eslint": "^8",
     "eslint-config-next": "15.5.28",
     "jose": "^6.2.3",
+    "knip": "6.44.1",
     "postcss": "^8.5.31",
     "tailwindcss": "^3.4.1",
     "typescript": "^5",

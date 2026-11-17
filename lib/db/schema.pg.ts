@@ -598,6 +598,9 @@ export const coworkMessages = pgTable('cowork_messages', {
     index('idx_cowork_messages_flagged').on(t.flagged),
     index('idx_cowork_messages_session').on(t.session_id, t.occurred_at),
     index('idx_cowork_messages_agent_name').on(t.agent_name, t.occurred_at).where(sql`agent_name IS NOT NULL`),
+    // Whether a person has ever sent a Work Pulse prompt, per vendor (migration 0056).
+    index('idx_cowork_wp_people_claude').on(t.user_id).where(sql`message_type = 'cowork_user_message' AND (surface IN ('cowork', 'chat') OR surface IS NULL) AND (source IS NULL OR source NOT IN ('chatgpt_chat', 'chatgpt_work', 'codex'))`),
+    index('idx_cowork_wp_people_openai').on(t.user_id).where(sql`message_type = 'cowork_user_message' AND (surface IN ('cowork', 'chat') OR surface IS NULL) AND source IN ('chatgpt_chat', 'chatgpt_work', 'codex')`),
 ]);
 
 // One cached model-written sentence per session for the frontier boxes
@@ -803,6 +806,19 @@ export const githubUserRepoStats = pgTable('github_user_repo_stats', {
     primaryKey({ columns: [t.user_id, t.repo, t.date] }),
     index('idx_gurs_repo_date').on(t.repo, t.date),
     index('idx_gurs_user_date').on(t.user_id, t.date),
+]);
+
+// Each person's first judged prompt (Work Pulse) or session (Developer Pulse), and first
+// meaningful one, kept past retention for So What's waves (migration 0057, lib/pulse/first-dates.ts).
+export const pulseFirstDates = pgTable('pulse_first_dates', {
+    surface: text().notNull(),
+    user_id: text().notNull(),
+    vendor: text().notNull(),
+    first_at: bigint({ mode: 'number' }).notNull(),
+    first_deep_at: bigint({ mode: 'number' }),
+}, (t) => [
+    primaryKey({ columns: [t.surface, t.user_id, t.vendor] }),
+    index('idx_pulse_first_dates_user').on(t.user_id),
 ]);
 
 export const githubIdentityMap = pgTable('github_identity_map', {
@@ -1503,6 +1519,7 @@ export const pgSchema = {
   pulseBriefings,
   pulseClassifications,
   pulseEvents,
+  pulseFirstDates,
   pulseMetrics,
   pulseMetricsVendor,
   openaiCosts,

@@ -34,8 +34,3 @@ export interface IntentAssessment {
   reasoning: string;
   recommendedAction: string;
 }
-
-export interface IntentResult {
-  matches: IntentMatch[];
-  assessment?: IntentAssessment;
-}

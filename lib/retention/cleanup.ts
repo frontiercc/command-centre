@@ -13,6 +13,7 @@ import { schema } from '@/lib/db/schema';
 import { withTx } from '@/lib/db/with-tx';
 import { getConfigValue, setConfigValue } from '@/lib/config';
 import { STRIPPED_MARKER } from '@/lib/retention/marker';
+import { keepFirstDates } from '@/lib/pulse/first-dates';
 
 // Postgres caps one statement at 65,535 bind parameters, so an id list handed
 // to inArray() must be split. In strip mode cowork_messages rows are never
@@ -293,6 +294,10 @@ export async function runRetentionCleanup(): Promise<CleanupResult> {
         await tx.delete(schema.pulseClassifications).where(inArray(schema.pulseClassifications.cowork_message_id, batch));
       }
     }
+
+    // Before anything is deleted: each person's first dates, which So What's waves are measured
+    // from, are copied out of the prompts and sessions about to go (lib/pulse/first-dates.ts).
+    await keepFirstDates(tx, { workBefore: Math.max(coworkCutoff, chatCutoff), codeBefore: codeCutoff });
 
     await purgePulseChildren('cowork', coworkCutoff);
     await purgePulseChildren('code', codeCutoff);
