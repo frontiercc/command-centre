@@ -236,6 +236,55 @@ async function getTierCountsForUsers(
   };
 }
 
+type TierCounts = { t1: number; t2: number; t3: number; total: number };
+const NO_TIER_COUNTS: TierCounts = { t1: 0, t2: 0, t3: 0, total: 0 };
+
+/**
+ * Tier counts for every user over ONE shared window, in a single grouped query.
+ *
+ * The hourly job used to call getTierCountsForUsers once per person, twice (the
+ * rolling week and the calendar week). Each call looked up every message that
+ * person has ever had classified, so the work grew with the whole history and
+ * with headcount. One grouped query reads only the window's messages, once.
+ * Users with nothing in the window are absent from the map (callers use zeros).
+ */
+async function getTierCountsByUser(
+  client: TypedClient,
+  windowStart: number,
+  windowEnd: number,
+): Promise<Map<string, TierCounts>> {
+  const pc = schema.pulseClassifications;
+  const cm = schema.coworkMessages;
+
+  const rows = await client
+    .select({
+      user_id: pc.user_id,
+      t1: sql<number | string>`SUM(CASE WHEN ${pc.tier} = 1 THEN 1 ELSE 0 END)`,
+      t2: sql<number | string>`SUM(CASE WHEN ${pc.tier} = 2 THEN 1 ELSE 0 END)`,
+      t3: sql<number | string>`SUM(CASE WHEN ${pc.tier} = 3 THEN 1 ELSE 0 END)`,
+      total: sql<number | string>`COUNT(*)`,
+    })
+    .from(pc)
+    .innerJoin(cm, eq(cm.id, pc.cowork_message_id))
+    .where(and(
+      eq(pc.classifier_status, 'classified'),
+      gte(cm.occurred_at, windowStart),
+      lt(cm.occurred_at, windowEnd),
+    ))
+    .groupBy(pc.user_id);
+
+  const out = new Map<string, TierCounts>();
+  for (const r of rows) {
+    out.set(r.user_id, {
+      t1: Number(r.t1 ?? 0),
+      t2: Number(r.t2 ?? 0),
+      t3: Number(r.t3 ?? 0),
+      total: Number(r.total ?? 0),
+    });
+  }
+  return out;
+}
+
 /**
  * Fetch all classification IDs written since a given ISO timestamp string.
  * Used to scope frontier/capability detection to new rows only.
@@ -394,6 +443,9 @@ export async function runHourlyAggregation(): Promise<void> {
   const userIds = users.map(u => u.user_id);
   const otiByUser = await computeOtiForUsers(userIds);
   const ddsByUser = await computeDdsForUsers(userIds);
+  // One query for everyone on the standard rolling window. Only a person with
+  // their own later start date (pulse_start_at) needs a query of their own.
+  const rollingCountsByUser = await getTierCountsByUser(client, periodStart, periodEnd + 1);
 
   for (const { user_id } of users) {
     const otiRes = otiByUser.get(user_id) ?? null;
@@ -403,7 +455,9 @@ export async function runHourlyAggregation(): Promise<void> {
     const pulseStartAt = startDateMap.get(user_id) ?? null;
     const effectiveStart = pulseStartAt !== null ? Math.max(periodStart, pulseStartAt) : periodStart;
 
-    const counts = await getTierCountsForUsers(client, [user_id], effectiveStart, periodEnd + 1);
+    const counts = effectiveStart === periodStart
+      ? rollingCountsByUser.get(user_id) ?? NO_TIER_COUNTS
+      : await getTierCountsForUsers(client, [user_id], effectiveStart, periodEnd + 1);
 
     await writeMetric(client, {
       scopeType: 'user',
@@ -519,8 +573,9 @@ export async function runHourlyAggregation(): Promise<void> {
   const weeklyDds = (t1: number, t2: number, t3: number, total: number): number | null =>
     total > 0 ? (3 * t3 + 2 * t2 + t1) / total : null;
 
+  const weeklyCountsByUser = await getTierCountsByUser(client, wkStart, now + 1);
   for (const { user_id } of users) {
-    const counts = await getTierCountsForUsers(client, [user_id], wkStart, now + 1);
+    const counts = weeklyCountsByUser.get(user_id) ?? NO_TIER_COUNTS;
     await writeMetric(client, {
       scopeType: 'user',
       scopeId: user_id,

@@ -164,6 +164,10 @@ export interface AppConfig {
   // hourly, cadence-guarded inside the job) — deliberately NOT in
   // app/api/config/route.ts's allowedKeys, same convention as the other *LastRun keys.
   coworkSessionAggLastRun: string;
+  // Job-written (same job): epoch seconds. Hourly runs look only at sessions with
+  // a message received since the watermark; a full check runs once a day.
+  coworkSessionAggWatermark: string;
+  coworkSessionAggLastFullSweep: string;
   pulseWeeklyBriefingLastRun: string;
   pulseCioBriefingLastRun: string;
   pulseClassifierConfig: string;
@@ -462,6 +466,8 @@ export const CONFIG_KEYS: Record<keyof AppConfig, string> = {
   pulseVendorWeeksGradedSince: 'pulse_vendor_weeks_graded_since',
   pulseAggregatorDailyLastRun: 'pulse_aggregator_daily_last_run',
   coworkSessionAggLastRun: 'cowork_session_agg_last_run',
+  coworkSessionAggWatermark: 'cowork_session_agg_watermark',
+  coworkSessionAggLastFullSweep: 'cowork_session_agg_last_full_sweep',
   pulseWeeklyBriefingLastRun: 'pulse_weekly_briefing_last_run',
   pulseCioBriefingLastRun: 'pulse_cio_briefing_last_run',
   pulseClassifierConfig: 'pulse_classifier_config',
@@ -870,6 +876,8 @@ export async function getAllConfig(): Promise<AppConfig> {
     pulseVendorWeeksGradedSince: resolve('pulseVendorWeeksGradedSince'),
     pulseAggregatorDailyLastRun: resolve('pulseAggregatorDailyLastRun'),
     coworkSessionAggLastRun: resolve('coworkSessionAggLastRun'),
+    coworkSessionAggWatermark: resolve('coworkSessionAggWatermark'),
+    coworkSessionAggLastFullSweep: resolve('coworkSessionAggLastFullSweep'),
     pulseWeeklyBriefingLastRun: resolve('pulseWeeklyBriefingLastRun'),
     pulseCioBriefingLastRun: resolve('pulseCioBriefingLastRun'),
     pulseClassifierConfig: resolve('pulseClassifierConfig'),

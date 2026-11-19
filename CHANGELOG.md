@@ -1,5 +1,19 @@
 # Changelog
 
+## 1.4.4 (2026-11-20)
+
+### Changed
+
+- Token totals on Claude Code sessions, Claude Cowork sessions and the Developer Pulse summary rows are stored as 64-bit numbers, so a very long-running session's totals always fit (migration 0059).
+- The hourly jobs do less work on a large hub. The results are unchanged.
+  - The Claude Code roll-up reads each active session's rows once, and finds the sessions that changed through a new index (migration 0059).
+  - The Claude Cowork session roll-up looks at the sessions that received a message since its last complete run, and checks every session once a day. A run started by hand or from a script still checks everything.
+  - Work Pulse counts tiers for everyone with one query per period.
+
+### Upgrading
+
+- Migration 0059 builds an index on `code_assistant_meta`. On a table with millions of rows this takes from seconds to a few minutes, during which new Claude Code telemetry waits. The first Claude Cowork roll-up after the upgrade is a full check.
+
 ## 1.4.3 (2026-11-19)
 
 ### Added
