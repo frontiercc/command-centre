@@ -581,6 +581,12 @@ export const coworkMessages = pgTable('cowork_messages', {
     // so this tells a redacted prompt that needs a Desktop restart from one
     // that cannot be fixed on the device (migration 0038). NULL = not recorded.
     session_location: text(),
+    // Which Claude Desktop build and operating system sent a Cowork user prompt,
+    // from the OTel resource attributes service.version / os.type / os.version
+    // (migration 0058). NULL = not recorded.
+    client_version: text(),
+    os_type: text(),
+    os_version: text(),
     // Which Office app a row came from (migration 0039): NULL = Cowork,
     // otherwise excel / word / powerpoint / outlook (Claude in Office) or
     // sheets / docs / slides (Claude in Google).

@@ -123,6 +123,24 @@ describe('processOtlpLogs', () => {
     expect(row.session_location).toBe('local');
   });
 
+  it('keeps the client version and operating system from the resource on the user prompt', async () => {
+    const payload = makePayload('claude_code.user_prompt', { prompt: '<REDACTED>' });
+    payload.resourceLogs[0].resource.attributes.push(
+      { key: 'service.version', value: { stringValue: ' 1.5354.0 ' } },
+      { key: 'os.type', value: { stringValue: 'win32' } },
+      { key: 'os.version', value: { stringValue: '10.0.26200' } },
+    );
+    await processOtlpLogs(payload);
+    const row = (await sql.get("SELECT client_version, os_type, os_version FROM cowork_messages WHERE prompt_id = 'prompt_001'")) as Record<string, string | null>;
+    expect(row).toEqual({ client_version: '1.5354.0', os_type: 'win32', os_version: '10.0.26200' });
+  });
+
+  it('falls back to the record for client info, and leaves it NULL when absent', async () => {
+    await processOtlpLogs(makePayload('claude_code.user_prompt', { prompt: 'Hello', 'os.type': 'darwin' }));
+    const row = (await sql.get("SELECT client_version, os_type, os_version FROM cowork_messages WHERE prompt_id = 'prompt_001'")) as Record<string, string | null>;
+    expect(row).toEqual({ client_version: null, os_type: 'darwin', os_version: null });
+  });
+
   it('leaves session_location NULL when the client sends no cowork_surface', async () => {
     await processOtlpLogs(makePayload('claude_code.user_prompt', { prompt: 'Hello' }));
     const row = (await sql.get("SELECT session_location FROM cowork_messages WHERE prompt_id = 'prompt_001'")) as { session_location: string | null };

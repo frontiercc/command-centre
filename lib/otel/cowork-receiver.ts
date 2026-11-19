@@ -30,6 +30,7 @@ import { otelEventKey, claimOtelEvent } from '@/lib/otel/event-key';
 import { outputFileName } from '@/lib/otel/output-name';
 import { SUBAGENT_LAUNCH_TOOLS, subagentLabel } from '@/lib/otel/subagent';
 import { SESSION_LOCATION_ATTR, sessionLocationLabel } from '@/lib/otel/session-location';
+import { clientInfo } from '@/lib/otel/client-info';
 
 /** OTLP key-value attribute as it arrives in JSON payloads. */
 interface OtlpAttr {
@@ -440,6 +441,7 @@ export async function processOtlpLogs(payload: unknown): Promise<ProcessResult> 
                   flag_reason: flagReason,
                   synced_resources: syncedResources.length > 0 ? JSON.stringify(syncedResources) : null,
                   session_location: sessionLocationLabel(getAttr(attrs, SESSION_LOCATION_ATTR) ?? getAttr(resAttrs, SESSION_LOCATION_ATTR)),
+                  ...clientInfo(resAttrs, attrs),
                   occurred_at: occurredAt,
                 });
                 result.logsInserted++;
