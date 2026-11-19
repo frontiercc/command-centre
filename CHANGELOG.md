@@ -2,22 +2,17 @@
 
 ## 1.4.4 (2026-11-20)
 
-### Fixed
-
-- Developer Pulse stopped updating on a hub where one Claude Code session had passed 2,147,483,647 cache-read tokens. The hourly roll-up stored session token totals in a column that could not hold a number that large, so the save failed and the run stopped part-way: every session after the large one was skipped that hour, and the summary figures were not refreshed. Token totals on Claude Code sessions, Claude Cowork sessions and the Developer Pulse summary rows are now 64-bit (migration 0059). On a hub this happened to, sessions that have been quiet since are not recomputed on their own; see Upgrading below.
-
 ### Changed
 
-- The hourly jobs read far less from the database. On a hub whose data had outgrown its database's memory, they re-read whole tables every hour: about 26 MB a second of disk reading, which fell to about 0.1 MB a second with these changes and a larger database. The results are unchanged.
-  - The Claude Code roll-up read every row of each active session four separate times; it now reads them once. A long-lived session is recomputed every hour while it is in use, so this was the largest cost.
-  - The same roll-up scanned the whole model-calls table to find which sessions had changed. A new index on the received time answers that directly (migration 0059).
-  - The Claude Cowork session roll-up checked every session on every run. Hourly runs now look only at sessions that received a message since the last complete run, and a check of every session runs once a day. A run started by hand or from a script still checks everything.
-  - Work Pulse counted each person's tiers with two queries per person per hour, each walking that person's whole history. It now uses one query for everyone per period. The per-vendor figures, kept only where OpenAI data exists, still count one person at a time.
+- Token totals on Claude Code sessions, Claude Cowork sessions and the Developer Pulse summary rows are stored as 64-bit numbers, so a very long-running session's totals always fit (migration 0059).
+- The hourly jobs do less work on a large hub. The results are unchanged.
+  - The Claude Code roll-up reads each active session's rows once, and finds the sessions that changed through a new index (migration 0059).
+  - The Claude Cowork session roll-up looks at the sessions that received a message since its last complete run, and checks every session once a day. A run started by hand or from a script still checks everything.
+  - Work Pulse counts tiers for everyone with one query per period.
 
 ### Upgrading
 
-- Migration 0059 builds an index on `code_assistant_meta`, which holds up new Claude Code telemetry for the seconds or minutes the build takes on a table with millions of rows. The first Claude Cowork roll-up after the upgrade is a full check.
-- If the hub log shows `Developer Pulse aggregation failed` with `out of range for type integer`, the roll-up has been skipping sessions. After upgrading, set the `code_aggregator_last_run` config value back to before the first failure once; the next hourly run recomputes every session with data since then. On a hub with six weeks of failures that recomputed 16,157 sessions in about five minutes.
+- Migration 0059 builds an index on `code_assistant_meta`. On a table with millions of rows this takes from seconds to a few minutes, during which new Claude Code telemetry waits. The first Claude Cowork roll-up after the upgrade is a full check.
 
 ## 1.4.3 (2026-11-19)
 
