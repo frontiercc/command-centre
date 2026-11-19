@@ -62,6 +62,10 @@ export interface AggregateResult {
 }
 
 const DEFAULT_LIMIT = 500;
+/** How often the scheduled job checks every session, not only new activity. */
+const FULL_SWEEP_INTERVAL_S = 24 * 60 * 60;
+/** Re-read this much before the watermark, for inserts in flight at run start. */
+const WATERMARK_OVERLAP_S = 10 * 60;
 
 /**
  * Parse one cowork_messages.content_preview value written for a
@@ -91,8 +95,15 @@ function parseApiRequestTokens(contentPreview: string | null): ApiRequestPreview
  * Pass `limit` to cap how many candidate sessions this run processes
  * (default 500) — any left over are reported in `remaining` and are picked
  * up naturally by the next run.
+ * Pass `opts.ingestedSince` (epoch seconds) to look only at sessions that
+ * received a message since then — the scheduled job's hourly path. Without it
+ * every session is checked, which reads the whole of cowork_messages.
  */
-export async function aggregateCoworkSessionStats(sessionId?: string, limit = DEFAULT_LIMIT): Promise<AggregateResult> {
+export async function aggregateCoworkSessionStats(
+  sessionId?: string,
+  limit = DEFAULT_LIMIT,
+  opts: { ingestedSince?: number } = {},
+): Promise<AggregateResult> {
   const client = await getTypedClient();
   const now = Math.floor(Date.now() / 1000);
   const result: AggregateResult = { sessionsProcessed: 0, sessionsUpserted: 0, errors: [], remaining: 0 };
@@ -102,7 +113,7 @@ export async function aggregateCoworkSessionStats(sessionId?: string, limit = DE
   // the 2-table JOIN + correlated MAX() subquery is clearer raw than built
   // via the query builder (Rule 2). Fetches up to limit+1 rows so the (limit+1)th
   // row's presence tells us there's more pending without a separate COUNT query.
-  const fetched = await rawSessionsNeedingAggregation(client, sessionId, limit + 1);
+  const fetched = await rawSessionsNeedingAggregation(client, sessionId, limit + 1, opts.ingestedSince);
   const capped = fetched.length > limit;
   result.remaining = capped ? fetched.length - limit : 0;
   const sessions = capped ? fetched.slice(0, limit) : fetched;
@@ -328,13 +339,33 @@ export async function runCoworkSessionAggJob(): Promise<void> {
   const oneHourAgo = new Date(Date.now() - 60 * 60 * 1000).toISOString();
   if (lastRun && lastRun >= oneHourAgo) return;
 
-  const result = await aggregateCoworkSessionStats();
+  // Hourly runs look only at sessions that received a message since the last
+  // complete run (the watermark); a full check of every session runs once a
+  // day as the safety net. Checking every session every hour read the whole of
+  // cowork_messages plus one index lookup per message row, which on a database
+  // that no longer fits in memory was most of the disk reading on that table.
+  const runStartS = Math.floor(Date.now() / 1000);
+  const watermark = Number(await getConfigValue('coworkSessionAggWatermark')) || 0;
+  const lastFullSweep = Number(await getConfigValue('coworkSessionAggLastFullSweep')) || 0;
+  const fullSweep = watermark <= 0 || runStartS - lastFullSweep >= FULL_SWEEP_INTERVAL_S;
+
+  const result = fullSweep
+    ? await aggregateCoworkSessionStats()
+    : await aggregateCoworkSessionStats(undefined, DEFAULT_LIMIT, { ingestedSince: watermark });
   if (result.errors.length > 0) {
     console.error('[CoworkSessionAgg] errors:', result.errors);
   }
   console.log(
-    `[CoworkSessionAgg] processed=${result.sessionsProcessed} upserted=${result.sessionsUpserted} remaining=${result.remaining}`,
+    `[CoworkSessionAgg] ${fullSweep ? 'full check' : 'new activity only'} processed=${result.sessionsProcessed} upserted=${result.sessionsUpserted} remaining=${result.remaining}`,
   );
+
+  // Move the watermark only after a complete, clean run: sessions left over by
+  // the cap, or that failed, must still be found next hour. The overlap covers
+  // messages whose insert was in flight when this run started.
+  if (result.remaining === 0 && result.errors.length === 0) {
+    await setConfigValue('coworkSessionAggWatermark', String(runStartS - WATERMARK_OVERLAP_S));
+    if (fullSweep) await setConfigValue('coworkSessionAggLastFullSweep', String(runStartS));
+  }
   await setConfigValue('coworkSessionAggLastRun', new Date().toISOString());
 }
 
@@ -364,8 +395,17 @@ async function rawSessionsNeedingAggregation(
   client: any,
   sessionId?: string,
   limit = DEFAULT_LIMIT + 1,
+  ingestedSince?: number,
 ): Promise<Array<{ session_id: string; user_id: string }>> {
   const sessionFilter = sessionId ? sql`AND cm.session_id = ${sessionId}` : sql``;
+  // Narrow to sessions with a message received since the watermark (uses the
+  // ingested_at index). The staleness rule below is unchanged and still decides.
+  const recentFilter = ingestedSince !== undefined && !sessionId
+    ? sql`AND cm.session_id IN (
+        SELECT r.session_id FROM cowork_messages r
+        WHERE r.ingested_at >= ${ingestedSince} AND r.source = 'otel'
+      )`
+    : sql``;
   const query = sql`
     SELECT DISTINCT cm.session_id, cm.user_id
     FROM cowork_messages cm
@@ -373,6 +413,7 @@ async function rawSessionsNeedingAggregation(
     WHERE cm.source = 'otel'
       AND COALESCE(cm.surface, 'cowork') = 'cowork'
       ${sessionFilter}
+      ${recentFilter}
       AND (
         css.session_id IS NULL
         OR css.computed_at < (
