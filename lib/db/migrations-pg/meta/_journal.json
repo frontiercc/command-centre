@@ -407,6 +407,13 @@
       "when": 1792195206000,
       "tag": "0057_pulse_first_dates",
       "breakpoints": true
+    },
+    {
+      "idx": 58,
+      "version": "7",
+      "when": 1792195207000,
+      "tag": "0058_cowork_client_info",
+      "breakpoints": true
     }
   ]
 }

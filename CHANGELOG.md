@@ -1,5 +1,11 @@
 # Changelog
 
+## 1.4.3 (2026-11-19)
+
+### Added
+
+- Each Claude Cowork prompt keeps the Claude Desktop version and operating system it came from (`service.version`, `os.type` and `os.version` from the telemetry), in three new columns on `cowork_messages` (migration 0058). They show whether prompts that arrive redacted come from particular builds or operating systems. Version and system names only, never content. Prompts stored before 1.4.3 have none, and nothing on screen changes. A hub that already has these columns keeps them and their values.
+
 ## 1.4.2 (2026-11-19)
 
 ### Changed
