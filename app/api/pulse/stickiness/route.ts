@@ -4,7 +4,8 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { visibleVendor } from '@/lib/sources/openai-visibility';
 import { getAdminSession, canAccessOrgOverview } from '@/lib/auth/admin-auth';
-import { getStickinessForDashboard } from '@/lib/pulse/stickiness';
+import { buildStickinessView } from '@/lib/pulse/stickiness';
+import { keptFigures } from '@/lib/kept-figures';
 
 export const dynamic = 'force-dynamic';
 
@@ -15,15 +16,8 @@ export async function GET(request: NextRequest) {
   }
 
   const vendor = await visibleVendor(request.nextUrl.searchParams.get('vendor'));
-  // The three kinds of work (for the vendor) and the six products, from one read.
-  const { kinds: { cowork, code, chat }, products } = await getStickinessForDashboard(undefined, vendor);
-
-  return NextResponse.json({
-    cowork,
-    code,
-    chat,
-    // Each of the six products on its own, for the dashboard's split view.
-    products,
-    computedAt: Math.floor(Date.now() / 1000),
-  });
+  // Kept and refreshed in the background every few minutes (lib/kept-figures.ts).
+  return NextResponse.json(await keptFigures(`stickiness:${vendor}`, () => buildStickinessView(vendor), {
+    force: request.nextUrl.searchParams.get('fresh') === '1',
+  }));
 }

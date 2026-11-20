@@ -149,3 +149,10 @@ export async function getStickinessForDashboard(nowEpochS: number = Math.floor(D
   const series = await readStickinessSeries(nowEpochS, vendor);
   return { kinds: kindsFrom(series), products: productsFrom(series) };
 }
+
+/** The stickiness route's answer for one vendor view: the three kinds of work and the six products. */
+export async function buildStickinessView(vendor: Vendor) {
+  const { kinds: { cowork, code, chat }, products } = await getStickinessForDashboard(undefined, vendor);
+  // Each of the six products on its own, for the dashboard's split view.
+  return { cowork, code, chat, products, computedAt: Math.floor(Date.now() / 1000) };
+}

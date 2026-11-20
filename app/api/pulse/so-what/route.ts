@@ -17,7 +17,7 @@ import { getWorkFinds } from '@/lib/pulse/cowork/so-what-finds';
 import { listDecisions } from '@/lib/pulse/code/decision-log';
 import { buildSoWhat, workDecisions, type Question } from '@/lib/pulse/cowork/so-what';
 import { coachingScope } from '@/lib/pulse/coaching-scope';
-import { cachedWorkPulse } from '@/lib/pulse/work-pulse-cache';
+import { keptFigures } from '@/lib/kept-figures';
 
 export const dynamic = 'force-dynamic';
 
@@ -46,8 +46,8 @@ export async function GET(request: NextRequest) {
   try {
     const vendor = await visibleVendor(null);
     // Every judged prompt and session in the window: the same for every viewer, so built once and
-    // kept for five minutes (lib/pulse/work-pulse-cache.ts). Who sees which team is decided below.
-    const data = await cachedWorkPulse(`so-what-data:${vendor}`, () => loadWorkData(vendor));
+    // kept for five minutes (lib/kept-figures.ts). Who sees which team is decided below.
+    const data = await keptFigures(`so-what-data:${vendor}`, () => loadWorkData(vendor));
     const groups = groupsByTeam(peopleFrom(data));
     // A manager asks only about their own team, exactly as Team coaching scopes them.
     const scope = coachingScope(session, groups.map(g => g.department), request.nextUrl.searchParams.get('department'));
@@ -74,7 +74,7 @@ export async function GET(request: NextRequest) {
       // team gets it.
       finds: scope.teams.length > 1
         // Kept per set of decisions, since a decided card stays on the page after it leaves the top.
-        ? await cachedWorkPulse(
+        ? await keptFigures(
           `so-what-finds:${vendor}:${[...kept].sort().join('\u0001')}`,
           () => getWorkFinds(vendor, data, (card, department) => kept.has(`${card}\u0000${department}`)),
         )

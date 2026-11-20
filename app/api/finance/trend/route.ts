@@ -6,6 +6,7 @@ import { getAllConfig } from '@/lib/config';
 import { getAdminSession, canAccessPulseAdmin } from '@/lib/auth/admin-auth';
 import { logAccess } from '@/lib/audit/log';
 import { buildSpendTrend } from '@/lib/finance/trend';
+import { keptFigures } from '@/lib/kept-figures';
 
 export const dynamic = 'force-dynamic';
 
@@ -32,5 +33,8 @@ export async function GET(request: NextRequest) {
     action: 'READ',
     outcome: 'success',
   });
-  return NextResponse.json(await buildSpendTrend(Math.floor(Date.now() / 1000), months, { keepFinishedMonths: true }));
+  // Kept and refreshed in the background every few minutes (lib/kept-figures.ts).
+  return NextResponse.json(await keptFigures(`finance-trend:${months}`,
+    () => buildSpendTrend(Math.floor(Date.now() / 1000), months, { keepFinishedMonths: true }),
+    { force: request.nextUrl.searchParams.get('fresh') === '1' }));
 }

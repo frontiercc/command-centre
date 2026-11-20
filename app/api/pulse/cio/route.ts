@@ -29,7 +29,7 @@ import { type Vendor } from '@/lib/dashboard/vendor';
 import { hasOpenAiData } from '@/lib/dashboard/queries';
 import { messageVendor } from '@/lib/pulse/vendor-filter';
 
-import { cachedWorkPulse } from '@/lib/pulse/work-pulse-cache';
+import { keptFigures } from '@/lib/kept-figures';
 import { errorResponse } from '@/lib/api/errors';
 
 export const dynamic = 'force-dynamic';
@@ -41,12 +41,12 @@ export async function GET(request: NextRequest) {
   }
   try {
     const sp = request.nextUrl.searchParams;
-    // Kept per view, window and viewer for five minutes (lib/pulse/work-pulse-cache.ts): the
+    // Kept per view, window and viewer for five minutes (lib/kept-figures.ts): the
     // act-next list follows the role, and the capability log's prompt text follows the viewer's
     // role and department (gateContentRead). ?fresh=1 after an action on the page. A result with
     // a part that failed is not kept.
     const key = ['cio', sp.get('vendor') ?? '', sp.get('weeks') ?? '', session.role ?? '', session.department ?? '', session.email ?? ''].join('\u0000');
-    const { promptRead, ...body } = await cachedWorkPulse(key, () => buildCio(session, sp), { keep: b => b.failed.length === 0, force: sp.get('fresh') === '1' });
+    const { promptRead, ...body } = await keptFigures(key, () => buildCio(session, sp), { keep: b => b.failed.length === 0, force: sp.get('fresh') === '1' });
     // Every visit that shows prompt text is recorded, whether the figures were kept or built.
     if (promptRead) await logPromptRead(request, session, 'pulse/cio/capability-log');
     return NextResponse.json(body);

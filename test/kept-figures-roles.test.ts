@@ -1,7 +1,7 @@
 // Copyright 2026 Lee James
 // SPDX-License-Identifier: Apache-2.0
 
-// Work Pulse keeps its figures in memory (lib/pulse/work-pulse-cache.ts). The figures a viewer's
+// Work Pulse keeps its figures in memory (lib/kept-figures.ts). The figures a viewer's
 // role changes must never be served from another viewer's load: an admin loads a page first, then
 // a contributor and a viewer load the same page and get their own answer, not the admin's.
 import { describe, it, expect, vi, beforeAll, afterAll } from 'vitest';
@@ -31,8 +31,8 @@ beforeAll(async () => {
   await (made.client as any).insert(schema.users).values([
     { id: 'u-anna', email: 'anna@test.local', display_name: 'Anna', department: 'Finance' },
   ]);
-  const { clearWorkPulseCache } = await import('@/lib/pulse/work-pulse-cache');
-  clearWorkPulseCache();
+  const { clearKeptFigures } = await import('@/lib/kept-figures');
+  clearKeptFigures();
 });
 
 afterAll(async () => cleanup());

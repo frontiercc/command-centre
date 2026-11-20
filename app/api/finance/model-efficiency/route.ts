@@ -7,6 +7,7 @@ import { getAdminSession, canAccessPulseAdmin } from '@/lib/auth/admin-auth';
 import { logAccess } from '@/lib/audit/log';
 import { buildModelEfficiency } from '@/lib/finance/model-efficiency';
 import { currentPeriod } from '@/lib/finance/period';
+import { keptFigures } from '@/lib/kept-figures';
 
 export const dynamic = 'force-dynamic';
 
@@ -31,6 +32,7 @@ export async function GET(request: NextRequest) {
     return NextResponse.json({ error: 'Invalid period (expected YYYY-MM)' }, { status: 400 });
   }
   // The access record and the report are independent, so they are written and read together.
+  // The report is kept and refreshed in the background every few minutes (lib/kept-figures.ts).
   const [, report] = await Promise.all([
     logAccess({
       actorId: session.userId!,
@@ -40,7 +42,9 @@ export async function GET(request: NextRequest) {
       action: 'READ',
       outcome: 'success',
     }),
-    buildModelEfficiency(surface, period, Math.floor(Date.now() / 1000)),
+    keptFigures(`model-efficiency:${surface}:${period}`, () => buildModelEfficiency(surface, period, Math.floor(Date.now() / 1000)), {
+      force: request.nextUrl.searchParams.get('fresh') === '1',
+    }),
   ]);
   return NextResponse.json(report);
 }

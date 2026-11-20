@@ -1,6 +1,7 @@
 // Copyright 2026 Lee James
 // SPDX-License-Identifier: Apache-2.0
 
+import { clearKeptFigures } from '@/lib/kept-figures';
 import { describe, it, expect, vi, beforeAll, beforeEach, afterAll, afterEach } from 'vitest';
 import { NextRequest } from 'next/server';
 import { createTestDatabase } from './helpers/db';
@@ -149,7 +150,9 @@ describe('GET /api/pulse/code/org-summary — spendProjection', () => {
     await seedMeta('m-early', { model: 'claude-sonnet-4-6', occurredAt: sixthOfJune - 2 * DAY });
     at(sixthOfJune);
     expect((await (await route.GET(makeRequest())).json()).spendProjection).toBeNull();
-    // From day 7 it is shown.
+    // From day 7 it is shown. The figures are kept between visits, so start from none, as a visit
+    // the next day would after the background refresh.
+    clearKeptFigures();
     at(utcEpoch(2026, 6, 7));
     expect((await (await route.GET(makeRequest())).json()).spendProjection).not.toBeNull();
   });

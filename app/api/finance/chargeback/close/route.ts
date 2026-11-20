@@ -14,6 +14,7 @@ import { logAccess } from '@/lib/audit/log';
 import { getTypedClient } from '@/lib/db/client';
 import { schema } from '@/lib/db/schema';
 import { buildChargeback } from '@/lib/finance/chargeback';
+import { forgetKeptFigures } from '@/lib/kept-figures';
 
 export const dynamic = 'force-dynamic';
 
@@ -53,5 +54,7 @@ export async function POST(request: NextRequest) {
 
   await logAccess({ actorId: session.userId!, actorEmail: session.email!, actorIp: request.headers.get('x-forwarded-for') || undefined, resource: 'finance/chargeback', action: 'WRITE', outcome: 'success', detail: `close ${period}` });
 
+  // The kept FinOps figures for the month now come from the frozen snapshot.
+  forgetKeptFigures('chargeback:');
   return NextResponse.json({ ok: true, period, status: 'closed', closedAt: now, estimated: report.estimated });
 }

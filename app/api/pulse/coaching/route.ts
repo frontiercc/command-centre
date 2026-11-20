@@ -19,7 +19,7 @@ import { coachingScope } from '@/lib/pulse/coaching-scope';
 import { visibleOpenAi, visibleVendor } from '@/lib/sources/openai-visibility';
 import { hasOpenAiData } from '@/lib/dashboard/queries';
 import { humanTimeOn } from '@/lib/pulse/human-time-flags';
-import { cachedWorkPulse } from '@/lib/pulse/work-pulse-cache';
+import { keptFigures } from '@/lib/kept-figures';
 
 export const dynamic = 'force-dynamic';
 
@@ -38,9 +38,9 @@ export async function GET(request: NextRequest) {
   try {
     // Every platform shown: Claude's alone when an admin has hidden ChatGPT.
     // Every team's figures: the same for every viewer, so built once and kept for five minutes
-    // (lib/pulse/work-pulse-cache.ts). What was marked done is read fresh below.
+    // (lib/kept-figures.ts). What was marked done is read fresh below.
     const vendor = await visibleVendor(null);
-    const figures = await cachedWorkPulse(`coaching-figures:${vendor}`, () => getCoworkCoachingFigures(vendor));
+    const figures = await keptFigures(`coaching-figures:${vendor}`, () => getCoworkCoachingFigures(vendor));
     const all = figures.teams.map(t => t.department).sort((a, b) => a.localeCompare(b));
     const scope = coachingScope(session, all, request.nextUrl.searchParams.get('department'));
     if ('error' in scope) {

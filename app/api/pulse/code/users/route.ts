@@ -1,49 +1,16 @@
 // Copyright 2026 Lee James
 // SPDX-License-Identifier: Apache-2.0
 
-// Async Drizzle on Postgres. Follows the
-// standard pattern (lib/pulse/code/dept.ts): getTypedClient()
-// + a local rawAll() facade for the "latest row per scope" MAX(id) derived-
-// table join (clearer as raw SQL than the query builder here; `NULLS LAST` is
-// native SQL on Postgres). `cm.spend_usd` (numeric) and the bigint
-// `cm.computed_at` are Number()-coerced (Postgres returns bigint and numeric as strings): a raw query returns
-// bigint as a STRING from node-postgres even though the query-builder's own
-// bigint({mode:'number'}) codec would normally handle it (mirrors lib/pulse/
-// trends.ts's rawAll reads).
+// The Developer Pulse Users list. Built by lib/pulse/code/users-list.ts.
 import { NextRequest, NextResponse } from 'next/server';
-import { visibleVendor, visibleOpenAi } from '@/lib/sources/openai-visibility';
+import { visibleVendor } from '@/lib/sources/openai-visibility';
 import { sql } from 'drizzle-orm';
 import { getAdminSession, canAccessCodePulse, isDeptScoped, canAccessPulseAdmin } from '@/lib/auth/admin-auth';
 import { getTypedClient } from '@/lib/db/client';
-import { hasCodexData, pickCodeMetricsSource, latestRunStart } from '@/lib/pulse/code/vendor-view';
+import { keptFigures } from '@/lib/kept-figures';
+import { buildCodeUsersList, rawAll } from '@/lib/pulse/code/users-list';
 
 export const dynamic = 'force-dynamic';
-
-interface RawFacade {
-  execute?: (q: unknown) => Promise<{ rows: unknown[]; rowCount: number | null }>;
-}
-async function rawAll<T>(client: unknown, query: unknown): Promise<T[]> {
-  const c = client as RawFacade;
-  const res = await c.execute!(query);
-  return res.rows as T[];
-}
-
-interface RawUserRow {
-  user_id: string;
-  display_name: string | null;
-  email: string | null;
-  department: string | null;
-  spend_usd: string | number | null;
-  autonomy_ratio: number | null;
-  cache_hit_ratio: number | null;
-  session_count: number;
-  repo_count: number;
-  commit_count: number;
-  skill_leverage: number | null;
-  input_tokens: number;
-  output_tokens: number;
-  computed_at: string | number;
-}
 
 export async function GET(request: NextRequest) {
   const session = await getAdminSession(request);
@@ -61,7 +28,6 @@ export async function GET(request: NextRequest) {
     );
   }
 
-  const client = await getTypedClient();
   // Contributor roles (code, pulse) are always scoped to their own department
   const dept = isDeptScoped(session.role)
     ? (session.department ?? null)
@@ -69,64 +35,18 @@ export async function GET(request: NextRequest) {
 
   // Developer Pulse's All / Claude / Codex switch.
   const vendor = await visibleVendor(request.nextUrl.searchParams.get('vendor'));
-  const codexPresent = await visibleOpenAi(hasCodexData());
 
-  // Latest user-scope code_metrics row per user from the view's latest run,
-  // joined to identity. Users with no Code activity in it are excluded — this
-  // is a Developer Pulse view.
-  const { table, only } = await pickCodeMetricsSource(vendor, codexPresent);
-  const rawRows = await rawAll<RawUserRow>(client, sql`
-     SELECT cm.scope_id AS user_id,
-            u.display_name, u.email, u.department,
-            cm.spend_usd, cm.autonomy_ratio, cm.cache_hit_ratio,
-            cm.session_count, cm.repo_count, cm.commit_count, cm.skill_leverage,
-            cm.input_tokens, cm.output_tokens, cm.computed_at
-     FROM ${table} cm
-     JOIN (
-       SELECT scope_id, MAX(id) AS max_id
-       FROM ${table} WHERE scope_type = 'user' AND granularity = 'rolling' ${only}
-         AND computed_at >= ${latestRunStart(table, only)}
-       GROUP BY scope_id
-     ) latest ON latest.max_id = cm.id
-     LEFT JOIN users u ON u.id = cm.scope_id
-     WHERE cm.scope_type = 'user' AND cm.granularity = 'rolling'
-       ${dept ? sql`AND u.department = ${dept}` : sql``}
-     ORDER BY cm.spend_usd DESC NULLS LAST
-  `);
-
-  // Which coding tools each person used in the last 30 days, for the tags
-  // beside a name once Codex data exists.
-  const productRows = !codexPresent || rawRows.length === 0 ? [] : await rawAll<{ user_id: string; product: string }>(client, sql`
-     SELECT DISTINCT user_id, CASE WHEN session_id LIKE 'codex:%' THEN 'codex' ELSE 'claude_code' END AS product
-     FROM code_session_stats
-     WHERE last_at >= ${Math.floor(Date.now() / 1000) - 30 * 86400}
-       AND user_id IN (${sql.join(rawRows.map(r => sql`${r.user_id}`), sql`, `)})
-  `);
-  const productsByUser = new Map<string, string[]>();
-  for (const r of productRows) productsByUser.set(r.user_id, [...(productsByUser.get(r.user_id) ?? []), r.product].sort());
-
-  const rows = rawRows.map(r => ({
-    user_id: r.user_id,
-    display_name: r.display_name,
-    email: r.email,
-    department: r.department,
-    spend_usd: r.spend_usd !== null && r.spend_usd !== undefined ? Number(r.spend_usd) : null,
-    autonomy_ratio: r.autonomy_ratio,
-    cache_hit_ratio: r.cache_hit_ratio,
-    session_count: Number(r.session_count),
-    repo_count: Number(r.repo_count),
-    commit_count: Number(r.commit_count),
-    skill_leverage: r.skill_leverage,
-    input_tokens: Number(r.input_tokens),
-    output_tokens: Number(r.output_tokens),
-    computed_at: Number(r.computed_at),
-    products: productsByUser.get(r.user_id) ?? [],
-  }));
+  // The list is the same for every viewer of this department and view, so it is kept and
+  // refreshed in the background every few minutes (lib/kept-figures.ts); what each viewer may see
+  // of it is decided below, on every request.
+  const { rows, codexPresent } = await keptFigures(`code-users:${dept ?? ''}:${vendor}`, () => buildCodeUsersList(dept, vendor), {
+    force: request.nextUrl.searchParams.get('fresh') === '1',
+  });
 
   // Each person's spend: admins and managers see everyone's. Anyone else gets only their own, with
   // the list in name order, so neither a figure nor the order says what a colleague spent.
   if (!canAccessPulseAdmin(session.role)) {
-    const mine = await rawAll<{ id: string }>(client, sql`
+    const mine = await rawAll<{ id: string }>(await getTypedClient(), sql`
       SELECT COALESCE(
         (SELECT linked_cowork_user_id FROM admin_users WHERE id = ${session.userId ?? ''} LIMIT 1),
         (SELECT id FROM users WHERE email = ${session.email ?? ''} LIMIT 1)
