@@ -75,11 +75,26 @@ async function runSpec(): Promise<void> {
       await session(`${user}-2`, user, day - 86400 + 7200, 3, 0);
       await classify(`${user}-2`, user, 'bugfix', 1);
     }
+    // Pull requests and accepted edits come from Claude Code's telemetry; the harness's are ignored.
+    await sql.run(`INSERT INTO code_otel_metrics (id, user_id, session_id, metric_name, value, type, occurred_at)
+                   VALUES ('m1', 'cat', 'cat-1', 'claude_code.pull_request.count', 2, NULL, ?),
+                          ('m2', 'cat', 'cat-1', 'claude_code.code_edit_tool.decision', 5, 'accept', ?),
+                          ('m3', 'cat', 'cat-1', 'claude_code.code_edit_tool.decision', 9, 'reject', ?),
+                          ('m4', 'bot', 'bot-0', 'claude_code.pull_request.count', 50, NULL, ?)`, [day, day, day, day]);
+    // Someone whose GitHub account is linked: their commits come from GitHub, not their sessions.
+    const today = new Date((day) * 1000).toISOString().slice(0, 10);
+    await sql.run(`INSERT INTO github_user_repo_stats (user_id, repo, date, commit_count, synced_at) VALUES ('dan', 'org/app', ?, 7, ?)`, [today, nowS]);
+
     const g = (await getOutputGroups('all', nowS)).find(x => x.department === 'Lab')!;
     expect(g.people).toBe(6);
     expect(g.shallow.people).toBe(5);
-    expect(g.shallow.commits).toBe(6);
+    // cat 3 + dan 7 from GitHub (not their 2 from sessions) + eve 0 + fay 1.
+    expect(g.shallow.commits).toBe(11);
+    expect(g.shallow.prs).toBe(2);
+    expect(g.shallow.edits).toBe(5);
+    expect(g.fromGithub).toBe(1);
     expect(g.deep.people).toBe(1);
+    expect(g.deep.prs).toBe(0);
   } finally {
     await cleanup();
   }

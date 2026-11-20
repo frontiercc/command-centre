@@ -73,12 +73,12 @@ describe('the comparison', () => {
     expect(refusalFor(g)).toContain('Too few people to tell');
   });
 
-  it('refuses when nobody in the team made any commits', () => {
+  it('refuses when nobody in the team made any commits, pull requests or accepted edits', () => {
     const g = groupsFrom('Engineering', [
       ...Array.from({ length: 4 }, () => person('deep', 0)),
       ...Array.from({ length: 4 }, () => person('shallow', 0)),
     ]);
-    expect(g.verdict).toBe('no_commits');
+    expect(g.verdict).toBe('no_output');
     expect(refusalFor(g)).toContain('We cannot answer this');
   });
 
@@ -92,7 +92,7 @@ describe('the hiring card', () => {
   it('holds the hires when the gap covers them, and prices it', () => {
     const c = hireCard(team(), 3, undefined, NOW);
     expect(c.headline).toBe('Hold the 3 hires. Close the gap first.');
-    expect(c.body.join(' ')).toContain('ship twice as much');
+    expect(c.body.join(' ')).toContain('Each of them makes 20 commits, against 10 commits for each of the other 6.');
     expect(c.body.join(' ')).toContain('that is the output of 3 more people');
     expect(c.recommended).toBe('hold');
     expect(c.buttons).toEqual({ hold: 'Hold the hires', go: 'Hire anyway' });
@@ -120,9 +120,39 @@ describe('the hiring card', () => {
 
   it('always says what it cannot see', () => {
     const c = hireCard(team({ hardly: 2 }), 3, undefined, NOW);
-    expect(c.cannotSee).toContain('We cannot see work done outside Claude Code and Codex');
+    expect(c.cannotSee).toContain('We cannot see output that is not a commit, a pull request or an accepted edit');
     expect(c.cannotSee).toContain('2 people hardly used it');
-    expect(c.caption).toContain('made in their Claude Code and Codex sessions');
+    expect(c.caption).toContain('commits, pull requests and accepted edits per person');
+  });
+});
+
+describe('the three counts', () => {
+  const withOutput = (deep: [number, number, number], shallow: [number, number, number]) => groupsFrom('Engineering', [
+    ...Array.from({ length: 4 }, () => ({ ...person('deep', deep[0]), prs: deep[1], edits: deep[2] })),
+    ...Array.from({ length: 6 }, () => ({ ...person('shallow', shallow[0]), prs: shallow[1], edits: shallow[2] })),
+  ]);
+
+  it('prices the gap from the count that shows the least of it', () => {
+    // Commits say three people's worth, pull requests 1.5, edits two: the smallest is used.
+    const g = withOutput([20, 4, 30], [10, 3, 20]);
+    expect(g.peopleWorth).toBe(1.5);
+    expect(g.deep.prsPerPerson).toBe(4);
+    expect(g.shallow.editsPerPerson).toBe(20);
+  });
+
+  it('prices nothing when any count shows no gap', () => {
+    const g = withOutput([20, 3, 30], [10, 3, 20]);
+    expect(g.peopleWorth).toBeNull();
+  });
+
+  it('leaves out a count with no output at all', () => {
+    const g = withOutput([20, 0, 0], [10, 0, 0]);
+    expect(g.peopleWorth).toBe(3);
+  });
+
+  it('says what each group produces, per person', () => {
+    const c = hireCard(withOutput([20, 4, 30], [10, 3, 20]), 1, undefined, NOW);
+    expect(c.body.join(' ')).toContain('Each of them makes 20 commits, 4 pull requests and 30 accepted edits, against 10 commits, 3 pull requests and 20 accepted edits for each of the other 6.');
   });
 });
 
