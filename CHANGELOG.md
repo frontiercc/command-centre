@@ -1,5 +1,19 @@
 # Changelog
 
+## 1.4.5 (2026-11-20)
+
+### Added
+
+- Developer Pulse shows automated runs as their own kind of work. A session with at most one prompt, from someone who started ten or more such sessions within an hour, is a script or test harness rather than a person typing. These sessions are labelled "Automated runs" by rule, without a classifier call, wherever kinds of work are listed: the work mix, Team Coaching and Spend Review. Sessions already classified are relabelled on the classifier's next run.
+- Spend Review's index shows how many automated runs each person had in the month.
+- "Other coding work" is now "Non-coding tasks (documents, research, admin)", and the classifier is told it covers work that is not software development. A hub with its own saved rubric keeps its own wording.
+- Built-in prices for Claude Fable 5.2 and Claude Mythos 5.2.
+
+### Changed
+
+- Automated runs stay out of the figures about how people work: the share of multi-step work, the tier charts, Team Coaching's people and So What's groups. They are still counted, priced and shown.
+- Developer Pulse So What measures each group's output from the commits made in its people's own Claude Code and Codex sessions, so every team with sessions can be answered, with no GitHub account matching needed.
+
 ## 1.4.4 (2026-11-20)
 
 ### Changed

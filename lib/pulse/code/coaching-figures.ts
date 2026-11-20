@@ -17,6 +17,7 @@ import { codexActionCounts } from '@/lib/pulse/code/aggregator';
 import { getCodeWorkTypeDefinitions } from '@/lib/pulse/code/tier-config';
 import { codeWorkTypeLabel } from '@/lib/pulse/code/work-type-labels';
 import { getCodeTierNames } from '@/lib/pulse/code/weekly-tiers';
+import { AUTOMATED_WORK_TYPE } from '@/lib/pulse/code/automated-runs';
 import { getConfigValue } from '@/lib/config';
 import type { Vendor } from '@/lib/dashboard/vendor';
 import type { TierNames } from '@/lib/pulse/tier-names';
@@ -307,8 +308,12 @@ export async function getCoachingFigures(vendor: Vendor, nowS = Math.floor(Date.
     return a + rj > 0 ? a / (a + rj) : null;
   };
 
-  const inWindow = rows.filter(r => n(r.last_at) >= since);
-  const before = rows.filter(r => n(r.last_at) < since);
+  // Every session counts in the kinds of work, automated runs included, so they show as their own
+  // kind. The figures about people (who goes deep, who is stuck, the team's deep share) read only the
+  // sessions people ran themselves.
+  const inWindowAll = rows.filter(r => n(r.last_at) >= since);
+  const inWindow = inWindowAll.filter(r => r.work_type !== AUTOMATED_WORK_TYPE);
+  const before = rows.filter(r => n(r.last_at) < since && r.work_type !== AUTOMATED_WORK_TYPE);
   const labels = await getCodeWorkTypeDefinitions();
   const targets = parseWorkTargets(await getConfigValue('codeEffortTargets'));
   const tierNames = await getCodeTierNames();
@@ -317,10 +322,13 @@ export async function getCoachingFigures(vendor: Vendor, nowS = Math.floor(Date.
     rs.length === 0 || people < MIN_TEAM_PEOPLE ? null : rs.filter(r => n(r.tier) >= 2).length / rs.length;
 
   const byTeam = new Map<string, Row[]>();
+  const byTeamAll = new Map<string, Row[]>();
   const byTeamBefore = new Map<string, Row[]>();
-  for (const r of inWindow) {
+  for (const r of inWindowAll) {
     const d = r.department || NO_DEPARTMENT;
-    byTeam.set(d, [...(byTeam.get(d) ?? []), r]);
+    byTeamAll.set(d, [...(byTeamAll.get(d) ?? []), r]);
+    if (r.work_type !== AUTOMATED_WORK_TYPE) byTeam.set(d, [...(byTeam.get(d) ?? []), r]);
+    else if (!byTeam.has(d)) byTeam.set(d, []);
   }
   for (const r of before) {
     const d = r.department || NO_DEPARTMENT;
@@ -339,7 +347,7 @@ export async function getCoachingFigures(vendor: Vendor, nowS = Math.floor(Date.
       priorDeepShare: deepShare(priorRows, priorPeople),
       hardlyUsed: p.hardlyUsed,
       hardlyUsedShare: p.people >= MIN_TEAM_PEOPLE ? p.hardlyUsed / p.people : null,
-      work: shares(rs, targets, labels),
+      work: shares(byTeamAll.get(department) ?? rs, targets, labels),
       champions: p.champions,
       stuck: p.stuck,
       freed: freedFrom(rs, labels),
@@ -366,7 +374,7 @@ export async function getCoachingFigures(vendor: Vendor, nowS = Math.floor(Date.
       deepShare: deepShare(inWindow, orgPeople.people),
       priorDeepShare: deepShare(before, orgBeforePeople),
       hardlyUsedShare: orgPeople.people > 0 ? orgPeople.hardlyUsed / orgPeople.people : null,
-      work: shares(inWindow, targets, labels),
+      work: shares(inWindowAll, targets, labels),
     },
     teams,
     targets,

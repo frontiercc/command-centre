@@ -116,8 +116,8 @@ export function cardFigures(g: OutputGroups): CardFigures {
 
 /** Why a team's figures cannot answer a question, in the leader's words. Null when they can. */
 export function refusalFor(g: OutputGroups): string | null {
-  if (g.verdict === 'no_github') {
-    return 'We cannot answer this for this team. No commits can be attributed to anyone in it, so there is nothing to compare.';
+  if (g.verdict === 'no_commits') {
+    return 'We cannot answer this for this team. Its sessions made no commits in the last 30 days, so there is no output to compare.';
   }
   if (g.verdict === 'too_few') {
     const small = [
@@ -135,14 +135,13 @@ export function refusalFor(g: OutputGroups): string | null {
 
 /** What the page cannot see, said on every card. */
 function cannotSeeLine(g: OutputGroups): string {
-  const parts = ['We cannot see work done without AI beyond the commits on this chart'];
-  if (g.unmatched > 0) parts.push(`${people(g.unmatched)} in this team ${g.unmatched === 1 ? 'is' : 'are'} left out because no commits can be attributed to them`);
+  const parts = ['We cannot see work done outside Claude Code and Codex, or output that is not a commit'];
   if (g.hardly > 0) parts.push(`${people(g.hardly)} hardly used it and ${g.hardly === 1 ? 'is' : 'are'} in neither group`);
   return `${parts.join('. ')}.`;
 }
 
 const capt = (g: OutputGroups) =>
-  `A dot per person, and commits per person over the last ${WINDOW_DAYS} days, from GitHub. The commits are measured; which group a person is in comes from the AI-judged tiers. Commits made with Claude Code, with Codex and with no tool are all counted. ${g.deep.people + g.shallow.people} of ${g.people} people in the team are on the chart.`;
+  `A dot per person, and commits per person over the last ${WINDOW_DAYS} days, made in their Claude Code and Codex sessions. The commits are measured; which group a person is in comes from the AI-judged tiers. Automated runs are left out. ${g.deep.people + g.shallow.people} of ${g.people} people in the team are on the chart.`;
 
 /**
  * Should this team hire? Hold when the people who do not hand work over, working like the ones who

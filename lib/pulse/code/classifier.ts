@@ -31,6 +31,7 @@ import { humanTimeOn } from '@/lib/pulse/human-time-flags';
 import { fenceUntrusted } from '@/lib/anthropic/untrusted';
 import { redactPii } from '@/lib/pii/detect';
 import { codexActionCounts } from '@/lib/pulse/code/aggregator';
+import { markAutomatedRuns } from '@/lib/pulse/code/automated-runs';
 
 export const WORK_TYPES = [
   'feature', 'bugfix', 'refactor', 'testing',
@@ -309,6 +310,10 @@ export async function runCodeClassifierJob(): Promise<{ selected: number; classi
   const csc = schema.codeSessionClassifications;
   const cutoff = now - SESSION_QUIET_SECONDS;
   const candidateWhere = classifierCandidateWhere(css, csc, now, (await getConfigValue('codeClassifyCodex')) !== 'false');
+
+  // Automated runs are labelled by rule before any model call, so the passes below never pay to
+  // classify them, and a session already classified is relabelled once its run of siblings is seen.
+  await markAutomatedRuns(client, now, SESSION_QUIET_SECONDS);
 
   const digestCols = {
     session_id: css.session_id,

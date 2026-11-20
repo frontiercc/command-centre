@@ -37,6 +37,8 @@ interface Person {
   unpricedOnly: boolean;
   mainWork: { label: string; surface: Surface; share: number } | null;
   routeCount: number;
+  /** Sessions started by a script or test harness this month. */
+  automatedRuns?: number;
   /** Their largest-saving route; null (or absent) with no route. */
   topRoute?: SpendReviewTopRoute | null;
   anthropic: LimitRow | null;
@@ -546,6 +548,7 @@ function SpendReviewIndex() {
                     <td className={T.td}>
                       <span className="block font-medium text-[#0A0A0A]">{p.displayName}</span>
                       <span className="block text-[13px] text-[#8F8F8F]">{p.department ?? 'No department'}</span>
+                      {(p.automatedRuns ?? 0) > 0 && <span className="block text-[13px] text-[#8F8F8F] tabular-nums">{(p.automatedRuns ?? 0).toLocaleString('en-GB')} automated run{p.automatedRuns === 1 ? '' : 's'}</span>}
                       {p.pendingRequestAt && <span className="inline-block mt-1"><Tag tone="warn">Asked for more</Tag></span>}
                     </td>
                     <td className={T.td}>

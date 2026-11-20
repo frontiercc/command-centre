@@ -17,17 +17,16 @@ const NOW = 1_700_000_000;
 const DAY = 86400;
 
 type Person = Parameters<typeof groupsFrom>[1][number];
-const person = (group: 'deep' | 'shallow' | 'hardly', commits: number, matched = true): Person =>
-  ({ userId: `u${Math.random()}`, department: 'Engineering', group, commits, matched });
+const person = (group: 'deep' | 'shallow' | 'hardly', commits: number): Person =>
+  ({ userId: `u${Math.random()}`, department: 'Engineering', group, commits });
 
 /** A team where the first group ships twice as much as the second. */
-function team(over: { deep?: number; shallow?: number; deepEach?: number; shallowEach?: number; hardly?: number; unmatched?: number } = {}): OutputGroups {
-  const { deep = 4, shallow = 6, deepEach = 20, shallowEach = 10, hardly = 0, unmatched = 0 } = over;
+function team(over: { deep?: number; shallow?: number; deepEach?: number; shallowEach?: number; hardly?: number } = {}): OutputGroups {
+  const { deep = 4, shallow = 6, deepEach = 20, shallowEach = 10, hardly = 0 } = over;
   return groupsFrom('Engineering', [
     ...Array.from({ length: deep }, () => person('deep', deepEach)),
     ...Array.from({ length: shallow }, () => person('shallow', shallowEach)),
     ...Array.from({ length: hardly }, () => person('hardly', 0)),
-    ...Array.from({ length: unmatched }, () => person('shallow', 0, false)),
   ]);
 }
 
@@ -55,12 +54,16 @@ describe('the comparison', () => {
     expect(g.verdict).toBe('ok');
   });
 
-  it('counts nobody who hardly uses it, and leaves out anyone with no commits attributed', () => {
-    const g = team({ hardly: 2, unmatched: 3 });
+  it('counts nobody who hardly uses it, and counts everyone else whether or not they committed', () => {
+    const g = groupsFrom('Engineering', [
+      ...Array.from({ length: 4 }, () => person('deep', 20)),
+      ...Array.from({ length: 6 }, () => person('shallow', 10)),
+      ...Array.from({ length: 3 }, () => person('shallow', 0)),
+      ...Array.from({ length: 2 }, () => person('hardly', 0)),
+    ]);
     expect(g.hardly).toBe(2);
-    expect(g.unmatched).toBe(3);
-    expect(g.shallow.people).toBe(6);
-    expect(g.dots).toHaveLength(10);
+    expect(g.shallow.people).toBe(9);
+    expect(g.dots).toHaveLength(13);
   });
 
   it('refuses rather than guesses when a group is too small', () => {
@@ -70,9 +73,12 @@ describe('the comparison', () => {
     expect(refusalFor(g)).toContain('Too few people to tell');
   });
 
-  it('refuses when nobody in the team has any commits attributed', () => {
-    const g = groupsFrom('Engineering', Array.from({ length: 8 }, () => person('shallow', 0, false)));
-    expect(g.verdict).toBe('no_github');
+  it('refuses when nobody in the team made any commits', () => {
+    const g = groupsFrom('Engineering', [
+      ...Array.from({ length: 4 }, () => person('deep', 0)),
+      ...Array.from({ length: 4 }, () => person('shallow', 0)),
+    ]);
+    expect(g.verdict).toBe('no_commits');
     expect(refusalFor(g)).toContain('We cannot answer this');
   });
 
@@ -113,10 +119,10 @@ describe('the hiring card', () => {
   });
 
   it('always says what it cannot see', () => {
-    const c = hireCard(team({ hardly: 2, unmatched: 1 }), 3, undefined, NOW);
-    expect(c.cannotSee).toContain('We cannot see work done without AI');
-    expect(c.cannotSee).toContain('1 person in this team is left out');
+    const c = hireCard(team({ hardly: 2 }), 3, undefined, NOW);
+    expect(c.cannotSee).toContain('We cannot see work done outside Claude Code and Codex');
     expect(c.cannotSee).toContain('2 people hardly used it');
+    expect(c.caption).toContain('made in their Claude Code and Codex sessions');
   });
 });
 

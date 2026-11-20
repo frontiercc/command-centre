@@ -9,7 +9,8 @@
 // here). Every SUM/COUNT aggregate is Number()-coerced (Postgres returns bigint and numeric as strings).
 import { NextRequest, NextResponse } from 'next/server';
 import { visibleVendor, visibleOpenAi } from '@/lib/sources/openai-visibility';
-import { and, desc, eq, gte, inArray, sql } from 'drizzle-orm';
+import { and, desc, eq, gte, inArray, ne, sql } from 'drizzle-orm';
+import { AUTOMATED_WORK_TYPE } from '@/lib/pulse/code/automated-runs';
 import { getAdminSession, isDeptScoped, canAccessCodePulse } from '@/lib/auth/admin-auth';
 import { getTypedClient } from '@/lib/db/client';
 import { schema } from '@/lib/db/schema';
@@ -319,13 +320,13 @@ export async function GET(request: NextRequest) {
     .select({ tier: csc.tier, provisional: csc.provisional, last_at: css.last_at })
     .from(csc)
     .innerJoin(css, eq(css.session_id, csc.session_id))
-    .where(and(eq(csc.user_id, userId), eq(csc.status, 'classified'), gte(css.last_at, sixWeeksAgo), sessionVendor));
+    .where(and(eq(csc.user_id, userId), eq(csc.status, 'classified'), ne(csc.work_type, AUTOMATED_WORK_TYPE), gte(css.last_at, sixWeeksAgo), sessionVendor));
 
   const yearTierRows = await client
     .select({ tier: csc.tier, work_type: csc.work_type, last_at: css.last_at })
     .from(csc)
     .innerJoin(css, eq(css.session_id, csc.session_id))
-    .where(and(eq(csc.user_id, userId), eq(csc.status, 'classified'), gte(css.last_at, yearAgo), sessionVendor));
+    .where(and(eq(csc.user_id, userId), eq(csc.status, 'classified'), ne(csc.work_type, AUTOMATED_WORK_TYPE), gte(css.last_at, yearAgo), sessionVendor));
   const { weeks: tierWeeks, grid: tierGrid } = weeklyTiers(yearTierRows, now);
   const tierNames = await getCodeTierNames();
 

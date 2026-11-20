@@ -17,10 +17,24 @@ const LABELS: Record<string, string> = {
   documentation: 'Docs and comments',
   infrastructure: 'Build, deploy and tooling',
   exploration: 'Understanding and reviewing code',
-  other: 'Other coding work',
+  other: 'Non-coding tasks (documents, research, admin)',
+};
+
+/** Kinds of work set by a rule rather than the classifier, so no rubric can rewrite them. */
+const RULE_LABELS: Record<string, { label: string; definition: string }> = {
+  automated: {
+    label: 'Automated runs',
+    definition: 'sessions started by a script or test harness: one prompt each, ten or more from the same person within an hour',
+  },
 };
 
 const DEFAULT_DEFINITIONS = new Map(DEFAULT_CODE_CLASSIFIER_CONFIG.workTypes.map(w => [w.name, w.description]));
+/** Earlier default wordings: a rubric saved unchanged before a default was reworded keeps its label. */
+const EARLIER_DEFAULTS: Record<string, string[]> = {
+  other: ['anything that does not fit the above'],
+};
+const isDefault = (name: string, definition: string) =>
+  definition === DEFAULT_DEFINITIONS.get(name) || (EARLIER_DEFAULTS[name] ?? []).includes(definition);
 
 function titleCase(name: string): string {
   return name.replace(/[_-]+/g, ' ').replace(/\b\w/g, c => c.toUpperCase());
@@ -34,13 +48,15 @@ export function displayDefinition(definition: string): string {
 }
 
 export function codeWorkTypeLabel(name: string, configuredDefinition?: string | null): string {
+  if (RULE_LABELS[name]) return RULE_LABELS[name].label;
   const label = LABELS[name];
   if (!label) return titleCase(name);
-  if (configuredDefinition != null && configuredDefinition !== DEFAULT_DEFINITIONS.get(name)) return titleCase(name);
+  if (configuredDefinition != null && !isDefault(name, configuredDefinition)) return titleCase(name);
   return label;
 }
 
 /** What the classifier was told the kind covers: the configured definition, else the default one. */
 export function codeWorkTypeDefinition(name: string, configuredDefinition?: string | null): string | null {
+  if (RULE_LABELS[name]) return RULE_LABELS[name].definition;
   return configuredDefinition ?? DEFAULT_DEFINITIONS.get(name) ?? null;
 }

@@ -119,13 +119,15 @@ export const OPENAI_SPECIALIST_MODELS = new Set([
 ]);
 
 // Published Anthropic API pricing, $/MTok (input / output), from
-// platform.claude.com/docs/en/about-claude/pricing (checked 2026-11-05).
+// platform.claude.com/docs/en/about-claude/pricing (checked 2026-11-20).
 // Retired models stay because Bedrock and Google Cloud still serve some of them.
 // Claude Haiku 5.5 is priced at its rate for prompts up to 100,000 tokens; longer
 // prompts cost five times as much, so its spend is a low estimate for those.
 // OpenAI's rates come first (OPENAI_DEFAULT_RATES above).
 export const DEFAULT_RATES: ModelRates = {
   ...OPENAI_DEFAULT_RATES,
+  'claude-fable-5-2': rate(8, 40, 0.025),
+  'claude-mythos-5-2': rate(8, 40, 0.025),
   'claude-fable-5-1': rate(10, 50, 0.025),
   'claude-mythos-5-1': rate(10, 50, 0.025),
   'claude-fable-5': rate(10, 50),

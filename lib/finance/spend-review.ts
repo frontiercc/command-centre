@@ -45,6 +45,7 @@ import { buildChargeback, mergeUsersById } from '@/lib/finance/chargeback';
 import { SpendSplitAcc, type SpendSplit } from '@/lib/finance/where-money-went';
 import { routeRank } from '@/lib/finance/spend-review-format';
 import { chatgptSessionShares, codexSessionTurns, type OpenAiFilter } from '@/lib/finance/spend-review-openai';
+import { AUTOMATED_WORK_TYPE } from '@/lib/pulse/code/automated-runs';
 
 export const PEER_WINDOW_DAYS = 90;
 export const MIN_PEER_USERS = 3;
@@ -1450,6 +1451,8 @@ export interface SpendReviewPerson {
   mainWork: { label: string; surface: ReviewSurface; share: number } | null;
   /** Distinct better routes across their kinds of work (a tool suggested for two kinds counts once). */
   routeCount: number;
+  /** Sessions started by a script or test harness this month (lib/pulse/code/automated-runs.ts). */
+  automatedRuns: number;
   /**
    * The route the index leads with: the one with the largest estimated saving, else (none has a
    * saving) the one on the work carrying most of their spend. Null exactly when routeCount is 0.
@@ -1762,7 +1765,12 @@ export async function buildSpendReviewIndex(period: string, nowS: number = Math.
     if (workKey) addNum(orgKindSpend, key, acc.spend);
     orgSessionSpend += acc.spend;
   };
-  for (const acc of [...codeAcc.values(), ...codexAcc.values()]) { const w = codeWork.get(acc.sessionId); addSession(acc, w?.workType ?? null, w?.tier ?? null, null); }
+  const automatedByUser = new Map<string, number>();
+  for (const acc of [...codeAcc.values(), ...codexAcc.values()]) {
+    const w = codeWork.get(acc.sessionId);
+    if (w?.workType === AUTOMATED_WORK_TYPE) automatedByUser.set(acc.userId, (automatedByUser.get(acc.userId) ?? 0) + 1);
+    addSession(acc, w?.workType ?? null, w?.tier ?? null, null);
+  }
   for (const acc of coworkAcc.values()) addSession(acc, coworkWork.get(acc.sessionId) ?? null, coworkTier.get(acc.sessionId) ?? null, produced.get(acc.sessionId) ?? null);
   for (const acc of chatgptAcc.values()) addSession(acc, coworkWork.get(acc.sessionId) ?? null, coworkTier.get(acc.sessionId) ?? null, null);
 
@@ -1848,6 +1856,7 @@ export async function buildSpendReviewIndex(period: string, nowS: number = Math.
       unpricedOnly: u.totalUsd === 0,
       mainWork,
       routeCount: suggestions.size,
+      automatedRuns: automatedByUser.get(u.userId) ?? 0,
       topRoute: pickTopRoute(candidates),
       _efficiency: figs,
     };

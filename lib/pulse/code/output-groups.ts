@@ -5,20 +5,24 @@
  * The one comparison every So what card is priced from: inside a team, the people who hand whole
  * pieces of work over against the people who do not, and what each group ships.
  *
- * Both groups are measured. Output is commits per person from GitHub, which counts commits made
- * with Claude Code, with Codex and with no tool recorded, so a person who hardly uses Claude is
- * still counted fairly. No AI estimate goes anywhere near this.
+ * Both groups are measured. Output is the commits made in each person's own sessions, as Claude Code
+ * and Codex record them, so everyone with sessions in the window is counted, with no account
+ * matching needed. No AI estimate goes anywhere near this.
  *
  * Who is in which group follows Team coaching's rule, so the two pages never disagree: fewer than
  * HARDLY_USED sessions in the window and a person is in neither group, otherwise more than half
- * their sessions in the top two tiers puts them in the first group.
+ * their sessions in the top two tiers puts them in the first group. Automated runs are not a
+ * person's own sessions and count in neither the grouping nor the output.
  *
- * The card refuses rather than guesses. A team with no GitHub data at all cannot be answered. A
- * group under MIN_GROUP people is too few to tell, which also stops a chart identifying anyone.
+ * The card refuses rather than guesses. A team whose sessions made no commits at all cannot be
+ * answered. A group under MIN_GROUP people is too few to tell, which also stops a chart identifying
+ * anyone.
  */
 import { sql, type SQL } from 'drizzle-orm';
 import { getTypedClient } from '@/lib/db/client';
 import { codeSessionVendor } from '@/lib/pulse/code/vendor-view';
+import { codexActionCounts } from '@/lib/pulse/code/aggregator';
+import { AUTOMATED_WORK_TYPE } from '@/lib/pulse/code/automated-runs';
 import type { Vendor } from '@/lib/dashboard/vendor';
 
 const DAY = 86400;
@@ -39,18 +43,16 @@ export interface GroupFigures {
   perPerson: number | null;
 }
 
-export type GroupsVerdict = 'ok' | 'no_github' | 'too_few';
+export type GroupsVerdict = 'ok' | 'no_commits' | 'too_few';
 
 export interface OutputGroups {
   department: string;
-  /** Everyone in the team with a classified session in the window. */
+  /** Everyone in the team with a classified session of their own in the window. */
   people: number;
   deep: GroupFigures;
   shallow: GroupFigures;
   /** People using it too little to belong in either group. */
   hardly: number;
-  /** People left out because no GitHub commits can be attributed to them. */
-  unmatched: number;
   /** A dot per person for the chart, in group order. No names: the chart is a count. */
   dots: GroupName[];
   /** Commits per person the second group would add if it worked like the first. */
@@ -65,9 +67,8 @@ interface PersonRow {
   department: string | null;
   sessions: number | string;
   deep_sessions: number | string;
+  commits: number | string | null;
 }
-
-interface CommitRow { user_id: string; commits: number | string }
 
 const n = (v: unknown) => Number(v ?? 0);
 
@@ -78,12 +79,7 @@ function departmentSql(): SQL {
 
 const NO_DEPARTMENT = 'No department';
 
-/** The day a window starts, as the text date GitHub rows are keyed by. */
-export function dayString(epochS: number): string {
-  return new Date(epochS * 1000).toISOString().slice(0, 10);
-}
-
-interface Person { userId: string; department: string; group: GroupName; commits: number; matched: boolean }
+interface Person { userId: string; department: string; group: GroupName; commits: number }
 
 /** Which group a person belongs in, from their sessions in the window. */
 export function groupFor(sessions: number, deepSessions: number): GroupName {
@@ -91,9 +87,9 @@ export function groupFor(sessions: number, deepSessions: number): GroupName {
   return deepSessions / sessions > DEEP_PERSON_SHARE ? 'deep' : 'shallow';
 }
 
-/** The figures for one team, from people already grouped and matched. */
+/** The figures for one team, from people already grouped. */
 export function groupsFrom(department: string, people: Person[]): OutputGroups {
-  const counted = people.filter(p => p.group !== 'hardly' && p.matched);
+  const counted = people.filter(p => p.group !== 'hardly');
   const deepPeople = counted.filter(p => p.group === 'deep');
   const shallowPeople = counted.filter(p => p.group === 'shallow');
   const figures = (ps: Person[]): GroupFigures => {
@@ -103,10 +99,9 @@ export function groupsFrom(department: string, people: Person[]): OutputGroups {
   const deep = figures(deepPeople);
   const shallow = figures(shallowPeople);
 
-  const inTeam = people.filter(p => p.group !== 'hardly');
   const verdict: GroupsVerdict =
-    inTeam.every(p => !p.matched) ? 'no_github'
-      : deep.perPerson === null || shallow.perPerson === null ? 'too_few'
+    deep.perPerson === null || shallow.perPerson === null ? 'too_few'
+      : deep.commits + shallow.commits === 0 ? 'no_commits'
         : 'ok';
 
   const gapPerPerson = verdict === 'ok' ? deep.perPerson! - shallow.perPerson! : null;
@@ -121,7 +116,6 @@ export function groupsFrom(department: string, people: Person[]): OutputGroups {
     deep,
     shallow,
     hardly: people.filter(p => p.group === 'hardly').length,
-    unmatched: inTeam.filter(p => !p.matched).length,
     dots: [...deepPeople.map(() => 'deep' as const), ...shallowPeople.map(() => 'shallow' as const)],
     gapPerPerson,
     peopleWorth,
@@ -136,28 +130,41 @@ export async function getOutputGroups(vendor: Vendor, nowS = Math.floor(Date.now
   const run = async (q: SQL) =>
     (await (client as unknown as { execute: (query: SQL) => Promise<{ rows: unknown[] }> }).execute(q)).rows;
 
+  // Each person's own sessions in the window, how many went deep, and the commits Claude Code
+  // recorded in them. Automated runs are left out of all three.
   const personRows = (await run(sql`
     SELECT csc.user_id,
            ${departmentSql()} AS department,
            COUNT(*) AS sessions,
-           SUM(CASE WHEN csc.tier >= 2 THEN 1 ELSE 0 END) AS deep_sessions
+           SUM(CASE WHEN csc.tier >= 2 THEN 1 ELSE 0 END) AS deep_sessions,
+           SUM(CASE WHEN css.session_id LIKE 'codex:%' THEN 0 ELSE COALESCE(css.commit_count, 0) END) AS commits
     FROM code_session_classifications csc
     JOIN code_session_stats css ON css.session_id = csc.session_id
     LEFT JOIN users u ON u.id = csc.user_id
     LEFT JOIN admin_users au ON au.linked_cowork_user_id = csc.user_id
     WHERE csc.status = 'classified' AND css.last_at >= ${since}
+      AND csc.work_type <> ${AUTOMATED_WORK_TYPE}
       AND ${codeSessionVendor(sql`css.session_id`, vendor)}
     GROUP BY csc.user_id, ${departmentSql()}
   `)) as PersonRow[];
 
-  // Commits per person over the same window: made with Claude, with Codex and with no tool.
-  const commitRows = (await run(sql`
-    SELECT user_id, SUM(commit_count) AS commits
-    FROM github_user_repo_stats
-    WHERE date >= ${dayString(since)}
-    GROUP BY user_id
-  `)) as CommitRow[];
-  const commits = new Map(commitRows.map(r => [r.user_id, n(r.commits)]));
+  // A Codex session's commits are in its own actions, which Claude Code's telemetry never sees.
+  const codexRows = (await run(sql`
+    SELECT csc.user_id, css.session_id
+    FROM code_session_classifications csc
+    JOIN code_session_stats css ON css.session_id = csc.session_id
+    WHERE csc.status = 'classified' AND css.last_at >= ${since}
+      AND csc.work_type <> ${AUTOMATED_WORK_TYPE}
+      AND css.session_id LIKE 'codex:%'
+      AND ${codeSessionVendor(sql`css.session_id`, vendor)}
+  `)) as Array<{ user_id: string; session_id: string }>;
+  const codexCommits = new Map<string, number>();
+  if (codexRows.length > 0) {
+    const counts = await codexActionCounts(client, codexRows.map(r => r.session_id));
+    for (const r of codexRows) {
+      codexCommits.set(r.user_id, (codexCommits.get(r.user_id) ?? 0) + (counts.get(r.session_id)?.commits ?? 0));
+    }
+  }
 
   const byTeam = new Map<string, Person[]>();
   for (const r of personRows) {
@@ -166,9 +173,7 @@ export async function getOutputGroups(vendor: Vendor, nowS = Math.floor(Date.now
       userId: r.user_id,
       department,
       group: groupFor(n(r.sessions), n(r.deep_sessions)),
-      commits: commits.get(r.user_id) ?? 0,
-      // Nothing tells matched-with-no-commits from unmatched, so having commits is the test.
-      matched: commits.has(r.user_id),
+      commits: n(r.commits) + (codexCommits.get(r.user_id) ?? 0),
     };
     const list = byTeam.get(department);
     if (list) list.push(person); else byTeam.set(department, [person]);

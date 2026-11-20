@@ -6,7 +6,8 @@
 // `code_metrics.spend_usd` is numeric on pg, so it is coerced.
 import { NextRequest, NextResponse } from 'next/server';
 import { visibleVendor, visibleOpenAi } from '@/lib/sources/openai-visibility';
-import { and, desc, eq, gte, inArray } from 'drizzle-orm';
+import { and, desc, eq, gte, inArray, ne } from 'drizzle-orm';
+import { AUTOMATED_WORK_TYPE } from '@/lib/pulse/code/automated-runs';
 import { getAdminSession, isDeptScoped, canAccessCodePulse, canAccessPulseAdmin } from '@/lib/auth/admin-auth';
 import { getTypedClient } from '@/lib/db/client';
 import { schema } from '@/lib/db/schema';
@@ -139,7 +140,7 @@ export async function GET(
     .from(csc)
     .innerJoin(css, eq(css.session_id, csc.session_id))
     .innerJoin(u, eq(u.id, csc.user_id))
-    .where(and(eq(u.department, dept), eq(csc.status, 'classified'), gte(css.last_at, sixWeeksAgo), codeSessionVendor(css.session_id, vendor)));
+    .where(and(eq(u.department, dept), eq(csc.status, 'classified'), ne(csc.work_type, AUTOMATED_WORK_TYPE), gte(css.last_at, sixWeeksAgo), codeSessionVendor(css.session_id, vendor)));
 
   const counts = new Map<string, number>();
   const provisionalCounts = new Map<string, number>();
@@ -161,7 +162,7 @@ export async function GET(
     .from(csc)
     .innerJoin(css, eq(css.session_id, csc.session_id))
     .innerJoin(u, eq(u.id, csc.user_id))
-    .where(and(eq(u.department, dept), eq(csc.status, 'classified'), gte(css.last_at, yearAgo), codeSessionVendor(css.session_id, vendor)));
+    .where(and(eq(u.department, dept), eq(csc.status, 'classified'), ne(csc.work_type, AUTOMATED_WORK_TYPE), gte(css.last_at, yearAgo), codeSessionVendor(css.session_id, vendor)));
   const { weeks: tierWeeks, grid: tierGrid } = weeklyTiers(yearTierRows, now);
   const tierNames = await getCodeTierNames();
 
