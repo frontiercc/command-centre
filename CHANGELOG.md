@@ -13,6 +13,19 @@
 
 - Automated runs stay out of the figures about how people work: the share of multi-step work, the tier charts, Team Coaching's people and So What's groups. They are still counted, priced and shown.
 - Developer Pulse So What's hiring answer splits each team by Tier 2/3 work and compares what each group produces: commits, pull requests and accepted edits. Commits come from GitHub where a person's account is linked, and from their Claude Code sessions otherwise.
+- Team Coaching and So What leave out "No department". People without a department yet no longer appear as a team, matching the Departments page.
+- Faster pages.
+  - Parts of a page that ask for the same thing at the same moment now share one request.
+  - The heavier routes run their queries side by side instead of one after another, and stop repeating reads.
+  - New indexes serve the latest-score and recent-activity lookups (migration 0061).
+
+### Fixed
+
+- Claude Code metrics: running totals are stored as increases. Clients set to cumulative temporality send running totals. The receiver now reads the temporality of each series and stores the increase since the last value, so engaged time, lines, pull requests and edits are no longer overstated (migration 0060). A one-off script, `scripts/convert-cumulative-otel-history.mjs`, corrects rows stored before this change. It reports what it would change and changes nothing unless run with `--apply`.
+
+### Upgrading
+
+- Migration 0061 builds indexes on `pulse_metrics`, `code_metrics`, `code_assistant_meta` and `cowork_messages`. On large tables this takes from seconds to a few minutes at first start.
 
 ## 1.4.4 (2026-11-20)
 
