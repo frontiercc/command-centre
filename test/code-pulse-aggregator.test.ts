@@ -227,6 +227,60 @@ describe('runCodeHourlyAggregation', () => {
     await sql.run(`UPDATE users SET department = NULL WHERE id = 'user-1'`);
   });
 
+  // Token totals are 64-bit: a long-lived session can pass 2,147,483,647.
+  it('stores a session whose token totals pass the 32-bit limit', async () => {
+    const PER_CALL = 2_000_000_000;
+    for (let i = 0; i < 4; i++) {
+      await seedMeta({ id: `big-${i}`, sessionId: 'big', model: 'claude-sonnet-4-5', cacheRead: PER_CALL, input: PER_CALL, occurredAt: NOW - i });
+    }
+    await runCodeHourlyAggregation();
+
+    const row = (await sql.get(
+      `SELECT cache_read_tokens, input_tokens, models_json FROM code_session_stats WHERE session_id = 'big'`,
+    )) as { cache_read_tokens: number; input_tokens: number; models_json: string };
+    expect(row.cache_read_tokens).toBe(8_000_000_000);
+    expect(row.input_tokens).toBe(8_000_000_000);
+    expect(JSON.parse(row.models_json)['claude-sonnet-4-5'].cache_read).toBe(8_000_000_000);
+
+    const org = (await sql.get(
+      `SELECT input_tokens FROM code_metrics WHERE scope_type = 'organisation' AND granularity = 'rolling' ORDER BY id DESC LIMIT 1`,
+    )) as { input_tokens: number };
+    expect(org.input_tokens).toBe(8_000_000_000);
+  });
+
+  // The roll-up reads each session's rows once and sums them in code. These are
+  // the figures the four separate queries used to produce.
+  it('sums one session across models, model-less rows and prompts in a single read', async () => {
+    await seedMeta({ id: 'a1', sessionId: 'mix', model: 'claude-haiku-4-5', input: 100, output: 10, cacheCreate: 5, cacheRead: 50, tools: 2, commits: 1, cwd: '/home/lee/old-repo', occurredAt: NOW - 600 });
+    await seedMeta({ id: 'a2', sessionId: 'mix', model: 'claude-sonnet-4-5', input: 200, output: 20, cacheCreate: 6, cacheRead: 60, tools: 3, cwd: '/home/lee/new-repo', occurredAt: NOW - 300 });
+    // A later row with no model: counted in the totals, not as a turn.
+    await seedMeta({ id: 'a3', sessionId: 'mix', model: '', input: 1, tools: 1, cwd: '/home/lee/new-repo', occurredAt: NOW - 100 });
+    await seedUserMsg('p1', 'mix', 'user-1', NOW - 700);
+    await seedUserMsg('p2', 'mix', 'user-1', NOW - 200);
+
+    expect(await rollupCodeSessionStats()).toBe(1);
+
+    const row = (await sql.get(`SELECT * FROM code_session_stats WHERE session_id = 'mix'`)) as Record<string, unknown>;
+    expect(row.assistant_turns).toBe(2);
+    expect(row.tool_use_count).toBe(6);
+    expect(row.commit_count).toBe(1);
+    expect(row.input_tokens).toBe(301);
+    expect(row.output_tokens).toBe(30);
+    expect(row.cache_creation_tokens).toBe(11);
+    expect(row.cache_read_tokens).toBe(110);
+    expect(row.user_msg_count).toBe(2);
+    expect(row.first_at).toBe(NOW - 700);
+    expect(row.last_at).toBe(NOW - 100);
+    expect(row.repo).toBe('new-repo');
+    expect(row.user_id).toBe('user-1');
+    // Every gap between events is under the 30-minute idle limit: 700 - 100.
+    expect(row.active_secs).toBe(600);
+    expect(JSON.parse(row.models_json as string)).toEqual({
+      'claude-haiku-4-5': { input: 100, output: 10, cache_creation: 5, cache_read: 50 },
+      'claude-sonnet-4-5': { input: 200, output: 20, cache_creation: 6, cache_read: 60 },
+    });
+  });
+
   it('advances the high-water mark after a run', async () => {
     await seedMeta({ id: 'm1', sessionId: 's1', input: 10 });
     await runCodeHourlyAggregation();

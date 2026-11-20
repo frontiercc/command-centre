@@ -414,6 +414,13 @@
       "when": 1792195207000,
       "tag": "0058_cowork_client_info",
       "breakpoints": true
+    },
+    {
+      "idx": 59,
+      "version": "7",
+      "when": 1792281607000,
+      "tag": "0059_wide_token_counts",
+      "breakpoints": true
     }
   ]
 }

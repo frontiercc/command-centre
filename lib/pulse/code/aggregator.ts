@@ -22,7 +22,7 @@
  * 'week' rows are upserted via onConflictDoUpdate with
  * `targetWhere: sql\`granularity = 'week'\`` as the partial index arbiter.
  */
-import { and, desc, eq, gte, inArray, isNotNull, lt, ne, sql } from 'drizzle-orm';
+import { and, eq, gte, inArray, isNotNull, lt, ne, sql } from 'drizzle-orm';
 import { getTypedClient } from '@/lib/db/client';
 import { schema } from '@/lib/db/schema';
 import { getConfigValue, setConfigValue } from '@/lib/config';
@@ -108,82 +108,80 @@ export async function rollupCodeSessionStats(): Promise<number> {
   let updated = 0;
 
   for (const { session_id } of dirty) {
-    // Assistant-side aggregates (full recompute per session — idempotent).
-    // SUM/MIN/MAX/COUNT are STRINGS on Postgres (bigint) — Number()-coerce at
-    // the read site (Policy B); these feed spend/output figures downstream.
-    const metaRows = await client
+    // Assistant side: ONE read of the session's model-call rows, summed here
+    // (totals, latest working folder, per-model totals and timestamps). A
+    // long-lived session has tens of thousands of rows and is recomputed every
+    // hour while it is active, so one pass matters. Per-call counts are small
+    // integers, so plain JS sums are exact.
+    const camRows = await client
       .select({
-        turns: sql<number | string | null>`SUM(CASE WHEN ${cam.model} != '' THEN 1 ELSE 0 END)`,
-        tools: sql<number | string | null>`SUM(${cam.tool_use_count})`,
-        errors: sql<number | string | null>`SUM(${cam.error_count})`,
-        commits: sql<number | string | null>`SUM(${cam.commit_count})`,
-        inp: sql<number | string | null>`SUM(${cam.input_tokens})`,
-        outp: sql<number | string | null>`SUM(${cam.output_tokens})`,
-        cw: sql<number | string | null>`SUM(${cam.cache_creation_tokens})`,
-        cr: sql<number | string | null>`SUM(${cam.cache_read_tokens})`,
-        first_at: sql<number | string | null>`MIN(${cam.occurred_at})`,
-        last_at: sql<number | string | null>`MAX(${cam.occurred_at})`,
+        model: cam.model,
+        tool_use_count: cam.tool_use_count,
+        error_count: cam.error_count,
+        commit_count: cam.commit_count,
+        input_tokens: cam.input_tokens,
+        output_tokens: cam.output_tokens,
+        cache_creation_tokens: cam.cache_creation_tokens,
+        cache_read_tokens: cam.cache_read_tokens,
+        occurred_at: cam.occurred_at,
+        user_id: cam.user_id,
+        cwd: cam.cwd,
+        git_branch: cam.git_branch,
       })
       .from(cam)
       .where(eq(cam.session_id, session_id));
-    const meta = metaRows[0];
-    const turns = Number(meta?.turns ?? 0);
-    const tools = Number(meta?.tools ?? 0);
-    const errorsCount = Number(meta?.errors ?? 0);
-    const commits = Number(meta?.commits ?? 0);
-    const inp = Number(meta?.inp ?? 0);
-    const outp = Number(meta?.outp ?? 0);
-    const cw = Number(meta?.cw ?? 0);
-    const cr = Number(meta?.cr ?? 0);
-    const metaFirstAt = meta?.first_at != null ? Number(meta.first_at) : null;
-    const metaLastAt = meta?.last_at != null ? Number(meta.last_at) : null;
 
-    const lastCtxRows = await client
-      .select({ user_id: cam.user_id, cwd: cam.cwd, git_branch: cam.git_branch })
-      .from(cam)
-      .where(and(eq(cam.session_id, session_id), ne(cam.cwd, '')))
-      .orderBy(desc(cam.occurred_at))
-      .limit(1);
-    const lastCtx = lastCtxRows[0];
-
-    const perModelRows = await client
-      .select({
-        model: cam.model,
-        inp: sql<number | string | null>`SUM(${cam.input_tokens})`,
-        outp: sql<number | string | null>`SUM(${cam.output_tokens})`,
-        cw: sql<number | string | null>`SUM(${cam.cache_creation_tokens})`,
-        cr: sql<number | string | null>`SUM(${cam.cache_read_tokens})`,
-      })
-      .from(cam)
-      .where(and(eq(cam.session_id, session_id), ne(cam.model, '')))
-      .groupBy(cam.model);
-
+    let turns = 0, tools = 0, errorsCount = 0, commits = 0, inp = 0, outp = 0, cw = 0, cr = 0;
+    let metaFirstAt: number | null = null;
+    let metaLastAt: number | null = null;
+    let lastCtx: { user_id: string | null; cwd: string | null; git_branch: string | null } | undefined;
+    let lastCtxAt = -Infinity;
     const modelsJson: Record<string, { input: number; output: number; cache_creation: number; cache_read: number }> = {};
-    for (const m of perModelRows) {
-      if (!m.model) continue; // ne(cam.model, '') already excludes null/empty; guard for TS
-      modelsJson[m.model] = {
-        input: Number(m.inp ?? 0),
-        output: Number(m.outp ?? 0),
-        cache_creation: Number(m.cw ?? 0),
-        cache_read: Number(m.cr ?? 0),
-      };
+    const camTimestamps: number[] = [];
+    for (const r of camRows) {
+      const at = Number(r.occurred_at);
+      const rIn = Number(r.input_tokens ?? 0);
+      const rOut = Number(r.output_tokens ?? 0);
+      const rCw = Number(r.cache_creation_tokens ?? 0);
+      const rCr = Number(r.cache_read_tokens ?? 0);
+      tools += Number(r.tool_use_count ?? 0);
+      errorsCount += Number(r.error_count ?? 0);
+      commits += Number(r.commit_count ?? 0);
+      inp += rIn; outp += rOut; cw += rCw; cr += rCr;
+      camTimestamps.push(at);
+      if (metaFirstAt === null || at < metaFirstAt) metaFirstAt = at;
+      if (metaLastAt === null || at > metaLastAt) metaLastAt = at;
+      if (r.model) {
+        turns++;
+        const m = (modelsJson[r.model] ??= { input: 0, output: 0, cache_creation: 0, cache_read: 0 });
+        m.input += rIn; m.output += rOut; m.cache_creation += rCw; m.cache_read += rCr;
+      }
+      // Latest row that recorded a working directory (>= keeps the later row on a tie).
+      if (r.cwd && at >= lastCtxAt) {
+        lastCtxAt = at;
+        lastCtx = { user_id: r.user_id, cwd: r.cwd, git_branch: r.git_branch };
+      }
     }
 
-    // User-side aggregates
-    const userSideRows = await client
-      .select({
-        msgs: sql<number | string>`COUNT(*)`,
-        first_at: sql<number | string | null>`MIN(${cm.occurred_at})`,
-        last_at: sql<number | string | null>`MAX(${cm.occurred_at})`,
-        user_id: sql<string | null>`MAX(${cm.user_id})`,
-      })
+    // User side: one read of the session's prompt rows (was a summary query
+    // plus a second read of the same rows for their timestamps).
+    const userRows = await client
+      .select({ occurred_at: cm.occurred_at, user_id: cm.user_id })
       .from(cm)
       .where(and(eq(cm.session_id, session_id), eq(cm.surface, 'code'), eq(cm.message_type, 'code_user_message')));
-    const userSide = userSideRows[0];
-    const userMsgs = Number(userSide?.msgs ?? 0);
-    const userFirstAt = userSide?.first_at != null ? Number(userSide.first_at) : null;
-    const userLastAt = userSide?.last_at != null ? Number(userSide.last_at) : null;
-    const userSideUserId = userSide?.user_id ?? null;
+    const userMsgs = userRows.length;
+    let userFirstAt: number | null = null;
+    let userLastAt: number | null = null;
+    let userSideUserId: string | null = null;
+    const userTimestamps: number[] = [];
+    for (const r of userRows) {
+      const at = Number(r.occurred_at);
+      userTimestamps.push(at);
+      if (userFirstAt === null || at < userFirstAt) userFirstAt = at;
+      if (userLastAt === null || at > userLastAt) userLastAt = at;
+      // Same pick as the old MAX(user_id): the highest id in the session.
+      if (r.user_id && (userSideUserId === null || r.user_id > userSideUserId)) userSideUserId = r.user_id;
+    }
 
     const skillRows = await client
       .select({ skill_name: csi.skill_name, invocation_type: csi.invocation_type })
@@ -211,17 +209,9 @@ export async function rollupCodeSessionStats(): Promise<number> {
     // both the assistant side (code_assistant_meta) and the user side
     // (code_user_message rows), mirroring lib/pulse/cowork/session-aggregator.ts's
     // per-session raw-timestamp style. See lib/pulse/session-active-time.ts.
-    const camTimestampRows = await client
-      .select({ occurred_at: cam.occurred_at })
-      .from(cam)
-      .where(eq(cam.session_id, session_id));
-    const userMsgTimestampRows = await client
-      .select({ occurred_at: cm.occurred_at })
-      .from(cm)
-      .where(and(eq(cm.session_id, session_id), eq(cm.surface, 'code'), eq(cm.message_type, 'code_user_message')));
     const activeSecs = activeSecondsFromTimestamps([
-      ...camTimestampRows.map(r => Number(r.occurred_at)),
-      ...userMsgTimestampRows.map(r => Number(r.occurred_at)),
+      ...camTimestamps,
+      ...userTimestamps,
       ...codexActionTs,
     ]);
 
