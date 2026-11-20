@@ -40,7 +40,7 @@ import { REPEAT_MIN_PROMPTS } from '@/lib/pulse/cowork/coaching-figures';
 import { MECHANISM_TASK_TYPES } from '@/lib/finance/model-efficiency';
 import { kindLabel } from '@/lib/pulse/cowork/coaching-words';
 import { soleWorkByPerson } from '@/lib/pulse/sole-work';
-import { cachedWorkPulse } from '@/lib/pulse/work-pulse-cache';
+import { keptFigures } from '@/lib/kept-figures';
 import { errorResponse } from '@/lib/api/errors';
 
 export const dynamic = 'force-dynamic';
@@ -83,9 +83,9 @@ export async function GET(
     const sp = request.nextUrl.searchParams;
     // Built once per team, view, window and viewer (the best-work boxes show admins and managers
     // more, and mark the viewer's own work), then kept for five minutes and refreshed in the
-    // background (lib/pulse/work-pulse-cache.ts). A result with a part that failed is not kept.
+    // background (lib/kept-figures.ts). A result with a part that failed is not kept.
     const key = ['dept', dept, sp.get('vendor') ?? '', sp.get('weeks') ?? '', sp.get('period') ?? '', session.role ?? '', session.email ?? ''].join('\u0000');
-    const body = await cachedWorkPulse(key, () => buildDept(dept, request, session), { keep: b => b.failed.length === 0, force: sp.get('fresh') === '1' });
+    const body = await keptFigures(key, () => buildDept(dept, request, session), { keep: b => b.failed.length === 0, force: sp.get('fresh') === '1' });
     return NextResponse.json(body);
   } catch (err) {
     return errorResponse('pulse/dept', err);

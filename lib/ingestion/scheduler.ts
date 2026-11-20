@@ -42,6 +42,10 @@ let descriptionRunInFlight = false;
 let judgeRunInFlight = false;
 let openAiSyncInFlight = false;
 let anomalyRunInFlight = false;
+// The page-figures refresh runs alongside the cycle too; its cadence is kept in memory because
+// what it refreshes is kept in memory (lib/kept-figures.ts).
+let keptRefreshInFlight = false;
+let keptRefreshLastAt = 0;
 
 /**
  * Wall-clock budget per SCHEDULED classifier drain. Bounds when a pass may
@@ -170,6 +174,28 @@ async function runCycle(): Promise<void> {
   // already started under the current generation — exit now rather than run
   // the rest of this cycle's jobs beside it.
   if (generation !== schedulerGeneration) return;
+
+  // Page figures (lib/kept-figures.ts): every few minutes, rebuild the heavy pages' figures so a
+  // visit reads prepared figures instead of waiting for them. The organisation-wide pages are
+  // prepared from start-up; the rest from their first visit. STARTED, NOT AWAITED, and builds one
+  // view at a time, so it never holds up the jobs after it or floods the database.
+  if (!keptRefreshInFlight) {
+    const { REFRESH_EVERY_MS } = await import('@/lib/kept-figures');
+    if (Date.now() - keptRefreshLastAt >= REFRESH_EVERY_MS) {
+      keptRefreshInFlight = true;
+      keptRefreshLastAt = Date.now();
+      void runJob('kept_figures_refresh', 'Page figures refresh', async () => {
+        const { refreshKeptFigures } = await import('@/lib/kept-figures');
+        const { registerWarmViews } = await import('@/lib/kept-figures-warm');
+        registerWarmViews();
+        const r = await refreshKeptFigures();
+        // Counts only: keys can name a person, and this text is stored for System health.
+        if (r.failed > 0) {
+          throw new Error(`${r.failed} of ${r.refreshed + r.failed} page views could not be rebuilt; the last good figures are still shown`);
+        }
+      }).finally(() => { keptRefreshInFlight = false; });
+    }
+  }
 
   // OpenAI sync (ChatGPT and Codex prompts), interval-gated inside the job and
   // a no-op until a key and workspace are saved. STARTED, NOT AWAITED: a first

@@ -1,5 +1,10 @@
 # Changelog
 
+## 1.4.6 (2026-11-20)
+
+- **Faster pages:** the heavy pages (Dashboard, Work Pulse, Developer Pulse, both Users lists, FinOps) read figures prepared in the background every 5 minutes, instead of working them out on each visit. Figures are at most a few minutes old.
+- System health shows the new "Page figures refresh" job.
+
 ## 1.4.5 (2026-11-20)
 
 - **Automated runs:** Developer Pulse shows script and test-harness sessions as "Automated runs". They are kept out of the figures about how people work.

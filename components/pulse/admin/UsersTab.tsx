@@ -89,7 +89,8 @@ export default function UsersTab() {
   }, []);
 
   useEffect(() => {
-    fetch('/api/pulse/admin/users')
+    // Always built now: admins read the waiting and failed counts here right after acting on them.
+    fetch('/api/pulse/admin/users?fresh=1')
       .then(r => r.json())
       .then(d => setUsers(d.users ?? []))
       .catch(() => setUsers([]))

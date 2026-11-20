@@ -16,6 +16,7 @@ import { requireAdmin } from '@/lib/auth/admin-auth';
 import { logAccess } from '@/lib/audit/log';
 import { getTypedClient } from '@/lib/db/client';
 import { schema } from '@/lib/db/schema';
+import { forgetKeptFigures } from '@/lib/kept-figures';
 
 export const dynamic = 'force-dynamic';
 
@@ -83,6 +84,13 @@ export async function GET(request: NextRequest) {
 }
 
 export async function POST(request: NextRequest) {
+  const res = await changeCostCentres(request);
+  // A change moves spend between cost centres, so the kept FinOps figures are rebuilt.
+  if (res.ok) forgetKeptFigures('chargeback:');
+  return res;
+}
+
+async function changeCostCentres(request: NextRequest): Promise<NextResponse> {
   if ((await getAllConfig()).chargebackEnabled !== true) {
     return NextResponse.json({ error: 'Not found' }, { status: 404 });
   }

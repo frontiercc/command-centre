@@ -150,7 +150,8 @@ export default function DashboardPage() {
 
   useEffect(() => {
     if (!vendorReady) return; // the saved view is read after the page loads
-    fetch(`/api/dashboard?vendor=${vendor}`)
+    // Refresh asks for figures built now, not the ones kept from the last background refresh.
+    fetch(`/api/dashboard?vendor=${vendor}${refreshKey > 0 ? '&fresh=1' : ''}`)
       .then(r => {
         // A role without the dashboard is refused here and sent to its own
         // Pulse page by useCorePlatformGuard; that is not an error to log.

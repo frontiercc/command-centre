@@ -15,6 +15,8 @@ export default defineConfig({
     // is set, when it clears leftover ccc_t_* test databases and builds the
     // migrated template before any file starts. See test/helpers/pg.ts.
     globalSetup: ['test/helpers/pg-global-setup.ts'],
+    // Each test starts with no kept page figures (lib/kept-figures.ts).
+    setupFiles: ['test/helpers/kept-figures-reset.ts'],
     // Several suites re-import heavy module graphs (vi.resetModules + lib/anthropic)
     // or run real scrypt (N=32768) against a fresh database. Under parallel load
     // (Docker, CI) these legitimately exceed the 5s default and flake.

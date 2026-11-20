@@ -1,0 +1,709 @@
+// Copyright 2026 Lee James
+// SPDX-License-Identifier: Apache-2.0
+
+// Async Drizzle on Postgres. Follows the
+// standard pattern (lib/pulse/code/aggregator.ts, the
+// route app/api/pulse/cio/route.ts): getTypedClient() + schema.<table>, the
+// query builder for GROUP BY/HAVING aggregates, and a raw sql`CAST(... AS
+// REAL)` expression for the friction ratio (matching
+// lib/alerts/code-pulse-alerts.ts's checkFriction()). Every SUM/COUNT aggregate is Number()-coerced (bigint/numeric come back as STRINGS on Postgres); `code_metrics.spend_usd`
+// is `numeric` on pg specifically, so its single-row reads are also coerced.
+//
+// Speed: the page's cards are independent of one another, so their queries run
+// concurrently in two stages: first the view switch and settings that every
+// card needs, then every card at once (each card's own queries also run side by
+// side, waiting only where one query needs another's result). The database
+// pool queues whatever does not fit at once.
+import { getCodeWorkTypeDefinitions } from '@/lib/pulse/code/tier-config';
+import { codeWorkTypeLabel, codeWorkTypeDefinition } from '@/lib/pulse/code/work-type-labels';
+import { visibleVendor, visibleOpenAi } from '@/lib/sources/openai-visibility';
+import { and, desc, eq, gte, inArray, isNotNull, ne, notInArray, or, sql } from 'drizzle-orm';
+import { getTypedClient } from '@/lib/db/client';
+import { schema } from '@/lib/db/schema';
+import { getConfigValue } from '@/lib/config';
+import { getCodeModelRates, priceTokens, spendIsPartlyEstimated, isEstimatedPricing } from '@/lib/pulse/code/rates';
+import { ORG_SCOPE_ID } from '@/lib/pulse/code/aggregator';
+import { computeSpendConcentration } from '@/lib/pulse/code/concentration';
+import { getWeeklySeries, deltaFromSeries } from '@/lib/pulse/trends';
+import { type SpendProjection } from '@/lib/pulse/code/projection';
+import { buildFinopsProjection, MIN_PROJECTION_DAYS } from '@/lib/finance/finops-projection';
+import { buildDailyWindow, buildShippingSeries, buildRepoCards, countReposActive7d, countReposActive30d, hasToolSplit, buildCodexRepoReach, type GhDailyRow, type ShippingDay, type RepoShippingCard, type CodexRepoReach } from '@/lib/pulse/code/shipping-alignment';
+import { readHumanTime } from '@/lib/pulse/human-time-summary';
+import { hasCodexData, readCodeMetrics, trendVendor, codeSessionVendor } from '@/lib/pulse/code/vendor-view';
+import { codexSpend } from '@/lib/openai/spend';
+
+/** Developer Pulse's organisation-wide figures for one vendor view, the same for every viewer allowed in. */
+export async function buildCodeOrgSummary(vendorParam: string | null) {
+  const client = await getTypedClient();
+  const now = Math.floor(Date.now() / 1000);
+  const thirtyDaysAgo = now - 30 * 24 * 3600;
+  const sevenDaysAgo = now - 7 * 24 * 3600;
+
+  const cam = schema.codeAssistantMeta;
+  const css = schema.codeSessionStats;
+  const csi = schema.coworkSkillInvocations;
+  const cmi = schema.coworkMcpInvocations;
+  const com = schema.codeOtelMetrics;
+  const grm = schema.githubRepoMap;
+  const grs = schema.githubRepoStats;
+  const csc = schema.codeSessionClassifications;
+  const usr = schema.users;
+  const adu = schema.adminUsers;
+
+  // ── Stage 1: the view switch and the settings every card needs ──────────
+  // Developer Pulse's All / Claude / Codex switch. Claude Code's own
+  // telemetry (model calls, engaged time, lines, edits, languages) has no
+  // Codex counterpart, so those lists read Claude Code in every view but Codex.
+  const [vendor, codexPresent, rates, judgedLayerEnabled, mappedRepoRows] = await Promise.all([
+    visibleVendor(vendorParam),
+    visibleOpenAi(hasCodexData()),
+    getCodeModelRates(),
+    // Judged layer (opt-in): the work-type mix card reads this.
+    getConfigValue('codeClassifierEnabled').then(v => v !== 'false'),
+    // GitHub overlay: the manually-tracked repos.
+    client.select({ repo: grm.repo }).from(grm),
+  ]);
+  const tv = trendVendor(vendor, codexPresent);
+  const withClaude = vendor !== 'openai';
+  const withCodex = vendor !== 'claude' && codexPresent;
+  const sessionVendor = codeSessionVendor(sql`${schema.codeSessionStats.session_id}`, vendor);
+  const mappedRepos = mappedRepoRows.map(r => r.repo);
+
+  // ── Stage 2: every card, side by side ───────────────────────────────────
+
+  // Headline figures: the latest 'rolling' row, and the 30 days before it (the
+  // aggregator's latest 'rolling_prior' row). Both are read in one
+  // readCodeMetrics call, so the check for which table holds the view is made
+  // once rather than once per row.
+  const readMetrics = async () => {
+    const metricsColsFor = (cm: typeof schema.codeMetrics) => ({
+      spend_usd: cm.spend_usd,
+      input_tokens: cm.input_tokens,
+      output_tokens: cm.output_tokens,
+      cache_hit_ratio: cm.cache_hit_ratio,
+      autonomy_ratio: cm.autonomy_ratio,
+      session_count: cm.session_count,
+      repo_count: cm.repo_count,
+      commit_count: cm.commit_count,
+      skill_leverage: cm.skill_leverage,
+      friction_index: cm.friction_index,
+      active_time_user_s: cm.active_time_user_s,
+      active_time_cli_s: cm.active_time_cli_s,
+      lines_added: cm.lines_added,
+      lines_removed: cm.lines_removed,
+      pr_count: cm.pr_count,
+      edit_accept_count: cm.edit_accept_count,
+      edit_reject_count: cm.edit_reject_count,
+      period_start: cm.period_start,
+      period_end: cm.period_end,
+      computed_at: cm.computed_at,
+    });
+
+    const latestOrgRow = (t: typeof schema.codeMetrics, only: ReturnType<typeof eq> | undefined) => client
+      .select(metricsColsFor(t))
+      .from(t)
+      .where(and(eq(t.scope_type, 'organisation'), eq(t.scope_id, ORG_SCOPE_ID), eq(t.granularity, 'rolling'), only))
+      .orderBy(desc(t.computed_at))
+      .limit(1);
+    const priorOrgRow = (t: typeof schema.codeMetrics, only: ReturnType<typeof eq> | undefined) => client
+      .select({
+        spend_usd: t.spend_usd,
+        autonomy_ratio: t.autonomy_ratio,
+        cache_hit_ratio: t.cache_hit_ratio,
+        session_count: t.session_count,
+        repo_count: t.repo_count,
+        commit_count: t.commit_count,
+      })
+      .from(t)
+      .where(and(eq(t.scope_type, 'organisation'), eq(t.scope_id, ORG_SCOPE_ID), eq(t.granularity, 'rolling_prior'), only))
+      .orderBy(desc(t.computed_at))
+      .limit(1);
+    const toMetrics = <R extends { spend_usd: string | null }>(r: R | undefined) =>
+      r ? { ...r, spend_usd: r.spend_usd !== null ? Number(r.spend_usd) : null } : null;
+
+    const [[[metricsRows, priorMetricsRows]], split] = await Promise.all([
+      readCodeMetrics(vendor, codexPresent, async (t, only) => [await Promise.all([latestOrgRow(t, only), priorOrgRow(t, only)])]),
+      // All view, once Codex data exists: each product's figures, for the split
+      // lines under the headline figures.
+      vendor === 'all' && codexPresent
+        ? Promise.all([readCodeMetrics('claude', true, latestOrgRow), readCodeMetrics('openai', true, latestOrgRow)])
+        : null,
+    ]);
+
+    const metrics = toMetrics(metricsRows[0]);
+    const metricsSplit = split ? { claude: toMetrics(split[0][0]), openai: toMetrics(split[1][0]) } : null;
+
+    // Null when nothing happened in the prior 30 days, so no change is ever
+    // worked out against an empty window.
+    const priorMetricsRaw = priorMetricsRows[0] ?? null;
+    const priorMetrics = priorMetricsRaw && priorMetricsRaw.session_count > 0
+      ? { ...priorMetricsRaw, spend_usd: priorMetricsRaw.spend_usd !== null ? Number(priorMetricsRaw.spend_usd) : null }
+      : null;
+    return { metrics, metricsSplit, priorMetrics };
+  };
+
+  // Token share by model, last 30 days: Claude Code's model calls, and Codex's
+  // turns (uncached and cached input, output) in the views that include it.
+  const readModelMix = async () => {
+    const [modelMixRaw, codexModels] = await Promise.all([
+      !withClaude ? [] : client
+        .select({
+          model: cam.model,
+          input_tokens: sql<number | string>`SUM(${cam.input_tokens})`,
+          output_tokens: sql<number | string>`SUM(${cam.output_tokens})`,
+          cache_creation_tokens: sql<number | string>`SUM(${cam.cache_creation_tokens})`,
+          cache_read_tokens: sql<number | string>`SUM(${cam.cache_read_tokens})`,
+          // Turns are PROMPTS: a prompt stores one row per model call.
+          turns: sql<number | string>`COUNT(DISTINCT COALESCE(${cam.prompt_id}, ${cam.id}))`,
+        })
+        .from(cam)
+        .where(and(gte(cam.occurred_at, thirtyDaysAgo), ne(cam.model, '')))
+        .groupBy(cam.model)
+        .orderBy(desc(sql`SUM(${cam.input_tokens}) + SUM(${cam.output_tokens})`)),
+      !withCodex ? null : client
+        .select({
+          model: schema.codexTurns.model,
+          inp: sql<number | string>`SUM(${schema.codexTurns.uncached_input_tokens})`,
+          cached: sql<number | string>`SUM(${schema.codexTurns.cached_input_tokens})`,
+          outp: sql<number | string>`SUM(${schema.codexTurns.output_tokens})`,
+          turns: sql<number | string>`COUNT(*)`,
+        })
+        .from(schema.codexTurns)
+        .where(and(gte(schema.codexTurns.started_at, thirtyDaysAgo), isNotNull(schema.codexTurns.model)))
+        .groupBy(schema.codexTurns.model),
+    ]);
+    const modelMix = modelMixRaw.map(m => ({
+      model: m.model as string,
+      input_tokens: Number(m.input_tokens),
+      output_tokens: Number(m.output_tokens),
+      cache_creation_tokens: Number(m.cache_creation_tokens),
+      cache_read_tokens: Number(m.cache_read_tokens),
+      turns: Number(m.turns),
+    }));
+    if (codexModels) {
+      for (const m of codexModels) {
+        modelMix.push({
+          model: m.model as string, input_tokens: Number(m.inp), output_tokens: Number(m.outp),
+          cache_creation_tokens: 0, cache_read_tokens: Number(m.cached), turns: Number(m.turns),
+        });
+      }
+      modelMix.sort((a, b) => (b.input_tokens + b.output_tokens) - (a.input_tokens + a.output_tokens));
+    }
+    return modelMix;
+  };
+
+  // Spend concentration and the month-end projection.
+  const readSpend = async () => {
+    // Month-end spend projection: FinOps's method, reused so the two pages never project
+    // differently (the owner chose this on 2026-11-15, replacing the trailing 7-day run rate):
+    // month-to-date priced spend (UTC calendar month) divided by the exact share of the month
+    // gone by. Same pricing path as everything else — unpriced models contribute nothing
+    // (null-never-zero), never presented as measured (see the estimate styling on the UI side).
+    const monthStart = Math.floor(Date.UTC(
+      new Date(now * 1000).getUTCFullYear(),
+      new Date(now * 1000).getUTCMonth(),
+      1
+    ) / 1000);
+
+    async function sumPricedSpend(sinceEpochS: number): Promise<number> {
+      const rows = await client
+        .select({
+          model: cam.model,
+          inp: sql<number | string>`SUM(${cam.input_tokens})`,
+          outp: sql<number | string>`SUM(${cam.output_tokens})`,
+          cw: sql<number | string>`SUM(${cam.cache_creation_tokens})`,
+          cr: sql<number | string>`SUM(${cam.cache_read_tokens})`,
+        })
+        .from(cam)
+        .where(and(gte(cam.occurred_at, sinceEpochS), ne(cam.model, '')))
+        .groupBy(cam.model);
+      let total = 0;
+      for (const r of rows) {
+        const usd = priceTokens(r.model as string, {
+          inputTokens: Number(r.inp), outputTokens: Number(r.outp), cacheCreationTokens: Number(r.cw), cacheReadTokens: Number(r.cr),
+        }, rates);
+        if (usd !== null) total += usd;
+      }
+      return total;
+    }
+
+    const codexPriced = async (since: number) => withCodex ? ((await codexSpend({ since }, rates)).usd ?? 0) : 0;
+
+    // Codex spend per person, priced from the rates table, in the views that include it.
+    // Each person's spend is read at the same time; the results keep the order
+    // the people were listed in.
+    const codexSpendByPerson = async () => {
+      const codexPeople = await client.selectDistinct({ user_id: schema.codexTurns.user_id }).from(schema.codexTurns)
+        .where(gte(schema.codexTurns.started_at, thirtyDaysAgo));
+      return Promise.all(codexPeople.map(async ({ user_id }) => ({
+        user_id,
+        usd: (await codexSpend({ since: thirtyDaysAgo, userIds: [user_id] }, rates)).usd,
+      })));
+    };
+
+    const [perUserSpendRows, codexPersonSpend, mtdClaude, mtdCodex] = await Promise.all([
+      // Spend concentration (30d): how much of total priced spend comes from the top
+      // few users. Priced per-user from the same token rates as everything else —
+      // measured, not estimated. Hidden below a minimum spender count (see helper).
+      !withClaude ? [] : client
+        .select({
+          user_id: cam.user_id,
+          model: cam.model,
+          inp: sql<number | string>`SUM(${cam.input_tokens})`,
+          outp: sql<number | string>`SUM(${cam.output_tokens})`,
+          cw: sql<number | string>`SUM(${cam.cache_creation_tokens})`,
+          cr: sql<number | string>`SUM(${cam.cache_read_tokens})`,
+        })
+        .from(cam)
+        .where(and(isNotNull(cam.user_id), ne(cam.user_id, ''), gte(cam.occurred_at, thirtyDaysAgo), ne(cam.model, '')))
+        .groupBy(cam.user_id, cam.model),
+      withCodex ? codexSpendByPerson() : [],
+      withClaude ? sumPricedSpend(monthStart) : 0,
+      codexPriced(monthStart),
+    ]);
+
+    const spendByUser = new Map<string, number>();
+    for (const r of perUserSpendRows) {
+      const usd = priceTokens(r.model as string, {
+        inputTokens: Number(r.inp), outputTokens: Number(r.outp), cacheCreationTokens: Number(r.cw), cacheReadTokens: Number(r.cr),
+      }, rates);
+      if (usd !== null) spendByUser.set(r.user_id as string, (spendByUser.get(r.user_id as string) ?? 0) + usd);
+    }
+    for (const { user_id, usd } of codexPersonSpend) {
+      if (usd !== null) spendByUser.set(user_id, (spendByUser.get(user_id) ?? 0) + usd);
+    }
+    const spendConcentration = computeSpendConcentration([...spendByUser.values()]);
+
+    const mtdSpend = mtdClaude + mtdCodex;
+    // No priced spend yet this month: nothing to project from, so null rather than $0. Before day 7
+    // the projection is mostly noise, so, as FinOps does, none is shown (MIN_PROJECTION_DAYS).
+    const projected = mtdSpend > 0 ? buildFinopsProjection(mtdSpend, true, now) : null;
+    const spendProjection: SpendProjection | null = projected && projected.daysElapsed >= MIN_PROJECTION_DAYS ? projected : null;
+    return { spendConcentration, spendProjection };
+  };
+
+  // Repos, skills, connectors and languages: the 30-day lists.
+  const readLists = async () => {
+    const [activeReposRaw, darkReposRaw, topSkillsRaw, topConnectorsRaw, languageMixRaw] = await Promise.all([
+      // Active repos (30d) and dark repos (seen before, silent in window)
+      client
+        .select({
+          repo: css.repo,
+          sessions: sql<number | string>`COUNT(*)`,
+          tokens: sql<number | string>`SUM(${css.input_tokens} + ${css.output_tokens})`,
+          commits: sql<number | string>`SUM(${css.commit_count})`,
+        })
+        .from(css)
+        .where(and(isNotNull(css.repo), gte(css.last_at, thirtyDaysAgo), sessionVendor))
+        .groupBy(css.repo)
+        .orderBy(desc(sql`COUNT(*)`))
+        .limit(20),
+      client
+        .select({ repo: css.repo, last_seen: sql<number | string>`MAX(${css.last_at})` })
+        .from(css)
+        .where(and(isNotNull(css.repo), sessionVendor))
+        .groupBy(css.repo)
+        .having(sql`MAX(${css.last_at}) < ${thirtyDaysAgo}`)
+        .orderBy(desc(sql`MAX(${css.last_at})`))
+        .limit(20),
+      // Top skills and connectors used in code-surface sessions, 30d
+      client
+        .select({
+          skill_name: csi.skill_name,
+          uses: sql<number | string>`COUNT(*)`,
+          agent_chained: sql<number | string>`SUM(CASE WHEN ${csi.invocation_type} = 'agent_chained' THEN 1 ELSE 0 END)`,
+        })
+        .from(csi)
+        .innerJoin(css, eq(css.session_id, csi.session_id))
+        .where(and(gte(csi.occurred_at, thirtyDaysAgo), sessionVendor))
+        .groupBy(csi.skill_name)
+        .orderBy(desc(sql`COUNT(*)`))
+        .limit(10),
+      client
+        .select({ mcp_server: cmi.mcp_server, uses: sql<number | string>`COUNT(*)` })
+        .from(cmi)
+        .leftJoin(css, eq(css.session_id, cmi.session_id))
+        .where(and(
+          gte(cmi.occurred_at, thirtyDaysAgo), notInArray(cmi.mcp_server, ['workspace', 'cowork']),
+          // A Code session's calls, or a Codex call: Codex's log carries no
+          // session on a connector call, so it is counted by its source.
+          or(
+            and(isNotNull(css.session_id), sessionVendor),
+            withCodex ? eq(cmi.source, 'codex') : sql`FALSE`,
+          ),
+        ))
+        .groupBy(cmi.mcp_server)
+        .orderBy(desc(sql`COUNT(*)`))
+        .limit(10),
+      // Language Mix: edit-decision counts by language (from the OTel metrics stream).
+      // The repo-free "what are people working on" axis.
+      client
+        .select({ language: com.language, edits: sql<number | string>`SUM(${com.value})` })
+        .from(com)
+        .where(and(
+          eq(com.metric_name, 'claude_code.code_edit_tool.decision'),
+          isNotNull(com.language), ne(com.language, ''),
+          gte(com.occurred_at, thirtyDaysAgo),
+        ))
+        .groupBy(com.language)
+        .orderBy(desc(sql`SUM(${com.value})`))
+        .limit(8),
+    ]);
+    return {
+      activeRepos: activeReposRaw.map(r => ({
+        repo: r.repo, sessions: Number(r.sessions), tokens: Number(r.tokens), commits: Number(r.commits),
+      })),
+      darkRepos: darkReposRaw.map(r => ({ repo: r.repo, last_seen: Number(r.last_seen) })),
+      topSkills: topSkillsRaw.map(r => ({
+        skill_name: r.skill_name, uses: Number(r.uses), agent_chained: Number(r.agent_chained),
+      })),
+      topConnectors: topConnectorsRaw.map(r => ({ mcp_server: r.mcp_server, uses: Number(r.uses) })),
+      languageMix: withClaude ? languageMixRaw.map(r => ({ language: r.language as string, edits: Number(r.edits) })) : [],
+    };
+  };
+
+  // Leverage: spend + output attributed to the active skill / subagent,
+  // priced with the same model rates as total spend. Source: the api_request
+  // enrichment columns (migration 051). Unpriced models contribute turns but null spend.
+  const leverageBy = async (column: 'skill_name' | 'agent_name') => {
+    const col = cam[column];
+    const grouped = await client
+      .select({
+        name: col,
+        model: cam.model,
+        inp: sql<number | string>`SUM(${cam.input_tokens})`,
+        outp: sql<number | string>`SUM(${cam.output_tokens})`,
+        cw: sql<number | string>`SUM(${cam.cache_creation_tokens})`,
+        cr: sql<number | string>`SUM(${cam.cache_read_tokens})`,
+        // Turns are PROMPTS: a prompt stores one row per model call.
+        turns: sql<number | string>`COUNT(DISTINCT COALESCE(${cam.prompt_id}, ${cam.id}))`,
+      })
+      .from(cam)
+      .where(and(isNotNull(col), ne(col, ''), gte(cam.occurred_at, thirtyDaysAgo), ne(cam.model, '')))
+      .groupBy(col, cam.model);
+    const byName = new Map<string, { name: string; turns: number; tokens: number; spend: number; anyPriced: boolean }>();
+    for (const r of grouped) {
+      const name = r.name as string;
+      const inp = Number(r.inp);
+      const outp = Number(r.outp);
+      const cw = Number(r.cw);
+      const cr = Number(r.cr);
+      const turns = Number(r.turns);
+      const e = byName.get(name) ?? { name, turns: 0, tokens: 0, spend: 0, anyPriced: false };
+      e.turns += turns;
+      e.tokens += inp + outp + cw + cr;
+      const usd = priceTokens(r.model as string, { inputTokens: inp, outputTokens: outp, cacheCreationTokens: cw, cacheReadTokens: cr }, rates);
+      if (usd !== null) { e.spend += usd; e.anyPriced = true; }
+      byName.set(name, e);
+    }
+    return [...byName.values()]
+      .map(e => ({ name: e.name, turns: e.turns, tokens: e.tokens, spend_usd: e.anyPriced ? e.spend : null }))
+      .sort((a, b) => (b.spend_usd ?? 0) - (a.spend_usd ?? 0) || b.turns - a.turns)
+      .slice(0, 10);
+  };
+
+  // Skill and subagent leverage, and autonomy (share of turns driven by a
+  // named subagent: delegation depth). Claude Code's model calls only: Codex
+  // records no skill or subagent per call.
+  const readLeverage = async () => {
+    const [skillLeverage, agentLeverage, autonomyRows] = await Promise.all([
+      withClaude ? leverageBy('skill_name') : [],
+      withClaude ? leverageBy('agent_name') : [],
+      client
+        .select({
+          subagent: sql<number | string | null>`SUM(CASE WHEN ${cam.agent_name} IS NOT NULL AND ${cam.agent_name} != '' THEN 1 ELSE 0 END)`,
+          total: sql<number | string | null>`COUNT(*)`,
+        })
+        .from(cam)
+        .where(and(gte(cam.occurred_at, thirtyDaysAgo), ne(cam.model, ''))),
+    ]);
+    const autonomyRow = autonomyRows[0];
+    const autonomyTotal = Number(autonomyRow?.total ?? 0);
+    const subagentShare = withClaude && autonomyTotal ? Number(autonomyRow?.subagent ?? 0) / autonomyTotal : null;
+    return { skillLeverage, agentLeverage, subagentShare };
+  };
+
+  // GitHub overlay — GitHub shipping VOLUME for the manually-tracked repos.
+  // Repo/org level only (never commits/authors). No in-session share: Claude Code
+  // OTel has no cwd, so commits can't be attributed to sessions. This is shipping
+  // context for the tracked repos, read alongside the OTel commit/PR metrics.
+  type GithubOverlay = {
+    trackedRepoCount: number;
+    totalCommits7d: number;
+    totalPrs7d: number;
+    totalCommits30dByRepo: Record<string, number>;
+    reposActive7d: number;
+    /** Tracked repos with a GitHub commit in the last 30 days: the page's window. All commits, like reposActive7d. */
+    reposActive30d: number;
+    shippingSeries: ShippingDay[];
+    repoCards: RepoShippingCard[];
+    /** A sync has written the tool split (made with Claude Code / Codex / no AI tool recorded). */
+    toolSplit: boolean;
+    /** Codex tab's "How much of our codebase" box: worked out from GitHub commits matched to Codex. */
+    codexReach: CodexRepoReach | null;
+  };
+  const readGithubOverlay = async (): Promise<GithubOverlay | null> => {
+    if (mappedRepos.length === 0) return null;
+
+    // Covered = tracked repos that actually have synced stats (a repo whose sync
+    // fails — wrong name, private without token — must not count). Scoped to
+    // mappedRepos so a since-untracked repo's stale github_repo_stats rows
+    // (nothing deletes them on untrack) never resurface as a phantom card.
+    const coveredRepoRows = await client.selectDistinct({ repo: grs.repo }).from(grs).where(inArray(grs.repo, mappedRepos));
+    const coveredRepos = coveredRepoRows.map(r => r.repo);
+    if (coveredRepos.length === 0) return null;
+
+    // The exact 30-entry window buildDailyWindow produces (today back 29
+    // days inclusive), and its last 7 days: the same days, and the same
+    // tracked repos, as the repo cards and the shipping series below.
+    const windowDays = buildDailyWindow(new Date(now * 1000).toISOString().slice(0, 10), 30);
+    const sevenDayDate = windowDays[windowDays.length - 7];
+
+    // Shipping alignment series/cards need day-grain rows over the same
+    // window: filtering on a day before windowDays[0] would let a
+    // boundary-day row through even though no day in the window maps to
+    // it, surfacing a phantom all-zero repo card.
+
+    // Day-grain AI-assisted commits — same rows the aggregator sums into
+    // code_metrics.commit_count, re-bucketed by UTC day for the alignment
+    // series. UTC day expression (idiom: lib/pulse/stickiness.ts).
+    const dayExpr = sql<string>`to_char(to_timestamp(${cam.occurred_at}) AT TIME ZONE 'UTC', 'YYYY-MM-DD')`;
+    const ca = schema.codexActions;
+    const codexDay = sql<string>`to_char(to_timestamp(${ca.occurred_at}) AT TIME ZONE 'UTC', 'YYYY-MM-DD')`;
+
+    const [vol7Rows, perRepo30Rows, aiDailyRows, codexDaily, ghDailyRaw] = await Promise.all([
+      client
+        .select({
+          commits: sql<number | string>`COALESCE(SUM(${grs.commit_count}), 0)`,
+          prs: sql<number | string>`COALESCE(SUM(${grs.prs_merged}), 0)`,
+        })
+        .from(grs)
+        .where(and(gte(grs.date, sevenDayDate), inArray(grs.repo, mappedRepos))),
+      client
+        .select({ repo: grs.repo, c: sql<number | string>`SUM(${grs.commit_count})` })
+        .from(grs)
+        .where(and(gte(grs.date, windowDays[0]), inArray(grs.repo, mappedRepos)))
+        .groupBy(grs.repo),
+      client
+        .select({ day: dayExpr, commits: sql<number | string>`SUM(${cam.commit_count})` })
+        .from(cam)
+        .where(gte(cam.occurred_at, thirtyDaysAgo))
+        .groupBy(sql`1`),
+      !withCodex ? null : client
+        .select({ day: codexDay, commits: sql<number | string>`SUM(${ca.commit_count})` })
+        .from(ca)
+        .where(gte(ca.occurred_at, thirtyDaysAgo))
+        .groupBy(sql`1`),
+      client
+        .select({
+          repo: grs.repo, date: grs.date, commit_count: grs.commit_count, prs_merged: grs.prs_merged,
+          claude: grs.claude_commit_count, codex: grs.codex_commit_count, none: grs.no_tool_commit_count,
+        })
+        .from(grs)
+        .where(and(gte(grs.date, windowDays[0]), inArray(grs.repo, mappedRepos))),
+    ]);
+    const vol7 = vol7Rows[0];
+
+    const aiByDay: Record<string, number> = {};
+    if (withClaude) for (const r of aiDailyRows) aiByDay[r.day] = Number(r.commits ?? 0);
+    if (codexDaily) {
+      for (const r of codexDaily) aiByDay[r.day] = (aiByDay[r.day] ?? 0) + Number(r.commits ?? 0);
+    }
+
+    const ghDailyRows: GhDailyRow[] = ghDailyRaw.map(r => ({
+      repo: r.repo, date: r.date, commit_count: Number(r.commit_count), prs_merged: Number(r.prs_merged),
+      claude: r.claude == null ? null : Number(r.claude),
+      // While Codex is hidden (or has no data) the hub reads as Claude only,
+      // so commits matched to Codex count as no AI tool recorded, the same
+      // as a tool that is not connected.
+      codex: r.codex == null ? null : (codexPresent ? Number(r.codex) : 0),
+      none: r.none == null ? null : Number(r.none) + (codexPresent || r.codex == null ? 0 : Number(r.codex)),
+    }));
+
+    return {
+      trackedRepoCount: coveredRepos.length,
+      totalCommits7d: Number(vol7?.commits ?? 0),
+      totalPrs7d: Number(vol7?.prs ?? 0),
+      totalCommits30dByRepo: Object.fromEntries(perRepo30Rows.map(r => [r.repo, Number(r.c)])),
+      reposActive7d: countReposActive7d(windowDays, ghDailyRows),
+      reposActive30d: countReposActive30d(windowDays, ghDailyRows),
+      shippingSeries: buildShippingSeries(windowDays, aiByDay, ghDailyRows),
+      repoCards: buildRepoCards(windowDays, ghDailyRows),
+      toolSplit: hasToolSplit(ghDailyRows),
+      codexReach: withCodex ? buildCodexRepoReach(windowDays, ghDailyRows, coveredRepos) : null,
+    };
+  };
+
+  // Sessions where a meaningful share of tool actions failed — coaching list.
+  // CAST(... AS REAL) (matches lib/alerts/code-pulse-alerts.ts's checkFriction()).
+  // user_display_name: Claude Code's OTel stream sends user.id as a 64-char hash,
+  // and `repo` is always null on an OTel-only deployment (no cwd in the stream),
+  // so without this join the card renders a bare hash as its only label. Same
+  // COALESCE(admin_users, users) resolution the Alerts page uses; additive —
+  // user_id is still returned.
+  const readHighFriction = async () => {
+    const ca = schema.codexActions;
+    const [highFrictionSessions, codexFriction] = await Promise.all([
+      client
+        .select({
+          session_id: css.session_id, user_id: css.user_id, repo: css.repo,
+          error_count: css.error_count, tool_use_count: css.tool_use_count, last_at: css.last_at,
+          user_display_name: sql<string | null>`COALESCE(${adu.display_name}, ${usr.display_name}, ${usr.email})`,
+        })
+        .from(css)
+        .leftJoin(usr, eq(usr.id, css.user_id))
+        .leftJoin(adu, eq(adu.linked_cowork_user_id, css.user_id))
+        .where(and(
+          gte(css.last_at, sevenDaysAgo),
+          gte(css.tool_use_count, 5),
+          sql`CAST(${css.error_count} AS REAL) / ${css.tool_use_count} > 0.25`,
+          withClaude ? undefined : sql`FALSE`,
+        ))
+        .orderBy(desc(sql`CAST(${css.error_count} AS REAL) / ${css.tool_use_count}`))
+        .limit(10),
+      // Codex sessions' actions live in codex_actions: the same rule over them.
+      !withCodex ? null : client
+        .select({
+          session_id: ca.session_id, user_id: sql<string>`MAX(${ca.user_id})`,
+          error_count: sql<number | string>`SUM(${ca.failed})`, tool_use_count: sql<number | string>`COUNT(*)`,
+          last_at: sql<number | string>`MAX(${ca.occurred_at})`,
+        })
+        .from(ca)
+        .where(gte(ca.occurred_at, sevenDaysAgo))
+        .groupBy(ca.session_id)
+        .having(sql`COUNT(*) >= 5 AND CAST(SUM(${ca.failed}) AS REAL) / COUNT(*) > 0.25`),
+    ]);
+    if (codexFriction) {
+      // Names for the Codex sessions found: needs their user ids first.
+      const names = new Map((codexFriction.length === 0 ? [] : await client
+        .select({ id: usr.id, name: sql<string | null>`COALESCE(${adu.display_name}, ${usr.display_name}, ${usr.email})` })
+        .from(usr).leftJoin(adu, eq(adu.linked_cowork_user_id, usr.id))
+        .where(inArray(usr.id, codexFriction.map(r => r.user_id)))).map(r => [r.id, r.name]));
+      for (const r of codexFriction) {
+        highFrictionSessions.push({
+          session_id: r.session_id, user_id: r.user_id, repo: null,
+          error_count: Number(r.error_count), tool_use_count: Number(r.tool_use_count), last_at: Number(r.last_at),
+          user_display_name: names.get(r.user_id) ?? null,
+        });
+      }
+      highFrictionSessions.sort((a, b) => b.error_count / b.tool_use_count - a.error_count / a.tool_use_count);
+      highFrictionSessions.splice(10);
+    }
+    return highFrictionSessions;
+  };
+
+  // Judged layer (opt-in): work-type mix from the session-digest classifier.
+  // null = classifier disabled; [] = enabled but nothing classified yet.
+  type WorkMixRow = { work_type: string; label: string; definition: string | null; sessions: number; tier3: number; tier2: number; tier1: number; provisional: number; claude: number; openai: number };
+  const readWorkMix = async (): Promise<WorkMixRow[] | null> => {
+    if (!judgedLayerEnabled) return null;
+    const [workMixRaw, defs] = await Promise.all([
+      client
+        .select({
+          work_type: csc.work_type,
+          sessions: sql<number | string>`COUNT(*)`,
+          tier3: sql<number | string>`SUM(CASE WHEN ${csc.tier} = 3 THEN 1 ELSE 0 END)`,
+          tier2: sql<number | string>`SUM(CASE WHEN ${csc.tier} = 2 THEN 1 ELSE 0 END)`,
+          tier1: sql<number | string>`SUM(CASE WHEN ${csc.tier} = 1 THEN 1 ELSE 0 END)`,
+          provisional: sql<number | string>`SUM(CASE WHEN ${csc.provisional} = 1 THEN 1 ELSE 0 END)`,
+          openai: sql<number | string>`SUM(CASE WHEN ${css.session_id} LIKE 'codex:%' THEN 1 ELSE 0 END)`,
+        })
+        .from(csc)
+        .innerJoin(css, eq(css.session_id, csc.session_id))
+        .where(and(eq(csc.status, 'classified'), gte(css.last_at, thirtyDaysAgo), sessionVendor))
+        .groupBy(csc.work_type)
+        .orderBy(desc(sql`COUNT(*)`)),
+      getCodeWorkTypeDefinitions(),
+    ]);
+    return workMixRaw.map(r => ({
+      work_type: r.work_type,
+      label: codeWorkTypeLabel(r.work_type, defs.get(r.work_type)),
+      definition: codeWorkTypeDefinition(r.work_type, defs.get(r.work_type)),
+      sessions: Number(r.sessions), tier3: Number(r.tier3), tier2: Number(r.tier2), tier1: Number(r.tier1),
+      provisional: Number(r.provisional),
+      claude: Number(r.sessions) - Number(r.openai),
+      openai: Number(r.openai),
+    }));
+  };
+
+  // 8-week calendar-aligned trends for the verdict cards, org scope. The
+  // current (partial) week is included and flagged — never presented as a
+  // completed week. Deltas compare the two most recent COMPLETED weeks; the
+  // page's change badges compare metrics with priorMetrics (30 days on 30) instead.
+  // Each series is read once and its delta worked out from it.
+  const trendSeries = async (column: 'spend_usd' | 'autonomy_ratio' | 'commit_count' | 'session_count') => {
+    const series = await getWeeklySeries('code_metrics', 'organisation', ORG_SCOPE_ID, column, 8, now, tv);
+    return { series, delta: deltaFromSeries(series) };
+  };
+  const readTrends = async () => {
+    const [spend, autonomy, commits, sessions] = await Promise.all([
+      trendSeries('spend_usd'),
+      trendSeries('autonomy_ratio'),
+      trendSeries('commit_count'),
+      trendSeries('session_count'),
+    ]);
+    return { spend, autonomy, commits, sessions };
+  };
+
+  const [
+    { metrics, metricsSplit, priorMetrics },
+    modelMix,
+    { spendConcentration, spendProjection },
+    { activeRepos, darkRepos, topSkills, topConnectors, languageMix },
+    { skillLeverage, agentLeverage, subagentShare },
+    githubOverlay,
+    highFrictionSessions,
+    workMix,
+    trends,
+    humanTime,
+  ] = await Promise.all([
+    readMetrics(),
+    readModelMix(),
+    readSpend(),
+    readLists(),
+    readLeverage(),
+    readGithubOverlay(),
+    readHighFriction(),
+    readWorkMix(),
+    readTrends(),
+    // Human time vs Claude time — org totals; null when off.
+    readHumanTime('code', undefined, vendor),
+  ]);
+
+  // Unpriced = no exact rate AND no normalised fallback. A Bedrock/Vertex id priced at the
+  // canonical list rate is an estimate (the badge below), not unpriced (same rule as health.ts).
+  const unpricedModels = modelMix.map(m => m.model).filter(m => !rates[m] && !isEstimatedPricing(m, rates));
+
+  // True when spend in this window includes at least one Bedrock/Vertex
+  // model priced only via the normalised-key fallback (Anthropic list rate,
+  // an estimate — see rates.ts normalizeModelId). Drives the violet
+  // "includes provider-routed usage estimated at list pricing" badge on the
+  // spend tile.
+  const spendIsPartlyEstimatedFlag = spendIsPartlyEstimated(modelMix.map(m => m.model), rates);
+
+  return ({
+    vendor,
+    codexPresent,
+    metricsSplit,
+    humanTime,
+    metrics,
+    priorMetrics,
+    trends,
+    modelMix,
+    unpricedModels,
+    spendIsPartlyEstimated: spendIsPartlyEstimatedFlag,
+    activeRepos,
+    darkRepos,
+    topSkills,
+    topConnectors,
+    skillLeverage,
+    agentLeverage,
+    subagentShare,
+    spendConcentration,
+    languageMix,
+    highFrictionSessions,
+    workMix,
+    githubOverlay,
+    spendProjection,
+  });
+}

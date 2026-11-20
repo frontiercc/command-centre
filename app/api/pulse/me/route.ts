@@ -35,7 +35,7 @@ import { monthSpend } from '@/lib/finance/month-spend';
 // floor → the status reads "under review" rather than asserting a verdict.
 const KAPPA_FLOOR = 0.6;
 
-import { cachedWorkPulse } from '@/lib/pulse/work-pulse-cache';
+import { keptFigures } from '@/lib/kept-figures';
 import { errorResponse } from '@/lib/api/errors';
 
 export const dynamic = 'force-dynamic';
@@ -126,12 +126,12 @@ export async function GET(request: NextRequest) {
 
   try {
     const sp = request.nextUrl.searchParams;
-    // Kept per person, view, period and viewer for five minutes (lib/pulse/work-pulse-cache.ts):
+    // Kept per person, view, period and viewer for five minutes (lib/kept-figures.ts):
     // what a viewer may see of someone (spend, by-hand time, best work) depends on who they are.
     // ?fresh=1 after an action on the page. A result with a part that failed is not kept.
     const key = ['me', userId, sp.get('vendor') ?? '', sp.get('period') ?? '', session.role ?? '', session.email ?? ''].join('\u0000');
     const forUser = userId;
-    const { promptRead, ...body } = await cachedWorkPulse(key, () => buildMe(sp, session, forUser, resolveMyUserId), { keep: b => b.failed.length === 0, force: sp.get('fresh') === '1' });
+    const { promptRead, ...body } = await keptFigures(key, () => buildMe(sp, session, forUser, resolveMyUserId), { keep: b => b.failed.length === 0, force: sp.get('fresh') === '1' });
     // Every visit that shows someone else's prompt text is recorded, whether kept or built.
     if (promptRead) await logPromptRead(request, session, 'pulse/me/capability-candidates');
     return NextResponse.json(body);
