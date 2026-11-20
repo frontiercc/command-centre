@@ -2,33 +2,13 @@
 
 ## 1.4.5 (2026-11-20)
 
-### Added
-
-- Developer Pulse shows automated runs as their own kind of work. A session with at most one prompt, from someone who started ten or more such sessions within an hour, is a script or test harness rather than a person typing. These sessions are labelled "Automated runs" by rule, without a classifier call, wherever kinds of work are listed: the work mix, Team Coaching and Spend Review. Sessions already classified are relabelled on the classifier's next run.
-- Spend Review's index shows how many automated runs each person had in the month.
-- "Other coding work" is now "Non-coding tasks (documents, research, admin)", and the classifier is told it covers work that is not software development. A hub with its own saved rubric keeps its own wording.
-- Built-in prices for Claude Fable 5.2 and Claude Mythos 5.2.
-
-### Changed
-
-- Automated runs stay out of the figures about how people work: the share of multi-step work, the tier charts, Team Coaching's people and So What's groups. They are still counted, priced and shown.
-- Developer Pulse So What's hiring answer splits each team by Tier 2/3 work and compares what each group produces: commits, pull requests and accepted edits. Commits come from GitHub where a person's account is linked, and from their Claude Code sessions otherwise.
-- Team Coaching and So What leave out "No department". People without a department yet no longer appear as a team, matching the Departments page.
-- Faster pages.
-  - Parts of a page that ask for the same thing at the same moment now share one request.
-  - The heavier routes run their queries side by side instead of one after another, and stop repeating reads.
-  - New indexes serve the latest-score and recent-activity lookups (migration 0061).
-  - The dashboard asks for the Developer Pulse summary once instead of twice.
-  - The FinOps spend trend keeps each finished month for an hour, so a visit works out only the current month. Spend that arrives late for a past month shows within the hour.
-  - A department's page asks for its figures together instead of one after another.
-
-### Fixed
-
-- Claude Code metrics: running totals are stored as increases. Clients set to cumulative temporality send running totals. The receiver now reads the temporality of each series and stores the increase since the last value, so engaged time, lines, pull requests and edits are no longer overstated (migration 0060). A one-off script, `scripts/convert-cumulative-otel-history.mjs`, corrects rows stored before this change. It reports what it would change and changes nothing unless run with `--apply`.
-
-### Upgrading
-
-- Migration 0061 builds indexes on `pulse_metrics`, `code_metrics`, `code_assistant_meta` and `cowork_messages`. On large tables this takes from seconds to a few minutes at first start.
+- **Automated runs:** Developer Pulse shows script and test-harness sessions as "Automated runs". They are kept out of the figures about how people work.
+- **Non-coding tasks:** "Other coding work" is now "Non-coding tasks (documents, research, admin)".
+- **So What hiring:** compares commits, pull requests and accepted edits between people doing Tier 2/3 work and everyone else.
+- **Team Coaching and So What:** "No department" is no longer shown as a team.
+- **Faster pages:** fewer repeated requests, queries run side by side, and new indexes (migration 0061).
+- **Fixed:** Claude Code metrics from clients that send running totals are no longer overstated (migration 0060). A script corrects older rows.
+- **Prices:** added for Claude Fable 5.2 and Mythos 5.2.
 
 ## 1.4.4 (2026-11-20)
 
