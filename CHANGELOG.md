@@ -24,35 +24,35 @@
 
 ### Changed
 
-- So What's "used it once and hardly since" no longer reads every prompt ever stored. On a test hub with two years of activity for 5,000 people it took 17 seconds on every build; it now looks each person up in one of two new indexes, one for Claude and one for ChatGPT (migration 0056). The count is unchanged.
-- A dead-code check (knip) runs on every pull request. Its first run found 15 components that no page showed, the unused chart package recharts and a few unused functions and settings, which are gone.
+- So What's "used it once and hardly since" count is faster. It looks each person up in one of two new indexes, one for Claude and one for ChatGPT (migration 0056). The count is unchanged.
+- A dead-code check (knip) runs on every pull request. Unused components, the recharts package and a few unused functions and settings are removed.
 
 ### Fixed
 
-- So What's waves, on Work Pulse and Developer Pulse, measured each person from their first prompt or session still stored. Once a hub was older than its retention window (90 days unless changed), everyone who started earlier looked as if they had started in the oldest month kept. Retention now keeps each person's first date and first meaningful date before it deletes anything (migration 0057), so the waves stay right. Dates only, never content, and they are erased with the person. Dates retention deleted before 1.4.2 are gone, so a wave that started before then is left out rather than shown wrong.
-- Removing the OpenAI key while a sync was running could still leave a sync position, or the last sync time and figures, saved afterwards. A key added later then carried on from the old position instead of starting again.
+- So What's waves, on Work Pulse and Developer Pulse, stay right once a hub is older than its retention window. Retention now keeps each person's first date and first meaningful date before it deletes anything (migration 0057). Dates only, never content, and they are erased with the person. A wave that started before 1.4.2, whose dates are no longer stored, is left out.
+- Removing the OpenAI key during a sync always clears the sync position and the last sync time and figures, so a key added later starts from the beginning.
 
 ## 1.4.1 (2026-11-16)
 
 ### Changed
 
-- Every Work Pulse page (Overview, My Pulse, Users, Departments, Team Coaching and So What) and the dashboard's Work Pulse panels keep their figures for five minutes and then refresh them in the background, as Spend Review does. Figures that depend on who is looking are kept for each viewer, and reading someone's prompt text is recorded in the Audit Log on every visit, kept or not. On a large hub they took several seconds on every visit; now only the first visit after a restart waits. Confirming a new way of working or generating a briefing shows the change straight away. A result with a part that failed to load is never kept.
-- So What works its figures out about twice as fast. The evenings card built a new timezone reader for every prompt, which made it most of the page's wait; it now builds one per timezone and checks each 15-minute slot once. On the sample hub So What's own work went from 1.4 seconds to 0.65.
+- Every Work Pulse page (Overview, My Pulse, Users, Departments, Team Coaching and So What) and the dashboard's Work Pulse panels keep their figures for five minutes and then refresh them in the background, as Spend Review does. Figures that depend on who is looking are kept for each viewer, and reading someone's prompt text is recorded in the Audit Log on every visit, kept or not. Confirming a new way of working or generating a briefing shows the change straight away. A result with a part that failed to load is never kept.
+- So What works its figures out about twice as fast.
 - Work Pulse's "What did the work produce?" and FinOps Model Efficiency work out each session's kind of work in the database, and the panel counts sessions by week and kind there too. The app gets back about a hundred rows instead of every session and every label. The answers are unchanged.
 - The dashboard's "Which skills and connectors are spreading?" says how its product users split between Claude and ChatGPT, since someone using both counts in each.
 - Claude Chat conversations for So What and "What did the work produce?" are found through the conversations with a prompt in the window, rather than by grouping every conversation ever held.
 
 ### Fixed
 
-- A panel no longer disappears while its feature is switched on. If its figures fail to load it says "Couldn't load this. Try refreshing the page.", and with no data it says there is nothing yet. Only a feature that is switched off, or a page that isn't for that role, still hides a panel. This covers Work Pulse, Developer Pulse, the dashboard, FinOps, Spend Review, Use Cases, the S&C Board, Reports, Alerts, the Audit Log and Admin.
-- A page that failed to load no longer showed "No work yet", "No alerts", "No reports" or "No events found" as if there were none. It now says it couldn't load. The S&C Board no longer goes blank, and an entry that fails to load no longer sends you back to the Board without saying why.
-- Switching view while a load failed no longer leaves the last view's figures on show under the new view's name.
-- The dashboard's AI briefing could set this week's active users against everyone on record, as in "141 of 100 active users". It now gives active users as the dashboard does and never against a total.
-- On a hub with more than about 65,000 sessions in a quarter, Work Pulse's "What did the work produce?" panel disappeared, because Postgres refuses more than 65,535 values in one query. Sessions are now looked up 1,000 at a time.
-- One person's Spend Review showed Claude in Office and Google even when **Show Claude in Office and Google** was off. It now follows the setting, as FinOps does.
-- In the Codex view, panels for figures Codex doesn't send (Language mix, Efficiency, Leverage and Observed signal) now say so instead of disappearing.
+- A panel shows whenever its feature is switched on. If its figures can't be loaded it says "Couldn't load this. Try refreshing the page.", and with no data it says there is nothing yet. Only a feature that is switched off, or a page that isn't for that role, hides a panel. This covers Work Pulse, Developer Pulse, the dashboard, FinOps, Spend Review, Use Cases, the S&C Board, Reports, Alerts, the Audit Log and Admin.
+- A page that can't load says so, and the S&C Board explains when an entry can't be opened.
+- Switching view always shows the new view's own figures.
+- The dashboard's AI briefing gives this week's active users the same way the dashboard does.
+- Work Pulse's "What did the work produce?" panel looks sessions up 1,000 at a time, so it works on a hub of any size.
+- One person's Spend Review follows the **Show Claude in Office and Google** setting, as FinOps does.
+- In the Codex view, panels for figures Codex doesn't send (Language mix, Efficiency, Leverage and Observed signal) say so.
 - An unconfirmed use case shows its Skill and Spread opportunities panels, saying to confirm it first. An archived one says it is archived.
-- The AI data flow guide said administrators, managers and viewers could ask for adoption suggestions. Nothing in the app asks for them; it only runs through `/api/ai/analyze`.
+- The AI data flow guide says adoption suggestions run only through `/api/ai/analyze`.
 
 ### Removed
 
@@ -85,20 +85,20 @@
 - A person's spend is shown only to them, administrators and managers, on Work Pulse and Developer Pulse alike. Colleagues and viewers see "hidden".
 - The S&C Board leaves out Claude's own connectors and Claude Code's bundled skills, says how many connectors come from Anthropic, and counts only unclaimed entries that are in use. The Tool Usage page is folded into the Board.
 - Use Case Governance groups bets by lifecycle, says how long each has been at its stage, and reads "Not estimated" for a bet with no sessions.
-- Opening Work Pulse takes administrators, managers and viewers to the Overview. Viewers no longer get Developer Pulse Users, which could not show them another person, matching Work Pulse.
+- Opening Work Pulse takes administrators, managers and viewers to the Overview, and viewers' Developer Pulse menu matches Work Pulse's.
 - Only administrators see the buttons to acknowledge, resolve, dismiss or clear alerts, the actions only they can take.
 - Features that defaulted to Claude Haiku 4.5 (the Core AI model, both classifiers and transcript import) now default to Claude Haiku 5.5. Every AI call asks for thinking off, so a model that thinks by default cannot use up a short reply before writing it. A model already chosen in Admin, and features that default to Sonnet, are unchanged.
-- Skills discovery no longer runs: no page showed its results, so its weekly web search made model calls for nothing.
+- Skills discovery is switched off, as no page shows its results.
 
 ### Fixed
 
-- Weekly Highlights could fail with "The model call failed or produced nothing that could be traced back to real work items" when the reply came wrapped in text or ran long. The draft is now read reliably, with room for six full sentences, and the log says why a draft was rejected.
-- The Dashboard briefing's Refresh could fail with "failed the number check twice" when the AI model spent its whole reply thinking, or put text around its reply. Every briefing now asks for thinking off and reads its reply as Weekly Highlights does, and the message no longer blames the numbers.
-- A Pulse colleague with no sign-in account could not be opened from the Users list, which offered them.
-- Opening the address of a Pulse page your menu does not offer now takes you to your own page, not one that cannot load. Someone with Developer Pulse only goes to My Developer Pulse, and someone with Work Pulse only goes to My Pulse.
+- Weekly Highlights reads its draft reliably, with room for six full sentences, and the log says why a draft was rejected.
+- Every briefing asks for thinking off and reads its reply the same way Weekly Highlights does, so the Dashboard briefing's Refresh is more reliable.
+- A Pulse colleague with no sign-in account opens from the Users list.
+- Opening the address of a Pulse page your menu does not offer takes you to your own page. Someone with Developer Pulse only goes to My Developer Pulse, and someone with Work Pulse only goes to My Pulse.
 - So What and Team Coaching sentences: singular and plural agree ("1 person is left out"), "most" no longer claims more than the figure shows, time windows read as they are counted, and the 30-day follow-up is said against the card's aim rather than the leader's choice. A decided Developer Pulse So What card keeps its follow-up after its finding stops qualifying.
-- Messages that pointed to the wrong admin page now name the right one: the Claude API key is on Access & Keys, Use Cases is switched on under Use Cases, model rates are under Developer Pulse → Rates, and Work Pulse tiers are on Tier config.
-- Twelve dependency security alerts, report dates that are not real dates, and month links on FinOps and Spend Review.
+- Messages name the right admin page: the Claude API key is on Access & Keys, Use Cases is switched on under Use Cases, model rates are under Developer Pulse → Rates, and Work Pulse tiers are on Tier config.
+- Dependency updates, stricter checking of report dates, and month links on FinOps and Spend Review.
 
 ### Upgrading from 1.3.0
 
@@ -140,21 +140,21 @@ Back up first: see [Upgrading from 1.3.0 to 1.4.0](docs/troubleshooting.md#upgra
 - Developer Pulse no longer shows "n/a" under a figure for a product a person has not used.
 - "Last active" on the department page shows when the person last worked, not when their work was graded.
 - Viewers no longer see Work Pulse's Users page in the menu, which they cannot open.
-- A department's resilience score on the Work Pulse department page no longer falls back to "Pending data" after the daily run.
+- A department's resilience score on the Work Pulse department page stays after the daily run.
 - In an Audit Log conversation the newest turn stays at the top and is now numbered last: Turn 1 is the first prompt, and each turn shows the time of its prompt. Turns used to be numbered from the newest.
 - Spend Review's efficiency board says what its rule is: people are ranked when their share of Tier 3 work is no more than 10 points below colleagues', not "within 10 points".
 - A model with two ids (a dated id and its alias, such as Claude Haiku 4.5) is listed once in spend by model and its legend, with one colour.
 - The use case governance summary says how many completed weeks an at-risk bet has had no matching activity, not "quiet for 0 weeks".
-- Opening a person or a use case that doesn't exist says so, instead of crashing or saying Use Cases is switched off.
+- Opening a person or a use case that doesn't exist says so.
 - A use case's measured time under six minutes reads in minutes, never "0.0h".
 - An AI session summary containing characters from another writing system is refused and written again.
-- Opening another department's Work Pulse page says it is not available, instead of "Couldn't load, try again".
+- Opening another department's Work Pulse page says it is not available.
 - Spend Review offers a manager "Show prompts" only for people in their own department, as the Audit Log does.
 - A manager on the Work Pulse admin overview sees that process baselines are set by an admin, not "No departments found".
 - The department page's "at this depth" line says it covers the same kind of work over the last 30 days.
 - The S&C Board's tile reads "Organisation connectors", matching the skills tile, and Hot this week lists only rising entries.
-- Person 360 no longer calls the combined spend an underestimate for someone with no coding activity.
-- The dashboard no longer logs an error when a Pulse-only role is sent to its own page.
+- Person 360 describes combined spend correctly for someone with no coding activity.
+- A Pulse-only role is sent to its own page without a dashboard log entry.
 - The Users page shows "Agent" for people first seen by the retired local agent.
 - Sample data: each use case match points at a real session the sample has, in the week that session happened (a match to a session the sample lacks moves to one the same person had that week), so each use case's people, sessions and time agree.
 - Retention clears the names of files attached in a session once the session is past its window, in both modes, and archiving now copies ChatGPT and Codex reply records, turns, actions, spend and conversation times before they are deleted.
@@ -177,7 +177,7 @@ Back up first: see [Upgrading from 1.3.0 to 1.4.0](docs/troubleshooting.md#upgra
 
 ### Fixed
 
-- Google Workspace work was filed under Microsoft Office: Google Sheets showed as Excel, Google Slides as PowerPoint and Google Docs as Word. Command Centre now reads which vendor sent each event. On upgrade, stored sessions that used Google Apps Script move to the Google apps; a Google Docs session with no Apps Script call cannot be told apart after the fact and stays under Word.
+- Google Workspace work is filed under the Google apps: Command Centre reads which vendor sent each event. On upgrade, stored sessions that used Google Apps Script move to the Google apps; a Google Docs session with no Apps Script call cannot be told apart and stays under Word.
 
 ### Changed
 
