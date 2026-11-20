@@ -152,10 +152,30 @@ async function buildDept(dept: string, request: NextRequest, session: Awaited<Re
   }
 
   const memberIdsSql = sql.join(memberIds.map(id => sql`${id}`), sql`, `);
+  const sevenDaysAgo = now - 7 * 24 * 3600;
+  const thirtyDaysAgo = now - 30 * 24 * 3600;
+  const soloSince = now - 30 * 24 * 3600;
+  const weeksParamRaw = Number(request.nextUrl.searchParams.get('weeks'));
+  const delegationWindow = ([13, 26, 52] as const).includes(weeksParamRaw as 13 | 26 | 52)
+    ? (weeksParamRaw as 13 | 26 | 52) : 26;
+  const delegationWeeks = weekStarts(now, delegationWindow + 1).slice(0, delegationWindow);
+  const asked = request.nextUrl.searchParams.get('period');
+  const periodName: PulsePeriod = asked === 'week' || asked === 'month' || asked === 'quarter' ? asked : 'quarter';
+  const numOrNull = (v: number | string | null | undefined): number | null =>
+    v !== null && v !== undefined ? Number(v) : null;
+  // Parts that failed to build: their panels say they couldn't load, never look empty.
+  const failed: string[] = [];
 
+  // Everything below needs only the member list, so it is asked for at once rather than one
+  // query after another. The two reads that need an earlier answer follow.
+  const [
+    teamMetricsRows, metricsRows, priorMetricsRows, memberMetrics, workByType, skillInvocationRows,
+    frontier, deptBriefingRows, docSessions, openaiPresent, deptWeekRowsRaw, personRowsRaw,
+    coachingPrompts, humanTime, period, spendThisMonth, tierNames,
+  ] = await Promise.all([
   // Team-level PSR and ORS: average across teams whose members are in this dept
   // PSR and ORS are scope_type='team' — the function-level aggregator does not compute them
-  const teamMetricsRows = await rawAll<{
+  rawAll<{
     avg_psr: number | string | null; avg_ors: number | string | null;
     avg_ors_breadth: number | string | null; avg_ors_overlap: number | string | null; avg_ors_propagation: number | string | null;
   }>(client, sql`
@@ -177,18 +197,10 @@ async function buildDept(dept: string, request: NextRequest, session: Awaited<Re
            GROUP BY scope_id
          )
      ) tm ON tm.team_id = t.team_id
-  `);
-  const teamMetricsRow = teamMetricsRows[0];
-  const numOrNull = (v: number | string | null | undefined): number | null =>
-    v !== null && v !== undefined ? Number(v) : null;
-  const deptPsr = numOrNull(teamMetricsRow?.avg_psr);
-  const deptOrs = numOrNull(teamMetricsRow?.avg_ors);
-  const deptOrsBreadth = numOrNull(teamMetricsRow?.avg_ors_breadth);
-  const deptOrsOverlap = numOrNull(teamMetricsRow?.avg_ors_overlap);
-  const deptOrsPropagation = numOrNull(teamMetricsRow?.avg_ors_propagation);
+  `),
 
   // Latest dept-level metrics (written as scope_type='function' by the daily aggregator)
-  const metricsRows = await client
+  client
     .select({
       oti: pm.oti, dds: pm.dds, psr: pm.psr, ors: pm.ors, event_count: pm.event_count,
       tier_1_count: pm.tier_1_count, tier_2_count: pm.tier_2_count, tier_3_count: pm.tier_3_count,
@@ -198,32 +210,18 @@ async function buildDept(dept: string, request: NextRequest, session: Awaited<Re
     .from(pm)
     .where(and(pmOnly, eq(pm.scope_type, 'function'), eq(pm.scope_id, dept), eq(pm.granularity, 'rolling')))
     .orderBy(desc(pm.computed_at))
-    .limit(1);
-  // Resilience is written by the hourly run; the daily run writes the same
-  // department row without it. Take resilience from the latest row that has
-  // it, so the All view never falls back to "Pending data" after the daily run.
-  const orsRows = metricsRows[0] && metricsRows[0].ors === null
-    ? await client
-      .select({ ors: pm.ors, ors_breadth: pm.ors_breadth, ors_overlap: pm.ors_overlap, ors_propagation: pm.ors_propagation })
-      .from(pm)
-      .where(and(pmOnly, eq(pm.scope_type, 'function'), eq(pm.scope_id, dept), eq(pm.granularity, 'rolling'), isNotNull(pm.ors)))
-      .orderBy(desc(pm.computed_at))
-      .limit(1)
-    : [];
-  const metrics = metricsRows[0] && orsRows[0] ? { ...metricsRows[0], ...orsRows[0] } : metricsRows[0];
+    .limit(1),
 
   // Prior period dept metrics: row closest to 7 days ago for meaningful week-over-week delta
-  const sevenDaysAgo = now - 7 * 24 * 3600;
-  const priorMetricsRows = await client
+  client
     .select({ oti: pm.oti, dds: pm.dds, psr: pm.psr, ors: pm.ors, computed_at: pm.computed_at })
     .from(pm)
     .where(and(pmOnly, eq(pm.scope_type, 'function'), eq(pm.scope_id, dept), eq(pm.granularity, 'rolling'), lte(pm.computed_at, sevenDaysAgo)))
     .orderBy(desc(pm.computed_at))
-    .limit(1);
-  const priorMetrics = priorMetricsRows[0];
+    .limit(1),
 
   // Per-member metrics: latest user-scoped pulse_metrics + last active
-  const memberMetrics = await rawAll<{
+  rawAll<{
     id: string; display_name: string | null; email: string;
     dds: number | string | null; oti: number | string | null; last_active: number | string | null;
   }>(client, sql`
@@ -253,19 +251,153 @@ async function buildDept(dept: string, request: NextRequest, session: Awaited<Re
   `).then(rows => rows.map(r => ({
     id: r.id, display_name: r.display_name, email: r.email,
     dds: numOrNull(r.dds), oti: numOrNull(r.oti), last_active: numOrNull(r.last_active),
-  })));
+  }))),
 
   // Work only one person does, by Team Coaching's rule (soloWork in
   // lib/pulse/cowork/coaching-figures.ts), so Departments, Team Coaching and So What
   // agree: a kind of work, at any depth, in the last 30 days, that exactly one member
   // does, with at least REPEAT_MIN_PROMPTS prompts. Mechanism labels are left out.
-  const soloSince = now - 30 * 24 * 3600;
-  const workByType = await client
+  client
     .select({ user_id: pc.user_id, task_type: pc.task_type, cnt: sql<number | string>`COUNT(*)` })
     .from(pc)
     .innerJoin(cm, eq(cm.id, pc.cowork_message_id))
     .where(and(inArray(pc.user_id, memberIds), eq(pc.classifier_status, 'classified'), gte(cm.occurred_at, soloSince), messageVendor(vendor)))
-    .groupBy(pc.user_id, pc.task_type);
+    .groupBy(pc.user_id, pc.task_type),
+
+
+  // Skill concentration: skills used by only one member in past 30 days
+  client
+    .select({ user_id: csi.user_id, skill_name: csi.skill_name })
+    .from(csi)
+    .where(and(inArray(csi.user_id, memberIds), gte(csi.occurred_at, thirtyDaysAgo), skillVendor(vendor)))
+    .groupBy(csi.user_id, csi.skill_name),
+
+
+  // Frontier boxes + feed. Own try/catch so a failure hides
+  // the boxes, not the page.
+  (async () => {
+    try {
+      return await buildFrontierView({ dept }, now, {
+        seeAllDetail: canAccessPulseAdmin(session.role),
+        ownUserId: await resolveViewerUserId(session.email),
+      }, vendor);
+    } catch (err) {
+      console.error('[pulse/dept] frontier view failed', err);
+      failed.push('frontier');
+      return null;
+    }
+  })(),
+
+  client
+    .select({ body: pb.body, suggestion: pb.suggestion, generated_at: pb.generated_at })
+    .from(pb)
+    .where(and(eq(pb.scope_type, 'function'), eq(pb.scope_id, dept)))
+    .orderBy(desc(pb.generated_at))
+    .limit(1),
+
+  // Document-upload sessions for dept members (30 days), Claude Cowork and ChatGPT alike.
+  getDocSessions({ since: thirtyDaysAgo, memberIds, vendor }),
+
+  visibleOpenAi(hasOpenAiData()),
+
+  // ── Delegation view ── Department bands (function scope; no per-week event floor).
+  client
+    .select({
+      scope_id: pm.scope_id, period_start: pm.period_start,
+      t1: pm.tier_1_count, t2: pm.tier_2_count, t3: pm.tier_3_count,
+    })
+    .from(pm)
+    .where(and(
+      pmOnly, eq(pm.granularity, 'week'), eq(pm.scope_type, 'function'), eq(pm.scope_id, dept),
+      gte(pm.period_start, delegationWeeks[0]), lt(pm.period_start, weekStart(now)),
+    )),
+
+  // Per-person series (user scope; MIN_WEEK_EVENTS floor applies).
+  client
+    .select({
+      scope_id: pm.scope_id, period_start: pm.period_start,
+      t1: pm.tier_1_count, t2: pm.tier_2_count, t3: pm.tier_3_count,
+    })
+    .from(pm)
+    .where(and(
+      pmOnly, eq(pm.granularity, 'week'), eq(pm.scope_type, 'user'), inArray(pm.scope_id, memberIds),
+      gte(pm.period_start, delegationWeeks[0]), lt(pm.period_start, weekStart(now)),
+    )),
+
+  // Coaching prompts — getDeptCoachingPrompts itself checks useCasesEnabled first and returns []
+  // without touching the DB when the flag is off, so this call is safe unconditionally.
+  getDeptCoachingPrompts(dept, now),
+
+  readHumanTime('cowork', memberIds, vendor),
+
+  // The page's one period: this week, this month or this quarter, for the whole department.
+  (async (): Promise<MyPeriod | null> => {
+    try {
+      return await buildMyPeriod({
+        userIds: memberIds, department: dept, vendor, nowS: now, period: periodName,
+        showHumanTime: true, humanTimeOn: await humanTimeOn('cowork'),
+      });
+    } catch (err) {
+      console.error('[pulse/dept] period failed', err);
+      failed.push('period');
+      return null;
+    }
+  })(),
+
+  // This month's spend for the department, from the same figures FinOps uses.
+  (async () => {
+    try {
+      return await monthSpend(memberIds, vendor, now);
+    } catch (err) {
+      console.error('[pulse/dept] month spend failed', err);
+      failed.push('spend');
+      return null;
+    }
+  })(),
+
+  getTierNames(),
+  ]);
+
+  const teamMetricsRow = teamMetricsRows[0];
+  const deptPsr = numOrNull(teamMetricsRow?.avg_psr);
+  const deptOrs = numOrNull(teamMetricsRow?.avg_ors);
+  const deptOrsBreadth = numOrNull(teamMetricsRow?.avg_ors_breadth);
+  const deptOrsOverlap = numOrNull(teamMetricsRow?.avg_ors_overlap);
+  const deptOrsPropagation = numOrNull(teamMetricsRow?.avg_ors_propagation);
+
+  const priorMetrics = priorMetricsRows[0];
+  const deptBriefing = deptBriefingRows[0];
+
+  // Stage 3: the two reads that need an earlier answer, together.
+  const [orsRows, memberWork] = await Promise.all([
+    // Resilience is written by the hourly run; the daily run writes the same
+    // department row without it. Take resilience from the latest row that has
+    // it, so the All view never falls back to "Pending data" after the daily run.
+    metricsRows[0] && metricsRows[0].ors === null
+      ? client
+        .select({ ors: pm.ors, ors_breadth: pm.ors_breadth, ors_overlap: pm.ors_overlap, ors_propagation: pm.ors_propagation })
+        .from(pm)
+        .where(and(pmOnly, eq(pm.scope_type, 'function'), eq(pm.scope_id, dept), eq(pm.granularity, 'rolling'), isNotNull(pm.ors)))
+        .orderBy(desc(pm.computed_at))
+        .limit(1)
+      : Promise.resolve([]),
+    // Each person in plain numbers over the same window: how much of their work reached the top
+    // two tiers, their deepest tier this week, and when they were last seen.
+    period === null ? Promise.resolve([]) : rawAll<{
+      user_id: string; deep: number | string; all: number | string; top: number | string | null; last_at: number | string | null;
+    }>(client, sql`
+      SELECT cm.user_id,
+             SUM(CASE WHEN pc.tier >= 2 THEN 1 ELSE 0 END) AS deep,
+             COUNT(*) AS all,
+             MAX(CASE WHEN cm.occurred_at >= ${now - 7 * 86400} THEN pc.tier END) AS top,
+             MAX(cm.occurred_at) AS last_at
+      FROM pulse_classifications pc JOIN cowork_messages cm ON cm.id = pc.cowork_message_id
+      WHERE cm.user_id IN (${memberIdsSql}) AND pc.classifier_status = 'classified'
+        AND cm.occurred_at >= ${period.start} AND cm.occurred_at < ${period.end}
+        AND ${sql.raw(vendorClause(vendor, 'cm.'))}
+      GROUP BY cm.user_id`),
+  ]);
+  const metrics = metricsRows[0] && orsRows[0] ? { ...metricsRows[0], ...orsRows[0] } : metricsRows[0];
 
   const soleWorkflowTypes = soleWorkByPerson(
     workByType.map(r => ({ user_id: r.user_id, task_type: r.task_type, prompts: Number(r.cnt) })),
@@ -294,13 +426,6 @@ async function buildDept(dept: string, request: NextRequest, session: Awaited<Re
   }
 
   // Skill concentration: skills used by only one member in past 30 days
-  const thirtyDaysAgo = now - 30 * 24 * 3600;
-  const skillInvocationRows = await client
-    .select({ user_id: csi.user_id, skill_name: csi.skill_name })
-    .from(csi)
-    .where(and(inArray(csi.user_id, memberIds), gte(csi.occurred_at, thirtyDaysAgo), skillVendor(vendor)))
-    .groupBy(csi.user_id, csi.skill_name);
-
   const skillUsersMap = new Map<string, Set<string>>();
   for (const row of skillInvocationRows) {
     const set = skillUsersMap.get(row.skill_name) ?? new Set();
@@ -329,57 +454,12 @@ async function buildDept(dept: string, request: NextRequest, session: Awaited<Re
     });
   }
 
-  // Frontier boxes + feed. Own try/catch so a failure hides
-  // the boxes, not the page.
-  // Parts that failed to build: their panels say they couldn't load, never look empty.
-  const failed: string[] = [];
-  let frontier = null;
-  try {
-    frontier = await buildFrontierView({ dept }, now, {
-      seeAllDetail: canAccessPulseAdmin(session.role),
-      ownUserId: await resolveViewerUserId(session.email),
-    }, vendor);
-  } catch (err) {
-    console.error('[pulse/dept] frontier view failed', err);
-    failed.push('frontier');
-  }
-
-  const deptBriefingRows = await client
-    .select({ body: pb.body, suggestion: pb.suggestion, generated_at: pb.generated_at })
-    .from(pb)
-    .where(and(eq(pb.scope_type, 'function'), eq(pb.scope_id, dept)))
-    .orderBy(desc(pb.generated_at))
-    .limit(1);
-  const deptBriefing = deptBriefingRows[0];
-
-  // Document-upload sessions for dept members (30 days), Claude Cowork and ChatGPT alike.
-  const docSessions = await getDocSessions({ since: thirtyDaysAgo, memberIds, vendor });
-
-  const openaiPresent = await visibleOpenAi(hasOpenAiData());
-
-  // ── Delegation view ───────────────────────────────────────────────────────
-  const weeksParamRaw = Number(request.nextUrl.searchParams.get('weeks'));
-  const delegationWindow = ([13, 26, 52] as const).includes(weeksParamRaw as 13 | 26 | 52)
-    ? (weeksParamRaw as 13 | 26 | 52) : 26;
-  const delegationWeeks = weekStarts(now, delegationWindow + 1).slice(0, delegationWindow);
-
   // A rubric save never splits the delegation charts or restarts then-vs-now:
   // admins update the tiers often, and splitting on each save would blank the
   // department arrows for four weeks. Saves are still logged in
   // pulse_rubric_versions; they do not segment the charts.
   const rubricChangesAtS: number[] = [];
 
-  // Department bands (function scope; no per-week event floor).
-  const deptWeekRowsRaw = await client
-    .select({
-      scope_id: pm.scope_id, period_start: pm.period_start,
-      t1: pm.tier_1_count, t2: pm.tier_2_count, t3: pm.tier_3_count,
-    })
-    .from(pm)
-    .where(and(
-      pmOnly, eq(pm.granularity, 'week'), eq(pm.scope_type, 'function'), eq(pm.scope_id, dept),
-      gte(pm.period_start, delegationWeeks[0]), lt(pm.period_start, weekStart(now)),
-    ));
   const deptWeekRows: DelegationWeekRow[] = deptWeekRowsRaw.map(r => ({
     scopeId: r.scope_id, periodStart: Number(r.period_start),
     t1: Number(r.t1), t2: Number(r.t2), t3: Number(r.t3),
@@ -388,17 +468,6 @@ async function buildDept(dept: string, request: NextRequest, session: Awaited<Re
   const bandsDataWeeks = countDataWeeks(
     buildDepthSegments(deptWeekRows, dept, delegationWeeks, rubricChangesAtS, 0));
 
-  // Per-person series (user scope; MIN_WEEK_EVENTS floor applies).
-  const personRowsRaw = memberIds.length === 0 ? [] : await client
-    .select({
-      scope_id: pm.scope_id, period_start: pm.period_start,
-      t1: pm.tier_1_count, t2: pm.tier_2_count, t3: pm.tier_3_count,
-    })
-    .from(pm)
-    .where(and(
-      pmOnly, eq(pm.granularity, 'week'), eq(pm.scope_type, 'user'), inArray(pm.scope_id, memberIds),
-      gte(pm.period_start, delegationWeeks[0]), lt(pm.period_start, weekStart(now)),
-    ));
   const personRows: DelegationWeekRow[] = personRowsRaw.map(r => ({
     scopeId: r.scope_id, periodStart: Number(r.period_start),
     t1: Number(r.t1), t2: Number(r.t2), t3: Number(r.t3),
@@ -433,43 +502,6 @@ async function buildDept(dept: string, request: NextRequest, session: Awaited<Re
     }];
   }).sort((a, b) => a.displayName.localeCompare(b.displayName));
 
-  // Coaching prompts — getDeptCoachingPrompts itself
-  // checks useCasesEnabled first and returns [] without touching the
-  // DB when the flag is off, mirroring lib/digest/build.ts's idiom — so
-  // this call is safe unconditionally, same as every other caller.
-  const coachingPrompts = await getDeptCoachingPrompts(dept, now);
-
-  const humanTime = await readHumanTime('cowork', memberIds, vendor);
-
-  // The page's one period: this week, this month or this quarter, for the whole department.
-  const asked = request.nextUrl.searchParams.get('period');
-  const periodName: PulsePeriod = asked === 'week' || asked === 'month' || asked === 'quarter' ? asked : 'quarter';
-  let period: MyPeriod | null = null;
-  try {
-    period = await buildMyPeriod({
-      userIds: memberIds, department: dept, vendor, nowS: now, period: periodName,
-      showHumanTime: true, humanTimeOn: await humanTimeOn('cowork'),
-    });
-  } catch (err) {
-    console.error('[pulse/dept] period failed', err);
-    failed.push('period');
-  }
-
-  // Each person in plain numbers over the same window: how much of their work reached the top
-  // two tiers, their deepest tier this week, and when they were last seen.
-  const memberWork = period === null ? [] : await rawAll<{
-    user_id: string; deep: number | string; all: number | string; top: number | string | null; last_at: number | string | null;
-  }>(client, sql`
-    SELECT cm.user_id,
-           SUM(CASE WHEN pc.tier >= 2 THEN 1 ELSE 0 END) AS deep,
-           COUNT(*) AS all,
-           MAX(CASE WHEN cm.occurred_at >= ${now - 7 * 86400} THEN pc.tier END) AS top,
-           MAX(cm.occurred_at) AS last_at
-    FROM pulse_classifications pc JOIN cowork_messages cm ON cm.id = pc.cowork_message_id
-    WHERE cm.user_id IN (${memberIdsSql}) AND pc.classifier_status = 'classified'
-      AND cm.occurred_at >= ${period.start} AND cm.occurred_at < ${period.end}
-      AND ${sql.raw(vendorClause(vendor, 'cm.'))}
-    GROUP BY cm.user_id`);
   const workByUser = new Map(memberWork.map(r => [r.user_id, r]));
   const memberRows = memberMetrics.map(m => {
     const w = workByUser.get(m.id);
@@ -486,22 +518,13 @@ async function buildDept(dept: string, request: NextRequest, session: Awaited<Re
     };
   }).sort((a, b) => (b.share ?? -1) - (a.share ?? -1) || b.deep - a.deep);
 
-  // This month's spend for the department, from the same figures FinOps uses.
-  let spendThisMonth = null;
-  try {
-    spendThisMonth = await monthSpend(memberIds, vendor, now);
-  } catch (err) {
-    console.error('[pulse/dept] month spend failed', err);
-    failed.push('spend');
-  }
-
   return {
     failed,
     humanTime,
     period,
     spendThisMonth,
     memberRows,
-    tierNames: await getTierNames(),
+    tierNames,
     dept,
     members,
     metrics: metrics ?? null,

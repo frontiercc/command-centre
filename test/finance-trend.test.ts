@@ -79,3 +79,30 @@ describe('buildSpendTrend', () => {
     expect(trend.render).toBe(false);
   });
 });
+
+describe('buildSpendTrend keepFinishedMonths', () => {
+  it('works out only the current month again: a finished month is kept, this month is fresh', async () => {
+    const { clearSpendReviewCache } = await import('@/lib/finance/spend-review-cache');
+    clearSpendReviewCache();
+    const first = await buildSpendTrend(MARCH_15, 12, { keepFinishedMonths: true });
+    const febBefore = first.series.find(p => p.period === '2026-02')!.usd!;
+    const marBefore = first.series.find(p => p.period === '2026-03')!.usd!;
+
+    // Another $1.00 lands in February and in March.
+    for (const [id, at] of [['cam-feb-2', FEB_15 + 60], ['cam-mar-2', MARCH_15 - 60]] as const) {
+      await sql.run(
+        `INSERT INTO code_assistant_meta (id, session_id, user_id, model, input_tokens, output_tokens, cache_creation_tokens, cache_read_tokens, occurred_at)
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+        [id, `sess-${id}`, 'u-1', 'claude-haiku-4-5', 1_000_000, 0, 0, 0, at]);
+    }
+
+    const kept = await buildSpendTrend(MARCH_15, 12, { keepFinishedMonths: true });
+    expect(kept.series.find(p => p.period === '2026-02')!.usd!).toBeCloseTo(febBefore, 6);
+    expect(kept.series.find(p => p.period === '2026-03')!.usd!).toBeCloseTo(marBefore + 1, 6);
+
+    // Without the option every month is built fresh.
+    const fresh = await buildSpendTrend(MARCH_15, 12);
+    expect(fresh.series.find(p => p.period === '2026-02')!.usd!).toBeCloseTo(febBefore + 1, 6);
+    clearSpendReviewCache();
+  });
+});
