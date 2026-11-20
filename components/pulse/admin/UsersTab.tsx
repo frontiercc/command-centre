@@ -9,6 +9,7 @@ import GenerateBriefingButton from '@/components/pulse/GenerateBriefingButton';
 import { deepShareOf } from '@/lib/pulse/tier-names';
 import { Panel, Muted, Tag, B, T, cx } from '@/components/precision/ui';
 import { PRODUCTS } from '@/lib/dashboard/vendor';
+import { sharedGet } from '@/components/shared/shared-get';
 
 interface UserRow {
   id: string;
@@ -81,7 +82,7 @@ export default function UsersTab() {
   // hidden until the role is known.
   const [isAdmin, setIsAdmin] = useState(false);
   useEffect(() => {
-    fetch('/api/admin/session')
+    sharedGet('/api/admin/session')
       .then(r => r.json())
       .then(d => setIsAdmin(d?.authenticated === true && d.user?.role === 'admin'))
       .catch(() => {});

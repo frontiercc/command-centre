@@ -407,7 +407,7 @@ export function keyPeopleCard(k: KeyPeople, decision: DecisionRecord | undefined
     cardId: 'key_people',
     department: k.department,
     touches: k.people,
-    headline: `Spread what ${who} in ${k.department} know.`,
+    headline: `Spread what ${who} in ${k.department} ${k.holders === 1 ? 'knows' : 'know'}.`,
     body,
     caption: `Counted from prompts over the last ${WINDOW_DAYS} days. Whether a prompt was ${MEANINGFUL_WORK} is the classifier's judgement. The people are named on the team's own coaching plan, not here.`,
     measure: { label: 'The share held by those people', value: k.share * 100, unit: '%', lowerIsBetter: true },

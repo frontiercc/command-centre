@@ -13,6 +13,7 @@ import { MIN_PASSWORD_LENGTH, PASSWORD_TOO_SHORT } from '@/lib/auth/password-pol
 import { PageBody, Panel, Pill, Tag, Muted, T, B, cx } from '@/components/precision/ui';
 import { ToggleRow } from '@/components/admin/precision-admin';
 import DepartmentSyncPanel from '@/components/admin/DepartmentSyncPanel';
+import { sharedGet } from '@/components/shared/shared-get';
 
 type TestStatus = 'idle' | 'testing' | 'success' | 'error';
 
@@ -252,7 +253,7 @@ export default function SecurityPage() {
       })
       .catch(() => showToast('Failed to load admin users', 'error'));
 
-    const loadSession = fetch('/api/admin/session')
+    const loadSession = sharedGet('/api/admin/session')
       .then(r => r.json())
       .then(data => {
         setCurrentUserId(data?.user?.id ?? null);

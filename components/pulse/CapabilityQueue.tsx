@@ -7,6 +7,7 @@ import { useEffect, useState } from 'react';
 import { Panel, Tabs, Tag, B, Muted, cx } from '@/components/precision/ui';
 import { cleanTitle } from '@/components/pulse/CapabilityLog';
 import { tierNamesOr, withTierNames, type TierNames } from '@/lib/pulse/tier-names';
+import { sharedGet } from '@/components/shared/shared-get';
 
 const tierList = (names: TierNames | null) => { const t = tierNamesOr(names); return [t.t1, t.t2, t.t3]; };
 
@@ -58,7 +59,7 @@ export default function CapabilityQueue({ onCountChange }: CapabilityQueueProps)
   }
 
   function loadCandidates() {
-    fetch('/api/pulse/capabilities')
+    sharedGet('/api/pulse/capabilities')
       .then(r => r.ok ? r.json() : Promise.reject())
       .then(d => {
         setCandidates(d.candidates ?? []);

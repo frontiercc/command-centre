@@ -11,6 +11,8 @@ import ReportViewer from '@/components/reports/ReportViewer';
 import { REPORT_SECTIONS, availableSections } from '@/lib/reports/section-catalog';
 import { useCorePlatformGuard } from '@/components/shared/useCorePlatformGuard';
 import { effectiveCodeHumanTime } from '@/lib/pulse/human-time';
+import { sharedGet } from '@/components/shared/shared-get';
+import { fetchConfigOnce } from '@/lib/client/config-once';
 
 interface Report {
   id: string;
@@ -54,19 +56,18 @@ export default function ReportsPage() {
   const [flags, setFlags] = useState<{ chargebackEnabled?: boolean; useCasesEnabled?: boolean; gdprApplicable?: boolean; lgpdApplicable?: boolean; humanTimeEnabled?: boolean }>({});
   const [role, setRole] = useState<string | null>(null);
   useEffect(() => {
-    fetch('/api/config')
-      .then(r => (r.ok ? r.json() : null))
+    fetchConfigOnce()
       .then(cfg => {
         if (cfg) setFlags({
           chargebackEnabled: Boolean(cfg.chargebackEnabled),
           useCasesEnabled: Boolean(cfg.useCasesEnabled),
           gdprApplicable: Boolean(cfg.gdprApplicable),
           lgpdApplicable: Boolean(cfg.lgpdApplicable),
-          humanTimeEnabled: String(cfg.humanTimeEnabled) === 'true' || effectiveCodeHumanTime(cfg.humanTimeCodeEnabled, cfg.humanTimeEnabled),
+          humanTimeEnabled: String(cfg.humanTimeEnabled) === 'true' || effectiveCodeHumanTime(cfg.humanTimeCodeEnabled as string | null | undefined, cfg.humanTimeEnabled as string | null | undefined),
         });
       })
       .catch(() => {});
-    fetch('/api/admin/session')
+    sharedGet('/api/admin/session')
       .then(r => (r.ok ? r.json() : null))
       .then(s => { if (s?.user?.role) setRole(String(s.user.role)); })
       .catch(() => {});

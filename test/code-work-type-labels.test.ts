@@ -29,3 +29,13 @@ describe('Code kind-of-work labels', () => {
     expect(codeWorkTypeDefinition('data_migration')).toBeNull();
   });
 });
+
+describe('the catch-all kind of work', () => {
+  it('reads as non-coding tasks, also on a rubric saved before it was reworded', async () => {
+    const { codeWorkTypeLabel } = await import('@/lib/pulse/code/work-type-labels');
+    expect(codeWorkTypeLabel('other')).toBe('Non-coding tasks (documents, research, admin)');
+    expect(codeWorkTypeLabel('other', 'anything that does not fit the above')).toBe('Non-coding tasks (documents, research, admin)');
+    expect(codeWorkTypeLabel('other', 'something an admin wrote')).toBe('Other');
+    expect(codeWorkTypeLabel('automated', 'anything')).toBe('Automated runs');
+  });
+});

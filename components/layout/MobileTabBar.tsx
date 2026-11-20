@@ -8,6 +8,8 @@ import { usePathname } from 'next/navigation';
 import { useEffect, useState } from 'react';
 import NavIcon from './NavIcon';
 import { visibleMobileNavItems, isCorePlatformRole, type NavFlags } from '@/lib/nav/items';
+import { sharedGet } from '@/components/shared/shared-get';
+import { fetchConfigOnce } from '@/lib/client/config-once';
 
 export default function MobileTabBar() {
   const pathname = usePathname();
@@ -16,14 +18,13 @@ export default function MobileTabBar() {
   const [openAlerts, setOpenAlerts] = useState(0);
 
   useEffect(() => {
-    fetch('/api/admin/session')
+    sharedGet('/api/admin/session')
       .then(r => r.json())
       .then(data => { if (data.authenticated) setRole(data.user?.role ?? ''); })
       .catch(() => {});
 
-    fetch('/api/config')
-      .then(r => r.json())
-      .then(data => setFlags({
+    fetchConfigOnce()
+      .then(data => data && setFlags({
         useCasesEnabled: data.useCasesEnabled === true,
         chargebackEnabled: data.chargebackEnabled === true,
       }))
@@ -34,7 +35,7 @@ export default function MobileTabBar() {
   useEffect(() => {
     if (!isCorePlatformRole(role)) return;
     const refreshAlertCount = () => {
-      fetch('/api/alerts/count')
+      sharedGet('/api/alerts/count')
         .then(r => (r.ok ? r.json() : Promise.reject()))
         .then(data => { if (typeof data.count === 'number') setOpenAlerts(data.count); })
         .catch(() => {});

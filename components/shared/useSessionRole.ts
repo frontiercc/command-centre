@@ -4,6 +4,7 @@
 'use client';
 
 import { useEffect, useState } from 'react';
+import { sharedGet } from '@/components/shared/shared-get';
 
 /**
  * The signed-in person's role, for hiding a control or link they cannot use. Empty until known,
@@ -12,7 +13,7 @@ import { useEffect, useState } from 'react';
 export function useSessionRole(): string {
   const [role, setRole] = useState('');
   useEffect(() => {
-    fetch('/api/admin/session')
+    sharedGet('/api/admin/session')
       .then(r => r.json())
       .then(d => setRole(d?.authenticated ? (d.user?.role ?? '') : ''))
       .catch(() => {});

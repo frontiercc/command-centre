@@ -24,10 +24,13 @@ interface RawFacade {
 const CLAUDE_KEYS = ['complianceAccessKey', 'anthropicAdminApiKey', 'anthropicAnalyticsApiKey'] as const;
 
 export async function getConnectedProducts(): Promise<ConnectedProducts> {
-  const keys = await Promise.all([...CLAUDE_KEYS, 'openaiAdminApiKey' as const].map((k) => getConfigValue(k)));
+  // The keys and the "Show ChatGPT and Codex" switch are read at the same time.
+  const [keys, shown] = await Promise.all([
+    Promise.all([...CLAUDE_KEYS, 'openaiAdminApiKey' as const].map((k) => getConfigValue(k))),
+    openaiShown(),
+  ]);
   const claudeKey = keys.slice(0, CLAUDE_KEYS.length).some((v) => !!v);
   const openaiKey = !!keys[CLAUDE_KEYS.length];
-  const shown = await openaiShown();
   if (claudeKey && openaiKey) return { claude: true, openai: shown, openaiConnected: true };
 
   const client = (await getTypedClient()) as unknown as RawFacade;

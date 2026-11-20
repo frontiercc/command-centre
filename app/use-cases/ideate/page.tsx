@@ -9,6 +9,7 @@ import Link from 'next/link';
 import TopBar from '@/components/layout/TopBar';
 import LoadingSpinner from '@/components/shared/LoadingSpinner';
 import { PageBody, Toolbar, Panel, Tag, Pill, B, Notice, Muted, cx } from '@/components/precision/ui';
+import { sharedGet } from '@/components/shared/shared-get';
 
 interface Candidate {
   title: string;
@@ -53,7 +54,7 @@ export default function IdeateChatPage() {
 
   // Admin gate — mirrors app/pulse/users/page.tsx
   useEffect(() => {
-    fetch('/api/admin/session')
+    sharedGet('/api/admin/session')
       .then(r => r.json())
       .then(data => {
         if (!data.authenticated) { router.replace('/'); return; }

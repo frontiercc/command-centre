@@ -21,6 +21,7 @@ import { getCodeWorkTypeDefinitions } from '@/lib/pulse/code/tier-config';
 import { codeWorkTypeLabel } from '@/lib/pulse/code/work-type-labels';
 import { getConfigValue } from '@/lib/config';
 import { DEEP_PERSON_SHARE, HARDLY_USED_SESSIONS, MIN_GROUP, WINDOW_DAYS } from '@/lib/pulse/code/output-groups';
+import { AUTOMATED_WORK_TYPE } from '@/lib/pulse/code/automated-runs';
 import type { Vendor } from '@/lib/dashboard/vendor';
 
 const DAY = 86400;
@@ -162,6 +163,8 @@ export function keyPeople(rows: SessionRow[], kept: Kept = keepNone): KeyPeople[
   }
   const out: KeyPeople[] = [];
   for (const [department, counts] of byTeam) {
+    // "No department" is everyone without one, not a team anyone can act on.
+    if (department === NO_DEPARTMENT) continue;
     const people = teamPeople.get(department)?.size ?? 0;
     if (people < MIN_GROUP + 1) continue;
     const total = [...counts.values()].reduce((a, b) => a + b, 0);
@@ -199,6 +202,7 @@ export async function getFinds(vendor: Vendor, kept: Kept = keepNone, nowS = Mat
     LEFT JOIN users u ON u.id = csc.user_id
     LEFT JOIN admin_users au ON au.linked_cowork_user_id = csc.user_id
     WHERE csc.status = 'classified' AND css.last_at >= ${since}
+      AND csc.work_type <> ${AUTOMATED_WORK_TYPE}
       AND ${codeSessionVendor(sql`css.session_id`, vendor)}
   `)) as SessionRow[];
 

@@ -17,6 +17,7 @@ import AuditTab from '@/components/pulse/admin/AuditTab';
 import HumanTimeChecks from '@/components/pulse/admin/HumanTimeChecks';
 import { effectiveCodeHumanTime } from '@/lib/pulse/human-time';
 import { PageBody, Tabs } from '@/components/precision/ui';
+import { sharedGet } from '@/components/shared/shared-get';
 
 type Tab = 'overview' | 'users' | 'depts' | 'tiers' | 'health' | 'audit';
 
@@ -79,7 +80,7 @@ export default function AdminPulsePage() {
   const [, setPendingCount] = useState(0);
 
   useEffect(() => {
-    fetch('/api/admin/session')
+    sharedGet('/api/admin/session')
       .then(r => r.json())
       // A failed check still ends the wait, with the non-admin view.
       .then(data => setUserRole(data.authenticated ? (data.user?.role || 'unknown') : 'unknown'))

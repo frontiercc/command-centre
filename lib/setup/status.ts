@@ -68,7 +68,15 @@ export async function getSetupStatus(): Promise<SetupStatus> {
   const client = await getTypedClient();
   const exists = async (q: Promise<unknown[]>) => (await q).length > 0;
 
-  const [hidden, key, codeAt, coworkAt, markedReviewed, stepsDone, chatAt, openaiAt, connected] = await Promise.all([
+  const au = schema.adminUsers;
+  const us = schema.users;
+  // Every setting and check is independent, so all are read at the same time.
+  // A department counts on either kind of account: the admin user pages save
+  // it on the users table, sign-in accounts carry their own.
+  const [
+    hidden, key, codeAt, coworkAt, markedReviewed, stepsDone, chatAt, openaiAt, connected,
+    rubricSaved, adminDept, userDept, sampleLoaded,
+  ] = await Promise.all([
     getConfigValue('setupGuideHidden'),
     getConfigValue('anthropicAiApiKey'),
     getConfigValue('setupFirstCodeAt'),
@@ -78,14 +86,6 @@ export async function getSetupStatus(): Promise<SetupStatus> {
     getConfigValue('setupFirstChatAt'),
     getConfigValue('setupFirstOpenaiAt'),
     getConnectedProducts(),
-  ]);
-  const markedDone = parseStepsDone(stepsDone);
-  const marked = (step: SetupStep) => markedDone.includes(step);
-  const au = schema.adminUsers;
-  const us = schema.users;
-  // A department counts on either kind of account: the admin user pages save
-  // it on the users table, sign-in accounts carry their own.
-  const [rubricSaved, adminDept, userDept, sampleLoaded] = await Promise.all([
     exists(client.select({ x: sql`1` }).from(schema.pulseRubricVersions).limit(1)),
     exists(client.select({ x: sql`1` }).from(au)
       .where(and(isNotNull(au.department), ne(sql`trim(${au.department})`, ''))).limit(1)),
@@ -93,6 +93,8 @@ export async function getSetupStatus(): Promise<SetupStatus> {
       .where(and(isNotNull(us.department), ne(sql`trim(${us.department})`, ''))).limit(1)),
     exists(client.select({ x: sql`1` }).from(schema.users).where(like(schema.users.email, SAMPLE_EMAIL_PATTERN)).limit(1)),
   ]);
+  const markedDone = parseStepsDone(stepsDone);
+  const marked = (step: SetupStep) => markedDone.includes(step);
 
   const departmentsSet = adminDept || userDept || marked('departments');
 

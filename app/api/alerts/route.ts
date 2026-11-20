@@ -29,7 +29,6 @@ export async function GET(request: NextRequest) {
     return NextResponse.json(shown);
   }
 
-  await logAccess({ actorId: session.userId!, actorEmail: session.email!, actorIp: request.headers.get('x-forwarded-for') || undefined, resource: 'alerts', action: 'READ', outcome: 'success' });
   const status = params.get('status') || undefined;
   // Dept-scoped roles (cowork/pulse/code) are locked to their own department and
   // cannot bypass it via the query param. Org-wide roles (admin/viewer) are NOT
@@ -38,7 +37,12 @@ export async function GET(request: NextRequest) {
   const department = isDeptScoped(session.role) ? (session.department || undefined) : (params.get('department') || undefined);
   const category = params.get('category') || undefined;
   const types = category ? typesForCategory(category) : [];
-  const alerts = await getAlerts({ status, department, types: types.length ? types : undefined });
+  // The access-log write and the alert read do not depend on each other, so
+  // they run at the same time. logAccess never rejects.
+  const [, alerts] = await Promise.all([
+    logAccess({ actorId: session.userId!, actorEmail: session.email!, actorIp: request.headers.get('x-forwarded-for') || undefined, resource: 'alerts', action: 'READ', outcome: 'success' }),
+    getAlerts({ status, department, types: types.length ? types : undefined }),
+  ]);
   return NextResponse.json(await applyAlertEvidenceRule(request, session, alerts));
 }
 

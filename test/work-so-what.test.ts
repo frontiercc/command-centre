@@ -93,7 +93,8 @@ describe('reading people from the window', () => {
     expect(a).toMatchObject({ prompts: 2, deepPrompts: 1, sessions: 3, measured: 1, produced: 1, department: 'Legal' });
     const b = people.find(p => p.userId === 'b')!;
     expect(b).toMatchObject({ department: 'No department', measured: 0, produced: 0 });
-    expect(groupsByTeam(people).map(g => g.department)).toEqual(['Legal', 'No department']);
+    // "No department" is not a team: its people are read, but it gets no card.
+    expect(groupsByTeam(people).map(g => g.department)).toEqual(['Legal']);
   });
 });
 

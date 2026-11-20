@@ -132,7 +132,11 @@ export async function getWeeklyDelta(
   // assertColumn happens inside getWeeklySeries; nWeeks+1 not needed since we
   // only ever look at completed weeks within the requested series and drop
   // the trailing (partial) entry.
-  const series = await getWeeklySeries(table, scopeType, scopeId, column, nWeeks, now, vendor);
+  return deltaFromSeries(await getWeeklySeries(table, scopeType, scopeId, column, nWeeks, now, vendor));
+}
+
+/** The change between the last two completed weeks of a series already read. */
+export function deltaFromSeries(series: WeeklyPoint[]): WeeklyDelta {
   const completed = series.filter(p => !p.partial);
   const current = completed.length > 0 ? completed[completed.length - 1].value : null;
   const prior = completed.length > 1 ? completed[completed.length - 2].value : null;

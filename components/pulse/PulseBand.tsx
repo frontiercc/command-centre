@@ -294,8 +294,6 @@ export default function PulseBand({ children, vendor = 'all', showVendor = false
       {loading && <Panel><Muted>Loading Work Pulse…</Muted></Panel>}
       {!loading && failed && <Panel title="Work Pulse"><Muted>{LOAD_FAILED}</Muted></Panel>}
       {!loading && !failed && !hasData && <Empty title="No Work Pulse data yet">Work appears here once Claude has classified it.</Empty>}
-      {(loading || !hasData) && children}
-
       {!loading && hasData && data && (
         <>
           {vendor !== 'all' && !openaiOnly && (
@@ -307,13 +305,15 @@ export default function PulseBand({ children, vendor = 'all', showVendor = false
             <WorkPulsePanel data={data} product={product} />
             <DepthPanel now={data.tierCounts} before={data.dashboard?.priorTierCounts ?? null} product={product} names={data.tierNames ?? undefined} />
           </div>
-
-          {children}
-
-          {data.dashboard && (
-            <SpreadPanel skills={data.dashboard.skillSpread} connectors={data.dashboard.connectorSpread} activePeople={data.dashboard.activePeople30d} split={data.dashboard.activePeopleByVendor30d} />
-          )}
         </>
+      )}
+
+      {/* One place whatever the state, so the panel inside loads once: placed differently while
+          loading and once loaded, React would treat it as a new panel and fetch its data again. */}
+      {children}
+
+      {!loading && hasData && data?.dashboard && (
+        <SpreadPanel skills={data.dashboard.skillSpread} connectors={data.dashboard.connectorSpread} activePeople={data.dashboard.activePeople30d} split={data.dashboard.activePeopleByVendor30d} />
       )}
     </div>
   );

@@ -146,3 +146,51 @@ describe('processCodeOtlpMetrics', () => {
     expect(count.n).toBe(1);
   });
 });
+
+describe('running totals (cumulative temporality)', () => {
+  const cumulative = (points: Array<{ value: number; t: number; start?: number }>) => {
+    const p = makeMetrics('claude_code.code_edit_tool.decision', points.map(x => ({
+      value: x.value, attrs: { decision: 'accept' }, timeUnixNano: `${x.t}000000000`,
+    })));
+    const m = p.resourceMetrics[0].scopeMetrics[0].metrics[0] as { sum: { aggregationTemporality?: number; dataPoints: Array<Record<string, unknown>> } };
+    m.sum.aggregationTemporality = 2;
+    m.sum.dataPoints.forEach((dp, i) => { dp.startTimeUnixNano = `${points[i].start ?? 1750000000}000000000`; });
+    return p;
+  };
+  const stored = async () =>
+    (await sql.all<{ value: number }>(`SELECT value FROM code_otel_metrics WHERE metric_name = 'claude_code.code_edit_tool.decision' ORDER BY occurred_at`)).map(r => Number(r.value));
+
+  beforeEach(async () => { await sql.exec(`DELETE FROM otel_cumulative_series`); });
+
+  it('stores the increase since the last report, across requests', async () => {
+    await processCodeOtlpMetrics(cumulative([{ value: 3, t: 1750000020 }, { value: 7, t: 1750000040 }]));
+    await processCodeOtlpMetrics(cumulative([{ value: 12, t: 1750000060 }]));
+    expect(await stored()).toEqual([3, 4, 5]);
+  });
+
+  it('reads points oldest first even when they arrive out of order', async () => {
+    await processCodeOtlpMetrics(cumulative([{ value: 7, t: 1750000040 }, { value: 3, t: 1750000020 }]));
+    expect(await stored()).toEqual([3, 4]);
+  });
+
+  it('counts a restarted counter from zero', async () => {
+    await processCodeOtlpMetrics(cumulative([{ value: 9, t: 1750000020 }]));
+    await processCodeOtlpMetrics(cumulative([{ value: 2, t: 1750000080, start: 1750000070 }]));
+    expect(await stored()).toEqual([9, 2]);
+  });
+
+  it('ignores a report already counted', async () => {
+    await processCodeOtlpMetrics(cumulative([{ value: 5, t: 1750000020 }]));
+    const again = await processCodeOtlpMetrics(cumulative([{ value: 5, t: 1750000020 }]));
+    expect(again.skipped).toBe(1);
+    expect(await stored()).toEqual([5]);
+  });
+
+  it('leaves increments from a delta client as they are', async () => {
+    await processCodeOtlpMetrics(makeMetrics('claude_code.code_edit_tool.decision', [
+      { value: 3, attrs: { decision: 'accept' }, timeUnixNano: '1750000020000000000' },
+      { value: 2, attrs: { decision: 'accept' }, timeUnixNano: '1750000040000000000' },
+    ]));
+    expect(await stored()).toEqual([3, 2]);
+  });
+});

@@ -35,7 +35,7 @@ export const DEFAULT_CODE_CLASSIFIER_CONFIG: CodeClassifierConfig = {
     { name: 'documentation',  description: 'docs, comments, READMEs' },
     { name: 'infrastructure', description: 'CI/CD, build, deploy, config, tooling' },
     { name: 'exploration',    description: 'understanding code, Q&A, review — no changes shipped' },
-    { name: 'other',          description: 'anything that does not fit the above' },
+    { name: 'other',          description: 'work that is not software development, such as finding or writing documents, research, and admin like arranging meetings' },
   ],
   signalsGuidance: 'a high tool-actions-to-prompts ratio, skills invoked, and commits made indicate deeper delegation. Many failed tool actions suggest exploration or a struggling session, not necessarily low tier. Judge the session as a whole.',
   confidenceThreshold: 0.7,

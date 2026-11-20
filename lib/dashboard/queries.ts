@@ -8,6 +8,10 @@
 // analytics_snapshots (Anthropic's Analytics API) hold Claude figures only, so
 // where a reader prefers them, they stand in for the Claude part alone and
 // OpenAI figures are always read live from cowork_messages.
+//
+// People counts list each person once per group in a GROUP BY first and then
+// count rows, rather than COUNT(DISTINCT user_id) over every prompt: same
+// figures, without sorting every prompt in the window.
 import { sql } from 'drizzle-orm';
 import { getTypedClient } from '@/lib/db/client';
 import { kindExpr, vendorClause, vendorExpr, codeSessionVendorClause, productExpr } from './product-sql';
@@ -28,19 +32,65 @@ export const DASHBOARD_PANEL_DAYS = 30;
 const KINDS: WorkKind[] = ['chat', 'work', 'code'];
 const nowS = () => Math.floor(Date.now() / 1000);
 
+/**
+ * A prompt's UTC day as 'YYYY-MM-DD', from a whole-day number (occurred_at / 86400).
+ * Grouping on the day number and formatting once per group gives the same
+ * labels as formatting every prompt, for less work.
+ */
+const DAY_LABEL = `to_char(to_timestamp(day * 86400) AT TIME ZONE 'UTC', 'YYYY-MM-DD')`;
+
 /** True once any ChatGPT or Codex prompt has been stored. */
 export async function hasOpenAiData(): Promise<boolean> {
   const rows = await rawAll<{ x: number }>(sql`SELECT 1 AS x FROM cowork_messages WHERE ${sql.raw(vendorClause('openai'))} LIMIT 1`);
   return rows.length > 0;
 }
 
+export interface ActiveUsersByWeek {
+  thisWeek: { claude: number; openai: number };
+  lastWeek: { claude: number; openai: number };
+}
+
+/**
+ * People with a prompt from each vendor in the 7 days ending at `endS` (this
+ * week) and in the 7 days before that (last week), read in one pass over the
+ * two weeks.
+ */
+export async function getActiveUsersThisAndLastWeek(endS = nowS()): Promise<ActiveUsersByWeek> {
+  const weekStart = endS - 7 * DAY;
+  const rows = await rawAll<{ vendor: string; this_week: number | string; last_week: number | string }>(sql`
+    WITH person_vendor AS (
+      SELECT ${sql.raw(vendorExpr())} AS vendor, user_id,
+             bool_or(occurred_at >= ${weekStart}) AS this_week,
+             bool_or(occurred_at < ${weekStart}) AS last_week
+      FROM cowork_messages
+      WHERE user_id IS NOT NULL AND occurred_at >= ${weekStart - 7 * DAY} AND occurred_at < ${endS}
+      GROUP BY 1, 2
+    )
+    SELECT vendor,
+           COUNT(*) FILTER (WHERE this_week) AS this_week,
+           COUNT(*) FILTER (WHERE last_week) AS last_week
+    FROM person_vendor
+    GROUP BY vendor
+  `);
+  const out: ActiveUsersByWeek = { thisWeek: { claude: 0, openai: 0 }, lastWeek: { claude: 0, openai: 0 } };
+  for (const r of rows) {
+    const vendor = r.vendor as 'claude' | 'openai';
+    out.thisWeek[vendor] = Number(r.this_week);
+    out.lastWeek[vendor] = Number(r.last_week);
+  }
+  return out;
+}
+
 /** People with a prompt from each vendor in the 7 days ending at `endS`. */
 export async function getActiveUsersByVendor(endS = nowS()): Promise<{ claude: number; openai: number }> {
   const rows = await rawAll<{ vendor: string; n: number | string }>(sql`
-    SELECT ${sql.raw(vendorExpr())} AS vendor, COUNT(DISTINCT user_id) AS n
-    FROM cowork_messages
-    WHERE user_id IS NOT NULL AND occurred_at >= ${endS - 7 * DAY} AND occurred_at < ${endS}
-    GROUP BY 1
+    WITH person_vendor AS (
+      SELECT ${sql.raw(vendorExpr())} AS vendor, user_id
+      FROM cowork_messages
+      WHERE user_id IS NOT NULL AND occurred_at >= ${endS - 7 * DAY} AND occurred_at < ${endS}
+      GROUP BY 1, 2
+    )
+    SELECT vendor, COUNT(*) AS n FROM person_vendor GROUP BY vendor
   `);
   const out = { claude: 0, openai: 0 };
   for (const r of rows) out[r.vendor as 'claude' | 'openai'] = Number(r.n);
@@ -76,12 +126,21 @@ export async function getSessionsPerWeekByProduct(now = nowS()): Promise<Record<
   };
 
   const [promptRows, codeRows] = await Promise.all([
+    // Each session once with its first prompt and whether it was active in the
+    // window, then counted per kind and vendor.
     rawAll<{ kind: string; vendor: string; sessions: number | string; first_at: number | string | null }>(sql`
-      SELECT ${sql.raw(kindExpr())} AS kind, ${sql.raw(vendorExpr())} AS vendor,
-             COUNT(DISTINCT CASE WHEN occurred_at >= ${windowStart} THEN session_id END) AS sessions,
-             MIN(occurred_at) AS first_at
-      FROM cowork_messages
-      WHERE session_id <> '' AND surface IS DISTINCT FROM 'code'
+      WITH session_rows AS (
+        SELECT ${sql.raw(kindExpr())} AS kind, ${sql.raw(vendorExpr())} AS vendor, session_id,
+               MIN(occurred_at) AS first_at,
+               bool_or(occurred_at >= ${windowStart}) AS in_window
+        FROM cowork_messages
+        WHERE session_id <> '' AND surface IS DISTINCT FROM 'code'
+        GROUP BY 1, 2, 3
+      )
+      SELECT kind, vendor,
+             COUNT(*) FILTER (WHERE in_window) AS sessions,
+             MIN(first_at) AS first_at
+      FROM session_rows
       GROUP BY 1, 2
     `),
     rawAll<{ vendor: string; sessions: number | string; first_at: number | string | null }>(sql`
@@ -131,37 +190,75 @@ export async function getFlaggedByProduct(now = nowS()): Promise<Record<WorkKind
 
 export interface TrendDay { date: string; products: ProductCounts }
 
-/**
- * Daily activity for each product over the last `days` days. Chat and Code
- * products count prompts a day, Work products count people a day (the
- * measures the trend has always used). Claude's three products prefer
- * analytics_snapshots on the days they cover, as getAdoptionTrend does; the
- * OpenAI products are always read live.
- */
-export async function getAdoptionTrendByProduct(days: number): Promise<TrendDay[]> {
+/** The adoption trend's window: from `days` days ago (to the second) to today (UTC). */
+function trendWindow(days: number): { cutoffS: number; cutoffStr: string; todayStr: string } {
   const cutoff = new Date();
   cutoff.setDate(cutoff.getDate() - days);
-  const cutoffStr = cutoff.toISOString().split('T')[0];
-  const todayStr = new Date().toISOString().split('T')[0];
-  const cutoffS = Math.floor(cutoff.getTime() / 1000);
-  const dateExpr = `to_char(to_timestamp(occurred_at) AT TIME ZONE 'UTC', 'YYYY-MM-DD')`;
+  return {
+    cutoffS: Math.floor(cutoff.getTime() / 1000),
+    cutoffStr: cutoff.toISOString().split('T')[0],
+    todayStr: new Date().toISOString().split('T')[0],
+  };
+}
 
-  const [live, snaps] = await Promise.all([
-    rawAll<{ date: string; product: string; prompts: number | string; people: number | string }>(sql`
-      SELECT ${sql.raw(dateExpr)} AS date, ${sql.raw(productExpr())} AS product,
-             COUNT(*) AS prompts, COUNT(DISTINCT user_id) AS people
+/** The "Who is using it each day?" window: the last `days` whole UTC days, today included. */
+function panelWindow(days: number, endS: number): { startS: number; endS: number } {
+  const todayStart = Math.floor(endS / DAY) * DAY;
+  return { startS: todayStart - (days - 1) * DAY, endS };
+}
+
+interface DailyActivityRow {
+  date: string;
+  product: string;
+  /** Prompts on or after the trend's cutoff, and the people who sent them. */
+  trend_prompts: number | string;
+  trend_people: number | string;
+  /** People with a prompt inside the panel window. */
+  panel_people: number | string;
+}
+
+/**
+ * Both daily readers' live figures in one pass: for each UTC day and product,
+ * the adoption trend's prompts and people (prompts on or after `trendFromS`)
+ * and the daily panel's people (prompts in [panelFromS, panelToS)). Each
+ * person is listed once per day and product first; their row carries what
+ * each reader needs.
+ */
+async function readDailyActivity(trendFromS: number, panelFromS: number, panelToS: number): Promise<DailyActivityRow[]> {
+  return rawAll<DailyActivityRow>(sql`
+    WITH person_days AS (
+      SELECT occurred_at / 86400 AS day, ${sql.raw(productExpr())} AS product, user_id,
+             COUNT(*) FILTER (WHERE occurred_at >= ${trendFromS}) AS trend_prompts,
+             bool_or(occurred_at >= ${panelFromS} AND occurred_at < ${panelToS}) AS in_panel
       FROM cowork_messages
-      WHERE occurred_at >= ${cutoffS}
-      GROUP BY 1, 2
-    `),
-    rawAll<{ date: string; chat: number | string; code: number | string; cowork: number | string }>(sql`
-      SELECT snapshot_date AS date, SUM(surface_chat) AS chat, SUM(surface_code) AS code, SUM(surface_cowork) AS cowork
-      FROM analytics_snapshots
-      WHERE snapshot_date >= ${cutoffStr} AND snapshot_date <= ${todayStr}
-      GROUP BY snapshot_date
-    `),
-  ]);
+      WHERE occurred_at >= ${Math.min(trendFromS, panelFromS)}
+      GROUP BY 1, 2, 3
+    )
+    SELECT ${sql.raw(DAY_LABEL)} AS date, product,
+           SUM(trend_prompts) AS trend_prompts,
+           COUNT(user_id) FILTER (WHERE trend_prompts > 0) AS trend_people,
+           COUNT(user_id) FILTER (WHERE in_panel) AS panel_people
+    FROM person_days
+    GROUP BY day, product
+  `);
+}
 
+/** Claude's daily figures from analytics_snapshots, for the adoption trend. */
+function readTrendSnapshots(cutoffStr: string, todayStr: string) {
+  return rawAll<{ date: string; chat: number | string; code: number | string; cowork: number | string }>(sql`
+    SELECT snapshot_date AS date, SUM(surface_chat) AS chat, SUM(surface_code) AS code, SUM(surface_cowork) AS cowork
+    FROM analytics_snapshots
+    WHERE snapshot_date >= ${cutoffStr} AND snapshot_date <= ${todayStr}
+    GROUP BY snapshot_date
+  `);
+}
+
+/** The adoption trend from the live rows and the snapshots. */
+function buildAdoptionTrend(
+  live: DailyActivityRow[],
+  snaps: Awaited<ReturnType<typeof readTrendSnapshots>>,
+  todayStr: string,
+): TrendDay[] {
   const byDate = new Map<string, ProductCounts>();
   const day = (date: string) => {
     let c = byDate.get(date);
@@ -170,8 +267,10 @@ export async function getAdoptionTrendByProduct(days: number): Promise<TrendDay[
   };
   const isWork = (id: ProductId) => id === 'claude_cowork' || id === 'chatgpt_work';
   for (const r of live) {
+    // A day and product with prompts only before the cutoff is not in the trend.
+    if (Number(r.trend_prompts) === 0) continue;
     const id = r.product as ProductId;
-    day(r.date)[id] = Number(isWork(id) ? r.people : r.prompts);
+    day(r.date)[id] = Number(isWork(id) ? r.trend_people : r.trend_prompts);
   }
   for (const s of snaps) {
     const c = day(s.date);
@@ -183,6 +282,69 @@ export async function getAdoptionTrendByProduct(days: number): Promise<TrendDay[
     .filter(([date]) => date <= todayStr)
     .map(([date, products]) => ({ date, products }))
     .sort((a, b) => a.date.localeCompare(b.date));
+}
+
+/** The daily panel from the live rows: every day of the window, a day with no activity at 0. */
+function buildPeopleByDay(live: DailyActivityRow[], days: number, startS: number): Array<{ date: string; products: ProductCounts }> {
+  const out = Array.from({ length: days }, (_, i) => ({
+    date: new Date((startS + i * DAY) * 1000).toISOString().slice(0, 10),
+    products: zeroCounts(),
+  }));
+  const byDate = new Map(out.map(d => [d.date, d.products]));
+  for (const r of live) {
+    const c = byDate.get(r.date);
+    if (c && r.product in c) c[r.product as ProductId] = Number(r.panel_people);
+  }
+  return out;
+}
+
+/**
+ * Daily activity for each product over the last `days` days. Chat and Code
+ * products count prompts a day, Work products count people a day (the
+ * measures the trend has always used). Claude's three products prefer
+ * analytics_snapshots on the days they cover, as getAdoptionTrend does; the
+ * OpenAI products are always read live.
+ */
+export async function getAdoptionTrendByProduct(days: number): Promise<TrendDay[]> {
+  const { cutoffS, cutoffStr, todayStr } = trendWindow(days);
+  const [live, snaps] = await Promise.all([
+    readDailyActivity(cutoffS, cutoffS, cutoffS),
+    readTrendSnapshots(cutoffStr, todayStr),
+  ]);
+  return buildAdoptionTrend(live, snaps, todayStr);
+}
+
+/**
+ * People a day for each product over the last `days` UTC days, oldest first: the dashboard's
+ * "Who is using it each day?" lines. Every figure counts people, never prompts, so the products
+ * can be read against one another. A day with no activity reads 0 (nobody used it).
+ */
+export async function getPeopleByDayByProduct(days: number, endS = nowS()): Promise<Array<{ date: string; products: ProductCounts }>> {
+  const panel = panelWindow(days, endS);
+  const live = await readDailyActivity(panel.startS, panel.startS, panel.endS);
+  return buildPeopleByDay(live, days, panel.startS);
+}
+
+/**
+ * The adoption trend over the last `trendDays` days and the people-a-day panel
+ * over the last `panelDays` UTC days, from one read of the prompts (plus the
+ * snapshots), for the dashboard, which shows both. Same figures as
+ * getAdoptionTrendByProduct and getPeopleByDayByProduct.
+ */
+export async function getDailyPanelsByProduct(trendDays: number, panelDays: number, endS = nowS()): Promise<{
+  adoptionTrend: TrendDay[];
+  peopleByDay: Array<{ date: string; products: ProductCounts }>;
+}> {
+  const trend = trendWindow(trendDays);
+  const panel = panelWindow(panelDays, endS);
+  const [live, snaps] = await Promise.all([
+    readDailyActivity(trend.cutoffS, panel.startS, panel.endS),
+    readTrendSnapshots(trend.cutoffStr, trend.todayStr),
+  ]);
+  return {
+    adoptionTrend: buildAdoptionTrend(live, snaps, trend.todayStr),
+    peopleByDay: buildPeopleByDay(live, panelDays, panel.startS),
+  };
 }
 
 export interface DepartmentRow {
@@ -201,27 +363,34 @@ export interface DepartmentRow {
  */
 export async function getDepartmentBreakdownByProduct(vendor: Vendor = 'all', endS = nowS()): Promise<DepartmentRow[]> {
   const since = endS - DASHBOARD_PANEL_DAYS * DAY;
-  const [depts, used, vendorActive] = await Promise.all([
+  const [depts, used] = await Promise.all([
     rawAll<{ department: string; user_count: number | string; active_users: number | string }>(sql`
       SELECT u.department, COUNT(*) AS user_count,
              COUNT(CASE WHEN u.last_seen_at >= ${since} THEN 1 END) AS active_users
       FROM users u WHERE u.department IS NOT NULL
       GROUP BY u.department
     `),
-    rawAll<{ department: string; product: string; n: number | string }>(sql`
-      SELECT u.department, ${sql.raw(productExpr('cm.'))} AS product, COUNT(DISTINCT cm.user_id) AS n
-      FROM cowork_messages cm JOIN users u ON u.id = cm.user_id
-      WHERE u.department IS NOT NULL AND cm.occurred_at >= ${since}
-      GROUP BY 1, 2
-    `),
-    vendor === 'all' ? Promise.resolve(null) : rawAll<{ department: string; n: number | string }>(sql`
-      SELECT u.department, COUNT(DISTINCT cm.user_id) AS n
-      FROM cowork_messages cm JOIN users u ON u.id = cm.user_id
-      WHERE u.department IS NOT NULL AND cm.occurred_at >= ${since} AND ${sql.raw(vendorClause(vendor, 'cm.'))}
-      GROUP BY 1
+    // Each person once per product (and whether it is the chosen vendor's), then
+    // counted per department and product, and per department for the vendor.
+    // The department-only rows (product NULL) carry the vendor's active people.
+    rawAll<{ department: string; product: string | null; n: number | string; vendor_people: number | string }>(sql`
+      WITH person_products AS (
+        SELECT user_id, ${sql.raw(productExpr())} AS product,
+               bool_or(${sql.raw(vendorClause(vendor))}) AS in_vendor
+        FROM cowork_messages
+        WHERE user_id IS NOT NULL AND occurred_at >= ${since}
+        GROUP BY 1, 2
+      )
+      SELECT u.department, pp.product, COUNT(*) AS n,
+             COUNT(DISTINCT pp.user_id) FILTER (WHERE pp.in_vendor) AS vendor_people
+      FROM person_products pp JOIN users u ON u.id = pp.user_id
+      WHERE u.department IS NOT NULL
+      GROUP BY GROUPING SETS ((u.department, pp.product), (u.department))
     `),
   ]);
-  const activeByDept = vendorActive ? new Map(vendorActive.map((r) => [r.department, Number(r.n)])) : null;
+  const activeByDept = vendor === 'all'
+    ? null
+    : new Map(used.filter((r) => r.product === null).map((r) => [r.department, Number(r.vendor_people)]));
   const rows = new Map<string, DepartmentRow>(depts.map((d) => [d.department, {
     department: d.department,
     user_count: Number(d.user_count),
@@ -229,6 +398,7 @@ export async function getDepartmentBreakdownByProduct(vendor: Vendor = 'all', en
     products: zeroCounts(),
   }]));
   for (const r of used) {
+    if (r.product === null) continue;
     const row = rows.get(r.department);
     if (row) row.products[r.product as ProductId] = Number(r.n);
   }
@@ -258,11 +428,16 @@ async function userProductCounts(): Promise<Map<string, Person>> {
   cutoff.setDate(cutoff.getDate() - 7);
   const cutoffStr = cutoff.toISOString().split('T')[0];
   const [live, snaps] = await Promise.all([
+    // Prompts counted per person and product first, then joined to the people.
     rawAll<{ id: string; display_name: string | null; email: string; department: string | null; product: string; n: number | string }>(sql`
-      SELECT u.id, u.display_name, u.email, u.department, ${sql.raw(productExpr('cm.'))} AS product, COUNT(*) AS n
-      FROM cowork_messages cm JOIN users u ON u.id = cm.user_id
-      WHERE cm.occurred_at >= ${weekAgo}
-      GROUP BY u.id, u.display_name, u.email, u.department, 5
+      WITH person_products AS (
+        SELECT user_id, ${sql.raw(productExpr())} AS product, COUNT(*) AS n
+        FROM cowork_messages
+        WHERE user_id IS NOT NULL AND occurred_at >= ${weekAgo}
+        GROUP BY 1, 2
+      )
+      SELECT u.id, u.display_name, u.email, u.department, pp.product, pp.n
+      FROM person_products pp JOIN users u ON u.id = pp.user_id
     `),
     rawAll<{ id: string; display_name: string | null; email: string; department: string | null; chat: number | string; code: number | string; cowork: number | string }>(sql`
       SELECT u.id, u.display_name, u.email, u.department,
@@ -368,31 +543,4 @@ export function tierMixShares(mix: { tier1: number; tier2: number; tier3: number
   if (total <= 0) return null;
   const pct = (n: number) => `${Math.round((n / total) * 100)}%`;
   return { tier1: pct(mix.tier1), tier2: pct(mix.tier2), tier3: pct(mix.tier3) };
-}
-
-/**
- * People a day for each product over the last `days` UTC days, oldest first: the dashboard's
- * "Who is using it each day?" lines. Every figure counts people, never prompts, so the products
- * can be read against one another. A day with no activity reads 0 (nobody used it).
- */
-export async function getPeopleByDayByProduct(days: number, endS = nowS()): Promise<Array<{ date: string; products: ProductCounts }>> {
-  const todayStart = Math.floor(endS / DAY) * DAY;
-  const startS = todayStart - (days - 1) * DAY;
-  const rows = await rawAll<{ date: string; product: string; people: number | string }>(sql`
-    SELECT to_char(to_timestamp(occurred_at) AT TIME ZONE 'UTC', 'YYYY-MM-DD') AS date,
-           ${sql.raw(productExpr())} AS product, COUNT(DISTINCT user_id) AS people
-    FROM cowork_messages
-    WHERE user_id IS NOT NULL AND occurred_at >= ${startS} AND occurred_at < ${endS}
-    GROUP BY 1, 2
-  `);
-  const out = Array.from({ length: days }, (_, i) => ({
-    date: new Date((startS + i * DAY) * 1000).toISOString().slice(0, 10),
-    products: zeroCounts(),
-  }));
-  const byDate = new Map(out.map(d => [d.date, d.products]));
-  for (const r of rows) {
-    const c = byDate.get(r.date);
-    if (c && r.product in c) c[r.product as ProductId] = Number(r.people);
-  }
-  return out;
 }

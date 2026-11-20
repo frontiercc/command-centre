@@ -32,5 +32,5 @@ export async function GET(request: NextRequest) {
     action: 'READ',
     outcome: 'success',
   });
-  return NextResponse.json(await buildSpendTrend(Math.floor(Date.now() / 1000), months));
+  return NextResponse.json(await buildSpendTrend(Math.floor(Date.now() / 1000), months, { keepFinishedMonths: true }));
 }

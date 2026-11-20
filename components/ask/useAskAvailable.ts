@@ -4,13 +4,14 @@
 'use client';
 
 import { useEffect, useState } from 'react';
+import { sharedGet } from '@/components/shared/shared-get';
 
 /** Whether Ask the data is available to this person (an admin, turned on, with an AI key). Asked once per page load. */
 let cached: Promise<boolean> | null = null;
 
 export function askAvailable(): Promise<boolean> {
   if (!cached) {
-    cached = fetch('/api/ask')
+    cached = sharedGet('/api/ask')
       .then(r => (r.ok ? r.json() : { available: false }))
       .then((d: { available?: boolean }) => d.available === true)
       .catch(() => false);

@@ -190,7 +190,49 @@ export function mergeUsersById(users: ChargebackUser[]): ChargebackUser[] {
  */
 const NULL_USER_KEY = '__null_user__';
 
-export async function buildChargeback(period: string, nowS: number = Math.floor(Date.now() / 1000)): Promise<ChargebackReport> {
+/** Rows every period's report reads the same way: fetched once and shared when one request builds several periods. */
+export interface ChargebackLookups {
+  rates: ModelRates;
+  deptByUserId: Map<string, { displayName: string | null; department: string | null }>;
+  deptToCentre: Awaited<ReturnType<typeof resolveDeptToCentre>>;
+  /** Whether OpenAI has ever sent a ChatGPT cost record / a Codex turn, and whether its products are shown. */
+  openai: { chatgpt: boolean; codex: boolean; shown: boolean };
+}
+
+/**
+ * Pass the same object to several buildChargeback calls in one request (this
+ * month and last month, say) and the lookups are read once, on first need.
+ * Never kept beyond the request that made it.
+ */
+export interface ChargebackShared {
+  lookups?: Promise<ChargebackLookups>;
+}
+
+async function loadLookups(db: unknown): Promise<ChargebackLookups> {
+  const [rates, userRows, deptToCentre, openaiRows, shown] = await Promise.all([
+    getCodeModelRates(),
+    rawAll<{ id: string; display_name: string | null; department: string | null }>(
+      db, sql`SELECT id, display_name, department FROM users`),
+    resolveDeptToCentre(),
+    rawAll<{ chatgpt: boolean; codex: boolean }>(
+      db,
+      sql`SELECT EXISTS (SELECT 1 FROM openai_costs WHERE product = 'chatgpt') AS chatgpt,
+                 EXISTS (SELECT 1 FROM codex_turns) AS codex`),
+    openaiShown(),
+  ]);
+  const deptByUserId = new Map<string, { displayName: string | null; department: string | null }>();
+  for (const row of userRows) {
+    deptByUserId.set(row.id, { displayName: row.display_name, department: row.department });
+  }
+  const o = openaiRows[0];
+  return { rates, deptByUserId, deptToCentre, openai: { chatgpt: o?.chatgpt === true, codex: o?.codex === true, shown } };
+}
+
+export async function buildChargeback(
+  period: string,
+  nowS: number = Math.floor(Date.now() / 1000),
+  shared: ChargebackShared = {},
+): Promise<ChargebackReport> {
   const db = await getTypedClient();
 
   // Period lock: a CLOSED period returns its immutable snapshot VERBATIM,
@@ -207,23 +249,28 @@ export async function buildChargeback(period: string, nowS: number = Math.floor(
   }
 
   const { start, end } = monthBounds(period);
-  const rates: ModelRates = await getCodeModelRates();
 
+  // --- Stage 1: the lookups (shared across periods) and this month's department moves, together ---
   // Department moves during the month (department sync, migration 0049). A
   // move recorded by the directory splits the person's spend at the move: the
   // part before counts to the old department, the part after to the new one.
   // A person with a manual change this month is not split: a manual
   // department applies to the whole open month. With no moves (the usual
   // case) every query below is exactly as before.
-  const moveRows = await rawAll<{ user_id: string; changed_at: number | string; from_department: string | null; to_department: string | null }>(
-    db,
-    sql`SELECT user_id, changed_at, from_department, to_department
-       FROM department_history
-       WHERE is_move = 1 AND user_id IS NOT NULL AND changed_at >= ${start} AND changed_at < ${end}
-         AND user_id NOT IN (SELECT user_id FROM department_history
-                             WHERE source = 'manual' AND user_id IS NOT NULL AND changed_at >= ${start} AND changed_at < ${end})
-       ORDER BY user_id, changed_at`
-  );
+  shared.lookups ??= loadLookups(db);
+  const [lookups, moveRows] = await Promise.all([
+    shared.lookups,
+    rawAll<{ user_id: string; changed_at: number | string; from_department: string | null; to_department: string | null }>(
+      db,
+      sql`SELECT user_id, changed_at, from_department, to_department
+         FROM department_history
+         WHERE is_move = 1 AND user_id IS NOT NULL AND changed_at >= ${start} AND changed_at < ${end}
+           AND user_id NOT IN (SELECT user_id FROM department_history
+                               WHERE source = 'manual' AND user_id IS NOT NULL AND changed_at >= ${start} AND changed_at < ${end})
+         ORDER BY user_id, changed_at`
+    ),
+  ]);
+  const { rates, deptByUserId, deptToCentre } = lookups;
   const moves = new Map<string, Move[]>();
   for (const r of moveRows) {
     if (!r.from_department || !r.to_department) continue;
@@ -241,6 +288,91 @@ export async function buildChargeback(period: string, nowS: number = Math.floor(
                       AND h.changed_at >= ${start} AND h.changed_at <= ${sql.raw(table)}.${sql.raw(timeCol)})
               ELSE 0 END`;
 
+  // ChatGPT and Codex count only when OpenAI has sent some and they are shown
+  // (hidden on the OpenAI panel, FinOps reads as Claude-only; a closed period keeps its snapshot).
+  const hasOpenAi = (lookups.openai.chatgpt || lookups.openai.codex) && lookups.openai.shown;
+
+  // --- Stage 2: every spend read for the month, together ---
+  // Policy B: SUM() of integer columns comes back as bigint, and SUM(cost_usd)
+  // over `numeric` as a STRING, from a raw pg query. Every total is
+  // Number()-coerced where it is read below, before any arithmetic or being
+  // handed to priceTokens: a string here would corrupt the token totals, the
+  // priced spend and the reconciliation invariant.
+  //
+  // The Cowork reads exclude Claude in Office rows (product IS NOT NULL):
+  // Office sends no cost, so it would add tokens without spend to the Cowork
+  // tile and look like uncosted Cowork requests. Office spend is a separate
+  // estimate (lib/finance/office-spend.ts), never part of these totals.
+  //
+  // ChatGPT and Codex (OpenAI Compliance API) use the same pricing as
+  // lib/openai/spend.ts: ChatGPT is the tokens in OpenAI's hourly cost records
+  // (product 'chatgpt'; Codex cost records are left out, since Codex is priced
+  // per turn), Codex each turn's tokens, both from the rates table.
+  type OpenAiRow = {
+    user_id: string | null; model: string | null;
+    inp: number | string | null; cached: number | string | null; outp: number | string | null;
+    // ChatGPT only: a group of records with no token split, valued at OpenAI's figure.
+    no_split?: boolean; reported?: number | string | null; unknown_usd?: number | string | null;
+    seg?: number | string | null;
+  };
+  const [codeRows, coworkRows, coworkTokenRows, chatgptRows, codexRows] = await Promise.all([
+    // Code tokens per (user_id, model).
+    rawAll<{
+      user_id: string | null;
+      model: string | null;
+      i: number | string | null;
+      o: number | string | null;
+      cw: number | string | null;
+      cr: number | string | null;
+      seg: number | string | null;
+    }>(
+      db,
+      sql`SELECT user_id, model,
+                SUM(input_tokens) AS i, SUM(output_tokens) AS o,
+                SUM(cache_creation_tokens) AS cw, SUM(cache_read_tokens) AS cr,
+                ${segOf('code_assistant_meta', 'occurred_at')} AS seg
+         FROM code_assistant_meta
+         WHERE occurred_at >= ${start} AND occurred_at < ${end}
+         GROUP BY user_id, model, seg`
+    ),
+    // Cowork spend per user.
+    rawAll<{ user_id: string | null; c: number | string | null; seg: number | string | null }>(
+      db,
+      sql`SELECT user_id, COALESCE(SUM(cost_usd), 0) AS c, ${segOf('cowork_messages', 'occurred_at')} AS seg
+         FROM cowork_messages
+         WHERE message_type = 'cowork_api_request' AND product IS NULL AND occurred_at >= ${start} AND occurred_at < ${end}
+         GROUP BY user_id, seg`
+    ),
+    // Cowork model calls one by one: each one's token_usage for the surface
+    // tokens, and whether it carries a cost, for the cost coverage. The
+    // coverage counts exactly these rows, so one read serves both.
+    rawAll<{ token_usage: unknown; has_cost: boolean }>(
+      db,
+      sql`SELECT token_usage, (cost_usd IS NOT NULL) AS has_cost
+         FROM cowork_messages
+         WHERE message_type = 'cowork_api_request' AND product IS NULL AND occurred_at >= ${start} AND occurred_at < ${end}`
+    ),
+    hasOpenAi
+      ? rawAll<OpenAiRow>(db, sql`
+          SELECT user_id, model, (input_tokens + cached_input_tokens + output_tokens = 0) AS no_split,
+                 SUM(input_tokens) AS inp, SUM(cached_input_tokens) AS cached, SUM(output_tokens) AS outp,
+                 SUM(cost_usd) AS reported, SUM(CASE WHEN cost_usd IS NULL THEN 1 ELSE 0 END) AS unknown_usd,
+                 ${segOf('openai_costs', 'hour_start')} AS seg
+          FROM openai_costs
+          WHERE product = 'chatgpt' AND hour_start >= ${start} AND hour_start < ${end}
+          GROUP BY user_id, model, no_split, seg`)
+      : Promise.resolve([] as OpenAiRow[]),
+    hasOpenAi
+      ? rawAll<OpenAiRow>(db, sql`
+          SELECT user_id, model, SUM(uncached_input_tokens) AS inp, SUM(cached_input_tokens) AS cached, SUM(output_tokens) AS outp,
+                 ${segOf('codex_turns', 'started_at')} AS seg
+          FROM codex_turns
+          WHERE started_at >= ${start} AND started_at < ${end}
+          GROUP BY user_id, model, seg`)
+      : Promise.resolve([] as OpenAiRow[]),
+  ]);
+
+  // --- Stage 3: attribute the spend to people, always in the same order (Code, Cowork, ChatGPT, Codex) ---
   const users = new Map<string, MutableUser>();
   const unpricedModels = new Set<string>();
   const modelsSeen: string[] = [];
@@ -277,30 +409,6 @@ export async function buildChargeback(period: string, nowS: number = Math.floor(
   }
 
   // --- Code spend per (user_id, model) ---
-  // Policy B: SUM() of integer columns comes back as bigint → a STRING from a
-  // raw pg query. Every token total is Number()-coerced at the read site
-  // below before any
-  // arithmetic or being handed to priceTokens — a string here would corrupt
-  // both the token totals and the priced spend that feeds grandTotalUsd.
-  const codeRows = await rawAll<{
-    user_id: string | null;
-    model: string | null;
-    i: number | string | null;
-    o: number | string | null;
-    cw: number | string | null;
-    cr: number | string | null;
-    seg: number | string | null;
-  }>(
-    db,
-    sql`SELECT user_id, model,
-              SUM(input_tokens) AS i, SUM(output_tokens) AS o,
-              SUM(cache_creation_tokens) AS cw, SUM(cache_read_tokens) AS cr,
-              ${segOf('code_assistant_meta', 'occurred_at')} AS seg
-       FROM code_assistant_meta
-       WHERE occurred_at >= ${start} AND occurred_at < ${end}
-       GROUP BY user_id, model, seg`
-  );
-
   for (const row of codeRows) {
     // Token totals are exact and count ALL usage, including rows whose model
     // is unpriced or NULL — tokens are real even when we can't price them.
@@ -350,17 +458,6 @@ export async function buildChargeback(period: string, nowS: number = Math.floor(
   }
 
   // --- Cowork spend per user ---
-  // Policy B: cost_usd is `numeric` on Postgres, so SUM(cost_usd) comes back
-  // as a STRING — Number()-coerced before it feeds coworkUsd / grandTotalUsd
-  // (a string here would break the reconciliation invariant).
-  const coworkRows = await rawAll<{ user_id: string | null; c: number | string | null; seg: number | string | null }>(
-    db,
-    sql`SELECT user_id, COALESCE(SUM(cost_usd), 0) AS c, ${segOf('cowork_messages', 'occurred_at')} AS seg
-       FROM cowork_messages
-       WHERE message_type = 'cowork_api_request' AND product IS NULL AND occurred_at >= ${start} AND occurred_at < ${end}
-       GROUP BY user_id, seg`
-  );
-
   for (const row of coworkRows) {
     const u = getUser(row.user_id);
     const c = Number(row.c ?? 0);
@@ -370,20 +467,9 @@ export async function buildChargeback(period: string, nowS: number = Math.floor(
     coworkSurfaceUsd += c;
   }
 
-  // Cowork queries here exclude Claude in Office rows (product IS NOT NULL):
-  // Office sends no cost, so it would add tokens without spend to the Cowork
-  // tile and look like uncosted Cowork requests. Office spend is a separate
-  // estimate (lib/finance/office-spend.ts), never part of these totals.
   // --- Cowork surface tokens (parsed from token_usage JSON, malformed/null skipped) ---
   // token_usage is `jsonb` (codec returns a parsed object) — jsonToText()
   // normalises it back to a JSON string for JSON.parse() below.
-  const coworkTokenRows = await rawAll<{ token_usage: unknown }>(
-    db,
-    sql`SELECT token_usage
-       FROM cowork_messages
-       WHERE message_type = 'cowork_api_request' AND product IS NULL AND occurred_at >= ${start} AND occurred_at < ${end}`
-  );
-
   for (const row of coworkTokenRows) {
     const rawJson = jsonToText(row.token_usage);
     if (!rawJson) continue;
@@ -400,36 +486,18 @@ export async function buildChargeback(period: string, nowS: number = Math.floor(
     coworkSurfaceTokens.cacheRead += Number(parsed.cacheReadTokens) || 0;
   }
 
-  // --- ChatGPT and Codex (OpenAI Compliance API) ---
-  // Same pricing as lib/openai/spend.ts: ChatGPT is the tokens in OpenAI's
-  // hourly cost records (product 'chatgpt'; Codex cost records are left out,
-  // since Codex is priced per turn), Codex each turn's tokens, both from the
-  // rates table. A model with no rate is named, never counted as $0. Tokens
-  // stay apart from Claude's token totals. Bigint/numeric sums are strings.
-  const openaiSeen = await rawAll<{ x: number }>(
-    db,
-    sql`SELECT 1 AS x WHERE EXISTS (SELECT 1 FROM openai_costs WHERE product = 'chatgpt')
-                        OR EXISTS (SELECT 1 FROM codex_turns)`
-  );
-  // Hidden on the OpenAI panel: FinOps reads as Claude-only (a closed period keeps its snapshot).
-  const hasOpenAi = openaiSeen.length > 0 && await openaiShown();
+  // --- ChatGPT and Codex ---
+  // A model with no rate is named, never counted as $0. Tokens stay apart
+  // from Claude's token totals.
   const openaiUnpriced = new Set<string>();
   let chatgptSurfaceUsd: number | null = null;
   let codexSurfaceUsd = 0;
   const chatgptTokens: CodeTokens = { input: 0, output: 0, cacheWrite: 0, cacheRead: 0 };
   const codexTokens: CodeTokens = { input: 0, output: 0, cacheWrite: 0, cacheRead: 0 };
   if (hasOpenAi) {
-    const anyChatgpt = await rawAll<{ x: number }>(db, sql`SELECT 1 AS x FROM openai_costs WHERE product = 'chatgpt' LIMIT 1`);
-    if (anyChatgpt.length > 0) chatgptSurfaceUsd = 0;
-    const openaiRows = async (query: unknown) => rawAll<{
-      user_id: string | null; model: string | null;
-      inp: number | string | null; cached: number | string | null; outp: number | string | null;
-      // ChatGPT only: a group of records with no token split, valued at OpenAI's figure.
-      no_split?: boolean; reported?: number | string | null; unknown_usd?: number | string | null;
-      seg?: number | string | null;
-    }>(db, query);
+    if (lookups.openai.chatgpt) chatgptSurfaceUsd = 0;
     const priceInto = (
-      rows: Awaited<ReturnType<typeof openaiRows>>,
+      rows: OpenAiRow[],
       tokens: CodeTokens,
       add: (u: MutableUser, usd: number, part: SegSpend | null) => void,
     ) => {
@@ -457,48 +525,15 @@ export async function buildChargeback(period: string, nowS: number = Math.floor(
         }
       }
     };
-    priceInto(await openaiRows(sql`
-      SELECT user_id, model, (input_tokens + cached_input_tokens + output_tokens = 0) AS no_split,
-             SUM(input_tokens) AS inp, SUM(cached_input_tokens) AS cached, SUM(output_tokens) AS outp,
-             SUM(cost_usd) AS reported, SUM(CASE WHEN cost_usd IS NULL THEN 1 ELSE 0 END) AS unknown_usd,
-             ${segOf('openai_costs', 'hour_start')} AS seg
-      FROM openai_costs
-      WHERE product = 'chatgpt' AND hour_start >= ${start} AND hour_start < ${end}
-      GROUP BY user_id, model, no_split, seg`), chatgptTokens, (u, usd, part) => { u.chatgptUsd += usd; if (part) part.chatgptUsd += usd; chatgptSurfaceUsd = (chatgptSurfaceUsd ?? 0) + usd; });
-    priceInto(await openaiRows(sql`
-      SELECT user_id, model, SUM(uncached_input_tokens) AS inp, SUM(cached_input_tokens) AS cached, SUM(output_tokens) AS outp,
-             ${segOf('codex_turns', 'started_at')} AS seg
-      FROM codex_turns
-      WHERE started_at >= ${start} AND started_at < ${end}
-      GROUP BY user_id, model, seg`), codexTokens, (u, usd, part) => { u.codexUsd += usd; if (part) part.codexUsd += usd; codexSurfaceUsd += usd; });
+    priceInto(chatgptRows, chatgptTokens, (u, usd, part) => { u.chatgptUsd += usd; if (part) part.chatgptUsd += usd; chatgptSurfaceUsd = (chatgptSurfaceUsd ?? 0) + usd; });
+    priceInto(codexRows, codexTokens, (u, usd, part) => { u.codexUsd += usd; if (part) part.codexUsd += usd; codexSurfaceUsd += usd; });
   }
 
-  // --- Cowork cost coverage ---
-  // COUNT/SUM come back as bigint → STRING on Postgres; Number()-coerce both.
-  const coverageRows = await rawAll<{ total: number | string | null; with_cost: number | string | null }>(
-    db,
-    sql`SELECT COUNT(*) AS total,
-              SUM(CASE WHEN cost_usd IS NOT NULL THEN 1 ELSE 0 END) AS with_cost
-       FROM cowork_messages
-       WHERE message_type = 'cowork_api_request' AND product IS NULL AND occurred_at >= ${start} AND occurred_at < ${end}`
-  );
-  const coverageRow = coverageRows[0];
+  // --- Cowork cost coverage (from the same model-call rows as the tokens) ---
   const coworkCostCoverage = {
-    total: Number(coverageRow?.total ?? 0),
-    withCost: Number(coverageRow?.with_cost ?? 0),
+    total: coworkTokenRows.length,
+    withCost: coworkTokenRows.filter(r => r.has_cost === true).length,
   };
-
-  // --- Department lookup ---
-  const userRows = await rawAll<{
-    id: string;
-    display_name: string | null;
-    department: string | null;
-  }>(db, sql`SELECT id, display_name, department FROM users`);
-  const deptByUserId = new Map<string, { displayName: string | null; department: string | null }>();
-  for (const row of userRows) {
-    deptByUserId.set(row.id, { displayName: row.display_name, department: row.department });
-  }
-  const deptToCentre = await resolveDeptToCentre();
 
   // --- Bucket users into cost centres / unallocated ---
   const centreMap = new Map<string, ChargebackCentre>();

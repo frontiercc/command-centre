@@ -4,7 +4,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { visibleVendor } from '@/lib/sources/openai-visibility';
 import { getAdminSession, canAccessOrgOverview } from '@/lib/auth/admin-auth';
-import { getProductStickiness, getStickinessByProduct } from '@/lib/pulse/stickiness';
+import { getStickinessForDashboard } from '@/lib/pulse/stickiness';
 
 export const dynamic = 'force-dynamic';
 
@@ -15,10 +15,8 @@ export async function GET(request: NextRequest) {
   }
 
   const vendor = await visibleVendor(request.nextUrl.searchParams.get('vendor'));
-  const [{ cowork, code, chat }, products] = await Promise.all([
-    getProductStickiness(undefined, vendor),
-    getStickinessByProduct(),
-  ]);
+  // The three kinds of work (for the vendor) and the six products, from one read.
+  const { kinds: { cowork, code, chat }, products } = await getStickinessForDashboard(undefined, vendor);
 
   return NextResponse.json({
     cowork,

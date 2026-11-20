@@ -38,8 +38,7 @@ function Dots({ card }: { card: Card }) {
       </span>
     </div>
   );
-  const widest = Math.max(g.deep.perPerson ?? 0, g.shallow.perPerson ?? 0, 1);
-  const bar = (label: string, perPerson: number | null, ink: string) => (
+  const bar = (label: string, perPerson: number | null, widest: number, ink: string) => (
     <div className="grid grid-cols-[190px_minmax(0,1fr)_90px] gap-3 items-center py-[3px]">
       <span className="text-[13px] text-[#666666] leading-5">{label}</span>
       <span className="h-2 rounded-full bg-[#F2F2F2] overflow-hidden">
@@ -48,14 +47,25 @@ function Dots({ card }: { card: Card }) {
       <span className="text-right tabular-nums text-[13px]">{perPerson === null ? 'too few to tell' : one(perPerson)}</span>
     </div>
   );
+  // One pair of bars per count that has any output in the team.
+  const counts: Array<[string, number | null, number | null, number]> = [
+    ['Commits', g.deep.perPerson, g.shallow.perPerson, g.deep.commits + g.shallow.commits],
+    ['Pull requests', g.deep.prsPerPerson, g.shallow.prsPerPerson, g.deep.prs + g.shallow.prs],
+    ['Accepted edits', g.deep.editsPerPerson, g.shallow.editsPerPerson, g.deep.edits + g.shallow.edits],
+  ];
   return (
     <div>
       {row('Hand whole work over', g.deep.people, g.deep.perPerson, PETROL)}
       {row('Do not', g.shallow.people, g.shallow.perPerson, PALE)}
-      <div className="mt-2 pt-2 border-t border-[#F2F2F2]">
-        {bar('Commits per person, handed over', g.deep.perPerson, PETROL)}
-        {bar('Commits per person, not', g.shallow.perPerson, PALE)}
-      </div>
+      {counts.filter(([, , , total]) => total > 0).map(([label, d, sh]) => {
+        const widest = Math.max(d ?? 0, sh ?? 0, 1);
+        return (
+          <div key={label} className="mt-2 pt-2 border-t border-[#F2F2F2]">
+            {bar(`${label} per person, handed over`, d, widest, PETROL)}
+            {bar(`${label} per person, not`, sh, widest, PALE)}
+          </div>
+        );
+      })}
     </div>
   );
 }

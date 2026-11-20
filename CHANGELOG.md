@@ -1,5 +1,15 @@
 # Changelog
 
+## 1.4.5 (2026-11-20)
+
+- **Automated runs:** Developer Pulse shows script and test-harness sessions as "Automated runs". They are kept out of the figures about how people work.
+- **Non-coding tasks:** "Other coding work" is now "Non-coding tasks (documents, research, admin)".
+- **So What hiring:** compares commits, pull requests and accepted edits between people doing Tier 2/3 work and everyone else.
+- **Team Coaching and So What:** "No department" is no longer shown as a team.
+- **Faster pages:** fewer repeated requests, queries run side by side, and new indexes (migration 0061).
+- **Fixed:** Claude Code metrics from clients that send running totals are no longer overstated (migration 0060). A script corrects older rows.
+- **Prices:** added for Claude Fable 5.2 and Mythos 5.2.
+
 ## 1.4.4 (2026-11-20)
 
 ### Changed

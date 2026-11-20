@@ -16,6 +16,7 @@ import { buildActivateEvidenceLine, tierDepthLabel, humaniseMatchedSignals } fro
 import { PageBody, Toolbar, Panel, PanelFoot, SubHead, T, Tag, Pill, B, Notice, Empty, Muted, cx, LOAD_FAILED } from '@/components/precision/ui';
 import { useConnectedProducts } from '@/components/shared/VendorSwitch';
 import { labelForUseCaseSurface } from '@/lib/usecases/dept-boxes';
+import { sharedGet } from '@/components/shared/shared-get';
 
 interface WeekActivity {
   weekStart: number;
@@ -140,7 +141,7 @@ export default function UseCaseDetailPage() {
   const [confirming, setConfirming] = useState(false);
 
   useEffect(() => {
-    fetch('/api/admin/session')
+    sharedGet('/api/admin/session')
       .then(r => r.json())
       .then(data => {
         if (!data.authenticated) { router.replace('/'); return; }

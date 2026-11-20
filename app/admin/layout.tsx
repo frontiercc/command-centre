@@ -7,6 +7,7 @@ import { useEffect, useState } from 'react';
 import { usePathname, useRouter } from 'next/navigation';
 import Link from 'next/link';
 import { useOpenAiOnly } from '@/components/shared/VendorSwitch';
+import { sharedGet } from '@/components/shared/shared-get';
 
 const adminNavItems = [
   { href: '/admin/overview', label: 'Overview' },
@@ -38,7 +39,7 @@ interface AdminUser {
 function usePulsePendingCount() {
   const [count, setCount] = useState(0);
   useEffect(() => {
-    fetch('/api/pulse/capabilities')
+    sharedGet('/api/pulse/capabilities')
       .then(r => r.ok ? r.json() : Promise.reject())
       .then(d => setCount(d.pendingCount ?? 0))
       .catch(() => {});
@@ -65,7 +66,7 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
       return;
     }
 
-    fetch('/api/admin/session')
+    sharedGet('/api/admin/session')
       .then(r => r.json())
       .then(data => {
         if (data.setupNeeded) {

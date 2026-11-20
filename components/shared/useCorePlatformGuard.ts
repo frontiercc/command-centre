@@ -10,6 +10,7 @@
 // this only keeps the page itself from opening.
 import { useEffect } from 'react';
 import { useRouter } from 'next/navigation';
+import { sharedGet } from '@/components/shared/shared-get';
 
 const CORE_ROLES = new Set(['admin', 'manager', 'viewer']);
 
@@ -17,7 +18,7 @@ export function useCorePlatformGuard(opts: { auditLog?: boolean } = {}): void {
   const router = useRouter();
   const auditLog = opts.auditLog === true;
   useEffect(() => {
-    fetch('/api/admin/session')
+    sharedGet('/api/admin/session')
       .then(r => r.json())
       .then(data => {
         if (!data?.authenticated) return; // middleware handles the login redirect

@@ -430,50 +430,83 @@ export function computeCostByType(
 async function buildCodeModelEfficiency(period: string, surface: 'code' | 'codex' = 'code'): Promise<ModelEfficiencyReport> {
   const client = await getTypedClient();
   const { start, end } = monthBounds(period);
-  const rates: ModelRates = await getCodeModelRates();
 
   const cam = schema.codeAssistantMeta;
   const csc = schema.codeSessionClassifications;
   const css = schema.codeSessionStats;
   const ct = schema.codexTurns;
+  const ca = schema.codexActions;
 
-  // Codex: each turn's tokens (OpenAI sends no cache-write tokens, and no
-  // skill, subagent or effort per turn).
-  const rows = surface === 'codex' ? (await client
-    .select({
-      session_id: ct.session_id,
-      work_type: csc.work_type,
-      model: ct.model,
-      input_tokens: ct.uncached_input_tokens,
-      output_tokens: ct.output_tokens,
-      cache_creation_tokens: sql<number>`0`,
-      cache_read_tokens: ct.cached_input_tokens,
-      skill_name: sql<string | null>`NULL`,
-      agent_name: sql<string | null>`NULL`,
-      effort: sql<string | null>`NULL`,
-    })
-    .from(ct)
-    .leftJoin(csc, eq(csc.session_id, ct.session_id))
-    .where(and(gte(ct.started_at, start), lt(ct.started_at, end)))) as CodeRow[] : (await client
-    .select({
-      session_id: cam.session_id,
-      work_type: csc.work_type,
-      model: cam.model,
-      input_tokens: cam.input_tokens,
-      output_tokens: cam.output_tokens,
-      cache_creation_tokens: cam.cache_creation_tokens,
-      cache_read_tokens: cam.cache_read_tokens,
-      skill_name: cam.skill_name,
-      agent_name: cam.agent_name,
-      effort: cam.effort,
-    })
-    .from(cam)
-    .leftJoin(csc, eq(csc.session_id, cam.session_id))
-    .where(and(gte(cam.occurred_at, start), lt(cam.occurred_at, end)))) as CodeRow[];
+  // Friction per activity needs each session's tool uses and errors.
+  // Claude Code's come from code_session_stats (one row per session), joined
+  // onto the month's rows so they arrive with them; Codex's from its actions
+  // in codex_actions (each action a tool use, a failed one an error), as the
+  // Code figures count them (codexActionCounts in lib/pulse/code/aggregator.ts),
+  // read for the month's Codex sessions alongside the rows.
+  type StatsRow = { session_id: string; tool_use_count: number | string | null; error_count: number | string | null };
+  type CodeRowWithStats = CodeRow & { stats_session?: string | null; stats_tool_use_count?: number | string | null; stats_error_count?: number | string | null };
+
+  // --- Stage 1: rates, the month's rows, the work-type labels and (Codex) the session stats, together ---
+  const [rates, rows, codeLabel, codexStatsRows] = await Promise.all([
+    getCodeModelRates(),
+    // Codex: each turn's tokens (OpenAI sends no cache-write tokens, and no
+    // skill, subagent or effort per turn).
+    surface === 'codex'
+      ? client
+          .select({
+            session_id: ct.session_id,
+            work_type: csc.work_type,
+            model: ct.model,
+            input_tokens: ct.uncached_input_tokens,
+            output_tokens: ct.output_tokens,
+            cache_creation_tokens: sql<number>`0`,
+            cache_read_tokens: ct.cached_input_tokens,
+            skill_name: sql<string | null>`NULL`,
+            agent_name: sql<string | null>`NULL`,
+            effort: sql<string | null>`NULL`,
+          })
+          .from(ct)
+          .leftJoin(csc, eq(csc.session_id, ct.session_id))
+          .where(and(gte(ct.started_at, start), lt(ct.started_at, end))) as Promise<CodeRowWithStats[]>
+      : client
+          .select({
+            session_id: cam.session_id,
+            work_type: csc.work_type,
+            model: cam.model,
+            input_tokens: cam.input_tokens,
+            output_tokens: cam.output_tokens,
+            cache_creation_tokens: cam.cache_creation_tokens,
+            cache_read_tokens: cam.cache_read_tokens,
+            skill_name: cam.skill_name,
+            agent_name: cam.agent_name,
+            effort: cam.effort,
+            stats_session: css.session_id,
+            stats_tool_use_count: css.tool_use_count,
+            stats_error_count: css.error_count,
+          })
+          .from(cam)
+          .leftJoin(csc, eq(csc.session_id, cam.session_id))
+          .leftJoin(css, eq(css.session_id, cam.session_id))
+          .where(and(gte(cam.occurred_at, start), lt(cam.occurred_at, end))) as Promise<CodeRowWithStats[]>,
+    getCodeWorkTypeLabeller(),
+    surface === 'codex'
+      ? client
+          .select({
+            session_id: ca.session_id,
+            tool_use_count: sql<number | string>`COUNT(*)`,
+            error_count: sql<number | string>`COALESCE(SUM(${ca.failed}), 0)`,
+          })
+          .from(ca)
+          .where(inArray(ca.session_id, client
+            .select({ session_id: ct.session_id })
+            .from(ct)
+            .where(and(gte(ct.started_at, start), lt(ct.started_at, end)))))
+          .groupBy(ca.session_id) as Promise<StatsRow[]>
+      : Promise.resolve([] as StatsRow[]),
+  ]);
 
   const unpricedModels = new Set<string>();
   const activities = new Map<string, ActivityAcc>();
-  const codeLabel = await getCodeWorkTypeLabeller();
 
   for (const row of rows) {
     const key = row.work_type ?? UNCLASSIFIED_KEY;
@@ -512,34 +545,12 @@ async function buildCodeModelEfficiency(period: string, surface: 'code' | 'codex
 
   // Friction per activity: SUM(error_count) / NULLIF(SUM(tool_use_count), 0)
   // over the activity's sessions; null (not measured) when there are no tool
-  // uses. Claude Code's come from code_session_stats; Codex's from its
-  // actions in codex_actions (each action a tool use, a failed one an error),
-  // as the Code figures count them (codexActionCounts in
-  // lib/pulse/code/aggregator.ts).
-  const allSessionIds = Array.from(new Set(rows.map((r) => r.session_id)));
-  const ca = schema.codexActions;
-  const statsRows: Array<{ session_id: string; tool_use_count: number | string | null; error_count: number | string | null }> = [];
-  for (let i = 0; i < allSessionIds.length; i += 500) {
-    const ids = allSessionIds.slice(i, i + 500);
-    statsRows.push(...(surface === 'codex'
-      ? await client
-          .select({
-            session_id: ca.session_id,
-            tool_use_count: sql<number | string>`COUNT(*)`,
-            error_count: sql<number | string>`COALESCE(SUM(${ca.failed}), 0)`,
-          })
-          .from(ca)
-          .where(inArray(ca.session_id, ids))
-          .groupBy(ca.session_id)
-      : await client
-          .select({
-            session_id: css.session_id,
-            tool_use_count: css.tool_use_count,
-            error_count: css.error_count,
-          })
-          .from(css)
-          .where(inArray(css.session_id, ids))));
-  }
+  // uses. The stats were read with the rows above.
+  const statsRows: StatsRow[] = surface === 'codex'
+    ? codexStatsRows
+    : rows
+        .filter((r) => r.stats_session != null)
+        .map((r) => ({ session_id: r.stats_session!, tool_use_count: r.stats_tool_use_count ?? null, error_count: r.stats_error_count ?? null }));
   const statsBySession = new Map<string, { tool_use_count: number; error_count: number }>();
   for (const s of statsRows) {
     statsBySession.set(s.session_id, {
@@ -794,41 +805,80 @@ const SESSION_ID_BATCH = 1000;
 async function buildCoworkModelEfficiency(period: string, surface: 'cowork' | 'chatgpt' = 'cowork'): Promise<ModelEfficiencyReport> {
   const client = await getTypedClient();
   const { start, end } = monthBounds(period);
-  const rates: ModelRates = await getCodeModelRates();
 
   const cm = schema.coworkMessages;
+  const csi = schema.coworkSkillInvocations;
+  const cmi = schema.coworkMcpInvocations;
 
-  // ChatGPT: each conversation's share of its hours' costs, as Spend Review
-  // splits them (lib/finance/spend-review-openai.ts). One row per share, in
-  // the shape of a Cowork model call; a share on a model with no rate has no
-  // cost and its model is listed as unpriced.
+  // Each session's kind of work (sessionKindSql, the rule buildSessionTaskTypeMap
+  // applies), plus every skill and connector invocation in the month's sessions
+  // for the measured drill-down below.
+  let rates: ModelRates;
+  let rows: CoworkSpendRow[];
+  let sessionTaskType: Map<string, string>;
+  let skillRows: Array<{ session_id: string; skill_name: string }>;
+  let connectorRows: Array<{ session_id: string; mcp_server: string }>;
   const chatgptUnpriced = new Set<string>();
-  const rows = surface === 'chatgpt' ? await (async () => {
+
+  if (surface === 'chatgpt') {
+    // ChatGPT: each conversation's share of its hours' costs, as Spend Review
+    // splits them (lib/finance/spend-review-openai.ts). One row per share, in
+    // the shape of a Cowork model call; a share on a model with no rate has no
+    // cost and its model is listed as unpriced. The shares need the rates, and
+    // the lookups below need the shares' sessions, so these run in turn.
+    rates = await getCodeModelRates();
     const shared = await chatgptSessionShares(client, rates, start, end, { all: true });
     for (const m of shared.unpricedModels) chatgptUnpriced.add(m);
-    const out: CoworkSpendRow[] = [];
+    rows = [];
     for (const [sid, e] of shared.bySession) {
-      for (const p of e.parts) out.push({ session_id: sid, model: p.model, cost_usd: p.usd, token_usage: p.usage });
+      for (const p of e.parts) rows.push({ session_id: sid, model: p.model, cost_usd: p.usd, token_usage: p.usage });
     }
-    return out;
-  })() : (await client
-    .select({
-      session_id: cm.session_id,
-      model: cm.model,
-      cost_usd: cm.cost_usd,
-      token_usage: cm.token_usage,
-    })
-    .from(cm)
-    .where(and(
+    const sessionIds = Array.from(new Set(rows.map((r) => r.session_id)));
+    [sessionTaskType, skillRows, connectorRows] = await Promise.all([
+      buildSessionTaskTypeMap(client, sessionIds),
+      sessionIds.length
+        ? client.select({ session_id: csi.session_id, skill_name: csi.skill_name }).from(csi).where(inArray(csi.session_id, sessionIds))
+        : Promise.resolve([]),
+      sessionIds.length
+        ? client.select({ session_id: cmi.session_id, mcp_server: cmi.mcp_server }).from(cmi).where(inArray(cmi.session_id, sessionIds))
+        : Promise.resolve([]),
+    ]);
+  } else {
+    // Cowork: the month's model calls. Claude in Office is left out: it has no
+    // cost and is estimated separately. The lookups name the same sessions
+    // with a subquery, so all five reads run together.
+    const spendWhere = () => and(
       eq(cm.message_type, 'cowork_api_request'),
-      // Cowork only: Claude in Office has no cost and is estimated separately.
       isNull(cm.product),
       gte(cm.occurred_at, start),
       lt(cm.occurred_at, end),
-    ))) as CoworkSpendRow[];
-
-  const spendSessionIds = Array.from(new Set(rows.map((r) => r.session_id)));
-  const sessionTaskType = await buildSessionTaskTypeMap(client, spendSessionIds);
+    );
+    const spendSessions = () => client.select({ session_id: cm.session_id }).from(cm).where(spendWhere());
+    const exec = client as unknown as { execute: (q: SQL) => Promise<{ rows: unknown[] }> };
+    const [r, spendRows, kindRows, skills, connectors] = await Promise.all([
+      getCodeModelRates(),
+      client
+        .select({
+          session_id: cm.session_id,
+          model: cm.model,
+          cost_usd: cm.cost_usd,
+          token_usage: cm.token_usage,
+        })
+        .from(cm)
+        .where(spendWhere()) as Promise<CoworkSpendRow[]>,
+      exec.execute(sessionKindSql(sql`
+        SELECT session_id FROM cowork_messages
+        WHERE message_type = 'cowork_api_request' AND product IS NULL
+          AND occurred_at >= ${start} AND occurred_at < ${end}`)).then((res) => res.rows as SessionKindRow[]),
+      client.select({ session_id: csi.session_id, skill_name: csi.skill_name }).from(csi).where(inArray(csi.session_id, spendSessions())),
+      client.select({ session_id: cmi.session_id, mcp_server: cmi.mcp_server }).from(cmi).where(inArray(cmi.session_id, spendSessions())),
+    ]);
+    rates = r;
+    rows = spendRows;
+    sessionTaskType = new Map(kindRows.map((k) => [k.session_id, k.task_type]));
+    skillRows = skills;
+    connectorRows = connectors;
+  }
 
   const activities = new Map<string, ActivityAcc>();
 
@@ -871,7 +921,6 @@ async function buildCoworkModelEfficiency(period: string, surface: 'cowork' | 'c
   // per tool call), so these populate `MeasuredBreakdownItem.count` (an
   // INVOCATION COUNT) via `addBreakdownCount` — `spendUsd` stays 0, never a
   // count masquerading as dollars.
-  const allSessionIds = Array.from(new Set(rows.map((r) => r.session_id)));
   const sessionToActivityKeys = new Map<string, string[]>();
   for (const activity of activities.values()) {
     for (const sid of activity.sessionIds) {
@@ -880,28 +929,14 @@ async function buildCoworkModelEfficiency(period: string, surface: 'cowork' | 'c
       else sessionToActivityKeys.set(sid, [activity.key]);
     }
   }
-
-  if (allSessionIds.length) {
-    const csi = schema.coworkSkillInvocations;
-    const skillRows = await client
-      .select({ session_id: csi.session_id, skill_name: csi.skill_name })
-      .from(csi)
-      .where(inArray(csi.session_id, allSessionIds));
-    for (const r of skillRows) {
-      for (const activityKey of sessionToActivityKeys.get(r.session_id) ?? []) {
-        addBreakdownCount(activities.get(activityKey)!, 'skill', r.skill_name, 1);
-      }
+  for (const r of skillRows) {
+    for (const activityKey of sessionToActivityKeys.get(r.session_id) ?? []) {
+      addBreakdownCount(activities.get(activityKey)!, 'skill', r.skill_name, 1);
     }
-
-    const cmi = schema.coworkMcpInvocations;
-    const connectorRows = await client
-      .select({ session_id: cmi.session_id, mcp_server: cmi.mcp_server })
-      .from(cmi)
-      .where(inArray(cmi.session_id, allSessionIds));
-    for (const r of connectorRows) {
-      for (const activityKey of sessionToActivityKeys.get(r.session_id) ?? []) {
-        addBreakdownCount(activities.get(activityKey)!, 'connector', r.mcp_server, 1);
-      }
+  }
+  for (const r of connectorRows) {
+    for (const activityKey of sessionToActivityKeys.get(r.session_id) ?? []) {
+      addBreakdownCount(activities.get(activityKey)!, 'connector', r.mcp_server, 1);
     }
   }
 

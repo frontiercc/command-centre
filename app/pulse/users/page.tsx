@@ -24,6 +24,7 @@ import { PageBody, Toolbar, Notice, B, cx, Muted } from '@/components/precision/
 import { useVendor, useOpenAiOnly, VendorSwitch } from '@/components/shared/VendorSwitch';
 import { WORK_PULSE_VENDOR_LABELS } from '@/lib/dashboard/vendor';
 import { deepShareOf, deepWords, withTierNames } from '@/lib/pulse/tier-names';
+import { sharedGet } from '@/components/shared/shared-get';
 
 interface PersonalPulseData {
   /** Parts of the response that failed to build, so their panels say so. */
@@ -80,7 +81,7 @@ export default function UsersPickerPage() {
 
   // Admin gate
   useEffect(() => {
-    fetch('/api/admin/session')
+    sharedGet('/api/admin/session')
       .then(r => r.json())
       .then(data => {
         if (!data.authenticated) { router.replace('/pulse/me'); return; }
@@ -98,16 +99,12 @@ export default function UsersPickerPage() {
       .catch(() => router.replace('/pulse/me'));
   }, [router]);
 
-  // Load user list
+  // Load user list. Asked for straight away, alongside the sign-in check rather than after it: the
+  // route itself limits a department-scoped role to its own department and refuses anyone else.
   useEffect(() => {
-    if (!adminChecked) return;
-    if (deptScoped && !userDept) { setUsersLoading(false); return; }
     if (!vendorReady) return; // the saved view is read after the page loads
     // The depth beside each name follows the switch.
-    const url = deptScoped && userDept
-      ? `/api/pulse/admin/users?dept=${encodeURIComponent(userDept)}&vendor=${vendor}`
-      : `/api/pulse/admin/users?vendor=${vendor}`;
-    fetch(url)
+    fetch(`/api/pulse/admin/users?vendor=${vendor}`)
       .then(r => r.json())
       .then(d => {
         const list: UserListRow[] = d.users ?? [];
@@ -120,7 +117,7 @@ export default function UsersPickerPage() {
       })
       .catch(() => {})
       .finally(() => setUsersLoading(false));
-  }, [adminChecked, deptScoped, userDept, vendor, vendorReady]); // eslint-disable-line react-hooks/exhaustive-deps
+  }, [vendor, vendorReady]); // eslint-disable-line react-hooks/exhaustive-deps
 
   const loadUser = useCallback((userId: string, fresh = false) => {
     if (!userId) return;

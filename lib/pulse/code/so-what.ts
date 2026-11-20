@@ -116,8 +116,8 @@ export function cardFigures(g: OutputGroups): CardFigures {
 
 /** Why a team's figures cannot answer a question, in the leader's words. Null when they can. */
 export function refusalFor(g: OutputGroups): string | null {
-  if (g.verdict === 'no_github') {
-    return 'We cannot answer this for this team. No commits can be attributed to anyone in it, so there is nothing to compare.';
+  if (g.verdict === 'no_output') {
+    return 'We cannot answer this for this team. Its people made no commits, pull requests or accepted edits in the last 30 days, so there is no output to compare.';
   }
   if (g.verdict === 'too_few') {
     const small = [
@@ -135,14 +135,13 @@ export function refusalFor(g: OutputGroups): string | null {
 
 /** What the page cannot see, said on every card. */
 function cannotSeeLine(g: OutputGroups): string {
-  const parts = ['We cannot see work done without AI beyond the commits on this chart'];
-  if (g.unmatched > 0) parts.push(`${people(g.unmatched)} in this team ${g.unmatched === 1 ? 'is' : 'are'} left out because no commits can be attributed to them`);
+  const parts = ['We cannot see output that is not a commit, a pull request or an accepted edit, nor pull requests and edits made outside Claude Code'];
   if (g.hardly > 0) parts.push(`${people(g.hardly)} hardly used it and ${g.hardly === 1 ? 'is' : 'are'} in neither group`);
   return `${parts.join('. ')}.`;
 }
 
 const capt = (g: OutputGroups) =>
-  `A dot per person, and commits per person over the last ${WINDOW_DAYS} days, from GitHub. The commits are measured; which group a person is in comes from the AI-judged tiers. Commits made with Claude Code, with Codex and with no tool are all counted. ${g.deep.people + g.shallow.people} of ${g.people} people in the team are on the chart.`;
+  `A dot per person, and commits, pull requests and accepted edits per person over the last ${WINDOW_DAYS} days. Commits come from GitHub for ${people(g.fromGithub)} whose account is linked, and from their Claude Code and Codex sessions for everyone else; pull requests and accepted edits come from Claude Code. These are measured; which group a person is in comes from the AI-judged tiers. Automated runs are left out. ${g.deep.people + g.shallow.people} of ${g.people} people in the team are on the chart.`;
 
 /**
  * Should this team hire? Hold when the people who do not hand work over, working like the ones who
@@ -161,7 +160,7 @@ export function hireCard(g: OutputGroups, hires: number, decision: DecisionRecor
   } else if (covers) {
     headline = `Hold the ${hires} ${hires === 1 ? 'hire' : 'hires'}. Close the gap first.`;
     body.push(
-      `${g.deep.people} of ${g.deep.people + g.shallow.people} do mostly multi-step work and ship ${timesWord(g)} as much as the other ${g.shallow.people}.`,
+      `${g.deep.people} of ${g.deep.people + g.shallow.people} do mostly multi-step work. ${outputLine(g)}`,
       `If the ${g.shallow.people} worked like the ${g.deep.people}, that is the output of ${round1(worth!)} more ${peopleNoun(round1(worth!))}.`,
       `Look again in ${LOOK_AGAIN_DAYS} days.`,
     );
@@ -170,13 +169,13 @@ export function hireCard(g: OutputGroups, hires: number, decision: DecisionRecor
     body.push(
       g.shallow.people === 0
         ? `All ${g.deep.people} already do mostly multi-step work.`
-        : `The ${g.deep.people} who do mostly multi-step work ship no more than the ${g.shallow.people} who do not.`,
+        : `The ${g.deep.people} who do mostly multi-step work produce no more than the ${g.shallow.people} who do not, on at least one of commits, pull requests and accepted edits.`,
       'There is no gap to close here, so more output means more people.',
     );
   } else {
     headline = `Hold ${Math.floor(worth!)} of the ${hires}. The gap covers that much.`;
     body.push(
-      `${g.deep.people} of ${g.deep.people + g.shallow.people} do mostly multi-step work and ship ${timesWord(g)} as much as the other ${g.shallow.people}.`,
+      `${g.deep.people} of ${g.deep.people + g.shallow.people} do mostly multi-step work. ${outputLine(g)}`,
       `If the ${g.shallow.people} worked like the ${g.deep.people}, that is the output of ${round1(worth!)} more ${peopleNoun(round1(worth!))}, which is short of the ${hires} asked for.`,
     );
   }
@@ -201,16 +200,18 @@ export function hireCard(g: OutputGroups, hires: number, decision: DecisionRecor
   };
 }
 
-/** How much more the first group ships, in words rather than a ratio nobody can picture. */
-function timesWord(g: OutputGroups): string {
-  const d = g.deep.perPerson ?? 0;
-  const s = g.shallow.perPerson ?? 0;
-  if (s <= 0) return 'more';
-  const ratio = d / s;
-  if (ratio >= 2.75) return `${Math.round(ratio)} times`;
-  if (ratio >= 1.75) return 'twice';
-  if (ratio >= 1.4) return 'half as much again';
-  return `${Math.round((ratio - 1) * 100)}% more`;
+/** What each group produces per person, on each count that has any output. */
+function outputLine(g: OutputGroups): string {
+  const each = (v: number | null) => String(Math.round((v ?? 0) * 10) / 10);
+  const parts: Array<[string, number | null, number | null, number]> = [
+    ['commits', g.deep.perPerson, g.shallow.perPerson, g.deep.commits + g.shallow.commits],
+    ['pull requests', g.deep.prsPerPerson, g.shallow.prsPerPerson, g.deep.prs + g.shallow.prs],
+    ['accepted edits', g.deep.editsPerPerson, g.shallow.editsPerPerson, g.deep.edits + g.shallow.edits],
+  ];
+  const shown = parts.filter(([, , , total]) => total > 0);
+  const list = (pick: (x: typeof parts[number]) => number | null) =>
+    shown.map(x => `${each(pick(x))} ${x[0]}`).join(', ').replace(/, ([^,]*)$/, ' and $1');
+  return `Each of them makes ${list(x => x[1])}, against ${list(x => x[2])} for each of the other ${g.shallow.people}.`;
 }
 
 /**
@@ -457,7 +458,7 @@ export function keyPeopleCard(k: KeyPeople, decision: DecisionRecord | undefined
     'key_people',
     'key_people',
     k.department,
-    `Spread what ${k.holders === 1 ? 'one person' : 'two people'} in ${k.department} know.`,
+    `Spread what ${k.holders === 1 ? 'one person' : 'two people'} in ${k.department} ${k.holders === 1 ? 'knows' : 'know'}.`,
     [
       `${Math.round(k.share * 100)}% of the multi-step work in this team of ${k.people} comes from ${k.holders === 1 ? 'one person' : 'two people'}.`,
       'If they leave, the team loses it.',

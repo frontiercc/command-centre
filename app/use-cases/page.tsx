@@ -14,6 +14,7 @@ import type { ProcessCanvas } from '@/lib/usecases/suggestion-store';
 import { surfaceLabels, surfaceOf } from '@/lib/usecases/dept-boxes';
 import { useConnectedProducts } from '@/components/shared/VendorSwitch';
 import { PageBody, Toolbar, Panel, PanelFoot, T, Tag, Pill, B, Notice, Empty, Bar, cx, Muted, LOAD_FAILED } from '@/components/precision/ui';
+import { sharedGet } from '@/components/shared/shared-get';
 
 interface UseCase {
   id: string;
@@ -143,7 +144,7 @@ export default function UseCasesRegisterPage() {
 
   // Admin gate — mirrors app/pulse/users/page.tsx
   useEffect(() => {
-    fetch('/api/admin/session')
+    sharedGet('/api/admin/session')
       .then(r => r.json())
       .then(data => {
         if (!data.authenticated) { router.replace('/'); return; }
