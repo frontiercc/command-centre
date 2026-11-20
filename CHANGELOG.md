@@ -12,7 +12,7 @@
 ### Changed
 
 - Automated runs stay out of the figures about how people work: the share of multi-step work, the tier charts, Team Coaching's people and So What's groups. They are still counted, priced and shown.
-- Developer Pulse So What measures each group's output from the commits made in its people's own Claude Code and Codex sessions, so every team with sessions can be answered, with no GitHub account matching needed.
+- Developer Pulse So What's hiring answer uses Tier 2/3 work and commits from people's own Claude Code sessions, so it works for every team.
 
 ## 1.4.4 (2026-11-20)
 
