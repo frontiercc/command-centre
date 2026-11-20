@@ -21,6 +21,7 @@ import { PageBody, Toolbar, Panel, Strip, Figure, Tag, Pill, T, B, Notice, Empty
 import { MIN_PROJECTION_DAYS } from '@/lib/finance/finops-projection';
 import { useOpenAiOnly } from '@/components/shared/VendorSwitch';
 import { useAskPageNote } from '@/components/ask/useAskAvailable';
+import { sharedGet } from '@/components/shared/shared-get';
 
 interface CodeTokens {
   input: number;
@@ -339,7 +340,7 @@ export default function CostChargebackPage() {
   // ask anyway and let the server decide.
   const [allowed, setAllowed] = useState<boolean | null>(null);
   useEffect(() => {
-    fetch('/api/admin/session').then(r => r.json())
+    sharedGet('/api/admin/session').then(r => r.json())
       .then(d => {
         const role = d.authenticated ? d.user?.role : undefined;
         if (role === 'admin') setIsAdmin(true);

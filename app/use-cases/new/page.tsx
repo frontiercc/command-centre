@@ -11,6 +11,7 @@ import LoadingSpinner from '@/components/shared/LoadingSpinner';
 import { PageBody, Toolbar, Panel, B, Notice, cx } from '@/components/precision/ui';
 import { useConnectedProducts } from '@/components/shared/VendorSwitch';
 import { labelForUseCaseSurface } from '@/lib/usecases/dept-boxes';
+import { sharedGet } from '@/components/shared/shared-get';
 
 // Labelled by what is connected: with OpenAI, Work and Code take in ChatGPT and Codex.
 const SURFACE_VALUES = ['cowork', 'code', 'chat'] as const;
@@ -42,7 +43,7 @@ export default function NewUseCasePage() {
   const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
-    fetch('/api/admin/session')
+    sharedGet('/api/admin/session')
       .then(r => r.json())
       .then(data => {
         if (!data.authenticated) { router.replace('/'); return; }

@@ -6,6 +6,7 @@
 
 import { useEffect, useState } from 'react';
 import { logoFor, type Theme } from '@/lib/theme';
+import { sharedGet } from '@/components/shared/shared-get';
 
 function initialsOf(name: string, email: string): string {
   const src = name.trim() || email.trim();
@@ -21,7 +22,7 @@ export default function MobileTopBar({ theme = 'default' }: { theme?: Theme }) {
   const [authed, setAuthed] = useState(false);
 
   useEffect(() => {
-    fetch('/api/admin/session')
+    sharedGet('/api/admin/session')
       .then(r => r.json())
       .then(data => {
         if (data.authenticated) {

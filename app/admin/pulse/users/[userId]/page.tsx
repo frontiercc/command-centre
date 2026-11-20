@@ -9,6 +9,7 @@ import TopBar from '@/components/layout/TopBar';
 import LoadingSpinner from '@/components/shared/LoadingSpinner';
 import UserDrillDown from '@/components/pulse/admin/UserDrillDown';
 import { PageBody } from '@/components/precision/ui';
+import { sharedGet } from '@/components/shared/shared-get';
 
 export default function AdminUserPulsePage({ params }: { params: Promise<{ userId: string }> }) {
   const [userId, setUserId] = useState<string | null>(null);
@@ -20,7 +21,7 @@ export default function AdminUserPulsePage({ params }: { params: Promise<{ userI
   }, [params]);
 
   useEffect(() => {
-    fetch('/api/admin/session')
+    sharedGet('/api/admin/session')
       .then(r => r.json())
       .then(data => {
         if (!data.authenticated || data.user?.role !== 'admin') {

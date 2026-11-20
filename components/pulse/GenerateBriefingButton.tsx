@@ -6,11 +6,12 @@
 
 import { useEffect, useState } from 'react';
 import { B } from '@/components/precision/ui';
+import { sharedGet } from '@/components/shared/shared-get';
 
 // One session read per page load, shared by every button on the page.
 let rolePromise: Promise<string | null> | null = null;
 function fetchRole(): Promise<string | null> {
-  rolePromise ??= fetch('/api/admin/session')
+  rolePromise ??= sharedGet('/api/admin/session')
     .then((r) => (r.ok ? r.json() : null))
     .then((d) => (d?.authenticated ? (d.user?.role ?? null) : null))
     .catch(() => null);

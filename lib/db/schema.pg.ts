@@ -215,6 +215,7 @@ export const codeAssistantMeta = pgTable('code_assistant_meta', {
     index('idx_cam_user_time').on(t.user_id, t.occurred_at),
     // The hourly roll-up finds changed sessions by ingested_at.
     index('idx_cam_ingested_at').on(t.ingested_at),
+    index('idx_cam_occurred_at').on(t.occurred_at),
     index('idx_cam_agent_name').on(t.agent_name, t.occurred_at).where(sql`agent_name IS NOT NULL`),
 ]);
 
@@ -360,6 +361,7 @@ export const codeMetrics = pgTable('code_metrics', {
     granularity: text().notNull().default('rolling'),
 }, (t) => [
     uniqueIndex('idx_code_metrics_week').on(t.scope_type, t.scope_id, t.period_start).where(sql`granularity = 'week'`),
+    index('idx_code_metrics_latest').on(t.scope_type, t.scope_id, t.granularity, t.computed_at),
     index('idx_code_metrics_scope').on(t.scope_type, t.scope_id, t.period_end),
 ]);
 
@@ -396,6 +398,7 @@ export const codeMetricsVendor = pgTable('code_metrics_vendor', {
     granularity: text().notNull().default('rolling'),
 }, (t) => [
     uniqueIndex('idx_code_metrics_vendor_week').on(t.vendor, t.scope_type, t.scope_id, t.period_start).where(sql`granularity = 'week'`),
+    index('idx_code_metrics_vendor_latest').on(t.vendor, t.scope_type, t.scope_id, t.granularity, t.computed_at),
     index('idx_code_metrics_vendor_scope').on(t.vendor, t.scope_type, t.scope_id, t.period_end),
 ]);
 
@@ -616,6 +619,7 @@ export const coworkMessages = pgTable('cowork_messages', {
     index('idx_cowork_messages_ingested_at').on(t.ingested_at),
     index('idx_cowork_messages_surface').on(t.surface),
     index('idx_cowork_messages_occurred_at').on(t.occurred_at),
+    // Covering index for the dashboard's daily counts (migration 0061); drizzle has no INCLUDE, so it lives in SQL only.
     index('idx_cowork_messages_user').on(t.user_id, t.occurred_at),
     index('idx_cowork_messages_flagged').on(t.flagged),
     index('idx_cowork_messages_session').on(t.session_id, t.occurred_at),
@@ -1004,6 +1008,7 @@ export const pulseMetrics = pgTable('pulse_metrics', {
     oti_active_days: integer(),
 }, (t) => [
     uniqueIndex('idx_pulse_metrics_week').on(t.scope_type, t.scope_id, t.period_start).where(sql`granularity = 'week'`),
+    index('idx_pulse_metrics_latest').on(t.scope_type, t.scope_id, t.granularity, t.computed_at),
     index('idx_pulse_metrics_scope').on(t.scope_type, t.scope_id, t.period_end),
 ]);
 
@@ -1034,6 +1039,7 @@ export const pulseMetricsVendor = pgTable('pulse_metrics_vendor', {
     oti_active_days: integer(),
 }, (t) => [
     uniqueIndex('idx_pulse_metrics_vendor_week').on(t.vendor, t.scope_type, t.scope_id, t.period_start).where(sql`granularity = 'week'`),
+    index('idx_pulse_metrics_vendor_latest').on(t.vendor, t.scope_type, t.scope_id, t.granularity, t.computed_at),
     index('idx_pulse_metrics_vendor_scope').on(t.vendor, t.scope_type, t.scope_id, t.period_end),
 ]);
 

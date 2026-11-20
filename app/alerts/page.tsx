@@ -3,7 +3,7 @@
 
 'use client';
 
-import { useCallback, useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import Link from 'next/link';
 import TopBar from '@/components/layout/TopBar';
 import LoadingSpinner from '@/components/shared/LoadingSpinner';
@@ -61,35 +61,56 @@ export default function AlertsPage() {
   // Unfiltered set used only for the counts on the status switch.
   const [allAlerts, setAllAlerts] = useState<Alert[] | null>(null);
 
-  const fetchAlerts = useCallback(() => {
+  // Bumped after a status change or a clear, to reload the list and the status counts.
+  const [reloadKey, setReloadKey] = useState(0);
+  const lastLoad = useRef<{ filter: string; category: string; reloadKey: number } | null>(null);
+
+  // One effect loads the three sets the page shows: the list (status and
+  // category), the status-only set (category counts) and the unfiltered set
+  // (status counts). They often name the same address (no status or no
+  // category picked), so each distinct address is requested once per load and
+  // its answer shared. Before, three separate effects each fetched on page
+  // open, so the same request went out three times.
+  useEffect(() => {
+    const prev = lastLoad.current;
+    lastLoad.current = { filter, category, reloadKey };
+
+    const requests = new Map<string, Promise<{ ok: boolean; status: number; data: unknown }>>();
+    const get = (url: string) => {
+      let p = requests.get(url);
+      if (!p) {
+        p = fetch(url).then(async r => ({ ok: r.ok, status: r.status, data: r.ok ? await r.json() : null }));
+        requests.set(url, p);
+      }
+      return p;
+    };
+
+    // The list: on every change.
     const params = new URLSearchParams();
     if (filter) params.set('status', filter);
     if (category) params.set('category', category);
     const qs = params.toString();
-    fetch(`/api/alerts${qs ? `?${qs}` : ''}`)
-      .then(r => { if (!r.ok) throw new Error(String(r.status)); return r.json(); })
-      .then(d => { setAlerts(d); setFailed(false); })
+    get(`/api/alerts${qs ? `?${qs}` : ''}`)
+      .then(r => { if (!r.ok) throw new Error(String(r.status)); return r.data; })
+      .then(d => { setAlerts(d as Alert[]); setFailed(false); })
       .catch(e => { console.error(e); setFailed(true); })
       .finally(() => setLoading(false));
-  }, [filter, category]);
 
-  const fetchStatusCounts = useCallback(() => {
-    fetch('/api/alerts')
-      .then(r => r.json())
-      .then(d => setAllAlerts(Array.isArray(d) ? d : null))
-      .catch(() => setAllAlerts(null));
-  }, []);
+    // The status-only set: on first load and when the status changes.
+    if (!prev || prev.filter !== filter) {
+      get(`/api/alerts${filter ? `?status=${filter}` : ''}`)
+        .then(r => { if (!r.ok) throw new Error(String(r.status)); return r.data; })
+        .then(d => setStatusAlerts(d as Alert[]))
+        .catch(console.error);
+    }
 
-  useEffect(() => { fetchAlerts(); }, [fetchAlerts]);
-  useEffect(() => { fetchStatusCounts(); }, [fetchStatusCounts]);
-
-  useEffect(() => {
-    const params = filter ? `?status=${filter}` : '';
-    fetch(`/api/alerts${params}`)
-      .then(r => r.json())
-      .then(setStatusAlerts)
-      .catch(console.error);
-  }, [filter]);
+    // The unfiltered set: on first load and after a change to alerts.
+    if (!prev || prev.reloadKey !== reloadKey) {
+      get('/api/alerts')
+        .then(r => setAllAlerts(Array.isArray(r.data) ? (r.data as Alert[]) : null))
+        .catch(() => setAllAlerts(null));
+    }
+  }, [filter, category, reloadKey]);
 
   const categoryCounts = ALL_CATEGORIES.reduce<Record<string, number>>((acc, cat) => {
     acc[cat] = statusAlerts.filter(a => categoryForType(a.alert_type) === cat).length;
@@ -113,8 +134,7 @@ export default function AlertsPage() {
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ id, status }),
     });
-    fetchAlerts();
-    fetchStatusCounts();
+    setReloadKey(k => k + 1);
     notifySidebar();
   };
 
@@ -125,8 +145,7 @@ export default function AlertsPage() {
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ bulk_from: fromStatus, status: toStatus, ...(category ? { category } : {}) }),
     });
-    fetchAlerts();
-    fetchStatusCounts();
+    setReloadKey(k => k + 1);
     notifySidebar();
   };
 
@@ -136,8 +155,7 @@ export default function AlertsPage() {
 
   const clearClosed = async () => {
     await fetch('/api/alerts', { method: 'DELETE' });
-    fetchAlerts();
-    fetchStatusCounts();
+    setReloadKey(k => k + 1);
     notifySidebar();
   };
 

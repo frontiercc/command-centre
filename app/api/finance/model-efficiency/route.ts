@@ -30,13 +30,17 @@ export async function GET(request: NextRequest) {
   if (!/^\d{4}-\d{2}$/.test(period)) {
     return NextResponse.json({ error: 'Invalid period (expected YYYY-MM)' }, { status: 400 });
   }
-  await logAccess({
-    actorId: session.userId!,
-    actorEmail: session.email!,
-    actorIp: request.headers.get('x-forwarded-for') || undefined,
-    resource: 'finance/model-efficiency',
-    action: 'READ',
-    outcome: 'success',
-  });
-  return NextResponse.json(await buildModelEfficiency(surface, period, Math.floor(Date.now() / 1000)));
+  // The access record and the report are independent, so they are written and read together.
+  const [, report] = await Promise.all([
+    logAccess({
+      actorId: session.userId!,
+      actorEmail: session.email!,
+      actorIp: request.headers.get('x-forwarded-for') || undefined,
+      resource: 'finance/model-efficiency',
+      action: 'READ',
+      outcome: 'success',
+    }),
+    buildModelEfficiency(surface, period, Math.floor(Date.now() / 1000)),
+  ]);
+  return NextResponse.json(report);
 }

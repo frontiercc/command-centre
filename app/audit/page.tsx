@@ -24,6 +24,7 @@ import { useConnectedProducts } from '@/components/shared/VendorSwitch';
 import { isOpenAiOnly, openAiConnected } from '@/lib/sources/connected-shared';
 import { STRIPPED_MARKER, shownContent } from '@/lib/retention/marker';
 import { formatDuration } from '@/components/pulse/code/CodeStatStrip';
+import { sharedGet } from '@/components/shared/shared-get';
 
 interface AuditEvent {
   id: string;
@@ -452,7 +453,7 @@ export default function AuditPage() {
     fetch('/api/users?all=true').then(r => r.json())
       .then(d => setUsers(Array.isArray(d) ? d.filter(u => u && u.id && u.email) : []))
       .catch(() => {});
-    fetch('/api/admin/session').then(r => r.json()).then(data => {
+    sharedGet('/api/admin/session').then(r => r.json()).then(data => {
       setSessionDepartment(data?.user?.department ?? null);
     }).catch(() => {});
   }, []);

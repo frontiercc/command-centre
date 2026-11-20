@@ -13,6 +13,7 @@ import { isWebUrl } from '@/lib/library/source-url';
 import {
   PageBody, Toolbar, Panel, Strip, Figure, BarRow, Tag, Pill, B, Notice, Muted, deltaTone, cx,
 } from '@/components/precision/ui';
+import { sharedGet } from '@/components/shared/shared-get';
 
 interface DayCount { day: string; cnt: number; }
 interface TopUser  { user_id: string; display_name: string | null; cnt: number; }
@@ -144,7 +145,7 @@ export default function LibraryDetailPage({ params }: { params: Promise<{ id: st
   }, []);
 
   useEffect(() => {
-    fetch('/api/admin/session')
+    sharedGet('/api/admin/session')
       .then(r => r.json())
       .then(data => setCallerRole(data.authenticated ? (data.user?.role ?? null) : null))
       .catch(() => {});

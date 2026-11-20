@@ -13,6 +13,7 @@ import Sparkline from '@/components/pulse/Sparkline';
 import { formatCurrency, formatTokens, formatDuration } from '@/components/pulse/code/CodeStatStrip';
 import HumanTimeCard, { type HumanTimeSummary } from '@/components/pulse/HumanTimeCard';
 import { PageBody, Toolbar, Panel, PanelFoot, SubHead, Figure, Tag, Notice, Muted, B, cx, type Tone } from '@/components/precision/ui';
+import { sharedGet } from '@/components/shared/shared-get';
 
 interface SeriesPoint { weekStart: number; value: number | null; partial: boolean }
 
@@ -71,7 +72,7 @@ export default function Person360Page() {
   const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
-    fetch('/api/admin/session')
+    sharedGet('/api/admin/session')
       .then(r => r.json())
       .then(d => {
         if (!d.authenticated) { router.replace('/audit'); return; }

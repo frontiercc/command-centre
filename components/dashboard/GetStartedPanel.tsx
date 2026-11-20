@@ -12,6 +12,7 @@ import { useEffect, useState } from 'react';
 import Link from 'next/link';
 import { Panel, B } from '@/components/precision/ui';
 import type { SetupStatus, SetupStep } from '@/lib/setup/status';
+import { sharedGet } from '@/components/shared/shared-get';
 
 const SAMPLE_COMMAND = 'docker compose --profile demo run --rm demo-data';
 
@@ -61,7 +62,7 @@ export default function GetStartedPanel() {
   useEffect(() => {
     let live = true;
     // Setup steps are for admins; anyone else would be refused, so don't ask.
-    fetch('/api/admin/session')
+    sharedGet('/api/admin/session')
       .then((r) => (r.ok ? r.json() : null))
       .then((sess) => (sess?.user?.role === 'admin' ? fetch('/api/get-started') : null))
       .then((r) => (r && r.ok ? r.json() : null))

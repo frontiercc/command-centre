@@ -13,6 +13,7 @@ import PrecisionSidebar, { type NavVisibility } from './PrecisionSidebar';
 import { isCorePlatformRole, canSeeAuditLog, canSeeFinOps, canSeeUseCasesOverview, canSeeCoworkOverview, canSeeCodeOverview } from '@/lib/nav/items';
 import { fetchConfigOnce } from '@/lib/client/config-once';
 import { useOpenAiOnly } from '@/components/shared/VendorSwitch';
+import { sharedGet } from '@/components/shared/shared-get';
 
 const navItems = [
   { href: '/', label: 'Dashboard', icon: 'grid' },
@@ -84,7 +85,7 @@ export default function Sidebar({ theme = 'default' }: { theme?: Theme }) {
   useEffect(() => {
     if (!isCorePlatformRole(userRole)) return;
     const refreshAlertCount = () => {
-      fetch('/api/alerts/count')
+      sharedGet('/api/alerts/count')
         .then(r => r.ok ? r.json() : Promise.reject())
         .then(data => {
           if (typeof data.count === 'number') setOpenAlerts(data.count);
@@ -115,7 +116,7 @@ export default function Sidebar({ theme = 'default' }: { theme?: Theme }) {
       })
       .catch(() => {});
 
-    fetch('/api/admin/session')
+    sharedGet('/api/admin/session')
       .then(r => r.json())
       .then(data => {
         if (data.authenticated) {
@@ -141,7 +142,7 @@ export default function Sidebar({ theme = 'default' }: { theme?: Theme }) {
   // Fetch capability queue count once we know the user is admin
   useEffect(() => {
     if (!isAdmin) return;
-    fetch('/api/pulse/capabilities')
+    sharedGet('/api/pulse/capabilities')
       .then(r => r.json())
       .then(data => setPulsePending(data.pendingCount ?? 0))
       .catch(() => {});

@@ -20,6 +20,7 @@ import PulseBand from '@/components/pulse/PulseBand';
 import CodePulseBand from '@/components/pulse/code/CodePulseBand';
 import { useCorePlatformGuard } from '@/components/shared/useCorePlatformGuard';
 import GetStartedPanel from '@/components/dashboard/GetStartedPanel';
+import { fetchConfigOnce } from '@/lib/client/config-once';
 
 interface DashboardData {
   stats: {
@@ -137,7 +138,7 @@ export default function DashboardPage() {
   const [briefingRefreshKey, setBriefingRefreshKey] = useState(0);
   const [, setTick] = useState(0);
   // Admin → Work Pulse on or off; 'failed' when the setting could not be read.
-  const [pulseEnabled, setPulseEnabled] = useState<boolean | 'failed'>(false);
+  const [pulseEnabled, setPulseEnabled] = useState<boolean | 'failed' | null>(null); // null until the settings say
   // The vendor switch, remembered per browser and shared with Work Pulse.
   const [vendor, setVendor, vendorReady] = useVendor();
 
@@ -165,9 +166,8 @@ export default function DashboardPage() {
   }, [refreshKey, vendor, vendorReady]);
 
   useEffect(() => {
-    fetch('/api/config')
-      .then(r => r.ok ? r.json() : Promise.reject())
-      .then(d => setPulseEnabled(!!d.pulseEnabled))
+    fetchConfigOnce()
+      .then(d => d ? setPulseEnabled(!!d.pulseEnabled) : Promise.reject())
       .catch(() => setPulseEnabled('failed'));
   }, []);
 
@@ -345,9 +345,9 @@ export default function DashboardPage() {
             <Panel title="Work Pulse"><Muted>{LOAD_FAILED}</Muted></Panel>
             <CodePulseBand vendor={vendor} />
           </>
-        ) : (
+        ) : pulseEnabled === false ? (
           <CodePulseBand vendor={vendor} />
-        )}
+        ) : null /* still finding out whether Work Pulse is on: placed once that is known, so it loads once */}
       </PageBody>
     </>
   );
