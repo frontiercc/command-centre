@@ -18,6 +18,9 @@
   - Parts of a page that ask for the same thing at the same moment now share one request.
   - The heavier routes run their queries side by side instead of one after another, and stop repeating reads.
   - New indexes serve the latest-score and recent-activity lookups (migration 0061).
+  - The dashboard asks for the Developer Pulse summary once instead of twice.
+  - The FinOps spend trend keeps each finished month for an hour, so a visit works out only the current month. Spend that arrives late for a past month shows within the hour.
+  - A department's page asks for its figures together instead of one after another.
 
 ### Fixed
 
