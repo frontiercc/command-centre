@@ -421,6 +421,13 @@
       "when": 1792281607000,
       "tag": "0059_wide_token_counts",
       "breakpoints": true
+    },
+    {
+      "idx": 60,
+      "version": "7",
+      "when": 1792368007000,
+      "tag": "0060_otel_cumulative_series",
+      "breakpoints": true
     }
   ]
 }

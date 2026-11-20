@@ -416,6 +416,19 @@ export const codeOtelMetrics = pgTable('code_otel_metrics', {
     index('idx_com_user_time').on(t.user_id, t.occurred_at),
 ]);
 
+/** The last running total per cumulative metric series (migration 0060, lib/otel/code-metrics-receiver.ts). */
+export const otelCumulativeSeries = pgTable('otel_cumulative_series', {
+    series_key: text().primaryKey(),
+    user_id: text(),
+    start_time: bigint({ mode: 'number' }),
+    last_time: bigint({ mode: 'number' }).notNull(),
+    value: doublePrecision().notNull(),
+    updated_at: bigint({ mode: 'number' }).notNull(),
+}, (t) => [
+    index('idx_otel_cumulative_series_updated').on(t.updated_at),
+    index('idx_otel_cumulative_series_user').on(t.user_id),
+]);
+
 export const codeSessionClassifications = pgTable('code_session_classifications', {
     session_id: text().primaryKey(),
     user_id: text(),
@@ -1549,6 +1562,7 @@ export const pgSchema = {
   skillLibraryVotes,
   otelIdentityAliases,
   otelIngestedEvents,
+  otelCumulativeSeries,
   jobRuns,
   otelIdentityConflicts,
   openaiIdentityUsers,

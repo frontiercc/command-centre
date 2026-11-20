@@ -1914,6 +1914,7 @@ export async function deleteUserData(userId: string): Promise<{
       async (h) => { await h.delete(schema.codexActions).where(eq(schema.codexActions.user_id, userId)); },
       async (h) => { await h.delete(schema.chatgptSessionTime).where(eq(schema.chatgptSessionTime.user_id, userId)); },
       async (h) => { await h.delete(schema.codeOtelMetrics).where(eq(schema.codeOtelMetrics.user_id, userId)); },
+      async (h) => { await h.delete(schema.otelCumulativeSeries).where(eq(schema.otelCumulativeSeries.user_id, userId)); },
       // user-scope metric rows only — org/dept aggregates are not personal data
       async (h) => { await h.delete(schema.codeMetrics).where(and(eq(schema.codeMetrics.scope_type, 'user'), eq(schema.codeMetrics.scope_id, userId))); },
       async (h) => { await h.delete(schema.codeMetricsVendor).where(and(eq(schema.codeMetricsVendor.scope_type, 'user'), eq(schema.codeMetricsVendor.scope_id, userId))); },

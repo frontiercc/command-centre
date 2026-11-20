@@ -468,6 +468,9 @@ export async function runRetentionCleanup(): Promise<CleanupResult> {
     // to days. 7 days, fixed; a time-indexed delete, never an id list.
     await tx.delete(schema.otelIngestedEvents)
       .where(lt(schema.otelIngestedEvents.received_at, Math.floor(Date.now() / 1000) - 7 * 86400));
+    // Running totals of cumulative metric series: a series quiet for a week has ended.
+    await tx.delete(schema.otelCumulativeSeries)
+      .where(lt(schema.otelCumulativeSeries.updated_at, Math.floor(Date.now() / 1000) - 7 * 86400));
     // code_session_classifications FK -> code_session_stats.session_id:
     // delete the children of old sessions first, then the sessions. Selects
     // the candidate ids first (rather than an inArray(...) subquery), and

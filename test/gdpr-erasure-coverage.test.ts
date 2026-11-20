@@ -108,6 +108,7 @@ const COVERAGE: Record<string, { status: Status; why: string }> = {
   'chatgpt_session_time.user_id':        { status: 'deleted', why: 'a person\'s ChatGPT working time and by-hand estimates (migration 0046)' },
   'code_session_stats.user_id':          { status: 'deleted', why: 'P1' },
   'code_otel_metrics.user_id':           { status: 'deleted', why: 'P1' },
+  'otel_cumulative_series.user_id':      { status: 'deleted', why: 'last running total of a cumulative metric series of the person (migration 0060)' },
   'code_session_classifications.user_id':{ status: 'deleted', why: 'P1' },
   'pulse_first_dates.user_id':           { status: 'deleted', why: 'the first and first meaningful dates of one person, kept past retention for So What (migration 0057)' },
   'code_metrics.scope_id':               { status: 'deleted', why: 'user-scope rows only, mirrors pulse_metrics' },
