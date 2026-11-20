@@ -388,7 +388,9 @@ export async function getCoworkCoachingFigures(vendor: Vendor = 'all', nowS = Ma
   const byTeamBefore = group(before);
   const sessionsByTeam = group(sessionRows);
 
-  const teams: CoworkTeamFigures[] = [...byTeam.entries()].map(([department, rs]) => {
+  // "No department" is everyone without one yet, not a team: it is left out of the team lists, as on
+  // Departments, while those people still count in the organisation's figures.
+  const teams: CoworkTeamFigures[] = [...byTeam.entries()].filter(([department]) => department !== NO_DEPARTMENT).map(([department, rs]) => {
     const teamSessions = sessionsByTeam.get(department) ?? [];
     const p = peopleFigures(rs, sessionsByUser);
     const priorRows = byTeamBefore.get(department) ?? [];

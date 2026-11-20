@@ -194,7 +194,9 @@ export function groupsByTeam(people: Person[]): WorkGroups[] {
     const list = byTeam.get(p.department);
     if (list) list.push(p); else byTeam.set(p.department, [p]);
   }
+  // "No department" is everyone without one yet, not a team, so it gets no card, as on Departments.
   return [...byTeam.entries()]
+    .filter(([department]) => department !== NO_DEPARTMENT)
     .map(([department, ps]) => groupsFrom(department, ps))
     .sort((a, b) => b.people - a.people || a.department.localeCompare(b.department));
 }

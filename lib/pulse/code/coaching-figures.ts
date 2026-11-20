@@ -335,7 +335,9 @@ export async function getCoachingFigures(vendor: Vendor, nowS = Math.floor(Date.
     byTeamBefore.set(d, [...(byTeamBefore.get(d) ?? []), r]);
   }
 
-  const teams: TeamFigures[] = [...byTeam.entries()].map(([department, rs]) => {
+  // "No department" is everyone without one yet, not a team: it is left out of the team lists, as on
+  // Departments, while those people still count in the organisation's figures.
+  const teams: TeamFigures[] = [...byTeam.entries()].filter(([department]) => department !== NO_DEPARTMENT).map(([department, rs]) => {
     const p = peopleFigures(rs);
     const priorRows = byTeamBefore.get(department) ?? [];
     const priorPeople = new Set(priorRows.map(r => r.user_id)).size;

@@ -163,6 +163,8 @@ export function keyPeople(rows: SessionRow[], kept: Kept = keepNone): KeyPeople[
   }
   const out: KeyPeople[] = [];
   for (const [department, counts] of byTeam) {
+    // "No department" is everyone without one, not a team anyone can act on.
+    if (department === NO_DEPARTMENT) continue;
     const people = teamPeople.get(department)?.size ?? 0;
     if (people < MIN_GROUP + 1) continue;
     const total = [...counts.values()].reduce((a, b) => a + b, 0);

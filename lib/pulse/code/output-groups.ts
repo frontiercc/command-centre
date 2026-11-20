@@ -259,7 +259,9 @@ export async function getOutputGroups(vendor: Vendor, nowS = Math.floor(Date.now
     if (list) list.push(person); else byTeam.set(department, [person]);
   }
 
+  // "No department" is everyone without one yet, not a team, so it gets no card, as on Departments.
   return [...byTeam.entries()]
+    .filter(([department]) => department !== NO_DEPARTMENT)
     .map(([department, ps]) => groupsFrom(department, ps))
     .sort((a, b) => b.people - a.people);
 }

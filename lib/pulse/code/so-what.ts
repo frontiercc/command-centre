@@ -458,7 +458,7 @@ export function keyPeopleCard(k: KeyPeople, decision: DecisionRecord | undefined
     'key_people',
     'key_people',
     k.department,
-    `Spread what ${k.holders === 1 ? 'one person' : 'two people'} in ${k.department} know.`,
+    `Spread what ${k.holders === 1 ? 'one person' : 'two people'} in ${k.department} ${k.holders === 1 ? 'knows' : 'know'}.`,
     [
       `${Math.round(k.share * 100)}% of the multi-step work in this team of ${k.people} comes from ${k.holders === 1 ? 'one person' : 'two people'}.`,
       'If they leave, the team loses it.',
