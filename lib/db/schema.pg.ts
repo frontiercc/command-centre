@@ -219,6 +219,37 @@ export const codeAssistantMeta = pgTable('code_assistant_meta', {
     index('idx_cam_agent_name').on(t.agent_name, t.occurred_at).where(sql`agent_name IS NOT NULL`),
 ]);
 
+// Claude Code model calls added up per session, UTC day and model (migration 0063), kept current by
+// lib/pulse/code/usage-daily.ts. Text columns use '' for "none" so they can be in the key.
+export const codeUsageDaily = pgTable('code_usage_daily', {
+    session_id: text().notNull(),
+    day_start: bigint({ mode: 'number' }).notNull(),
+    user_id: text().notNull().default(''),
+    model: text().notNull().default(''),
+    agent_name: text().notNull().default(''),
+    skill_name: text().notNull().default(''),
+    effort: text().notNull().default(''),
+    recorded: integer().notNull().default(0),
+    source: text().notNull().default(''),
+    calls: integer().notNull().default(0),
+    model_prompts: integer().notNull().default(0),
+    skill_prompts: integer().notNull().default(0),
+    agent_prompts: integer().notNull().default(0),
+    input_tokens: bigint({ mode: 'number' }).notNull().default(0),
+    output_tokens: bigint({ mode: 'number' }).notNull().default(0),
+    cache_creation_tokens: bigint({ mode: 'number' }).notNull().default(0),
+    cache_read_tokens: bigint({ mode: 'number' }).notNull().default(0),
+    commit_count: bigint({ mode: 'number' }).notNull().default(0),
+    error_count: bigint({ mode: 'number' }).notNull().default(0),
+    tool_use_count: bigint({ mode: 'number' }).notNull().default(0),
+    first_at: bigint({ mode: 'number' }).notNull(),
+    last_at: bigint({ mode: 'number' }).notNull(),
+}, (t) => [
+    primaryKey({ columns: [t.session_id, t.day_start, t.user_id, t.model, t.agent_name, t.skill_name, t.effort, t.recorded, t.source] }),
+    index('idx_cud_day').on(t.day_start),
+    index('idx_cud_user_day').on(t.user_id, t.day_start),
+]);
+
 // ChatGPT and Codex spend from OpenAI's Compliance API (migration 0043), kept apart
 // from Claude's spend so no page shows it under a Claude label.
 
@@ -1519,6 +1550,7 @@ export const pgSchema = {
   decisionLog,
   askLog,
   codeAssistantMeta,
+  codeUsageDaily,
   codeMetrics,
   codeOtelMetrics,
   codeSessionClassifications,

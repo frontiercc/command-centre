@@ -442,6 +442,13 @@
       "when": 1792540807000,
       "tag": "0062_scan_indexes",
       "breakpoints": true
+    },
+    {
+      "idx": 63,
+      "version": "7",
+      "when": 1792627207000,
+      "tag": "0063_code_usage_daily",
+      "breakpoints": true
     }
   ]
 }

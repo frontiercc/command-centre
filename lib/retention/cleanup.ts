@@ -7,6 +7,7 @@
 // leave content stripped/deleted from some tables but not others, which is
 // exactly the all-or-nothing guarantee the original single `db.transaction`
 // gave), row counts via the rowsAffected() helper.
+import { pruneCodeUsageDaily } from '@/lib/pulse/code/usage-daily';
 import { and, eq, gt, inArray, isNotNull, isNull, lt, ne, or, sql } from 'drizzle-orm';
 import { getTypedClient } from '@/lib/db/client';
 import { schema } from '@/lib/db/schema';
@@ -460,6 +461,8 @@ export async function runRetentionCleanup(): Promise<CleanupResult> {
     codeAffected += rowsAffected(
       await tx.delete(schema.codeAssistantMeta).where(lt(schema.codeAssistantMeta.occurred_at, codeCutoff))
     );
+    // The daily Claude Code summary (migration 0063) follows the calls it adds up.
+    await pruneCodeUsageDaily(tx, codeCutoff);
     codeAffected += rowsAffected(
       await tx.delete(schema.codeOtelMetrics).where(lt(schema.codeOtelMetrics.occurred_at, codeCutoff))
     );

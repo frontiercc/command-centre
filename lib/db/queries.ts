@@ -1905,6 +1905,7 @@ export async function deleteUserData(userId: string): Promise<{
       async (h) => { await h.delete(schema.codeSessionClassifications).where(eq(schema.codeSessionClassifications.user_id, userId)); },
       async (h) => { await h.delete(schema.codeSessionStats).where(eq(schema.codeSessionStats.user_id, userId)); },
       async (h) => { await h.delete(schema.codeAssistantMeta).where(eq(schema.codeAssistantMeta.user_id, userId)); },
+      async (h) => { await h.delete(schema.codeUsageDaily).where(eq(schema.codeUsageDaily.user_id, userId)); },
       // First dates kept past retention for So What's waves (migration 0057).
       async (h) => { await h.delete(schema.pulseFirstDates).where(eq(schema.pulseFirstDates.user_id, userId)); },
       // OpenAI spend (migration 0043): hourly costs, ChatGPT reply times, Codex turns.

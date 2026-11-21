@@ -44,6 +44,9 @@ let openAiSyncInFlight = false;
 let anomalyRunInFlight = false;
 // The page-figures refresh runs alongside the cycle too; its cadence is kept in memory because
 // what it refreshes is kept in memory (lib/kept-figures.ts).
+let codeUsageInFlight = false;
+let codeUsageLastAt = 0;
+const CODE_USAGE_EVERY_MS = 5 * 60 * 1000;
 let keptRefreshInFlight = false;
 let keptRefreshLastAt = 0;
 
@@ -174,6 +177,18 @@ async function runCycle(): Promise<void> {
   // already started under the current generation — exit now rather than run
   // the rest of this cycle's jobs beside it.
   if (generation !== schedulerGeneration) return;
+
+  // Claude Code daily totals (lib/pulse/code/usage-daily.ts): every five minutes, add the model
+  // calls that arrived since the last run to code_usage_daily, which the Claude Code pages read.
+  // STARTED, NOT AWAITED: the first run builds every day and must not hold up the jobs after it.
+  if (!codeUsageInFlight && Date.now() - codeUsageLastAt >= CODE_USAGE_EVERY_MS) {
+    codeUsageInFlight = true;
+    codeUsageLastAt = Date.now();
+    void runJob('code_usage_daily', 'Claude Code daily totals', async () => {
+      const { runCodeUsageDaily } = await import('@/lib/pulse/code/usage-daily');
+      await runCodeUsageDaily();
+    }).finally(() => { codeUsageInFlight = false; });
+  }
 
   // Page figures (lib/kept-figures.ts): every few minutes, rebuild the heavy pages' figures so a
   // visit reads prepared figures instead of waiting for them. The organisation-wide pages are

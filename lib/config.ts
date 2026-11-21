@@ -168,6 +168,8 @@ export interface AppConfig {
   // a message received since the watermark; a full check runs once a day.
   coworkSessionAggWatermark: string;
   coworkSessionAggLastFullSweep: string;
+  // Job-written: the Claude Code daily totals job's position, 'ingested_at|id'.
+  codeUsageDailyCursor: string;
   pulseWeeklyBriefingLastRun: string;
   pulseCioBriefingLastRun: string;
   pulseClassifierConfig: string;
@@ -468,6 +470,7 @@ export const CONFIG_KEYS: Record<keyof AppConfig, string> = {
   coworkSessionAggLastRun: 'cowork_session_agg_last_run',
   coworkSessionAggWatermark: 'cowork_session_agg_watermark',
   coworkSessionAggLastFullSweep: 'cowork_session_agg_last_full_sweep',
+  codeUsageDailyCursor: 'code_usage_daily_cursor',
   pulseWeeklyBriefingLastRun: 'pulse_weekly_briefing_last_run',
   pulseCioBriefingLastRun: 'pulse_cio_briefing_last_run',
   pulseClassifierConfig: 'pulse_classifier_config',
@@ -878,6 +881,7 @@ export async function getAllConfig(): Promise<AppConfig> {
     coworkSessionAggLastRun: resolve('coworkSessionAggLastRun'),
     coworkSessionAggWatermark: resolve('coworkSessionAggWatermark'),
     coworkSessionAggLastFullSweep: resolve('coworkSessionAggLastFullSweep'),
+    codeUsageDailyCursor: resolve('codeUsageDailyCursor'),
     pulseWeeklyBriefingLastRun: resolve('pulseWeeklyBriefingLastRun'),
     pulseCioBriefingLastRun: resolve('pulseCioBriefingLastRun'),
     pulseClassifierConfig: resolve('pulseClassifierConfig'),

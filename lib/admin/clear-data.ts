@@ -45,6 +45,7 @@ export const CLEARED_TABLES = [
   'cowork_skill_invocations',
   'cowork_mcp_invocations',
   'code_assistant_meta',
+  'code_usage_daily',
   'cowork_messages',
   // ChatGPT and Codex: the reply times, turns, actions and spend that go
   // with the prompts above (no foreign keys). The OpenAI sync keeps its
@@ -70,6 +71,7 @@ const TABLE_SCHEMA_MAP = {
   cowork_skill_invocations: schema.coworkSkillInvocations,
   cowork_mcp_invocations: schema.coworkMcpInvocations,
   code_assistant_meta: schema.codeAssistantMeta,
+  code_usage_daily: schema.codeUsageDaily,
   cowork_messages: schema.coworkMessages,
   openai_replies: schema.openaiReplies,
   chatgpt_session_time: schema.chatgptSessionTime,
