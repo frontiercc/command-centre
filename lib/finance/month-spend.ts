@@ -28,7 +28,9 @@ export async function monthSpend(
   if (userIds.length === 0) return null;
   const ids = new Set(userIds);
   const period = currentPeriod(nowS);
-  const [cur, last] = await Promise.all([buildChargeback(period, nowS), buildChargeback(priorPeriod(period), nowS)]);
+  // Only these people's rows are read; the whole organisation's spend is not needed here.
+  const only = { userIds: [...ids] };
+  const [cur, last] = await Promise.all([buildChargeback(period, nowS, {}, only), buildChargeback(priorPeriod(period), nowS, {}, only)]);
   const sum = (r: ChargebackReport) => {
     const t = { cowork: 0, code: 0, chatgpt: 0, codex: 0 };
     for (const u of [...r.costCentres.flatMap(c => c.users), ...r.unallocated.users]) {
