@@ -1,5 +1,21 @@
 # Changelog
 
+## 1.4.8 (2026-11-21)
+
+- **Faster pages that add up spend and tokens:** Spend Review, Model Efficiency, Developer Pulse, FinOps, Value, Claude Sub Agents and the Work Pulse model mix read daily totals instead of adding up every model call. A scheduled job adds new calls to the totals every 5 minutes (migrations 0063, 0064). Today and the part-days at each end of a period are still read from the calls themselves, so the figures are unchanged.
+- **Faster Work Pulse:** each classification carries its prompt's time, session, person and source, so Work Pulse, the dashboard tier mix, briefings, coaching, resilience and use cases no longer look up every classified prompt in the messages table (migration 0065).
+- **Faster Users list:** last activity and pending counts are worked out for everyone in one pass, not person by person.
+- **Faster session lookups:** a session's output files and product are read through two indexes built in the background.
+- **So What in plain words:** the hire and someone-has-left cards say what the figures show and what to do, using the tier names an admin has set. When Developer Pulse's three counts disagree, the card says so. Explanations of the product are gone from every card, and a test keeps them out.
+- System health shows three new jobs: "Claude Code daily totals", "Cowork daily totals" and "Background indexes".
+
+### Upgrading
+
+- Migrations 0063 to 0065 create two new tables and add columns to `pulse_classifications`. They do not lock `cowork_messages` or `code_assistant_meta` while they run.
+- Migration 0065 adds two triggers that keep the copied fields on `pulse_classifications` equal to `cowork_messages`.
+- After the upgrade, the first run of each daily totals job builds every past day in the background. Until that finishes, pages read the model calls directly, as before.
+- The two background indexes on `cowork_messages` are built without blocking writes. Pages give the same results before they exist, only more slowly.
+
 ## 1.4.7 (2026-11-21)
 
 - **Faster Audit Log:** each page looks up Claude Code figures for its own prompts only, instead of adding up every Claude Code model call. Later pages no longer skip or repeat rows when several sources are shown together.
