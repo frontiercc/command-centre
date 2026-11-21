@@ -172,6 +172,9 @@ export interface AppConfig {
   codeUsageDailyCursor: string;
   // Job-written: the Cowork daily totals job's position, 'ingested_at|id'.
   coworkUsageDailyCursor: string;
+  // Job-written: 'true' once each daily totals table has finished its first full build.
+  codeUsageDailyReady: string;
+  coworkUsageDailyReady: string;
   pulseWeeklyBriefingLastRun: string;
   pulseCioBriefingLastRun: string;
   pulseClassifierConfig: string;
@@ -474,6 +477,8 @@ export const CONFIG_KEYS: Record<keyof AppConfig, string> = {
   coworkSessionAggLastFullSweep: 'cowork_session_agg_last_full_sweep',
   codeUsageDailyCursor: 'code_usage_daily_cursor',
   coworkUsageDailyCursor: 'cowork_usage_daily_cursor',
+  codeUsageDailyReady: 'code_usage_daily_ready',
+  coworkUsageDailyReady: 'cowork_usage_daily_ready',
   pulseWeeklyBriefingLastRun: 'pulse_weekly_briefing_last_run',
   pulseCioBriefingLastRun: 'pulse_cio_briefing_last_run',
   pulseClassifierConfig: 'pulse_classifier_config',
@@ -886,6 +891,8 @@ export async function getAllConfig(): Promise<AppConfig> {
     coworkSessionAggLastFullSweep: resolve('coworkSessionAggLastFullSweep'),
     codeUsageDailyCursor: resolve('codeUsageDailyCursor'),
     coworkUsageDailyCursor: resolve('coworkUsageDailyCursor'),
+    codeUsageDailyReady: resolve('codeUsageDailyReady'),
+    coworkUsageDailyReady: resolve('coworkUsageDailyReady'),
     pulseWeeklyBriefingLastRun: resolve('pulseWeeklyBriefingLastRun'),
     pulseCioBriefingLastRun: resolve('pulseCioBriefingLastRun'),
     pulseClassifierConfig: resolve('pulseClassifierConfig'),

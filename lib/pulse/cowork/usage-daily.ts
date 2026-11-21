@@ -30,6 +30,10 @@ const PAIRS_PER_FLUSH = 500;
 const MAX_PENDING = 20_000;
 const BUDGET_MS = 240_000;
 const CURSOR_KEY = 'coworkUsageDailyCursor';
+const READY_KEY = 'coworkUsageDailyReady';
+
+/** True once the first full build has finished; until then readers add up the raw calls (see the Claude Code totals). */
+const READY = sql`EXISTS (SELECT 1 FROM config WHERE key = 'cowork_usage_daily_ready' AND value = 'true')`;
 
 interface RawFacade { execute: (q: unknown) => Promise<{ rows: unknown[] }> }
 
@@ -128,6 +132,7 @@ export async function runCoworkUsageDaily(nowS = Math.floor(Date.now() / 1000)):
     days += pairs.length;
     cursor = { ts: Number(top.ts), id: '￿' };
     await setConfigValue(CURSOR_KEY, `${cursor.ts}|${cursor.id}`);
+    await setConfigValue(READY_KEY, 'true');
     return { calls, days, done: true };
   }
 
@@ -172,11 +177,15 @@ export function coworkUsageIn(start: number, end: number, opts: { nowS?: number;
   const whole = wholeDays(start, end, nowS, false);
   const rawWhere = opts.rawWhere ? sql` AND ${opts.rawWhere}` : sql``;
   const summaryWhere = opts.summaryWhere ? sql` AND ${opts.summaryWhere}` : sql``;
-  const raw = (a: number, b: number) => aggregateFrom(sql`
+  const raw = (a: number, b: number, gate: SQL = sql`TRUE`) => aggregateFrom(sql`
     SELECT m.*, (m.occurred_at - (((m.occurred_at % ${DAY}) + ${DAY}) % ${DAY})) AS day
-      FROM cowork_messages m WHERE m.message_type = 'cowork_api_request' AND m.occurred_at >= ${a} AND m.occurred_at < ${b}${rawWhere}`);
+      FROM cowork_messages m WHERE m.message_type = 'cowork_api_request' AND m.occurred_at >= ${a} AND m.occurred_at < ${b}${rawWhere} AND ${gate}`);
   if (!whole) return sql`SELECT * FROM (${raw(start, end)}) r0`;
-  const parts: SQL[] = [sql`SELECT ${COLUMNS} FROM cowork_usage_daily WHERE day_start >= ${whole.from} AND day_start < ${whole.to}${summaryWhere}`];
+  // Whole days from the summary once it is built, from the raw calls before then.
+  const parts: SQL[] = [
+    sql`SELECT ${COLUMNS} FROM cowork_usage_daily WHERE day_start >= ${whole.from} AND day_start < ${whole.to}${summaryWhere} AND ${READY}`,
+    sql`SELECT * FROM (${raw(whole.from, whole.to, sql`NOT ${READY}`)}) rm`,
+  ];
   if (start < whole.from) parts.push(sql`SELECT * FROM (${raw(start, whole.from)}) r1`);
   if (whole.to < end) parts.push(sql`SELECT * FROM (${raw(whole.to, end)}) r2`);
   return sql.join(parts, sql` UNION ALL `);

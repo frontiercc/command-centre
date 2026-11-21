@@ -34,3 +34,6 @@ CREATE TABLE IF NOT EXISTS "code_usage_daily" (
 CREATE INDEX IF NOT EXISTS "idx_cud_day" ON "code_usage_daily" ("day_start");
 --> statement-breakpoint
 CREATE INDEX IF NOT EXISTS "idx_cud_user_day" ON "code_usage_daily" ("user_id", "day_start");
+--> statement-breakpoint
+-- Sub Agents reads the subagent rows only.
+CREATE INDEX IF NOT EXISTS "idx_cud_agent" ON "code_usage_daily" ("agent_name", "day_start") WHERE agent_name <> '';

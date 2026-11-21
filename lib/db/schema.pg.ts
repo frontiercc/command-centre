@@ -248,6 +248,7 @@ export const codeUsageDaily = pgTable('code_usage_daily', {
     primaryKey({ columns: [t.session_id, t.day_start, t.user_id, t.model, t.agent_name, t.skill_name, t.effort, t.query_source, t.source] }),
     index('idx_cud_day').on(t.day_start),
     index('idx_cud_user_day').on(t.user_id, t.day_start),
+    index('idx_cud_agent').on(t.agent_name, t.day_start).where(sql`agent_name <> ''`),
 ]);
 
 // Cowork model calls added up per session, UTC day and model (migration 0064), kept current by

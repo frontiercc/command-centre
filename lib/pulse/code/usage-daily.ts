@@ -33,6 +33,14 @@ const PAIRS_PER_FLUSH = 500;
 const MAX_PENDING = 20_000;
 const BUDGET_MS = 240_000;
 const CURSOR_KEY = 'codeUsageDailyCursor';
+const READY_KEY = 'codeUsageDailyReady';
+
+/**
+ * True once the job has finished its first full build. Until then readers add up the raw calls for
+ * the whole window, so a hub that has just started (or just been upgraded) never shows old days as
+ * empty while the summary is still being built. Evaluated once per query.
+ */
+const READY = sql`EXISTS (SELECT 1 FROM config WHERE key = 'code_usage_daily_ready' AND value = 'true')`;
 
 /** The start of the UTC day containing `s`. */
 export const dayStart = (s: number) => s - (((s % DAY) + DAY) % DAY);
@@ -162,6 +170,7 @@ export async function runCodeUsageDaily(nowS = Math.floor(Date.now() / 1000)): P
     if (Date.now() - started > BUDGET_MS) break;
   }
   await flush();
+  if (done) await setConfigValue(READY_KEY, 'true');
   return { calls, days, done };
 }
 
@@ -192,16 +201,22 @@ export function codeUsageIn(start: number, end: number, opts: { nowS?: number; r
   const summaryWhere = opts.summaryWhere ? sql` AND ${opts.summaryWhere}` : sql``;
   // Raw calls in [a, b), looking back to `lookFrom` so a prompt already counted on an earlier
   // summary day is not counted again.
-  const raw = (a: number, b: number, lookFrom: number) => aggregateFrom(sql`
+  const raw = (a: number, b: number, lookFrom: number, gate: SQL) => aggregateFrom(sql`
     SELECT m.*, ${sql.raw(`(m.occurred_at - (((m.occurred_at % ${DAY}) + ${DAY}) % ${DAY}))`)} AS day, 0 AS grp, (m.occurred_at >= ${a}) AS counted
-      FROM code_assistant_meta m WHERE m.occurred_at >= ${withPrompts ? lookFrom : a} AND m.occurred_at < ${b}${rawWhere}`, withPrompts);
+      FROM code_assistant_meta m WHERE m.occurred_at >= ${withPrompts ? lookFrom : a} AND m.occurred_at < ${b}${rawWhere} AND ${gate}`, withPrompts);
+  const always = sql`TRUE`;
   const cols = sql`session_id, day_start, user_id, model, agent_name, skill_name, effort, query_source, source,
     calls, model_prompts, skill_prompts, agent_prompts, input_tokens, output_tokens, cache_creation_tokens, cache_read_tokens,
     commit_count, error_count, tool_use_count, first_at, last_at`;
-  if (!whole) return sql`SELECT * FROM (${raw(start, end, start)}) r0`;
-  const parts: SQL[] = [sql`SELECT ${cols} FROM code_usage_daily WHERE day_start >= ${whole.from} AND day_start < ${whole.to}${summaryWhere}`];
-  if (start < whole.from) parts.push(sql`SELECT * FROM (${raw(start, whole.from, start)}) r1`);
-  if (whole.to < end) parts.push(sql`SELECT * FROM (${raw(whole.to, end, Math.max(start, whole.to - DAY))}) r2`);
+  if (!whole) return sql`SELECT * FROM (${raw(start, end, start, always)}) r0`;
+  // Once the summary is built: whole days from it, the ends from the raw calls. Before: the whole
+  // window from the raw calls. Each part's gate is evaluated once, so the other branch reads nothing.
+  const parts: SQL[] = [
+    sql`SELECT ${cols} FROM code_usage_daily WHERE day_start >= ${whole.from} AND day_start < ${whole.to}${summaryWhere} AND ${READY}`,
+    sql`SELECT * FROM (${raw(whole.from, whole.to, Math.max(start, whole.from - DAY), sql`NOT ${READY}`)}) rm`,
+  ];
+  if (start < whole.from) parts.push(sql`SELECT * FROM (${raw(start, whole.from, start, always)}) r1`);
+  if (whole.to < end) parts.push(sql`SELECT * FROM (${raw(whole.to, end, Math.max(start, whole.to - DAY), always)}) r2`);
   return sql.join(parts, sql` UNION ALL `);
 }
 
