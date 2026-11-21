@@ -28,17 +28,17 @@
  * can be traced to one colleague. Colleagues are never named.
  */
 import { codeUsageIn, readCodeUsage } from '@/lib/pulse/code/usage-daily';
+import { coworkUsageIn, readCoworkUsage } from '@/lib/pulse/cowork/usage-daily';
 import { and, eq, gte, inArray, lt, isNotNull, isNull, sql, type SQL } from 'drizzle-orm';
 import { openaiShown } from '@/lib/sources/openai-visibility';
 import { getTypedClient } from '@/lib/db/client';
 import { schema } from '@/lib/db/schema';
-import { jsonToText } from '@/lib/db/json';
 import { monthBounds } from '@/lib/finance/period';
 import { getCodeModelRates, priceTokens, type ModelRates, type TokenUsage } from '@/lib/pulse/code/rates';
 import { rankModelsByPrice, estimateCeilingUsd, modelPrice } from '@/lib/finance/model-tiering';
 import { normalizeModelId, OPENAI_SPECIALIST_MODELS, openaiModelOffered, type OpenAiProduct } from '@/lib/pulse/code/rates';
 import { isBuiltInTool } from '@/lib/finance/spend-review-builtins';
-import { buildSessionTaskTypeMap, parseCoworkTokenUsage, computeCostByType, computeCacheEfficiency, type ModelSpend } from '@/lib/finance/model-efficiency';
+import { buildSessionTaskTypeMap, computeCostByType, computeCacheEfficiency, type ModelSpend } from '@/lib/finance/model-efficiency';
 import { formatTaskType } from '@/lib/pulse/events/capability';
 import { codeWorkTypeLabel, codeWorkTypeDefinition } from '@/lib/pulse/code/work-type-labels';
 import { getCodeWorkTypeDefinitions } from '@/lib/pulse/code/tier-config';
@@ -708,34 +708,50 @@ async function coworkSpendBySession(
   client: Client, rates: ModelRates, start: number, end: number,
   filter: SessionFilter,
 ): Promise<Map<string, SessionAcc>> {
-  const cm = schema.coworkMessages;
-  const select = { session_id: cm.session_id, user_id: cm.user_id, model: cm.model, cost_usd: cm.cost_usd, token_usage: cm.token_usage, agent_name: cm.agent_name, skill_name: cm.skill_name, query_source: cm.query_source };
-  // Cowork only: Claude in Office (product set) has no cost and its own estimated
-  // line (lib/finance/office-spend.ts), so it never enters Cowork's kinds of work,
-  // colleague comparisons or advice.
-  const where = and(eq(cm.message_type, 'cowork_api_request'), isNull(cm.product), gte(cm.occurred_at, start), lt(cm.occurred_at, end));
+  // From the Cowork daily totals (lib/pulse/cowork/usage-daily.ts). Cowork only: Claude in Office
+  // (product set) has no cost and its own estimated line (lib/finance/office-spend.ts), so it never
+  // enters Cowork's kinds of work, colleague comparisons or advice.
+  type Row = {
+    session_id: string; user_id: string | null; model: string | null; agent_name: string | null; skill_name: string | null;
+    recorded: boolean; calls: string; costed: string; cost: string | null; with_usage: string; i: string; o: string; cw: string; cr: string;
+  };
+  const read = (rawWhere?: SQL, summaryWhere?: SQL) => readCoworkUsage<Row>(sql`
+    SELECT session_id, NULLIF(user_id, '') AS user_id, NULLIF(model, '') AS model,
+           NULLIF(agent_name, '') AS agent_name, NULLIF(skill_name, '') AS skill_name, (query_source <> '') AS recorded,
+           SUM(calls) AS calls, SUM(costed) AS costed, SUM(cost_usd) AS cost, SUM(with_usage) AS with_usage,
+           SUM(input_tokens) AS i, SUM(output_tokens) AS o, SUM(cache_creation_tokens) AS cw, SUM(cache_read_tokens) AS cr
+      FROM (${coworkUsageIn(start, end, { rawWhere, summaryWhere })}) u
+     WHERE product = ''
+     GROUP BY session_id, NULLIF(user_id, ''), NULLIF(model, ''), NULLIF(agent_name, ''), NULLIF(skill_name, ''), (query_source <> '')`);
+  const inList = (ids: string[]) => sql.join(ids.map(id => sql`${id}`), sql`, `);
   const rows = 'all' in filter
-    ? await client.select(select).from(cm).where(where)
+    ? await read()
     : 'userId' in filter
-    ? await client.select(select).from(cm).where(and(where, eq(cm.user_id, filter.userId)))
-    : await inChunks(filter.sessionIds, part => client.select(select).from(cm).where(and(where, inArray(cm.session_id, part))));
+    ? await read(sql`m.user_id = ${filter.userId}`, sql`user_id = ${filter.userId}`)
+    : await inChunks(filter.sessionIds, part => read(sql`m.session_id IN (${inList(part)})`, sql`session_id IN (${inList(part)})`));
 
   const out = new Map<string, SessionAcc>();
   for (const r of rows) {
     if (!r.user_id) continue;
     const acc = out.get(r.session_id) ?? newAcc('cowork', r.session_id, r.user_id);
     out.set(r.session_id, acc);
-    const cost = r.cost_usd === null || r.cost_usd === undefined ? null : Number(r.cost_usd);
     const model = r.model ? modelKey(r.model, rates) : r.model;
-    acc.split.add({ model, subagent: r.agent_name, skill: r.skill_name, sourceRecorded: r.query_source !== null || r.agent_name !== null, usd: cost !== null && Number.isFinite(cost) ? cost : null, calls: 1 });
+    const calls = Number(r.calls) || 0;
+    const costed = Number(r.costed) || 0;
+    const cost = costed > 0 ? Number(r.cost) : null;
+    const sourceRecorded = r.recorded === true || r.agent_name !== null;
+    // The calls that carried a cost, and those that did not, as the calls one by one would add.
+    if (costed > 0) acc.split.add({ model, subagent: r.agent_name, skill: r.skill_name, sourceRecorded, usd: cost, calls: costed });
+    if (calls > costed) acc.split.add({ model, subagent: r.agent_name, skill: r.skill_name, sourceRecorded, usd: null, calls: calls - costed });
     if (r.agent_name) acc.subagents.add(r.agent_name);
     if (cost !== null && Number.isFinite(cost)) {
       acc.spend += cost;
       acc.priced = true;
       if (model) addNum(acc.spendByModel, model, cost);
     }
-    const usage = parseCoworkTokenUsage(jsonToText(r.token_usage));
-    if (usage && model) addUsage(acc.usageByModel, model, usage);
+    if ((Number(r.with_usage) || 0) > 0 && model) {
+      addUsage(acc.usageByModel, model, { inputTokens: Number(r.i) || 0, outputTokens: Number(r.o) || 0, cacheCreationTokens: Number(r.cw) || 0, cacheReadTokens: Number(r.cr) || 0 });
+    }
   }
   return out;
 }
