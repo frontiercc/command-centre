@@ -234,6 +234,9 @@ export interface ModelTally {
   deep: number;
 }
 
+/** A tally as colleagues' figures read it: the people only counted. */
+export type TallyLike = Omit<ModelTally, 'people'> & { people: { readonly size: number } };
+
 export function newTally(): ModelTally {
   return { people: new Set(), sessions: 0, spends: [], measured: 0, produced: 0, tiered: 0, deep: 0 };
 }
@@ -245,16 +248,6 @@ export function tallySession(t: ModelTally, s: { userId: string; spend: number |
   if (s.spend !== null) t.spends.push(s.spend);
   if (s.produced !== null) { t.measured += 1; if (s.produced) t.produced += 1; }
   if (s.tier !== null) { t.tiered += 1; if (s.tier >= 3) t.deep += 1; }
-}
-
-export function mergeTally(into: ModelTally, from: ModelTally): void {
-  for (const p of from.people) into.people.add(p);
-  into.sessions += from.sessions;
-  into.spends.push(...from.spends);
-  into.measured += from.measured;
-  into.produced += from.produced;
-  into.tiered += from.tiered;
-  into.deep += from.deep;
 }
 
 /** The model that carried most of a session's priced spend. */
@@ -303,7 +296,7 @@ export interface ModelFigures {
   deepRate: number | null;
 }
 
-export function figures(t: ModelTally): ModelFigures {
+export function figures(t: TallyLike): ModelFigures {
   return {
     sessions: t.sessions,
     people: t.people.size,
@@ -383,7 +376,7 @@ function outcomeRate(f: ModelFigures, metric: 'produced' | 'deep'): number | nul
 export function deriveModelFit(
   surface: ReviewSurface,
   you: Map<string, ModelTally>,
-  colleagues: Map<string, ModelTally>,
+  colleagues: Map<string, TallyLike>,
   personUsageByModel: Map<string, TokenUsage>,
   rates: ModelRates,
   /** The person's spend on this kind of work this month, for the share-based saving floor. */
@@ -395,7 +388,7 @@ export function deriveModelFit(
    */
   chatgptProductsByModel: Map<string, OpenAiProduct[]> = new Map(),
 ): { rows: ModelFitRow[]; advice: ModelAdvice | null; trial: ModelAdvice | null } {
-  const qualifies = (t: ModelTally | undefined) => !!t && t.people.size >= MIN_PEER_USERS && t.sessions >= MIN_PEER_SESSIONS;
+  const qualifies = (t: TallyLike | undefined) => !!t && t.people.size >= MIN_PEER_USERS && t.sessions >= MIN_PEER_SESSIONS;
   const models = new Set<string>([...you.keys(), ...[...colleagues.entries()].filter(([, t]) => qualifies(t)).map(([m]) => m)]);
   const ordered = rankModelsByPrice([...models], rates);
   for (const m of models) if (!ordered.includes(m)) ordered.push(m); // unpriced last
@@ -569,7 +562,9 @@ function chunks<T>(arr: T[]): T[][] {
 
 async function inChunks<T, R>(ids: T[], fn: (part: T[]) => Promise<R[]>): Promise<R[]> {
   const out: R[] = [];
-  for (const part of chunks(ids)) out.push(...(await fn(part)));
+  // One row at a time: spreading a part's rows into push() passes each row as an argument, which
+  // overflows the call stack once a part returns more than about a hundred thousand rows.
+  for (const part of chunks(ids)) for (const row of await fn(part)) out.push(row);
   return out;
 }
 
@@ -1211,18 +1206,18 @@ function splitToolKey(key: string): ['skill' | 'connector', string] {
 }
 
 interface PeerKind {
-  users: Set<string>;
+  users: { readonly size: number };
   sessionCount: number;
   sessionSpends: number[];
   spendByModel: Map<string, number>;
-  toolUsers: Map<string, Set<string>>;
+  toolUsers: Map<string, { readonly size: number }>;
   toolSessions: Map<string, number>;
-  byModel: Map<string, ModelTally>;
+  byModel: Map<string, TallyLike>;
   usageByModel: Map<string, TokenUsage>;
 }
 
 /** One person's sessions of a kind of work over the peer window. */
-interface UserKindShare {
+export interface UserKindShare {
   sessions: number;
   sessionSpends: number[];
   spendByModel: Map<string, number>;
@@ -1337,29 +1332,121 @@ async function buildPopulation(client: Client, rates: ModelRates, start: number,
   return { byKind, toolNames: [...toolNames] };
 }
 
-/** Everyone who did a kind of work, except one person. */
-function peersExcluding(pop: Map<string, UserKindShare>, userId: string): PeerKind {
-  const pk: PeerKind = { users: new Set(), sessionCount: 0, sessionSpends: [], spendByModel: new Map(), toolUsers: new Map(), toolSessions: new Map(), byModel: new Map(), usageByModel: new Map() };
-  for (const [uid, u] of pop) {
-    if (uid === userId) continue;
-    for (const [m, us] of u.usageByModel) addUsage(pk.usageByModel, m, us);
-    for (const [m, t] of u.byModel) {
-      const into = pk.byModel.get(m) ?? newTally();
-      pk.byModel.set(m, into);
-      mergeTally(into, t);
+/**
+ * Everyone's figures for one kind of work, added up once. Colleagues for any
+ * one person are these totals with that person taken out (peersExcluding),
+ * rather than everyone else added up again for each person: that was a pass
+ * over the whole population per person, about 100 million steps at 10,000
+ * people.
+ */
+interface PeerTotals {
+  users: number;
+  sessionCount: number;
+  /** Ascending. */
+  sessionSpends: number[];
+  spendByModel: Map<string, { sum: number; users: number }>;
+  toolUsers: Map<string, number>;
+  toolSessions: Map<string, number>;
+  byModel: Map<string, { people: number; sessions: number; spends: number[]; measured: number; produced: number; tiered: number; deep: number }>;
+  usageByModel: Map<string, { usage: TokenUsage; users: number }>;
+}
+
+const peerTotalsCache = new WeakMap<Map<string, UserKindShare>, PeerTotals>();
+const ascending = (a: number, b: number) => a - b;
+
+function peerTotals(pop: Map<string, UserKindShare>): PeerTotals {
+  const cached = peerTotalsCache.get(pop);
+  if (cached) return cached;
+  const t: PeerTotals = { users: 0, sessionCount: 0, sessionSpends: [], spendByModel: new Map(), toolUsers: new Map(), toolSessions: new Map(), byModel: new Map(), usageByModel: new Map() };
+  for (const u of pop.values()) {
+    t.users += 1;
+    t.sessionCount += u.sessions;
+    for (const v of u.sessionSpends) t.sessionSpends.push(v);
+    for (const [m, v] of u.spendByModel) { const e = t.spendByModel.get(m) ?? { sum: 0, users: 0 }; e.sum += v; e.users += 1; t.spendByModel.set(m, e); }
+    for (const [k, n] of u.toolSessions) { addNum(t.toolSessions, k, n); addNum(t.toolUsers, k, 1); }
+    for (const [m, tl] of u.byModel) {
+      const e = t.byModel.get(m) ?? { people: 0, sessions: 0, spends: [], measured: 0, produced: 0, tiered: 0, deep: 0 };
+      e.people += tl.people.size;
+      e.sessions += tl.sessions;
+      for (const v of tl.spends) e.spends.push(v);
+      e.measured += tl.measured; e.produced += tl.produced; e.tiered += tl.tiered; e.deep += tl.deep;
+      t.byModel.set(m, e);
     }
-    pk.users.add(uid);
-    pk.sessionCount += u.sessions;
-    pk.sessionSpends.push(...u.sessionSpends);
-    for (const [m, v] of u.spendByModel) addNum(pk.spendByModel, m, v);
-    for (const [k, n] of u.toolSessions) {
-      addNum(pk.toolSessions, k, n);
-      const set = pk.toolUsers.get(k) ?? new Set<string>();
-      set.add(uid);
-      pk.toolUsers.set(k, set);
+    for (const [m, us] of u.usageByModel) {
+      const e = t.usageByModel.get(m) ?? { usage: { inputTokens: 0, outputTokens: 0, cacheCreationTokens: 0, cacheReadTokens: 0 }, users: 0 };
+      e.usage = { inputTokens: e.usage.inputTokens + us.inputTokens, outputTokens: e.usage.outputTokens + us.outputTokens, cacheCreationTokens: e.usage.cacheCreationTokens + us.cacheCreationTokens, cacheReadTokens: e.usage.cacheReadTokens + us.cacheReadTokens };
+      e.users += 1;
+      t.usageByModel.set(m, e);
     }
   }
-  return pk;
+  t.sessionSpends.sort(ascending);
+  for (const e of t.byModel.values()) e.spends.sort(ascending);
+  peerTotalsCache.set(pop, t);
+  return t;
+}
+
+/** `all` (ascending) without one occurrence of each value in `remove`. */
+function withoutValues(all: number[], remove: number[]): number[] {
+  if (remove.length === 0) return all;
+  const r = [...remove].sort(ascending);
+  const out: number[] = [];
+  let j = 0;
+  for (const v of all) {
+    if (j < r.length && v === r[j]) { j += 1; continue; }
+    out.push(v);
+  }
+  return out;
+}
+
+/** Colleagues for one kind of work: everyone in it but `userId`. Exactly what adding up everyone else gives. */
+export function peersExcluding(pop: Map<string, UserKindShare>, userId: string): PeerKind {
+  const t = peerTotals(pop);
+  const u = pop.get(userId);
+  const size = (n: number) => ({ size: n });
+  const spendByModel = new Map<string, number>();
+  for (const [m, e] of t.spendByModel) {
+    const mine = u?.spendByModel.get(m);
+    const users = e.users - (mine !== undefined ? 1 : 0);
+    if (users > 0) spendByModel.set(m, e.sum - (mine ?? 0));
+  }
+  const toolUsers = new Map<string, { readonly size: number }>();
+  const toolSessions = new Map<string, number>();
+  for (const [k, n] of t.toolUsers) {
+    const users = n - (u?.toolSessions.has(k) ? 1 : 0);
+    if (users > 0) {
+      toolUsers.set(k, size(users));
+      toolSessions.set(k, (t.toolSessions.get(k) ?? 0) - (u?.toolSessions.get(k) ?? 0));
+    }
+  }
+  const byModel = new Map<string, TallyLike>();
+  for (const [m, e] of t.byModel) {
+    const mine = u?.byModel.get(m);
+    const people = e.people - (mine ? mine.people.size : 0);
+    if (people <= 0 && !mine) continue;
+    if (people <= 0) continue;
+    byModel.set(m, {
+      people: size(people),
+      sessions: e.sessions - (mine?.sessions ?? 0),
+      spends: mine ? withoutValues(e.spends, mine.spends) : e.spends,
+      measured: e.measured - (mine?.measured ?? 0), produced: e.produced - (mine?.produced ?? 0),
+      tiered: e.tiered - (mine?.tiered ?? 0), deep: e.deep - (mine?.deep ?? 0),
+    });
+  }
+  const usageByModel = new Map<string, TokenUsage>();
+  for (const [m, e] of t.usageByModel) {
+    const mine = u?.usageByModel.get(m);
+    if (e.users - (mine ? 1 : 0) <= 0) continue;
+    usageByModel.set(m, mine ? {
+      inputTokens: e.usage.inputTokens - mine.inputTokens, outputTokens: e.usage.outputTokens - mine.outputTokens,
+      cacheCreationTokens: e.usage.cacheCreationTokens - mine.cacheCreationTokens, cacheReadTokens: e.usage.cacheReadTokens - mine.cacheReadTokens,
+    } : { ...e.usage });
+  }
+  return {
+    users: size(t.users - (u ? 1 : 0)),
+    sessionCount: t.sessionCount - (u?.sessions ?? 0),
+    sessionSpends: u ? withoutValues(t.sessionSpends, u.sessionSpends) : t.sessionSpends,
+    spendByModel, toolUsers, toolSessions, byModel, usageByModel,
+  };
 }
 
 type Tools = { skills: Set<string>; connectors: Set<string> };

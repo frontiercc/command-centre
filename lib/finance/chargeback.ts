@@ -232,8 +232,18 @@ export async function buildChargeback(
   period: string,
   nowS: number = Math.floor(Date.now() / 1000),
   shared: ChargebackShared = {},
+  /**
+   * Only these people's spend: for a page that shows one person or one department
+   * (lib/finance/month-spend.ts), so it reads their rows rather than the whole
+   * organisation's. The totals then cover these people only.
+   */
+  opts: { userIds?: string[] } = {},
 ): Promise<ChargebackReport> {
   const db = await getTypedClient();
+  const only = opts.userIds;
+  const forUsers = (col: string) => only
+    ? sql` AND ${sql.raw(col)} IN (${only.length ? sql.join(only.map(id => sql`${id}`), sql`, `) : sql`NULL`})`
+    : sql``;
 
   // Period lock: a CLOSED period returns its immutable snapshot VERBATIM,
   // short-circuiting BEFORE any spend query — never recomputes. snapshot_json
@@ -332,7 +342,7 @@ export async function buildChargeback(
                 SUM(cache_creation_tokens) AS cw, SUM(cache_read_tokens) AS cr,
                 ${segOf('code_assistant_meta', 'occurred_at')} AS seg
          FROM code_assistant_meta
-         WHERE occurred_at >= ${start} AND occurred_at < ${end}
+         WHERE occurred_at >= ${start} AND occurred_at < ${end}${forUsers('user_id')}
          GROUP BY user_id, model, seg`
     ),
     // Cowork spend per user.
@@ -340,7 +350,7 @@ export async function buildChargeback(
       db,
       sql`SELECT user_id, COALESCE(SUM(cost_usd), 0) AS c, ${segOf('cowork_messages', 'occurred_at')} AS seg
          FROM cowork_messages
-         WHERE message_type = 'cowork_api_request' AND product IS NULL AND occurred_at >= ${start} AND occurred_at < ${end}
+         WHERE message_type = 'cowork_api_request' AND product IS NULL AND occurred_at >= ${start} AND occurred_at < ${end}${forUsers('user_id')}
          GROUP BY user_id, seg`
     ),
     // Cowork model calls one by one: each one's token_usage for the surface
@@ -350,7 +360,7 @@ export async function buildChargeback(
       db,
       sql`SELECT token_usage, (cost_usd IS NOT NULL) AS has_cost
          FROM cowork_messages
-         WHERE message_type = 'cowork_api_request' AND product IS NULL AND occurred_at >= ${start} AND occurred_at < ${end}`
+         WHERE message_type = 'cowork_api_request' AND product IS NULL AND occurred_at >= ${start} AND occurred_at < ${end}${forUsers('user_id')}`
     ),
     hasOpenAi
       ? rawAll<OpenAiRow>(db, sql`
@@ -359,7 +369,7 @@ export async function buildChargeback(
                  SUM(cost_usd) AS reported, SUM(CASE WHEN cost_usd IS NULL THEN 1 ELSE 0 END) AS unknown_usd,
                  ${segOf('openai_costs', 'hour_start')} AS seg
           FROM openai_costs
-          WHERE product = 'chatgpt' AND hour_start >= ${start} AND hour_start < ${end}
+          WHERE product = 'chatgpt' AND hour_start >= ${start} AND hour_start < ${end}${forUsers('user_id')}
           GROUP BY user_id, model, no_split, seg`)
       : Promise.resolve([] as OpenAiRow[]),
     hasOpenAi
@@ -367,7 +377,7 @@ export async function buildChargeback(
           SELECT user_id, model, SUM(uncached_input_tokens) AS inp, SUM(cached_input_tokens) AS cached, SUM(output_tokens) AS outp,
                  ${segOf('codex_turns', 'started_at')} AS seg
           FROM codex_turns
-          WHERE started_at >= ${start} AND started_at < ${end}
+          WHERE started_at >= ${start} AND started_at < ${end}${forUsers('user_id')}
           GROUP BY user_id, model, seg`)
       : Promise.resolve([] as OpenAiRow[]),
   ]);

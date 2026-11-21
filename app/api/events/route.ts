@@ -9,7 +9,7 @@
 // Every `${value}` interpolation is a bound parameter (drizzle-orm's
 // sql tag), never string concatenation. The free-text search uses
 // ILIKE via sql.raw() (Postgres LIKE is case-sensitive). Aggregates from the
-// `cam` derived table (SUM(...) AS total_commits/total_errors) and
+// per-session `cam` lookup (SUM(...) AS total_commits/total_errors) and
 // cowork_session_stats.total_cost_usd (numeric() on pg) are Number()-coerced,
 // since Postgres returns them as strings.
 import { NextRequest, NextResponse } from 'next/server';
@@ -167,29 +167,36 @@ async function getCoworkEventsForAudit(filters: {
       code_tool_use_count: number | null; code_models_json: string | null; code_active_secs: number | null;
     }>(client, sql`
        SELECT cm.id, cm.session_id, cm.user_id, cm.message_type, cm.role, cm.content_preview, cm.content_full, cm.flagged, cm.flag_reason, cm.pii_verdict_reason, cm.occurred_at, cm.ingested_at, cm.surface, cm.source, cm.prompt_id, cm.product,
-              COALESCE(au.display_name, u.display_name) as user_display_name, COALESCE(au.department, u.department) as user_department,
+              cm.user_display_name, cm.user_department,
               css.total_cost_usd, css.total_input_tokens, css.total_output_tokens, css.tool_call_count, css.unique_tools, css.models_used, css.duration_secs,
               cs.files_uploaded,
               cam.git_branch, cam.cwd, cam.total_commits, cam.total_errors,
               cds.input_tokens AS code_input_tokens, cds.output_tokens AS code_output_tokens,
               cds.tool_use_count AS code_tool_use_count, cds.models_json AS code_models_json, cds.active_secs AS code_active_secs
-       FROM cowork_messages cm
-       LEFT JOIN users u ON cm.user_id = u.id
-       LEFT JOIN admin_users au ON au.linked_cowork_user_id = cm.user_id
+       FROM (
+         -- The page of prompts first; the per-session figures below are then read for
+         -- those rows only. Joining a derived table over every Claude Code model call
+         -- made each page add up the whole of code_assistant_meta.
+         SELECT cm.*, COALESCE(au.display_name, u.display_name) AS user_display_name, COALESCE(au.department, u.department) AS user_department
+         FROM cowork_messages cm
+         LEFT JOIN users u ON cm.user_id = u.id
+         LEFT JOIN admin_users au ON au.linked_cowork_user_id = cm.user_id
+         ${where}
+         ORDER BY cm.occurred_at DESC LIMIT ${limit} OFFSET ${offset}
+       ) cm
        LEFT JOIN cowork_session_stats css ON css.session_id = cm.session_id
        LEFT JOIN cowork_sessions cs ON cs.id = cm.session_id
-       LEFT JOIN (
-         SELECT session_id,
-                MAX(git_branch) AS git_branch,
-                MAX(cwd) AS cwd,
-                SUM(COALESCE(commit_count, 0)) AS total_commits,
-                SUM(COALESCE(error_count, 0)) AS total_errors
-         FROM code_assistant_meta
-         GROUP BY session_id
-       ) cam ON cam.session_id = cm.session_id
+       LEFT JOIN LATERAL (
+         SELECT MAX(c.git_branch) AS git_branch,
+                MAX(c.cwd) AS cwd,
+                SUM(COALESCE(c.commit_count, 0)) AS total_commits,
+                SUM(COALESCE(c.error_count, 0)) AS total_errors
+         FROM code_assistant_meta c
+         WHERE c.session_id = cm.session_id
+         HAVING COUNT(*) > 0
+       ) cam ON TRUE
        LEFT JOIN code_session_stats cds ON cds.session_id = cm.session_id
-       ${where}
-       ORDER BY cm.occurred_at DESC LIMIT ${limit} OFFSET ${offset}
+       ORDER BY cm.occurred_at DESC
     `);
 
     // Code sessions don't write cowork_session_stats (css above is always
@@ -648,6 +655,8 @@ export async function GET(request: NextRequest) {
   const search = params.get('search') || undefined;
   const limit = parseInt(params.get('limit') || '100');
   const offset = parseInt(params.get('offset') || '0');
+  // Rows each source is read up to when several are merged into one page.
+  const take = offset + limit;
 
   // The page's filters: a product (Claude Chat ... Codex) and how the rows
   // arrived (OpenTelemetry, Anthropic's Compliance API or OpenAI's Compliance API).
@@ -666,42 +675,42 @@ export async function GET(request: NextRequest) {
   if (product || arrival) {
     const parts = [];
     // Claude Chat prompts (surface 'chat') come from getChatEventsForAudit; none arrive through OpenTelemetry or OpenAI.
-    if (product !== 'claude_chat') parts.push(getCoworkEventsForAudit({ userId, department, flaggedOnly, dateFrom, dateTo, search, limit, offset, source: arrival, product }));
+    if (product !== 'claude_chat') parts.push(getCoworkEventsForAudit({ userId, department, flaggedOnly, dateFrom, dateTo, search, limit: take, offset: 0, source: arrival, product }));
     if ((!product || product === 'claude_chat') && (!arrival || arrival === 'compliance')) {
-      parts.push(getChatEventsForAudit({ userId, department, flaggedOnly, dateFrom, dateTo, search, limit, offset, source: arrival }));
+      parts.push(getChatEventsForAudit({ userId, department, flaggedOnly, dateFrom, dateTo, search, limit: take, offset: 0, source: arrival }));
     }
-    parts.push(getSkillConnectorEventsForAudit({ userId, department, flaggedOnly, dateFrom, dateTo, search, limit, source: arrival, product }));
+    parts.push(getSkillConnectorEventsForAudit({ userId, department, flaggedOnly, dateFrom, dateTo, search, limit: take, source: arrival, product }));
     const merged = (await Promise.all(parts)).flat()
       .sort((a, b) => b.occurred_at - a.occurred_at)
-      .slice(0, limit);
+      .slice(offset, offset + limit);
     return NextResponse.json(merged);
   }
 
   if (source === 'agent') {
     // Local agent: cowork_messages with source='agent' + legacy-agent chat events (agent_id stamped)
-    const messages = await getCoworkEventsForAudit({ userId, department, flaggedOnly, dateFrom, dateTo, search, limit, offset, source: 'agent' });
-    const chatEvents = await getChatEventsForAudit({ userId, department, flaggedOnly, dateFrom, dateTo, search, limit, offset, source: 'agent' });
+    const messages = await getCoworkEventsForAudit({ userId, department, flaggedOnly, dateFrom, dateTo, search, limit: take, offset: 0, source: 'agent' });
+    const chatEvents = await getChatEventsForAudit({ userId, department, flaggedOnly, dateFrom, dateTo, search, limit: take, offset: 0, source: 'agent' });
     const merged = [...messages, ...chatEvents]
       .sort((a, b) => b.occurred_at - a.occurred_at)
-      .slice(0, limit);
+      .slice(offset, offset + limit);
     return NextResponse.json(merged);
   }
 
   if (source === 'cowork') {
-    const messages = await getCoworkEventsForAudit({ userId, department, flaggedOnly, dateFrom, dateTo, search, limit, offset, surface: 'cowork' });
-    const skillsConnectors = await getSkillConnectorEventsForAudit({ userId, department, flaggedOnly, dateFrom, dateTo, search, limit });
+    const messages = await getCoworkEventsForAudit({ userId, department, flaggedOnly, dateFrom, dateTo, search, limit: take, offset: 0, surface: 'cowork' });
+    const skillsConnectors = await getSkillConnectorEventsForAudit({ userId, department, flaggedOnly, dateFrom, dateTo, search, limit: take });
     const merged = [...messages, ...skillsConnectors]
       .sort((a, b) => b.occurred_at - a.occurred_at)
-      .slice(0, limit);
+      .slice(offset, offset + limit);
     return NextResponse.json(merged);
   }
 
   if (source === 'code') {
-    const messages = await getCoworkEventsForAudit({ userId, department, flaggedOnly, dateFrom, dateTo, search, limit, offset, surface: 'code' });
-    const skillsConnectors = await getSkillConnectorEventsForAudit({ userId, department, flaggedOnly, dateFrom, dateTo, search, limit, surface: 'code' });
+    const messages = await getCoworkEventsForAudit({ userId, department, flaggedOnly, dateFrom, dateTo, search, limit: take, offset: 0, surface: 'code' });
+    const skillsConnectors = await getSkillConnectorEventsForAudit({ userId, department, flaggedOnly, dateFrom, dateTo, search, limit: take, surface: 'code' });
     const merged = [...messages, ...skillsConnectors]
       .sort((a, b) => b.occurred_at - a.occurred_at)
-      .slice(0, limit);
+      .slice(offset, offset + limit);
     return NextResponse.json(merged);
   }
 
@@ -712,20 +721,20 @@ export async function GET(request: NextRequest) {
 
   // Default: merge compliance + cowork + chat events, sorted by time
   if (surface === 'cowork') {
-    const messages = await getCoworkEventsForAudit({ userId, department, flaggedOnly, dateFrom, dateTo, search, limit, offset, surface: 'cowork' });
-    const skillsConnectors = await getSkillConnectorEventsForAudit({ userId, department, flaggedOnly, dateFrom, dateTo, search, limit, surface: 'cowork' });
+    const messages = await getCoworkEventsForAudit({ userId, department, flaggedOnly, dateFrom, dateTo, search, limit: take, offset: 0, surface: 'cowork' });
+    const skillsConnectors = await getSkillConnectorEventsForAudit({ userId, department, flaggedOnly, dateFrom, dateTo, search, limit: take, surface: 'cowork' });
     const merged = [...messages, ...skillsConnectors]
       .sort((a, b) => b.occurred_at - a.occurred_at)
-      .slice(0, limit);
+      .slice(offset, offset + limit);
     return NextResponse.json(merged);
   }
 
   if (surface === 'code') {
-    const messages = await getCoworkEventsForAudit({ userId, department, flaggedOnly, dateFrom, dateTo, search, limit, offset, surface: 'code' });
-    const skillsConnectors = await getSkillConnectorEventsForAudit({ userId, department, flaggedOnly, dateFrom, dateTo, search, limit, surface: 'code' });
+    const messages = await getCoworkEventsForAudit({ userId, department, flaggedOnly, dateFrom, dateTo, search, limit: take, offset: 0, surface: 'code' });
+    const skillsConnectors = await getSkillConnectorEventsForAudit({ userId, department, flaggedOnly, dateFrom, dateTo, search, limit: take, surface: 'code' });
     const merged = [...messages, ...skillsConnectors]
       .sort((a, b) => b.occurred_at - a.occurred_at)
-      .slice(0, limit);
+      .slice(offset, offset + limit);
     return NextResponse.json(merged);
   }
 
@@ -734,16 +743,18 @@ export async function GET(request: NextRequest) {
     return NextResponse.json(events);
   }
 
-  const complianceEvents = await getComplianceEvents({ surface, userId, department, flaggedOnly, dateFrom, dateTo, search, limit, offset });
+  // Merged with the other sources when no surface is chosen: each source is read up to the end of
+  // the page and the merge is cut to it, so later pages neither skip nor repeat rows.
+  const complianceEvents = await getComplianceEvents({ surface, userId, department, flaggedOnly, dateFrom, dateTo, search, limit: surface ? limit : take, offset: surface ? offset : 0 });
 
   // Also include cowork + chat + skill/connector events when showing all surfaces
   if (!surface) {
-    const coworkEvents = await getCoworkEventsForAudit({ userId, department, flaggedOnly, dateFrom, dateTo, search, limit, offset });
-    const chatEvents = await getChatEventsForAudit({ userId, department, flaggedOnly, dateFrom, dateTo, search, limit, offset });
-    const skillsConnectors = await getSkillConnectorEventsForAudit({ userId, department, flaggedOnly, dateFrom, dateTo, search, limit });
+    const coworkEvents = await getCoworkEventsForAudit({ userId, department, flaggedOnly, dateFrom, dateTo, search, limit: take, offset: 0 });
+    const chatEvents = await getChatEventsForAudit({ userId, department, flaggedOnly, dateFrom, dateTo, search, limit: take, offset: 0 });
+    const skillsConnectors = await getSkillConnectorEventsForAudit({ userId, department, flaggedOnly, dateFrom, dateTo, search, limit: take });
     const merged = [...complianceEvents, ...coworkEvents, ...chatEvents, ...skillsConnectors]
       .sort((a, b) => b.occurred_at - a.occurred_at)
-      .slice(0, limit);
+      .slice(offset, offset + limit);
     return NextResponse.json(merged);
   }
 

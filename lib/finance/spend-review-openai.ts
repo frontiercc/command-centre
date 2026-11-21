@@ -112,7 +112,8 @@ export type OpenAiFilter = { all: true } | { userId: string } | { sessionIds: st
 const CHUNK = 1000;
 async function inChunks<T, R>(ids: T[], fn: (part: T[]) => Promise<R[]>): Promise<R[]> {
   const out: R[] = [];
-  for (let i = 0; i < ids.length; i += CHUNK) out.push(...await fn(ids.slice(i, i + CHUNK)));
+  // One row at a time: spreading a large part into push() overflows the call stack.
+  for (let i = 0; i < ids.length; i += CHUNK) for (const row of await fn(ids.slice(i, i + CHUNK))) out.push(row);
   return out;
 }
 

@@ -435,6 +435,13 @@
       "when": 1792454407000,
       "tag": "0061_metrics_latest_indexes",
       "breakpoints": true
+    },
+    {
+      "idx": 62,
+      "version": "7",
+      "when": 1792540807000,
+      "tag": "0062_scan_indexes",
+      "breakpoints": true
     }
   ]
 }
