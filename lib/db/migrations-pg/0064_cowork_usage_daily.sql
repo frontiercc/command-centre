@@ -29,6 +29,3 @@ CREATE TABLE IF NOT EXISTS "cowork_usage_daily" (
 CREATE INDEX IF NOT EXISTS "idx_wud_day" ON "cowork_usage_daily" ("day_start");
 --> statement-breakpoint
 CREATE INDEX IF NOT EXISTS "idx_wud_user_day" ON "cowork_usage_daily" ("user_id", "day_start");
---> statement-breakpoint
--- The job finds newly arrived model calls by arrival time.
-CREATE INDEX IF NOT EXISTS "idx_cowork_messages_api_ingested" ON "cowork_messages" ("ingested_at", "id") WHERE message_type = 'cowork_api_request';

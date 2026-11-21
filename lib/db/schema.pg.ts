@@ -685,7 +685,6 @@ export const coworkMessages = pgTable('cowork_messages', {
     index('idx_cowork_messages_flagged').on(t.flagged),
     index('idx_cowork_messages_session').on(t.session_id, t.occurred_at),
     index('idx_cowork_messages_agent_name').on(t.agent_name, t.occurred_at).where(sql`agent_name IS NOT NULL`),
-    index('idx_cowork_messages_api_ingested').on(t.ingested_at, t.id).where(sql`message_type = 'cowork_api_request'`),
     // Whether a person has ever sent a Work Pulse prompt, per vendor (migration 0056).
     index('idx_cowork_wp_people_claude').on(t.user_id).where(sql`message_type = 'cowork_user_message' AND (surface IN ('cowork', 'chat') OR surface IS NULL) AND (source IS NULL OR source NOT IN ('chatgpt_chat', 'chatgpt_work', 'codex'))`),
     index('idx_cowork_wp_people_openai').on(t.user_id).where(sql`message_type = 'cowork_user_message' AND (surface IN ('cowork', 'chat') OR surface IS NULL) AND source IN ('chatgpt_chat', 'chatgpt_work', 'codex')`),
