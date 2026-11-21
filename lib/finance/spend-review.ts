@@ -27,7 +27,8 @@
  * at least MIN_PEER_USERS other people did the same kind of work, so no figure
  * can be traced to one colleague. Colleagues are never named.
  */
-import { and, eq, gte, inArray, lt, isNotNull, isNull, sql } from 'drizzle-orm';
+import { codeUsageIn, readCodeUsage } from '@/lib/pulse/code/usage-daily';
+import { and, eq, gte, inArray, lt, isNotNull, isNull, sql, type SQL } from 'drizzle-orm';
 import { openaiShown } from '@/lib/sources/openai-visibility';
 import { getTypedClient } from '@/lib/db/client';
 import { schema } from '@/lib/db/schema';
@@ -659,32 +660,25 @@ async function codeSpendBySession(
   unpriced: Set<string>,
   withSplit = false,
 ): Promise<Map<string, SessionAcc>> {
-  const cam = schema.codeAssistantMeta;
-  // The subagent/skill split groups finer, so it is asked for only for the
-  // person under review, never for the colleague population.
-  const recorded = sql<boolean>`(${cam.query_source} IS NOT NULL)`;
-  const select = {
-    session_id: cam.session_id,
-    user_id: cam.user_id,
-    model: cam.model,
-    i: sql<string>`SUM(${cam.input_tokens})`,
-    o: sql<string>`SUM(${cam.output_tokens})`,
-    cw: sql<string>`SUM(${cam.cache_creation_tokens})`,
-    cr: sql<string>`SUM(${cam.cache_read_tokens})`,
-    agent: withSplit ? cam.agent_name : sql<string | null>`NULL`,
-    skill: withSplit ? cam.skill_name : sql<string | null>`NULL`,
-    recorded: withSplit ? recorded : sql<boolean>`FALSE`,
-    calls: sql<string>`COUNT(*)`,
-  };
-  const groupCols = withSplit
-    ? [cam.session_id, cam.user_id, cam.model, cam.agent_name, cam.skill_name, recorded]
-    : [cam.session_id, cam.user_id, cam.model];
-  const timeWhere = and(gte(cam.occurred_at, start), lt(cam.occurred_at, end));
+  // From the Claude Code daily totals (lib/pulse/code/usage-daily.ts). The subagent/skill split
+  // groups finer, so it is asked for only for the person under review, never for the colleague
+  // population.
+  type Row = { session_id: string; user_id: string | null; model: string | null; i: string; o: string; cw: string; cr: string; agent: string | null; skill: string | null; recorded: boolean; calls: string };
+  const read = (rawWhere?: SQL, summaryWhere?: SQL) => readCodeUsage<Row>(sql`
+    SELECT session_id, NULLIF(user_id, '') AS user_id, NULLIF(model, '') AS model,
+           SUM(input_tokens) AS i, SUM(output_tokens) AS o, SUM(cache_creation_tokens) AS cw, SUM(cache_read_tokens) AS cr,
+           ${withSplit ? sql`NULLIF(agent_name, '')` : sql`NULL`} AS agent,
+           ${withSplit ? sql`NULLIF(skill_name, '')` : sql`NULL`} AS skill,
+           ${withSplit ? sql`(query_source <> '')` : sql`FALSE`} AS recorded,
+           SUM(calls) AS calls
+      FROM (${codeUsageIn(start, end, { rawWhere, summaryWhere })}) u
+     GROUP BY session_id, NULLIF(user_id, ''), NULLIF(model, '')${withSplit ? sql`, NULLIF(agent_name, ''), NULLIF(skill_name, ''), (query_source <> '')` : sql``}`);
+  const inList = (ids: string[]) => sql.join(ids.map(id => sql`${id}`), sql`, `);
   const rows = 'all' in filter
-    ? await client.select(select).from(cam).where(timeWhere).groupBy(...groupCols)
+    ? await read()
     : 'userId' in filter
-    ? await client.select(select).from(cam).where(and(timeWhere, eq(cam.user_id, filter.userId))).groupBy(...groupCols)
-    : await inChunks(filter.sessionIds, part => client.select(select).from(cam).where(and(timeWhere, inArray(cam.session_id, part))).groupBy(...groupCols));
+    ? await read(sql`m.user_id = ${filter.userId}`, sql`user_id = ${filter.userId}`)
+    : await inChunks(filter.sessionIds, part => read(sql`m.session_id IN (${inList(part)})`, sql`session_id IN (${inList(part)})`));
 
   const out = new Map<string, SessionAcc>();
   for (const r of rows) {
