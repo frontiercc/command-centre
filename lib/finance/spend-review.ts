@@ -250,16 +250,6 @@ export function tallySession(t: ModelTally, s: { userId: string; spend: number |
   if (s.tier !== null) { t.tiered += 1; if (s.tier >= 3) t.deep += 1; }
 }
 
-export function mergeTally(into: ModelTally, from: ModelTally): void {
-  for (const p of from.people) into.people.add(p);
-  into.sessions += from.sessions;
-  for (const v of from.spends) into.spends.push(v);
-  into.measured += from.measured;
-  into.produced += from.produced;
-  into.tiered += from.tiered;
-  into.deep += from.deep;
-}
-
 /** The model that carried most of a session's priced spend. */
 export function mainModel(spendByModel: Map<string, number>): string | null {
   let best: string | null = null;
