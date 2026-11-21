@@ -8,6 +8,7 @@
  * read from judged sessions; it used to be a one-shot OR-match of keywords,
  * skills, connectors and task labels over raw telemetry.
  */
+import { PC_MESSAGE } from '@/lib/pulse/classification-message';
 import { sql } from 'drizzle-orm';
 import { getTypedClient } from '@/lib/db/client';
 import { weekStart } from '@/lib/pulse/period';
@@ -66,7 +67,7 @@ export async function activateUseCase(uc: UseCase, nowEpochS?: number, windowDay
       (SELECT bool_or(by_work) FROM s) AS by_work,
       (SELECT bool_or(by_skill) FROM s) AS by_skill,
       GREATEST(
-        (SELECT MAX(pc.tier) FROM pulse_classifications pc JOIN cowork_messages cm ON cm.id = pc.cowork_message_id
+        (SELECT MAX(pc.tier) FROM pulse_classifications pc ${PC_MESSAGE}
           WHERE cm.session_id IN (SELECT session_id FROM s) AND pc.classifier_status = 'classified'),
         (SELECT MAX(csc.tier) FROM code_session_classifications csc WHERE csc.session_id IN (SELECT session_id FROM s))
       ) AS tier`);

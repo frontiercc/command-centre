@@ -62,18 +62,16 @@ export async function buildDeepWorkSummary(userIds: string[] | null, sinceS: num
   if (userIds !== null && userIds.length === 0) return empty;
   const client = await getTypedClient();
   const pc = schema.pulseClassifications;
-  const cm = schema.coworkMessages;
   const pe = schema.pulseEvents;
   const who = userIds === null ? [] : [inArray(pc.user_id, userIds)];
 
   const rows = await client
-    .select({ user_id: pc.user_id, session_id: cm.session_id, task_type: pc.task_type })
+    .select({ user_id: pc.user_id, session_id: pc.msg_session_id, task_type: pc.task_type })
     .from(pc)
-    .innerJoin(cm, eq(cm.id, pc.cowork_message_id))
     .where(and(
       ...who, eq(pc.tier, 3), eq(pc.classifier_status, 'classified'),
-      gte(cm.occurred_at, sinceS), lt(cm.occurred_at, untilS),
-      isWorkPulseSurface(cm.surface, true),
+      gte(pc.msg_occurred_at, sinceS), lt(pc.msg_occurred_at, untilS),
+      isWorkPulseSurface(pc.msg_surface, true),
     ));
 
   const people = new Set<string>();

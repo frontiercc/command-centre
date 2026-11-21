@@ -18,6 +18,7 @@
  * MEASURED active time, never the by-hand estimate. Depth (meaningful or not) and the kind of work
  * are the classifier's judgement of each prompt, and the cards that use them say so.
  */
+import { PC_MESSAGE } from '@/lib/pulse/classification-message';
 import { sql, type SQL } from 'drizzle-orm';
 import { getTypedClient } from '@/lib/db/client';
 import { getConfigValue } from '@/lib/config';
@@ -461,7 +462,7 @@ export async function getWorkFinds(vendor: Vendor, data: WorkData, kept: Kept = 
       SELECT pc.user_id, MIN(cm.occurred_at) AS first_at,
              MIN(CASE WHEN pc.tier >= 2 THEN cm.occurred_at END) AS first_deep_at
       FROM pulse_classifications pc
-      JOIN cowork_messages cm ON cm.id = pc.cowork_message_id
+      ${PC_MESSAGE}
       WHERE pc.classifier_status = 'classified' AND ${onWorkPulse}
       GROUP BY pc.user_id
       UNION ALL

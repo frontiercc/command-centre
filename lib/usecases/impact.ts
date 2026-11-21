@@ -13,6 +13,7 @@
  * classifier/rubric tables. Absent week -> all-null ImpactWeek entry (never
  * a fabricated zero); estimateHours is an ESTIMATE, labelled by the caller.
  */
+import { PC_MESSAGE } from '@/lib/pulse/classification-message';
 import { and, desc, eq, inArray, ne, sql } from 'drizzle-orm';
 import { getTypedClient } from '@/lib/db/client';
 import { schema } from '@/lib/db/schema';
@@ -288,7 +289,7 @@ async function depthByWeek(sessionIds: string[], windowStartsSet: Set<number>): 
         client,
         sql`SELECT pc.tier AS tier, cm.occurred_at AS occurred_at
             FROM pulse_classifications pc
-            JOIN cowork_messages cm ON cm.id = pc.cowork_message_id
+            ${PC_MESSAGE}
             WHERE cm.session_id IN (${inList(ids)})`,
       );
       for (const r of cwRows) bump(weekStart(Number(r.occurred_at)), Number(r.tier));

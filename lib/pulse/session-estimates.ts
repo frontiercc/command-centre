@@ -96,15 +96,13 @@ async function callRealModel(prompt: string): Promise<{ text: string }> {
 async function candidateSessions(client: Awaited<ReturnType<typeof getTypedClient>>, nowS: number, windowDays = WINDOW_DAYS, chatgpt = false): Promise<string[]> {
   const since = nowS - windowDays * DAY;
   const pc = schema.pulseClassifications;
-  const cm = schema.coworkMessages;
   const st = chatgpt ? schema.chatgptSessionTime : schema.coworkSessionStats;
   const deep = await client
-    .select({ session_id: cm.session_id, at: sql<number>`max(${cm.occurred_at})` })
+    .select({ session_id: pc.msg_session_id, at: sql<number>`max(${pc.msg_occurred_at})` })
     .from(pc)
-    .innerJoin(cm, eq(cm.id, pc.cowork_message_id))
-    .where(and(eq(pc.classifier_status, 'classified'), gte(pc.tier, 2), gte(cm.occurred_at, since),
-      isWorkPulseSurface(cm.surface, true)))
-    .groupBy(cm.session_id);
+    .where(and(eq(pc.classifier_status, 'classified'), gte(pc.tier, 2), gte(pc.msg_occurred_at, since),
+      isWorkPulseSurface(pc.msg_surface, true)))
+    .groupBy(pc.msg_session_id);
   const latest = new Map<string, number>();
   for (const r of deep) if (r.session_id) latest.set(r.session_id, Number(r.at));
   if (!latest.size) return [];

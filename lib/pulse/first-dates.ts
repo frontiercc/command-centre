@@ -11,6 +11,7 @@
 // and the waves read the earlier of these kept dates and what is still in the tables.
 //
 // Dates only, never content. Erasure deletes a person's rows (deleteUserData).
+import { PC_MESSAGE } from '@/lib/pulse/classification-message';
 import { sql, type SQL } from 'drizzle-orm';
 import type { Vendor } from '@/lib/dashboard/vendor';
 import { vendorClause } from '@/lib/dashboard/product-sql';
@@ -40,7 +41,7 @@ export async function keepFirstDates(db: Executor, cutoffs: { workBefore: number
            MIN(cm.occurred_at),
            MIN(CASE WHEN pc.tier >= 2 THEN cm.occurred_at END)
     FROM pulse_classifications pc
-    JOIN cowork_messages cm ON cm.id = pc.cowork_message_id
+    ${PC_MESSAGE}
     WHERE pc.classifier_status = 'classified' AND pc.user_id IS NOT NULL
       AND ${isWorkPulseSurface(sql`cm.surface`, true)}
       AND cm.occurred_at < ${cutoffs.workBefore}

@@ -16,6 +16,7 @@
  * Access is the Users page's: any Work Pulse role; a contributor role sees its own department only.
  * Names and departments only, never prompt text.
  */
+import { PC_MESSAGE } from '@/lib/pulse/classification-message';
 import { NextRequest, NextResponse } from 'next/server';
 import { sql } from 'drizzle-orm';
 import { getAdminSession, canAccessCoworkPulse, isDeptScoped } from '@/lib/auth/admin-auth';
@@ -91,7 +92,7 @@ export async function GET(request: NextRequest) {
         GROUP BY cm.user_id, 2`);
       const deep = new Set((await rows(sql`
         SELECT cm.user_id, ${prod} AS v, 0 AS n, NULL AS name, NULL AS email, NULL AS department
-        FROM pulse_classifications pc JOIN cowork_messages cm ON cm.id = pc.cowork_message_id ${person}
+        FROM pulse_classifications pc ${PC_MESSAGE} ${person}
         WHERE pc.classifier_status = 'classified' AND pc.tier >= 2 AND cm.occurred_at >= ${start} AND cm.occurred_at < ${end}
           AND cm.user_id IS NOT NULL AND ${vend} ${dept}
         GROUP BY cm.user_id, 2`)).map(r => `${r.user_id}:${r.v}`));
@@ -106,7 +107,7 @@ export async function GET(request: NextRequest) {
       const frontier = (await rows(sql`
         SELECT cm.user_id, ${prod} AS v, COUNT(*) AS n,
                MAX(u.display_name) AS name, MAX(u.email) AS email, MAX(u.department) AS department
-        FROM pulse_classifications pc JOIN cowork_messages cm ON cm.id = pc.cowork_message_id ${person}
+        FROM pulse_classifications pc ${PC_MESSAGE} ${person}
         WHERE pc.classifier_status = 'classified' AND pc.tier = 3 AND cm.occurred_at >= ${start} AND cm.occurred_at < ${end}
           AND cm.user_id IS NOT NULL AND ${vend} ${dept}
         GROUP BY cm.user_id, 2 ORDER BY 3 DESC`)).map(r => ({

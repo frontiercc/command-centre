@@ -80,6 +80,7 @@ const COVERAGE: Record<string, { status: Status; why: string }> = {
   // ── deleted directly by deleteUserData ─────────────────────────────────
   'pulse_skill_runs.user_id':            { status: 'deleted', why: 'preOps' },
   'pulse_classifications.user_id':       { status: 'deleted', why: 'preOps' },
+  'pulse_classifications.msg_user_id':   { status: 'deleted', why: 'P1' },
   'pulse_events.user_id':                { status: 'deleted', why: 'preOps' },
   'pulse_team_assessments.assessed_by':  { status: 'deleted', why: 'preOps' },
   'pulse_baselines.set_by':              { status: 'deleted', why: 'preOps' },

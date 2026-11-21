@@ -12,6 +12,7 @@
 // People counts list each person once per group in a GROUP BY first and then
 // count rows, rather than COUNT(DISTINCT user_id) over every prompt: same
 // figures, without sorting every prompt in the window.
+import { PC_MESSAGE } from '@/lib/pulse/classification-message';
 import { sql } from 'drizzle-orm';
 import { getTypedClient } from '@/lib/db/client';
 import { kindExpr, vendorClause, vendorExpr, codeSessionVendorClause, productExpr } from './product-sql';
@@ -524,7 +525,7 @@ export async function getTierMixThisWeekByVendor(endS = nowS()): Promise<Record<
            SUM(CASE WHEN pc.tier = 1 THEN 1 ELSE 0 END) AS t1,
            SUM(CASE WHEN pc.tier = 2 THEN 1 ELSE 0 END) AS t2,
            SUM(CASE WHEN pc.tier = 3 THEN 1 ELSE 0 END) AS t3
-    FROM pulse_classifications pc JOIN cowork_messages cm ON cm.id = pc.cowork_message_id
+    FROM pulse_classifications pc ${PC_MESSAGE}
     WHERE pc.classifier_status = 'classified' AND cm.occurred_at >= ${endS - 7 * DAY} AND cm.occurred_at < ${endS}
     GROUP BY 1
   `);

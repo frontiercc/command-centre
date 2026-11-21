@@ -14,6 +14,7 @@
  * omitted from the update when this batch's tier is null (equivalent to
  * "leave unchanged").
  */
+import { PC_MESSAGE } from '@/lib/pulse/classification-message';
 import { and, desc, eq, inArray, lt, sql } from 'drizzle-orm';
 import { getTypedClient } from '@/lib/db/client';
 import { schema } from '@/lib/db/schema';
@@ -195,7 +196,7 @@ export async function refreshWeekFromJunction(useCaseId: string, weekStartS: num
       (SELECT COALESCE(SUM(j.prompt_count), 0) FROM use_case_session_judgements j WHERE j.session_id IN (SELECT session_id FROM s)) AS messages,
       (SELECT MAX(j.last_event_at) FROM use_case_session_judgements j WHERE j.session_id IN (SELECT session_id FROM s)) AS last_seen,
       GREATEST(
-        (SELECT MAX(pc.tier) FROM pulse_classifications pc JOIN cowork_messages cm ON cm.id = pc.cowork_message_id
+        (SELECT MAX(pc.tier) FROM pulse_classifications pc ${PC_MESSAGE}
           WHERE cm.session_id IN (SELECT session_id FROM s) AND pc.classifier_status = 'classified'),
         (SELECT MAX(csc.tier) FROM code_session_classifications csc WHERE csc.session_id IN (SELECT session_id FROM s))
       ) AS tier`);

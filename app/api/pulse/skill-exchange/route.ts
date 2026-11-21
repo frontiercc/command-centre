@@ -75,7 +75,6 @@ export async function GET(request: NextRequest) {
   const au = schema.adminUsers;
   const u = schema.users;
   const csi = schema.coworkSkillInvocations;
-  const cm = schema.coworkMessages;
   const pc = schema.pulseClassifications;
 
   // Resolve member list — all users in department, OR single user fallback
@@ -163,8 +162,7 @@ export async function GET(request: NextRequest) {
   const tierRows = await client
     .select({ skill_name: csi.skill_name, tier_at_use: sql<number | string | null>`MAX(${pc.tier})` })
     .from(csi)
-    .innerJoin(cm, eq(cm.session_id, csi.session_id))
-    .innerJoin(pc, eq(pc.cowork_message_id, cm.id))
+    .innerJoin(pc, eq(pc.msg_session_id, csi.session_id))
     .where(and(inArray(csi.user_id, memberIds), gte(csi.occurred_at, windowStart), eq(pc.classifier_status, 'classified')))
     .groupBy(csi.skill_name);
 

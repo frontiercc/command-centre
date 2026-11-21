@@ -24,6 +24,7 @@
  * flag's estimated ceiling; a row with no parseable tokens still counts its
  * real cost_usd toward spend (see `parseCoworkTokenUsage`).
  */
+import { PC_MESSAGE } from '@/lib/pulse/classification-message';
 import { coworkUsageIn, readCoworkUsage } from '@/lib/pulse/cowork/usage-daily';
 import { codeUsageIn, readCodeUsage } from '@/lib/pulse/code/usage-daily';
 import { and, eq, gte, inArray, lt, sql, type SQL } from 'drizzle-orm';
@@ -728,7 +729,7 @@ export function sessionKindSql(sessionIds: SQL): SQL {
       SELECT cm.session_id, pc.task_type, COUNT(*) AS n, MAX(cm.occurred_at) AS latest,
              (pc.task_type IN (${mech})) AS mech
       FROM pulse_classifications pc
-      JOIN cowork_messages cm ON cm.id = pc.cowork_message_id
+      ${PC_MESSAGE}
       WHERE cm.session_id IN (${sessionIds})
       GROUP BY cm.session_id, pc.task_type
     ) c

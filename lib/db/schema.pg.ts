@@ -1006,12 +1006,21 @@ export const pulseClassifications = pgTable('pulse_classifications', {
     classifier_attempts: integer().notNull().default(1),
     classifier_error: text(),
     classified_at: bigint({ mode: 'number' }).notNull(),
+    // Copies of the prompt's fields (migration 0065), kept equal to cowork_messages by database
+    // triggers, so Work Pulse reads classifications without joining the messages table.
+    msg_occurred_at: bigint({ mode: 'number' }),
+    msg_session_id: text(),
+    msg_user_id: text(),
+    msg_surface: text(),
+    msg_source: text(),
 }, (t) => [
     foreignKey({ columns: [t.user_id], foreignColumns: [users.id], name: 'pulse_classifications_user_id_fk' }),
     foreignKey({ columns: [t.cowork_message_id], foreignColumns: [coworkMessages.id], name: 'pulse_classifications_cowork_message_id_fk' }),
     index('idx_pulse_class_status').on(t.classifier_status),
     index('idx_pulse_class_tier').on(t.tier),
     index('idx_pulse_class_user_time').on(t.user_id, t.classified_at),
+    index('idx_pulse_class_msg_occurred_at').on(t.msg_occurred_at),
+    index('idx_pulse_class_msg_session').on(t.msg_session_id),
     unique('pulse_classifications_cowork_message_id_uq').on(t.cowork_message_id),
 ]);
 
