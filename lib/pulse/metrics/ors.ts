@@ -6,7 +6,7 @@
 import { and, eq, gte, inArray, isNotNull, sql } from 'drizzle-orm';
 import { getTypedClient } from '@/lib/db/client';
 import { schema } from '@/lib/db/schema';
-import { messageVendor, connectorVendor, skillVendor } from '@/lib/pulse/vendor-filter';
+import { classificationVendor, connectorVendor, skillVendor } from '@/lib/pulse/vendor-filter';
 import type { Vendor } from '@/lib/dashboard/vendor';
 
 // ─── Component computations ───────────────────────────────────────────────────
@@ -24,14 +24,12 @@ async function computeT2Breadth(
 
   const db = await getTypedClient();
   const pc = schema.pulseClassifications;
-  const cm = schema.coworkMessages;
 
   // Active participants: any classified work in window (by when work happened)
   const activeRows = await db
     .selectDistinct({ user_id: pc.user_id })
     .from(pc)
-    .innerJoin(cm, eq(cm.id, pc.cowork_message_id))
-    .where(and(inArray(pc.user_id, teamMemberIds), eq(pc.classifier_status, 'classified'), gte(cm.occurred_at, windowStart), messageVendor(vendor)));
+    .where(and(inArray(pc.user_id, teamMemberIds), eq(pc.classifier_status, 'classified'), gte(pc.msg_occurred_at, windowStart), classificationVendor(vendor)));
 
   const totalParticipants = activeRows.length;
   if (totalParticipants < 2) return { breadth: null, totalParticipants };
@@ -41,14 +39,13 @@ async function computeT2Breadth(
   const tier2PlusRows = await db
     .selectDistinct({ user_id: pc.user_id })
     .from(pc)
-    .innerJoin(cm, eq(cm.id, pc.cowork_message_id))
     .where(
       and(
         inArray(pc.user_id, activeIds),
         eq(pc.classifier_status, 'classified'),
-        gte(cm.occurred_at, windowStart),
+        gte(pc.msg_occurred_at, windowStart),
         gte(pc.tier, 2),
-        messageVendor(vendor),
+        classificationVendor(vendor),
       ),
     );
 
@@ -73,16 +70,14 @@ async function computeConnectorOverlap(
 
   const db = await getTypedClient();
   const cmi = schema.coworkMcpInvocations;
-  const cm = schema.coworkMessages;
   const pc = schema.pulseClassifications;
 
   // Find all (mcp_server, user_id) pairs at tier≥2 for active members in window.
-  // Join cowork_mcp_invocations → cowork_messages (via session_id) → pulse_classifications.
+  // Join cowork_mcp_invocations → pulse_classifications by the prompt's session (copied, migration 0065).
   const connectorRows = await db
     .selectDistinct({ mcp_server: cmi.mcp_server, user_id: cmi.user_id })
     .from(cmi)
-    .innerJoin(cm, eq(cm.session_id, cmi.session_id))
-    .innerJoin(pc, eq(pc.cowork_message_id, cm.id))
+    .innerJoin(pc, eq(pc.msg_session_id, cmi.session_id))
     .where(
       and(
         inArray(cmi.user_id, activeIds),
@@ -194,7 +189,6 @@ async function computeOrsForMembers(memberIds: string[], vendor: Vendor = 'all')
 
   const db = await getTypedClient();
   const pc = schema.pulseClassifications;
-  const cm = schema.coworkMessages;
 
   const THIRTY_DAYS = 30 * 24 * 60 * 60;
   const now = Math.floor(Date.now() / 1000);
@@ -207,8 +201,7 @@ async function computeOrsForMembers(memberIds: string[], vendor: Vendor = 'all')
   const activeRows = await db
     .selectDistinct({ user_id: pc.user_id })
     .from(pc)
-    .innerJoin(cm, eq(cm.id, pc.cowork_message_id))
-    .where(and(inArray(pc.user_id, memberIds), eq(pc.classifier_status, 'classified'), gte(cm.occurred_at, windowStart), messageVendor(vendor)));
+    .where(and(inArray(pc.user_id, memberIds), eq(pc.classifier_status, 'classified'), gte(pc.msg_occurred_at, windowStart), classificationVendor(vendor)));
 
   const activeIds = activeRows.map((r) => r.user_id);
 

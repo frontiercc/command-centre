@@ -15,10 +15,11 @@
  * `unallocated` rather than being dropped, so the report always reconciles:
  * `grandTotalUsd === Σ costCentres.totalUsd + unallocated.totalUsd` (±0.005).
  */
+import { coworkUsageIn } from '@/lib/pulse/cowork/usage-daily';
+import { codeUsageIn } from '@/lib/pulse/code/usage-daily';
 import { sql } from 'drizzle-orm';
 import { openaiShown } from '@/lib/sources/openai-visibility';
 import { getTypedClient } from '@/lib/db/client';
-import { jsonToText } from '@/lib/db/json';
 import { monthBounds, isCurrentMonth } from '@/lib/finance/period';
 import { priceTokens, getCodeModelRates, spendIsPartlyEstimated, normalizeModelId, type ModelRates } from '@/lib/pulse/code/rates';
 import { valueChatgptCost } from '@/lib/openai/cost-value';
@@ -228,6 +229,16 @@ async function loadLookups(db: unknown): Promise<ChargebackLookups> {
   return { rates, deptByUserId, deptToCentre, openai: { chatgpt: o?.chatgpt === true, codex: o?.codex === true, shown } };
 }
 
+type CodeSpendRow = {
+  user_id: string | null;
+  model: string | null;
+  i: number | string | null;
+  o: number | string | null;
+  cw: number | string | null;
+  cr: number | string | null;
+  seg: number | string | null;
+};
+
 export async function buildChargeback(
   period: string,
   nowS: number = Math.floor(Date.now() / 1000),
@@ -241,6 +252,8 @@ export async function buildChargeback(
 ): Promise<ChargebackReport> {
   const db = await getTypedClient();
   const only = opts.userIds;
+  const idList = only ? (only.length ? sql.join(only.map(id => sql`${id}`), sql`, `) : sql`NULL`) : null;
+  const coworkUsers = { nowS, ...(idList ? { rawWhere: sql`m.user_id IN (${idList})`, summaryWhere: sql`user_id IN (${idList})` } : {}) };
   const forUsers = (col: string) => only
     ? sql` AND ${sql.raw(col)} IN (${only.length ? sql.join(only.map(id => sql`${id}`), sql`, `) : sql`NULL`})`
     : sql``;
@@ -327,40 +340,51 @@ export async function buildChargeback(
   };
   const [codeRows, coworkRows, coworkTokenRows, chatgptRows, codexRows] = await Promise.all([
     // Code tokens per (user_id, model).
-    rawAll<{
-      user_id: string | null;
-      model: string | null;
-      i: number | string | null;
-      o: number | string | null;
-      cw: number | string | null;
-      cr: number | string | null;
-      seg: number | string | null;
-    }>(
+    // From the daily totals (lib/pulse/code/usage-daily.ts) when nobody moved department this
+    // month; a move splits a person's spend at its exact time, so those months read the calls.
+    moverIds.length > 0
+      ? rawAll<CodeSpendRow>(
+          db,
+          sql`SELECT user_id, model,
+                    SUM(input_tokens) AS i, SUM(output_tokens) AS o,
+                    SUM(cache_creation_tokens) AS cw, SUM(cache_read_tokens) AS cr,
+                    ${segOf('code_assistant_meta', 'occurred_at')} AS seg
+             FROM code_assistant_meta
+             WHERE occurred_at >= ${start} AND occurred_at < ${end}${forUsers('user_id')}
+             GROUP BY user_id, model, seg`
+        )
+      : rawAll<CodeSpendRow>(
+          db,
+          sql`SELECT NULLIF(user_id, '') AS user_id, NULLIF(model, '') AS model,
+                    SUM(input_tokens) AS i, SUM(output_tokens) AS o,
+                    SUM(cache_creation_tokens) AS cw, SUM(cache_read_tokens) AS cr, 0 AS seg
+             FROM (${codeUsageIn(start, end, { nowS, ...(only ? { rawWhere: sql`m.user_id IN (${only.length ? sql.join(only.map(id => sql`${id}`), sql`, `) : sql`NULL`})`, summaryWhere: sql`user_id IN (${only.length ? sql.join(only.map(id => sql`${id}`), sql`, `) : sql`NULL`})` } : {}) })}) u
+             GROUP BY NULLIF(user_id, ''), NULLIF(model, '')`
+        ),
+    // Cowork spend per user: from the daily totals (lib/pulse/cowork/usage-daily.ts) unless someone
+    // moved department this month, when the calls are read so the move splits at its exact time.
+    moverIds.length > 0
+      ? rawAll<{ user_id: string | null; c: number | string | null; seg: number | string | null }>(
+          db,
+          sql`SELECT user_id, COALESCE(SUM(cost_usd), 0) AS c, ${segOf('cowork_messages', 'occurred_at')} AS seg
+             FROM cowork_messages
+             WHERE message_type = 'cowork_api_request' AND product IS NULL AND occurred_at >= ${start} AND occurred_at < ${end}${forUsers('user_id')}
+             GROUP BY user_id, seg`
+        )
+      : rawAll<{ user_id: string | null; c: number | string | null; seg: number | string | null }>(
+          db,
+          sql`SELECT NULLIF(user_id, '') AS user_id, COALESCE(SUM(cost_usd), 0) AS c, 0 AS seg
+             FROM (${coworkUsageIn(start, end, coworkUsers)}) u
+             WHERE product = ''
+             GROUP BY NULLIF(user_id, '')`
+        ),
+    // Cowork token totals and cost coverage (calls, calls with a cost), from the daily totals.
+    rawAll<{ calls: number | string | null; costed: number | string | null; i: number | string | null; o: number | string | null; cw: number | string | null; cr: number | string | null }>(
       db,
-      sql`SELECT user_id, model,
-                SUM(input_tokens) AS i, SUM(output_tokens) AS o,
-                SUM(cache_creation_tokens) AS cw, SUM(cache_read_tokens) AS cr,
-                ${segOf('code_assistant_meta', 'occurred_at')} AS seg
-         FROM code_assistant_meta
-         WHERE occurred_at >= ${start} AND occurred_at < ${end}${forUsers('user_id')}
-         GROUP BY user_id, model, seg`
-    ),
-    // Cowork spend per user.
-    rawAll<{ user_id: string | null; c: number | string | null; seg: number | string | null }>(
-      db,
-      sql`SELECT user_id, COALESCE(SUM(cost_usd), 0) AS c, ${segOf('cowork_messages', 'occurred_at')} AS seg
-         FROM cowork_messages
-         WHERE message_type = 'cowork_api_request' AND product IS NULL AND occurred_at >= ${start} AND occurred_at < ${end}${forUsers('user_id')}
-         GROUP BY user_id, seg`
-    ),
-    // Cowork model calls one by one: each one's token_usage for the surface
-    // tokens, and whether it carries a cost, for the cost coverage. The
-    // coverage counts exactly these rows, so one read serves both.
-    rawAll<{ token_usage: unknown; has_cost: boolean }>(
-      db,
-      sql`SELECT token_usage, (cost_usd IS NOT NULL) AS has_cost
-         FROM cowork_messages
-         WHERE message_type = 'cowork_api_request' AND product IS NULL AND occurred_at >= ${start} AND occurred_at < ${end}${forUsers('user_id')}`
+      sql`SELECT SUM(calls) AS calls, SUM(costed) AS costed, SUM(input_tokens) AS i, SUM(output_tokens) AS o,
+                SUM(cache_creation_tokens) AS cw, SUM(cache_read_tokens) AS cr
+         FROM (${coworkUsageIn(start, end, coworkUsers)}) u
+         WHERE product = ''`
     ),
     hasOpenAi
       ? rawAll<OpenAiRow>(db, sql`
@@ -480,21 +504,12 @@ export async function buildChargeback(
   // --- Cowork surface tokens (parsed from token_usage JSON, malformed/null skipped) ---
   // token_usage is `jsonb` (codec returns a parsed object) — jsonToText()
   // normalises it back to a JSON string for JSON.parse() below.
-  for (const row of coworkTokenRows) {
-    const rawJson = jsonToText(row.token_usage);
-    if (!rawJson) continue;
-    let parsed: { inputTokens?: number; outputTokens?: number; cacheReadTokens?: number; cacheCreationTokens?: number };
-    try {
-      parsed = JSON.parse(rawJson);
-    } catch {
-      continue; // malformed JSON — skip this row, never throw
-    }
-    if (!parsed || typeof parsed !== 'object') continue;
-    coworkSurfaceTokens.input += Number(parsed.inputTokens) || 0;
-    coworkSurfaceTokens.output += Number(parsed.outputTokens) || 0;
-    coworkSurfaceTokens.cacheWrite += Number(parsed.cacheCreationTokens) || 0;
-    coworkSurfaceTokens.cacheRead += Number(parsed.cacheReadTokens) || 0;
-  }
+  // Cowork token totals: the daily totals already read each call's token_usage as this used to.
+  const coworkTotals = coworkTokenRows[0];
+  coworkSurfaceTokens.input += Number(coworkTotals?.i ?? 0);
+  coworkSurfaceTokens.output += Number(coworkTotals?.o ?? 0);
+  coworkSurfaceTokens.cacheWrite += Number(coworkTotals?.cw ?? 0);
+  coworkSurfaceTokens.cacheRead += Number(coworkTotals?.cr ?? 0);
 
   // --- ChatGPT and Codex ---
   // A model with no rate is named, never counted as $0. Tokens stay apart
@@ -541,8 +556,8 @@ export async function buildChargeback(
 
   // --- Cowork cost coverage (from the same model-call rows as the tokens) ---
   const coworkCostCoverage = {
-    total: coworkTokenRows.length,
-    withCost: coworkTokenRows.filter(r => r.has_cost === true).length,
+    total: Number(coworkTotals?.calls ?? 0),
+    withCost: Number(coworkTotals?.costed ?? 0),
   };
 
   // --- Bucket users into cost centres / unallocated ---

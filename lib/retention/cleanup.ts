@@ -7,6 +7,8 @@
 // leave content stripped/deleted from some tables but not others, which is
 // exactly the all-or-nothing guarantee the original single `db.transaction`
 // gave), row counts via the rowsAffected() helper.
+import { pruneCodeUsageDaily } from '@/lib/pulse/code/usage-daily';
+import { pruneCoworkUsageDaily } from '@/lib/pulse/cowork/usage-daily';
 import { and, eq, gt, inArray, isNotNull, isNull, lt, ne, or, sql } from 'drizzle-orm';
 import { getTypedClient } from '@/lib/db/client';
 import { schema } from '@/lib/db/schema';
@@ -434,6 +436,8 @@ export async function runRetentionCleanup(): Promise<CleanupResult> {
       coworkAffected = rowsAffected(
         await tx.delete(schema.coworkMessages).where(and(lt(schema.coworkMessages.occurred_at, coworkCutoff), or(eq(schema.coworkMessages.surface, 'cowork'), isNull(schema.coworkMessages.surface))))
       );
+      // The daily Cowork totals (migration 0064) follow the model calls they add up.
+      await pruneCoworkUsageDaily(tx, coworkCutoff);
       codeAffected = rowsAffected(
         await tx.delete(schema.coworkMessages).where(and(lt(schema.coworkMessages.occurred_at, codeCutoff), eq(schema.coworkMessages.surface, 'code')))
       );
@@ -460,6 +464,8 @@ export async function runRetentionCleanup(): Promise<CleanupResult> {
     codeAffected += rowsAffected(
       await tx.delete(schema.codeAssistantMeta).where(lt(schema.codeAssistantMeta.occurred_at, codeCutoff))
     );
+    // The daily Claude Code summary (migration 0063) follows the calls it adds up.
+    await pruneCodeUsageDaily(tx, codeCutoff);
     codeAffected += rowsAffected(
       await tx.delete(schema.codeOtelMetrics).where(lt(schema.codeOtelMetrics.occurred_at, codeCutoff))
     );

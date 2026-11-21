@@ -22,6 +22,7 @@
  * also stops a chart pointing at anyone), and a group with under MIN_MEASURED measured sessions
  * cannot be compared.
  */
+import { PC_MESSAGE } from '@/lib/pulse/classification-message';
 import { sql, type SQL } from 'drizzle-orm';
 import { getTypedClient } from '@/lib/db/client';
 import { vendorClause } from '@/lib/dashboard/product-sql';
@@ -147,7 +148,7 @@ export async function readPromptRows(vendor: Vendor, since: number, until = Numb
   return (await (client as unknown as { execute: (query: SQL) => Promise<{ rows: unknown[] }> }).execute(sql`
     SELECT pc.user_id, ${departmentSql()} AS department, pc.tier, pc.task_type, cm.session_id, cm.occurred_at
     FROM pulse_classifications pc
-    JOIN cowork_messages cm ON cm.id = pc.cowork_message_id
+    ${PC_MESSAGE}
     LEFT JOIN users u ON u.id = pc.user_id
     LEFT JOIN admin_users au ON au.linked_cowork_user_id = pc.user_id
     WHERE pc.classifier_status = 'classified'

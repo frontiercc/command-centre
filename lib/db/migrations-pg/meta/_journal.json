@@ -442,6 +442,27 @@
       "when": 1792540807000,
       "tag": "0062_scan_indexes",
       "breakpoints": true
+    },
+    {
+      "idx": 63,
+      "version": "7",
+      "when": 1792627207000,
+      "tag": "0063_code_usage_daily",
+      "breakpoints": true
+    },
+    {
+      "idx": 64,
+      "version": "7",
+      "when": 1792713607000,
+      "tag": "0064_cowork_usage_daily",
+      "breakpoints": true
+    },
+    {
+      "idx": 65,
+      "version": "7",
+      "when": 1792800007000,
+      "tag": "0065_classification_message_fields",
+      "breakpoints": true
     }
   ]
 }

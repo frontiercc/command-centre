@@ -151,12 +151,11 @@ async function candidateSessions(client: Awaited<ReturnType<typeof getTypedClien
   const pe = schema.pulseEvents;
   const d = schema.coworkSessionDescriptions;
   const t3 = await client
-    .select({ session_id: cm.session_id, at: sql<number>`max(${cm.occurred_at})` })
+    .select({ session_id: pc.msg_session_id, at: sql<number>`max(${pc.msg_occurred_at})` })
     .from(pc)
-    .innerJoin(cm, eq(cm.id, pc.cowork_message_id))
-    .where(and(eq(pc.classifier_status, 'classified'), eq(pc.tier, 3), gte(cm.occurred_at, since),
-      isWorkPulseSurface(cm.surface, true)))
-    .groupBy(cm.session_id);
+    .where(and(eq(pc.classifier_status, 'classified'), eq(pc.tier, 3), gte(pc.msg_occurred_at, since),
+      isWorkPulseSurface(pc.msg_surface, true)))
+    .groupBy(pc.msg_session_id);
   const caps = await client
     .select({ session_id: cm.session_id, at: sql<number>`max(${pe.detected_at})` })
     .from(pe)

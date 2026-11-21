@@ -14,6 +14,7 @@
  * Every count here is measured or the classifier's stored judgement; nothing is written by a
  * model. A figure that is not captured comes back null, never 0.
  */
+import { PC_MESSAGE } from '@/lib/pulse/classification-message';
 import { sql, type SQL } from 'drizzle-orm';
 import { getTypedClient } from '@/lib/db/client';
 import { vendorClause, workPulseToolClause, personPerProduct } from '@/lib/dashboard/product-sql';
@@ -93,7 +94,7 @@ export async function buildMyPeriod(opts: {
   // ── Every classified task in this window and the one before, by bucket and tier ──
   const taskRows = await rows<{ at: number | string; tier: number | string }>(sql`
     SELECT cm.occurred_at AS at, pc.tier AS tier
-    FROM pulse_classifications pc JOIN cowork_messages cm ON cm.id = pc.cowork_message_id
+    FROM pulse_classifications pc ${PC_MESSAGE}
     WHERE ${whoIn('pc.user_id')} AND pc.classifier_status = 'classified'
       AND cm.occurred_at >= ${priorStart} AND cm.occurred_at < ${end} AND ${msgVendor}`);
   const realTrend = zeros();
@@ -110,7 +111,7 @@ export async function buildMyPeriod(opts: {
   const yearStart = mondayOf(opts.nowS) - 52 * WEEK;
   const weekRows = await rows<{ wk: number | string; tier: number | string; c: number | string }>(sql`
     SELECT FLOOR((cm.occurred_at - ${yearStart}) / ${WEEK}) AS wk, pc.tier AS tier, COUNT(*) AS c
-    FROM pulse_classifications pc JOIN cowork_messages cm ON cm.id = pc.cowork_message_id
+    FROM pulse_classifications pc ${PC_MESSAGE}
     WHERE ${whoIn('pc.user_id')} AND pc.classifier_status = 'classified'
       AND cm.occurred_at >= ${yearStart} AND ${msgVendor}
     GROUP BY 1, 2`);
@@ -136,7 +137,7 @@ export async function buildMyPeriod(opts: {
     const pr = await rows<{ deep: number | string; active: number | string }>(sql`
       SELECT COUNT(DISTINCT CASE WHEN pc.tier >= 2 THEN ${sql.raw(personPerProduct('cm.'))} END) AS deep,
              COUNT(DISTINCT ${sql.raw(personPerProduct('cm.'))}) AS active
-      FROM pulse_classifications pc JOIN cowork_messages cm ON cm.id = pc.cowork_message_id
+      FROM pulse_classifications pc ${PC_MESSAGE}
       WHERE ${whoIn('pc.user_id')} AND pc.classifier_status = 'classified'
         AND cm.occurred_at >= ${start} AND cm.occurred_at < ${end} AND ${msgVendor}`);
     people = { deep: n(pr[0]?.deep), active: n(pr[0]?.active) };
@@ -149,14 +150,14 @@ export async function buildMyPeriod(opts: {
     // A department against the rest of the organisation, as shares of judged tasks.
     const d = await rows<{ people: number | string; real: number | string; total: number | string }>(sql`
       SELECT COUNT(DISTINCT pc.user_id) AS people, SUM(CASE WHEN pc.tier >= 2 THEN 1 ELSE 0 END) AS real, COUNT(*) AS total
-      FROM pulse_classifications pc JOIN cowork_messages cm ON cm.id = pc.cowork_message_id
+      FROM pulse_classifications pc ${PC_MESSAGE}
       WHERE pc.classifier_status = 'classified' AND NOT ${whoIn('pc.user_id')}
         AND cm.occurred_at >= ${start} AND cm.occurred_at < ${end} AND ${msgVendor}`);
     orgShare = n(d[0]?.people) >= 3 && n(d[0]?.total) > 0 ? n(d[0]?.real) / n(d[0]?.total) : null;
   } else if (department) {
     const d = await rows<{ people: number | string; real: number | string }>(sql`
       SELECT COUNT(DISTINCT pc.user_id) AS people, SUM(CASE WHEN pc.tier >= 2 THEN 1 ELSE 0 END) AS real
-      FROM pulse_classifications pc JOIN cowork_messages cm ON cm.id = pc.cowork_message_id
+      FROM pulse_classifications pc ${PC_MESSAGE}
       WHERE pc.classifier_status = 'classified' AND pc.user_id IN (${deptMembers(department)})
         AND cm.occurred_at >= ${start} AND cm.occurred_at < ${end} AND ${msgVendor}`);
     const people = n(d[0]?.people);

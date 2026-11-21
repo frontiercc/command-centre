@@ -80,6 +80,7 @@ const COVERAGE: Record<string, { status: Status; why: string }> = {
   // ── deleted directly by deleteUserData ─────────────────────────────────
   'pulse_skill_runs.user_id':            { status: 'deleted', why: 'preOps' },
   'pulse_classifications.user_id':       { status: 'deleted', why: 'preOps' },
+  'pulse_classifications.msg_user_id':   { status: 'deleted', why: 'P1' },
   'pulse_events.user_id':                { status: 'deleted', why: 'preOps' },
   'pulse_team_assessments.assessed_by':  { status: 'deleted', why: 'preOps' },
   'pulse_baselines.set_by':              { status: 'deleted', why: 'preOps' },
@@ -101,6 +102,8 @@ const COVERAGE: Record<string, { status: Status; why: string }> = {
   'use_case_session_judgements.user_id': { status: 'deleted', why: 'model-written reason about a session (migration 0032)' },
   'chat_assistant_meta.user_id':         { status: 'deleted', why: 'blocker-class: NO ACTION FK (mig 0004)' },
   'code_assistant_meta.user_id':         { status: 'deleted', why: 'P1' },
+  'code_usage_daily.user_id':            { status: 'deleted', why: 'P1' },
+  'cowork_usage_daily.user_id':          { status: 'deleted', why: 'P1' },
   'openai_costs.user_id':                { status: 'deleted', why: 'a person\'s hourly ChatGPT and Codex cost (migration 0043)' },
   'openai_replies.user_id':              { status: 'deleted', why: 'a person\'s ChatGPT reply times (migration 0043)' },
   'codex_turns.user_id':                 { status: 'deleted', why: 'a person\'s Codex turns (migration 0043)' },

@@ -57,7 +57,7 @@ describe('the comparison', () => {
     const g = team({ shallow: 2 });
     expect(g.verdict).toBe('too_few');
     expect(g.gap).toBeNull();
-    expect(refusalFor(g)).toMatch(/Too few people to tell/);
+    expect(refusalFor(g)).toMatch(/Too few people to compare/);
   });
   it('cannot compare when too little was measured, never treating unmeasured as producing nothing', () => {
     const g = groupsFrom('Finance', [
@@ -66,7 +66,7 @@ describe('the comparison', () => {
     ]);
     expect(g.verdict).toBe('not_measured');
     expect(g.deep.share).toBeNull();
-    expect(refusalFor(g)).toMatch(/Too little was measured/);
+    expect(refusalFor(g)).toMatch(/Too little to compare yet/);
   });
   it('counts people in neither group', () => {
     const g = team({ light: 2, hardly: 3 });
@@ -102,15 +102,17 @@ describe('the hire and replace cards', () => {
   it('holds the hires while there is a gap, and says it cannot size it', () => {
     const c = hireCard(team(), 2, undefined, NOW);
     expect(c.recommended).toBe('hold');
-    expect(c.headline).toBe('Hold the 2 hires. Close the gap first.');
-    expect(c.body.join(' ')).toMatch(/cannot say how many hires/);
+    expect(c.headline).toBe('Finance asked for 2 hires. Coach the 4 first.');
+    expect(c.body.join(' ')).toMatch(/mostly do Meaningful or Frontier work: /);
+    expect(c.body.join(' ')).toMatch(/The other 4 mostly do Administrative work: /);
+    expect(c.buttons.hold).toBe('Coach first');
     expect(c.body.join(' ')).not.toMatch(/—/);
   });
   it('approves when there is no gap to close', () => {
     const c = hireCard(team({ deepProduced: 2, shallowProduced: 2 }), 1, undefined, NOW);
     expect(c.recommended).toBe('go');
-    expect(c.headline).toBe('Approve the 1 hire.');
-    expect(c.body[0]).toMatch(/no more often than the 4 who do not \(33% against 33%\)/);
+    expect(c.headline).toBe('Finance asked for 1 hire. Approve it.');
+    expect(c.body[0]).toMatch(/no more often than the other 4 \(33% against 33%\)/);
   });
   it('never says "no more often" when the first group does produce more, just under the gap', () => {
     // 60 sessions a group: 9 and 6 produced something, 15% against 10%.
@@ -120,14 +122,14 @@ describe('the hire and replace cards', () => {
     ]);
     const c = hireCard(g, 1, undefined, NOW);
     expect(c.recommended).toBe('go');
-    expect(c.body[0]).toBe('The 3 who do mostly meaningful work produce something a little more often than the 3 who do not (15% against 10%), a difference under 10 points.');
+    expect(c.body[0]).toBe('The 3 who mostly do Meaningful or Frontier work make something a little more often than the other 3 (15% against 10%).');
   });
   it('refuses rather than guesses on a small team', () => {
     const c = hireCard(team({ deep: 1 }), 2, undefined, NOW);
     expect(c.refusal).not.toBeNull();
   });
   it('says replace them when nothing in the team makes up the difference', () => {
-    expect(backfillCard(team({ deepProduced: 2, shallowProduced: 2 }), undefined, NOW).headline).toBe('Replace them.');
+    expect(backfillCard(team({ deepProduced: 2, shallowProduced: 2 }), undefined, NOW).headline).toBe('Someone has left Finance. Replace them.');
     expect(backfillCard(team(), undefined, NOW).recommended).toBe('hold');
   });
 });
@@ -139,7 +141,7 @@ describe('the follow-up', () => {
       { deepPeople: 5, shallowPeople: 3, deepShare: 0.6, shallowShare: 0.35 },
     );
     expect(s).toMatch(/^Since then, 5 of 8/);
-    expect(s).toMatch(/35% of the time, against 20% then/);
+    expect(s).toMatch(/make something in 35% of their sessions, against 20% then/);
     expect(s).not.toMatch(/because/i);
   });
   it('uses the current label, so a decision saved under an older one still reads well', () => {

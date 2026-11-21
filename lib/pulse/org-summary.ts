@@ -8,6 +8,8 @@
 // COUNT/SUM/AVG aggregate is Number()-coerced (bigint/numeric come
 // back as STRINGS on Postgres). otel_events.tool_input is jsonb on Postgres —
 // its `decision` field is read with `->>'decision'`.
+import { PC_MESSAGE } from '@/lib/pulse/classification-message';
+import { coworkUsageIn, OPEN_END } from '@/lib/pulse/cowork/usage-daily';
 import { getTierNames } from '@/lib/pulse/tier-config';
 import { and, eq, gte, isNotNull, lt, sql } from 'drizzle-orm';
 import { weekStarts } from '@/lib/pulse/period';
@@ -120,12 +122,11 @@ export async function buildOrgSummary(vendor: Vendor, quarterly: boolean) {
   const tierRow = tierRows[0];
 
   // OTel model mix — top models by request count (30 days)
+  // From the Cowork daily totals (lib/pulse/cowork/usage-daily.ts).
   const modelMixRaw = await rawAll<{ model: string; cnt: number | string }>(client, sql`
-    SELECT model, COUNT(*) AS cnt
-    FROM cowork_messages
-    WHERE message_type = 'cowork_api_request'
-      AND occurred_at >= ${thirtyDaysAgo}
-      AND model IS NOT NULL
+    SELECT model, SUM(calls) AS cnt
+    FROM (${coworkUsageIn(thirtyDaysAgo, OPEN_END)}) u
+    WHERE model <> ''
     GROUP BY model
     ORDER BY cnt DESC
   `);
@@ -218,7 +219,7 @@ export async function buildOrgSummary(vendor: Vendor, quarterly: boolean) {
            SUM(CASE WHEN pc.tier = 1 THEN 1 ELSE 0 END) AS t1,
            SUM(CASE WHEN pc.tier = 2 THEN 1 ELSE 0 END) AS t2,
            SUM(CASE WHEN pc.tier = 3 THEN 1 ELSE 0 END) AS t3
-    FROM pulse_classifications pc JOIN cowork_messages cm ON cm.id = pc.cowork_message_id
+    FROM pulse_classifications pc ${PC_MESSAGE}
     WHERE pc.classifier_status = 'classified' AND cm.occurred_at >= ${firstWeek} AND cm.occurred_at < ${thisWeek}
       AND ${sql.raw(vendorClause(vendor, 'cm.'))}
     GROUP BY 1
@@ -228,7 +229,7 @@ export async function buildOrgSummary(vendor: Vendor, quarterly: boolean) {
     SELECT SUM(CASE WHEN pc.tier = 1 THEN 1 ELSE 0 END) AS t1,
            SUM(CASE WHEN pc.tier = 2 THEN 1 ELSE 0 END) AS t2,
            SUM(CASE WHEN pc.tier = 3 THEN 1 ELSE 0 END) AS t3
-    FROM pulse_classifications pc JOIN cowork_messages cm ON cm.id = pc.cowork_message_id
+    FROM pulse_classifications pc ${PC_MESSAGE}
     WHERE pc.classifier_status = 'classified' AND cm.occurred_at >= ${pStart} AND cm.occurred_at < ${bStart}
       AND ${sql.raw(vendorClause(vendor, 'cm.'))}
   `);
@@ -292,13 +293,13 @@ export async function buildOrgSummary(vendor: Vendor, quarterly: boolean) {
   // the same, and how many people do half of all frontier work (counts only, no names).
   const deepPeopleRow = await rawGet<{ n: number | string }>(client, sql`
     SELECT COUNT(DISTINCT ${sql.raw(personPerProduct('cm.'))}) AS n
-    FROM pulse_classifications pc JOIN cowork_messages cm ON cm.id = pc.cowork_message_id
+    FROM pulse_classifications pc ${PC_MESSAGE}
     WHERE pc.classifier_status = 'classified' AND pc.tier >= 2 AND cm.occurred_at >= ${bStart} AND cm.occurred_at < ${bEnd}
       AND cm.user_id IS NOT NULL AND ${sql.raw(vendorClause(vendor, 'cm.'))}
   `);
   const deepPeopleWeekRows = await rawAll<{ w: number | string; n: number | string }>(client, sql`
     SELECT FLOOR((cm.occurred_at - ${firstWeek}) / ${7 * 86400}) AS w, COUNT(DISTINCT ${sql.raw(personPerProduct('cm.'))}) AS n
-    FROM pulse_classifications pc JOIN cowork_messages cm ON cm.id = pc.cowork_message_id
+    FROM pulse_classifications pc ${PC_MESSAGE}
     WHERE pc.classifier_status = 'classified' AND pc.tier >= 2 AND cm.occurred_at >= ${firstWeek} AND cm.occurred_at < ${thisWeek}
       AND cm.user_id IS NOT NULL AND ${sql.raw(vendorClause(vendor, 'cm.'))}
     GROUP BY 1
@@ -306,7 +307,7 @@ export async function buildOrgSummary(vendor: Vendor, quarterly: boolean) {
   const deepPeopleByWeek = new Map(deepPeopleWeekRows.map(r => [Number(r.w), Number(r.n)]));
   const frontierRows = (await rawAll<{ n: number | string; v: string }>(client, sql`
     SELECT COUNT(*) AS n, MIN(${sql.raw(vendorExpr('cm.'))}) AS v
-    FROM pulse_classifications pc JOIN cowork_messages cm ON cm.id = pc.cowork_message_id
+    FROM pulse_classifications pc ${PC_MESSAGE}
     WHERE pc.classifier_status = 'classified' AND pc.tier = 3 AND cm.occurred_at >= ${bStart} AND cm.occurred_at < ${bEnd}
       AND cm.user_id IS NOT NULL AND ${sql.raw(vendorClause(vendor, 'cm.'))}
     GROUP BY ${sql.raw(personPerProduct('cm.'))} ORDER BY 1 DESC
@@ -336,7 +337,7 @@ export async function buildOrgSummary(vendor: Vendor, quarterly: boolean) {
     SELECT SUM(CASE WHEN pc.tier = 1 THEN 1 ELSE 0 END) AS t1,
            SUM(CASE WHEN pc.tier = 2 THEN 1 ELSE 0 END) AS t2,
            SUM(CASE WHEN pc.tier = 3 THEN 1 ELSE 0 END) AS t3
-    FROM pulse_classifications pc JOIN cowork_messages cm ON cm.id = pc.cowork_message_id
+    FROM pulse_classifications pc ${PC_MESSAGE}
     WHERE pc.classifier_status = 'classified' AND cm.occurred_at >= ${bStart} AND cm.occurred_at < ${bEnd}
       AND ${sql.raw(vendorClause(vendor, 'cm.'))}
   `);

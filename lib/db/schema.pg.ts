@@ -219,6 +219,67 @@ export const codeAssistantMeta = pgTable('code_assistant_meta', {
     index('idx_cam_agent_name').on(t.agent_name, t.occurred_at).where(sql`agent_name IS NOT NULL`),
 ]);
 
+// Claude Code model calls added up per session, UTC day and model (migration 0063), kept current by
+// lib/pulse/code/usage-daily.ts. Text columns use '' for "none" so they can be in the key.
+export const codeUsageDaily = pgTable('code_usage_daily', {
+    session_id: text().notNull(),
+    day_start: bigint({ mode: 'number' }).notNull(),
+    user_id: text().notNull().default(''),
+    model: text().notNull().default(''),
+    agent_name: text().notNull().default(''),
+    skill_name: text().notNull().default(''),
+    effort: text().notNull().default(''),
+    query_source: text().notNull().default(''),
+    source: text().notNull().default(''),
+    calls: integer().notNull().default(0),
+    model_prompts: integer().notNull().default(0),
+    skill_prompts: integer().notNull().default(0),
+    agent_prompts: integer().notNull().default(0),
+    input_tokens: bigint({ mode: 'number' }).notNull().default(0),
+    output_tokens: bigint({ mode: 'number' }).notNull().default(0),
+    cache_creation_tokens: bigint({ mode: 'number' }).notNull().default(0),
+    cache_read_tokens: bigint({ mode: 'number' }).notNull().default(0),
+    commit_count: bigint({ mode: 'number' }).notNull().default(0),
+    error_count: bigint({ mode: 'number' }).notNull().default(0),
+    tool_use_count: bigint({ mode: 'number' }).notNull().default(0),
+    first_at: bigint({ mode: 'number' }).notNull(),
+    last_at: bigint({ mode: 'number' }).notNull(),
+}, (t) => [
+    primaryKey({ columns: [t.session_id, t.day_start, t.user_id, t.model, t.agent_name, t.skill_name, t.effort, t.query_source, t.source] }),
+    index('idx_cud_day').on(t.day_start),
+    index('idx_cud_user_day').on(t.user_id, t.day_start),
+    index('idx_cud_agent').on(t.agent_name, t.day_start).where(sql`agent_name <> ''`),
+]);
+
+// Cowork model calls added up per session, UTC day and model (migration 0064), kept current by
+// lib/pulse/cowork/usage-daily.ts. Text columns use '' for "none" so they can be in the key.
+export const coworkUsageDaily = pgTable('cowork_usage_daily', {
+    session_id: text().notNull(),
+    day_start: bigint({ mode: 'number' }).notNull(),
+    user_id: text().notNull().default(''),
+    model: text().notNull().default(''),
+    agent_name: text().notNull().default(''),
+    skill_name: text().notNull().default(''),
+    query_source: text().notNull().default(''),
+    product: text().notNull().default(''),
+    surface: text().notNull().default(''),
+    source: text().notNull().default(''),
+    calls: integer().notNull().default(0),
+    cost_usd: numeric(),
+    costed: integer().notNull().default(0),
+    with_usage: integer().notNull().default(0),
+    input_tokens: bigint({ mode: 'number' }).notNull().default(0),
+    output_tokens: bigint({ mode: 'number' }).notNull().default(0),
+    cache_creation_tokens: bigint({ mode: 'number' }).notNull().default(0),
+    cache_read_tokens: bigint({ mode: 'number' }).notNull().default(0),
+    first_at: bigint({ mode: 'number' }).notNull(),
+    last_at: bigint({ mode: 'number' }).notNull(),
+}, (t) => [
+    primaryKey({ columns: [t.session_id, t.day_start, t.user_id, t.model, t.agent_name, t.skill_name, t.query_source, t.product, t.surface, t.source] }),
+    index('idx_wud_day').on(t.day_start),
+    index('idx_wud_user_day').on(t.user_id, t.day_start),
+]);
+
 // ChatGPT and Codex spend from OpenAI's Compliance API (migration 0043), kept apart
 // from Claude's spend so no page shows it under a Claude label.
 
@@ -945,12 +1006,21 @@ export const pulseClassifications = pgTable('pulse_classifications', {
     classifier_attempts: integer().notNull().default(1),
     classifier_error: text(),
     classified_at: bigint({ mode: 'number' }).notNull(),
+    // Copies of the prompt's fields (migration 0065), kept equal to cowork_messages by database
+    // triggers, so Work Pulse reads classifications without joining the messages table.
+    msg_occurred_at: bigint({ mode: 'number' }),
+    msg_session_id: text(),
+    msg_user_id: text(),
+    msg_surface: text(),
+    msg_source: text(),
 }, (t) => [
     foreignKey({ columns: [t.user_id], foreignColumns: [users.id], name: 'pulse_classifications_user_id_fk' }),
     foreignKey({ columns: [t.cowork_message_id], foreignColumns: [coworkMessages.id], name: 'pulse_classifications_cowork_message_id_fk' }),
     index('idx_pulse_class_status').on(t.classifier_status),
     index('idx_pulse_class_tier').on(t.tier),
     index('idx_pulse_class_user_time').on(t.user_id, t.classified_at),
+    index('idx_pulse_class_msg_occurred_at').on(t.msg_occurred_at),
+    index('idx_pulse_class_msg_session').on(t.msg_session_id),
     unique('pulse_classifications_cowork_message_id_uq').on(t.cowork_message_id),
 ]);
 
@@ -1519,6 +1589,8 @@ export const pgSchema = {
   decisionLog,
   askLog,
   codeAssistantMeta,
+  codeUsageDaily,
+  coworkUsageDaily,
   codeMetrics,
   codeOtelMetrics,
   codeSessionClassifications,

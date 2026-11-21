@@ -13,7 +13,7 @@ import TopBar from '@/components/layout/TopBar';
 import LoadingSpinner from '@/components/shared/LoadingSpinner';
 import { PageBody, Panel, Notice, Tag, B, cx } from '@/components/precision/ui';
 import { linkCls } from '@/components/pulse/WorkPulseOverview';
-import type { Card, Choice, SoWhat } from '@/lib/pulse/cowork/so-what';
+import type { Card, Choice, GroupWords, SoWhat } from '@/lib/pulse/cowork/so-what';
 
 const day = (s: number) => new Date(s * 1000).toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric' });
 const pct = (v: number | null) => (v === null ? 'not measured' : `${Math.round(v * 100)}%`);
@@ -21,8 +21,8 @@ const pct = (v: number | null) => (v === null ? 'not measured' : `${Math.round(v
 const PETROL = '#1F6F8B';
 const PALE = '#C9DEE6';
 
-/** A dot per person, in two groups, and the share of each group's sessions that produced something. */
-function Dots({ card }: { card: Card }) {
+/** A dot per person, in two groups, and the share of each group's sessions that made something. */
+function Dots({ card, words }: { card: Card; words: GroupWords }) {
   const g = card.groups;
   if (!g) return null;
   const row = (label: string, count: number, share: number | null, ink: string) => (
@@ -35,7 +35,7 @@ function Dots({ card }: { card: Card }) {
         {count === 0 && <span className="text-[13px] text-[#8F8F8F]">nobody</span>}
       </span>
       <span className="ml-auto tabular-nums text-[13px] text-[#0A0A0A] whitespace-nowrap">
-        {share === null ? 'too few to tell' : `${pct(share)} produced something`}
+        {share === null ? 'too few to tell' : `${pct(share)} made something`}
       </span>
     </div>
   );
@@ -50,10 +50,10 @@ function Dots({ card }: { card: Card }) {
   );
   return (
     <div>
-      {row('Do mostly meaningful work', g.deep.people, g.deep.share, PETROL)}
-      {row('Do not', g.shallow.people, g.shallow.share, PALE)}
+      {row(`Mostly ${words.deep}`, g.deep.people, g.deep.share, PETROL)}
+      {row(`Mostly ${words.other}`, g.shallow.people, g.shallow.share, PALE)}
       <div className="mt-2 pt-2 border-t border-[#F2F2F2]">
-        {bar('Sessions that produced something', g.deep.share, PETROL)}
+        {bar('Sessions that made something', g.deep.share, PETROL)}
         {bar('The same, for the rest', g.shallow.share, PALE)}
       </div>
     </div>
@@ -221,7 +221,7 @@ function SoWhatBody() {
               <>
                 {card.groups && (
                   <div className="mt-3 pt-3 border-t border-[#F2F2F2]">
-                    <Dots card={card} />
+                    <Dots card={card} words={data!.words} />
                   </div>
                 )}
                 <p className={cx('m-0 text-[12px] text-[#8F8F8F] leading-5', card.groups ? 'mt-2' : 'mt-3')}>{card.caption}</p>

@@ -76,20 +76,30 @@ export async function buildUsersList(deptFilter: string | undefined, vendor: Ven
        (SELECT generated_at FROM pulse_briefings
          WHERE scope_id = u.id AND scope_type = 'user'
          ORDER BY generated_at DESC LIMIT 1) AS last_briefing_at,
-       (SELECT MAX(occurred_at) FROM cowork_messages
-         WHERE user_id = u.id AND ${isWorkPulseSurface(sql`surface`)}) AS last_active_at,
-       (SELECT COUNT(*) FROM cowork_messages cm2
-         WHERE cm2.user_id = u.id AND ${isWorkPulseSurface(sql`cm2.surface`)}
-           AND cm2.message_type = 'cowork_user_message'
-           AND ${classifiableSource(sql`cm2.source`, await classifyChatgptOn())}
-           AND cm2.id NOT IN (
-             SELECT cowork_message_id FROM pulse_classifications
-             WHERE classifier_status = 'classified'
-                OR classifier_attempts >= 5
-           )) AS pending_count,
-       (SELECT COUNT(*) FROM pulse_classifications
-         WHERE user_id = u.id AND classifier_status = 'failed') AS failed_count
+       act.last_active_at,
+       COALESCE(pend.n, 0) AS pending_count,
+       COALESCE(fail.n, 0) AS failed_count
      FROM users u
+     -- Each figure is worked out for everyone in one pass, not person by person.
+     JOIN (
+       SELECT user_id, MAX(occurred_at) AS last_active_at FROM cowork_messages
+        WHERE ${isWorkPulseSurface(sql`surface`)} GROUP BY user_id
+     ) act ON act.user_id = u.id
+     LEFT JOIN (
+       SELECT cm2.user_id, COUNT(*) AS n FROM cowork_messages cm2
+        WHERE ${isWorkPulseSurface(sql`cm2.surface`)}
+          AND cm2.message_type = 'cowork_user_message'
+          AND ${classifiableSource(sql`cm2.source`, await classifyChatgptOn())}
+          AND cm2.id NOT IN (
+            SELECT cowork_message_id FROM pulse_classifications
+            WHERE classifier_status = 'classified'
+               OR classifier_attempts >= 5
+          )
+        GROUP BY cm2.user_id
+     ) pend ON pend.user_id = u.id
+     LEFT JOIN (
+       SELECT user_id, COUNT(*) AS n FROM pulse_classifications WHERE classifier_status = 'failed' GROUP BY user_id
+     ) fail ON fail.user_id = u.id
      LEFT JOIN ${metricsTable} pm
        ON pm.scope_id = u.id
        AND pm.scope_type = 'user'
@@ -99,11 +109,7 @@ export async function buildUsersList(deptFilter: string | undefined, vendor: Ven
          SELECT MAX(computed_at) FROM ${metricsTable}
          WHERE scope_id = u.id AND scope_type = 'user' AND granularity = 'rolling' ${metricsVendor}
        )
-     WHERE EXISTS (
-       SELECT 1 FROM cowork_messages
-       WHERE user_id = u.id AND ${isWorkPulseSurface(sql`surface`)}
-     )
-     ${deptFilter ? sql`AND u.department = ${deptFilter}` : sql``}
+     ${deptFilter ? sql`WHERE u.department = ${deptFilter}` : sql``}
      ORDER BY pm.dds DESC NULLS LAST, u.display_name ASC
   `);
 

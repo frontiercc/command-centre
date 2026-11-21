@@ -24,7 +24,10 @@
  * flag's estimated ceiling; a row with no parseable tokens still counts its
  * real cost_usd toward spend (see `parseCoworkTokenUsage`).
  */
-import { and, eq, gte, inArray, isNull, lt, sql, type SQL } from 'drizzle-orm';
+import { PC_MESSAGE } from '@/lib/pulse/classification-message';
+import { coworkUsageIn, readCoworkUsage } from '@/lib/pulse/cowork/usage-daily';
+import { codeUsageIn, readCodeUsage } from '@/lib/pulse/code/usage-daily';
+import { and, eq, gte, inArray, lt, sql, type SQL } from 'drizzle-orm';
 import { getCodeWorkTypeLabeller } from '@/lib/pulse/code/tier-config';
 import { getTypedClient } from '@/lib/db/client';
 import { schema } from '@/lib/db/schema';
@@ -431,9 +434,7 @@ async function buildCodeModelEfficiency(period: string, surface: 'code' | 'codex
   const client = await getTypedClient();
   const { start, end } = monthBounds(period);
 
-  const cam = schema.codeAssistantMeta;
   const csc = schema.codeSessionClassifications;
-  const css = schema.codeSessionStats;
   const ct = schema.codexTurns;
   const ca = schema.codexActions;
 
@@ -468,26 +469,19 @@ async function buildCodeModelEfficiency(period: string, surface: 'code' | 'codex
           .from(ct)
           .leftJoin(csc, eq(csc.session_id, ct.session_id))
           .where(and(gte(ct.started_at, start), lt(ct.started_at, end))) as Promise<CodeRowWithStats[]>
-      : client
-          .select({
-            session_id: cam.session_id,
-            work_type: csc.work_type,
-            model: cam.model,
-            input_tokens: cam.input_tokens,
-            output_tokens: cam.output_tokens,
-            cache_creation_tokens: cam.cache_creation_tokens,
-            cache_read_tokens: cam.cache_read_tokens,
-            skill_name: cam.skill_name,
-            agent_name: cam.agent_name,
-            effort: cam.effort,
-            stats_session: css.session_id,
-            stats_tool_use_count: css.tool_use_count,
-            stats_error_count: css.error_count,
-          })
-          .from(cam)
-          .leftJoin(csc, eq(csc.session_id, cam.session_id))
-          .leftJoin(css, eq(css.session_id, cam.session_id))
-          .where(and(gte(cam.occurred_at, start), lt(cam.occurred_at, end))) as Promise<CodeRowWithStats[]>,
+      // Claude Code: the daily totals (lib/pulse/code/usage-daily.ts) by session, model, skill,
+      // subagent and effort. Pricing is per token, so pricing the totals equals pricing each call.
+      : readCodeUsage<CodeRowWithStats>(sql`
+          SELECT u.session_id, csc.work_type, NULLIF(u.model, '') AS model,
+                 SUM(u.input_tokens) AS input_tokens, SUM(u.output_tokens) AS output_tokens,
+                 SUM(u.cache_creation_tokens) AS cache_creation_tokens, SUM(u.cache_read_tokens) AS cache_read_tokens,
+                 NULLIF(u.skill_name, '') AS skill_name, NULLIF(u.agent_name, '') AS agent_name, NULLIF(u.effort, '') AS effort,
+                 css.session_id AS stats_session, css.tool_use_count AS stats_tool_use_count, css.error_count AS stats_error_count
+            FROM (${codeUsageIn(start, end)}) u
+            LEFT JOIN code_session_classifications csc ON csc.session_id = u.session_id
+            LEFT JOIN code_session_stats css ON css.session_id = u.session_id
+           GROUP BY u.session_id, csc.work_type, NULLIF(u.model, ''), NULLIF(u.skill_name, ''), NULLIF(u.agent_name, ''), NULLIF(u.effort, ''),
+                    css.session_id, css.tool_use_count, css.error_count`),
     getCodeWorkTypeLabeller(),
     surface === 'codex'
       ? client
@@ -735,7 +729,7 @@ export function sessionKindSql(sessionIds: SQL): SQL {
       SELECT cm.session_id, pc.task_type, COUNT(*) AS n, MAX(cm.occurred_at) AS latest,
              (pc.task_type IN (${mech})) AS mech
       FROM pulse_classifications pc
-      JOIN cowork_messages cm ON cm.id = pc.cowork_message_id
+      ${PC_MESSAGE}
       WHERE cm.session_id IN (${sessionIds})
       GROUP BY cm.session_id, pc.task_type
     ) c
@@ -806,7 +800,6 @@ async function buildCoworkModelEfficiency(period: string, surface: 'cowork' | 'c
   const client = await getTypedClient();
   const { start, end } = monthBounds(period);
 
-  const cm = schema.coworkMessages;
   const csi = schema.coworkSkillInvocations;
   const cmi = schema.coworkMcpInvocations;
 
@@ -844,34 +837,31 @@ async function buildCoworkModelEfficiency(period: string, surface: 'cowork' | 'c
         : Promise.resolve([]),
     ]);
   } else {
-    // Cowork: the month's model calls. Claude in Office is left out: it has no
-    // cost and is estimated separately. The lookups name the same sessions
-    // with a subquery, so all five reads run together.
-    const spendWhere = () => and(
-      eq(cm.message_type, 'cowork_api_request'),
-      isNull(cm.product),
-      gte(cm.occurred_at, start),
-      lt(cm.occurred_at, end),
-    );
-    const spendSessions = () => client.select({ session_id: cm.session_id }).from(cm).where(spendWhere());
+    // Cowork: the month's model calls, from the Cowork daily totals (lib/pulse/cowork/usage-daily.ts)
+    // by session and model. Claude in Office is left out: it has no cost and is estimated
+    // separately. The lookups name the same sessions with a subquery, so all five reads run together.
+    const usage = () => sql`(${coworkUsageIn(start, end)}) u`;
+    const spendSessions = () => sql`SELECT DISTINCT session_id FROM ${usage()} WHERE product = ''`;
     const exec = client as unknown as { execute: (q: SQL) => Promise<{ rows: unknown[] }> };
     const [r, spendRows, kindRows, skills, connectors] = await Promise.all([
       getCodeModelRates(),
-      client
-        .select({
-          session_id: cm.session_id,
-          model: cm.model,
-          cost_usd: cm.cost_usd,
-          token_usage: cm.token_usage,
-        })
-        .from(cm)
-        .where(spendWhere()) as Promise<CoworkSpendRow[]>,
-      exec.execute(sessionKindSql(sql`
-        SELECT session_id FROM cowork_messages
-        WHERE message_type = 'cowork_api_request' AND product IS NULL
-          AND occurred_at >= ${start} AND occurred_at < ${end}`)).then((res) => res.rows as SessionKindRow[]),
-      client.select({ session_id: csi.session_id, skill_name: csi.skill_name }).from(csi).where(inArray(csi.session_id, spendSessions())),
-      client.select({ session_id: cmi.session_id, mcp_server: cmi.mcp_server }).from(cmi).where(inArray(cmi.session_id, spendSessions())),
+      readCoworkUsage<{ session_id: string; model: string | null; costed: string; cost: string | null; with_usage: string; i: string; o: string; cw: string; cr: string }>(sql`
+        SELECT session_id, NULLIF(model, '') AS model, SUM(costed) AS costed, SUM(cost_usd) AS cost, SUM(with_usage) AS with_usage,
+               SUM(input_tokens) AS i, SUM(output_tokens) AS o, SUM(cache_creation_tokens) AS cw, SUM(cache_read_tokens) AS cr
+          FROM ${usage()} WHERE product = '' GROUP BY session_id, NULLIF(model, '')`)
+        // One row per session and model, in the shape the calls one by one had: a cost when any call
+        // carried one, and the token totals when any call carried token figures.
+        .then((rows) => rows.map((x): CoworkSpendRow => ({
+          session_id: x.session_id,
+          model: x.model,
+          cost_usd: Number(x.costed) > 0 ? x.cost : null,
+          token_usage: Number(x.with_usage) > 0
+            ? { inputTokens: Number(x.i) || 0, outputTokens: Number(x.o) || 0, cacheCreationTokens: Number(x.cw) || 0, cacheReadTokens: Number(x.cr) || 0 }
+            : null,
+        }))),
+      exec.execute(sessionKindSql(spendSessions())).then((res) => res.rows as SessionKindRow[]),
+      client.select({ session_id: csi.session_id, skill_name: csi.skill_name }).from(csi).where(sql`${csi.session_id} IN (${spendSessions()})`),
+      client.select({ session_id: cmi.session_id, mcp_server: cmi.mcp_server }).from(cmi).where(sql`${cmi.session_id} IN (${spendSessions()})`),
     ]);
     rates = r;
     rows = spendRows;

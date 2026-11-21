@@ -70,7 +70,7 @@ describe('the comparison', () => {
     const g = team({ deep: MIN_GROUP - 1 });
     expect(g.verdict).toBe('too_few');
     expect(g.peopleWorth).toBeNull();
-    expect(refusalFor(g)).toContain('Too few people to tell');
+    expect(refusalFor(g)).toContain('Too few people to compare');
   });
 
   it('refuses when nobody in the team made any commits, pull requests or accepted edits', () => {
@@ -79,7 +79,7 @@ describe('the comparison', () => {
       ...Array.from({ length: 4 }, () => person('shallow', 0)),
     ]);
     expect(g.verdict).toBe('no_output');
-    expect(refusalFor(g)).toContain('We cannot answer this');
+    expect(refusalFor(g)).toContain('There is nothing to compare');
   });
 
   it('prices nothing when the second group already ships as much', () => {
@@ -91,16 +91,18 @@ describe('the comparison', () => {
 describe('the hiring card', () => {
   it('holds the hires when the gap covers them, and prices it', () => {
     const c = hireCard(team(), 3, undefined, NOW);
-    expect(c.headline).toBe('Hold the 3 hires. Close the gap first.');
-    expect(c.body.join(' ')).toContain('Each of them makes 20 commits, against 10 commits for each of the other 6.');
-    expect(c.body.join(' ')).toContain('that is the output of 3 more people');
+    expect(c.headline).toBe('Engineering asked for 3 hires. Coach the 6 first.');
+    expect(c.body.join(' ')).toContain('The 4 who mostly do Delegated work or Frontier delegation each make 20 commits.');
+    expect(c.body.join(' ')).toContain('The other 6, who mostly do Single-step / conversational, each make 10 commits.');
+    expect(c.body.join(' ')).toContain('the team would get as much done as 3 more people');
+    expect(c.buttons.hold).toBe('Coach first');
     expect(c.recommended).toBe('hold');
-    expect(c.buttons).toEqual({ hold: 'Hold the hires', go: 'Hire anyway' });
+    expect(c.buttons).toEqual({ hold: 'Coach first', go: 'Hire anyway' });
   });
 
   it('approves them when there is no gap left to close', () => {
     const c = hireCard(team({ deepEach: 10, shallowEach: 12 }), 2, undefined, NOW);
-    expect(c.headline).toBe('Approve the 2 hires.');
+    expect(c.headline).toBe('Engineering asked for 2 hires. Approve them.');
     expect(c.recommended).toBe('go');
     expect(c.buttons.go).toBe('Approve the hires');
   });
@@ -108,21 +110,20 @@ describe('the hiring card', () => {
   it('is honest when the gap covers only part of the request', () => {
     // Six behind by ten each, against twenty each, is three people against five asked for.
     const c = hireCard(team(), 5, undefined, NOW);
-    expect(c.headline).toBe('Hold 3 of the 5. The gap covers that much.');
+    expect(c.headline).toBe('Engineering asked for 5 hires. Hire 2, and coach the 6 first.');
     expect(c.body.join(' ')).toContain('short of the 5 asked for');
   });
 
   it('answers nothing, and offers no decision, when the team cannot be read', () => {
     const c = hireCard(team({ deep: 1 }), 3, undefined, NOW);
-    expect(c.refusal).toContain('Too few people to tell');
-    expect(c.body.join(' ')).toContain('Too few people to tell');
+    expect(c.refusal).toContain('Too few people to compare');
+    expect(c.body.join(' ')).toContain('Too few people to compare');
   });
 
-  it('always says what it cannot see', () => {
+  it('says how many people used it too little to include, and where commits come from', () => {
     const c = hireCard(team({ hardly: 2 }), 3, undefined, NOW);
-    expect(c.cannotSee).toContain('We cannot see output that is not a commit, a pull request or an accepted edit');
-    expect(c.cannotSee).toContain('2 people hardly used it');
-    expect(c.caption).toContain('commits, pull requests and accepted edits per person');
+    expect(c.cannotSee).toBe('2 people used it too little to include.');
+    expect(c.caption).toContain('Commits come from GitHub');
   });
 });
 
@@ -152,20 +153,21 @@ describe('the three counts', () => {
 
   it('says what each group produces, per person', () => {
     const c = hireCard(withOutput([20, 4, 30], [10, 3, 20]), 1, undefined, NOW);
-    expect(c.body.join(' ')).toContain('Each of them makes 20 commits, 4 pull requests and 30 accepted edits, against 10 commits, 3 pull requests and 20 accepted edits for each of the other 6.');
+    expect(c.body.join(' ')).toContain('The 4 who mostly do Delegated work or Frontier delegation each make 20 commits, 4 pull requests and 30 accepted edits.');
+    expect(c.body.join(' ')).toContain('The other 6, who mostly do Single-step / conversational, each make 10 commits, 3 pull requests and 20 accepted edits.');
   });
 });
 
 describe('the backfill card', () => {
   it('says do not replace when closing the gap covers the person who left', () => {
     const c = backfillCard(team(), undefined, NOW);
-    expect(c.headline).toBe('Do not replace them yet.');
+    expect(c.headline).toBe('Someone has left Engineering. Coach the 6 before replacing them.');
     expect(c.recommended).toBe('hold');
   });
 
   it('says replace them when nothing in how the team works would make it up', () => {
     const c = backfillCard(team({ deepEach: 10, shallowEach: 12 }), undefined, NOW);
-    expect(c.headline).toBe('Replace them.');
+    expect(c.headline).toBe('Someone has left Engineering. Replace them.');
     expect(c.recommended).toBe('go');
   });
 });
@@ -193,7 +195,7 @@ describe('a decided card', () => {
 
   it('compares the figures as they stood with the figures now', () => {
     const c = hireCard(team({ deep: 7, shallow: 3 }), 3, decision(), NOW);
-    expect(c.decided!.followUp!.sentence).toContain('Since then, 7 of 10 do mostly multi-step work. It was 4 of 10 when you decided.');
+    expect(c.decided!.followUp!.sentence).toContain('Since then, 7 of 10 mostly do Delegated work or Frontier delegation. It was 4 of 10 when you decided.');
   });
 
   it('answers only the question that was asked', () => {
@@ -223,7 +225,7 @@ describe('the follow-up sentence', () => {
 
   it('says plainly when nobody has moved', () => {
     const s = followUpSentence(figures(), figures());
-    expect(s).toContain('4 of 10 do mostly multi-step work, the same as then.');
+    expect(s).toContain('4 of 10 mostly do Delegated work or Frontier delegation, the same as then.');
     expect(s).toContain('ships the same as it did then');
   });
 
@@ -250,13 +252,13 @@ describe('the cards the page finds on its own', () => {
   it('prices a standard job in hours a month, from measured time on both sides', () => {
     const c = standardJobCard(job, undefined, NOW);
     expect(c.headline).toBe('Make new functionality a standard skill.');
-    expect(c.body.join(' ')).toContain('The 12 who do it as multi-step work spend 40 minutes on it');
+    expect(c.body.join(' ')).toContain('The 12 who do it as Delegated work or Frontier delegation spend 40 minutes on it');
     expect(c.body.join(' ')).toContain('The other 28 spend 3 hours');
     expect(c.body.join(' ')).toContain('frees about 467 hours a month');
     // Everyone doing this coding work, in any department: people, not engineers.
     expect(c.body.join(' ')).toContain('40 people do this work.');
     expect(c.body.join(' ')).not.toContain('engineer');
-    expect(c.caption).toContain('Not an estimate');
+    expect(c.caption).toContain('Measured time in the tool');
     expect(c.buttons).toEqual({ go: "We'll do this", hold: 'Not now' });
   });
 
@@ -288,7 +290,7 @@ describe('the cards the page finds on its own', () => {
   it('names no one on the key-person card', () => {
     const c = keyPeopleCard({ department: 'Engineering', people: 10, holders: 2, share: 0.72 }, undefined, NOW);
     expect(c.headline).toBe('Spread what two people in Engineering know.');
-    expect(c.body.join(' ')).toContain('72% of the multi-step work in this team of 10');
+    expect(c.body.join(' ')).toContain('72% of the Delegated work or Frontier delegation in this team of 10');
     expect(c.caption).toContain('named on the team');
   });
 
@@ -363,7 +365,7 @@ describe('the wave card names the right wave', () => {
       { month: '2026-10', people: 8, reached: 2, weeksToHalf: null },
       { month: '2026-09', people: 20, reached: 15, weeksToHalf: 3 },
     ], undefined, NOW)!;
-    expect(c.body[0]).toBe('Your latest wave to get there, of 20, took 3 weeks for half of them to start doing multi-step work.');
+    expect(c.body[0]).toBe('Your latest wave to get there, of 20, took 3 weeks for half of them to start doing Delegated work or Frontier delegation.');
   });
 
   it('never calls two waves that both took under a week longer', () => {
@@ -381,7 +383,7 @@ describe('the wave card names the right wave', () => {
 
   it('agrees its verb with one person in the follow-up', () => {
     const f = { deepPeople: 4, shallowPeople: 6, deepPerPerson: 20, shallowPerPerson: 10, peopleWorth: 3, commits: 140 };
-    expect(followUpSentence(f, { ...f, deepPeople: 1, shallowPeople: 9 })).toContain('Since then, 1 of 10 does mostly multi-step work.');
+    expect(followUpSentence(f, { ...f, deepPeople: 1, shallowPeople: 9 })).toContain('Since then, 1 of 10 mostly does Delegated work or Frontier delegation.');
   });
 });
 
@@ -416,12 +418,12 @@ describe('the follow-up on a found card', () => {
 describe('the refusal reads properly', () => {
   it('agrees its verbs when only one person is in a group', () => {
     const g = team({ deep: 1 });
-    expect(refusalFor(g)).toContain('1 person does mostly multi-step work');
+    expect(refusalFor(g)).toContain('1 person mostly does Delegated work or Frontier delegation');
     expect(refusalFor(g)).not.toContain('person do mostly');
   });
 
   it('agrees them in the plural too', () => {
-    expect(refusalFor(team({ deep: 2 }))).toContain('2 people do mostly multi-step work');
-    expect(refusalFor(team({ shallow: 1 }))).toContain('1 person does not');
+    expect(refusalFor(team({ deep: 2 }))).toContain('2 people mostly do Delegated work or Frontier delegation');
+    expect(refusalFor(team({ shallow: 1 }))).toContain('1 person mostly does Single-step / conversational');
   });
 });

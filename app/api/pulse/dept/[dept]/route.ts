@@ -14,6 +14,7 @@
 // per-member friction-index query mirrors lib/pulse/aggregator.ts's
 // getCoworkFrictionIndex's COUNT(*) FILTER (WHERE ...) idiom (native on
 // Postgres).
+import { PC_MESSAGE } from '@/lib/pulse/classification-message';
 import { NextRequest, NextResponse } from 'next/server';
 import { visibleVendor, visibleOpenAi } from '@/lib/sources/openai-visibility';
 import { and, desc, eq, gte, inArray, isNotNull, lt, lte, sql } from 'drizzle-orm';
@@ -234,7 +235,7 @@ async function buildDept(dept: string, request: NextRequest, session: Awaited<Re
        -- When they last worked: the time of their latest classified prompt, not
        -- when the classifier got to it (on a fresh install that is everyone at once).
        (SELECT MAX(cm.occurred_at) FROM pulse_classifications pc
-        JOIN cowork_messages cm ON cm.id = pc.cowork_message_id
+        ${PC_MESSAGE}
         WHERE pc.user_id = u.id AND pc.classifier_status = 'classified') AS last_active
      FROM users u
      LEFT JOIN (
@@ -391,7 +392,7 @@ async function buildDept(dept: string, request: NextRequest, session: Awaited<Re
              COUNT(*) AS all,
              MAX(CASE WHEN cm.occurred_at >= ${now - 7 * 86400} THEN pc.tier END) AS top,
              MAX(cm.occurred_at) AS last_at
-      FROM pulse_classifications pc JOIN cowork_messages cm ON cm.id = pc.cowork_message_id
+      FROM pulse_classifications pc ${PC_MESSAGE}
       WHERE cm.user_id IN (${memberIdsSql}) AND pc.classifier_status = 'classified'
         AND cm.occurred_at >= ${period.start} AND cm.occurred_at < ${period.end}
         AND ${sql.raw(vendorClause(vendor, 'cm.'))}

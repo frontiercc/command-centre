@@ -6,8 +6,9 @@
 // standard pattern: getTypedClient() + schema.<table>.
 // SUM aggregates are Number()-coerced (Postgres returns bigint and numeric as strings); the single-row code_metrics
 // read coerces spend_usd (numeric on pg).
+import { codeUsageIn, OPEN_END, readCodeUsage } from '@/lib/pulse/code/usage-daily';
 import { NextRequest, NextResponse } from 'next/server';
-import { and, desc, eq, gte, isNotNull, ne, sql } from 'drizzle-orm';
+import { and, desc, eq, gte, ne, sql } from 'drizzle-orm';
 import { getAdminSession, canAccessOrgOverview } from '@/lib/auth/admin-auth';
 import { getTypedClient } from '@/lib/db/client';
 import { schema } from '@/lib/db/schema';
@@ -32,7 +33,6 @@ export async function GET(request: NextRequest) {
   if (!cfg.codeValueEnabled) return NextResponse.json({ enabled: false }, { status: 200 });
 
   const client = await getTypedClient();
-  const cam = schema.codeAssistantMeta;
 
   const now = Math.floor(Date.now() / 1000);
   const d30 = now - 30 * 24 * 3600;
@@ -45,18 +45,11 @@ export async function GET(request: NextRequest) {
   const withClaude = vendor !== 'openai';
 
   // 30-day priced spend + active users, from code_assistant_meta (certain source).
-  const spendRows = !withClaude ? [] : await client
-    .select({
-      user_id: cam.user_id,
-      model: cam.model,
-      inp: sql<number | string>`SUM(${cam.input_tokens})`,
-      outp: sql<number | string>`SUM(${cam.output_tokens})`,
-      cw: sql<number | string>`SUM(${cam.cache_creation_tokens})`,
-      cr: sql<number | string>`SUM(${cam.cache_read_tokens})`,
-    })
-    .from(cam)
-    .where(and(gte(cam.occurred_at, d30), ne(cam.model, ''), isNotNull(cam.user_id), ne(cam.user_id, '')))
-    .groupBy(cam.user_id, cam.model);
+  const spendRows = !withClaude ? [] : await readCodeUsage<{ user_id: string; model: string; inp: string; outp: string; cw: string; cr: string }>(sql`
+    SELECT user_id, model, SUM(input_tokens) AS inp, SUM(output_tokens) AS outp, SUM(cache_creation_tokens) AS cw, SUM(cache_read_tokens) AS cr
+      FROM (${codeUsageIn(d30, OPEN_END, { nowS: now })}) u
+     WHERE model <> '' AND user_id <> ''
+     GROUP BY user_id, model`);
   let spend30d = 0;
   const users = new Set<string>();
   for (const r of spendRows) {

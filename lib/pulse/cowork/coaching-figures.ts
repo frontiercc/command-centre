@@ -18,6 +18,7 @@
  * ChatGPT, narrowed by the All / Claude / ChatGPT switch. Sessions come from
  * lib/pulse/cowork/work-sessions.ts, so a platform is never counted two ways.
  */
+import { PC_MESSAGE } from '@/lib/pulse/classification-message';
 import { sql, type SQL } from 'drizzle-orm';
 import { getTypedClient } from '@/lib/db/client';
 import { getTierNames } from '@/lib/pulse/tier-config';
@@ -326,7 +327,7 @@ export async function getCoworkCoachingFigures(vendor: Vendor = 'all', nowS = Ma
            pc.capability_creation_candidate AS capability,
            cm.occurred_at, cm.session_id
     FROM pulse_classifications pc
-    JOIN cowork_messages cm ON cm.id = pc.cowork_message_id
+    ${PC_MESSAGE}
     LEFT JOIN users u ON u.id = pc.user_id
     LEFT JOIN admin_users au ON au.linked_cowork_user_id = pc.user_id
     WHERE pc.classifier_status = 'classified'
@@ -354,7 +355,7 @@ export async function getCoworkCoachingFigures(vendor: Vendor = 'all', nowS = Ma
   const firstRows = (await run(sql`
     SELECT pc.user_id, MIN(cm.occurred_at) AS first_at
     FROM pulse_classifications pc
-    JOIN cowork_messages cm ON cm.id = pc.cowork_message_id
+    ${PC_MESSAGE}
     WHERE pc.classifier_status = 'classified' AND ${onWorkPulse}
     GROUP BY pc.user_id
   `)) as Array<{ user_id: string; first_at: number | string }>;

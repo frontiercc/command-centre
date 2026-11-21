@@ -98,7 +98,7 @@ export async function readWorkSessions(opts: { since: number; until?: number; ve
              css.last_event_at AS last_at,
              (SELECT STRING_AGG(DISTINCT cm.output_name, ', ') FROM cowork_messages cm
                WHERE cm.session_id = css.session_id AND cm.output_name IS NOT NULL) AS outputs,
-             (SELECT MAX(cm.product) FROM cowork_messages cm WHERE cm.session_id = css.session_id) AS product
+             (SELECT MAX(cm.product) FROM cowork_messages cm WHERE cm.session_id = css.session_id AND cm.product IS NOT NULL) AS product
       FROM cowork_session_stats css ${people(sql`css.user_id`)}
       WHERE css.last_event_at >= ${opts.since} AND css.last_event_at < ${until} ${who(sql`css.user_id`)}`);
   }

@@ -7,6 +7,7 @@
  * can picture; the briefings say the same things the same way. Every figure is worked out here, in
  * code, and the model only words it (CLAUDE.md, rule 3).
  */
+import { PC_MESSAGE } from '@/lib/pulse/classification-message';
 import { sql, type SQL } from 'drizzle-orm';
 import { getTypedClient } from '@/lib/db/client';
 import { getConfigValue } from '@/lib/config';
@@ -66,7 +67,7 @@ export async function departmentsBelowFloor(since: number, until: number, names:
     SELECT COALESCE(NULLIF(au.department, ''), NULLIF(u.department, '')) AS d,
            COUNT(*) FILTER (WHERE pc.tier >= 2) AS deep, COUNT(*) AS n
     FROM pulse_classifications pc
-    JOIN cowork_messages cm ON cm.id = pc.cowork_message_id
+    ${PC_MESSAGE}
     LEFT JOIN users u ON u.id = pc.user_id
     LEFT JOIN admin_users au ON au.linked_cowork_user_id = pc.user_id
     WHERE pc.classifier_status = 'classified'

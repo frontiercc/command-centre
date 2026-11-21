@@ -13,6 +13,11 @@ export function messageVendor(vendor: Vendor): SQL {
   return sql.raw(vendorClause(vendor, 'cowork_messages.'));
 }
 
+/** pulse_classifications rows whose prompt came from the vendor, read from the copied source (migration 0065). */
+export function classificationVendor(vendor: Vendor): SQL {
+  return sql.raw(vendorClause(vendor, 'pulse_classifications.msg_'));
+}
+
 /** cowork_mcp_invocations rows from the vendor; Work Pulse's OpenAI view is ChatGPT alone, never Codex. */
 export function connectorVendor(vendor: Vendor): SQL {
   return sql.raw(workPulseToolClause(vendor, 'cowork_mcp_invocations.'));
