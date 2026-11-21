@@ -45,6 +45,8 @@ let anomalyRunInFlight = false;
 // The page-figures refresh runs alongside the cycle too; its cadence is kept in memory because
 // what it refreshes is kept in memory (lib/kept-figures.ts).
 let codeUsageInFlight = false;
+// Background indexes (lib/db/background-indexes.ts) are checked once per scheduler start.
+let backgroundIndexesChecked = false;
 let codeUsageLastAt = 0;
 const CODE_USAGE_EVERY_MS = 5 * 60 * 1000;
 let keptRefreshInFlight = false;
@@ -185,14 +187,19 @@ async function runCycle(): Promise<void> {
   if (!codeUsageInFlight && Date.now() - codeUsageLastAt >= CODE_USAGE_EVERY_MS) {
     codeUsageInFlight = true;
     codeUsageLastAt = Date.now();
-    void runJob('code_usage_daily', 'Claude Code daily totals', async () => {
+    const indexes = backgroundIndexesChecked ? Promise.resolve() : runJob('background_indexes', 'Background indexes', async () => {
+      const { ensureBackgroundIndexes } = await import('@/lib/db/background-indexes');
+      await ensureBackgroundIndexes();
+      backgroundIndexesChecked = true;
+    });
+    void indexes.then(() => runJob('code_usage_daily', 'Claude Code daily totals', async () => {
       const { runCodeUsageDaily } = await import('@/lib/pulse/code/usage-daily');
       await runCodeUsageDaily();
     })
       .then(() => runJob('cowork_usage_daily', 'Cowork daily totals', async () => {
         const { runCoworkUsageDaily } = await import('@/lib/pulse/cowork/usage-daily');
         await runCoworkUsageDaily();
-      }))
+      })))
       .finally(() => { codeUsageInFlight = false; });
   }
 
