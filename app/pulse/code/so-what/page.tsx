@@ -12,7 +12,7 @@ import TopBar from '@/components/layout/TopBar';
 import LoadingSpinner from '@/components/shared/LoadingSpinner';
 import { PageBody, Panel, Notice, Tag, B, cx } from '@/components/precision/ui';
 import { linkCls } from '@/components/pulse/WorkPulseOverview';
-import type { Card, Choice, SoWhat } from '@/lib/pulse/code/so-what';
+import type { Card, Choice, GroupWords, SoWhat } from '@/lib/pulse/code/so-what';
 
 const day = (s: number) => new Date(s * 1000).toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric' });
 const one = (v: number | null) => (v === null ? 'too few to tell' : String(Math.round(v * 10) / 10));
@@ -21,7 +21,7 @@ const PETROL = '#1F6F8B';
 const PALE = '#C9DEE6';
 
 /** A dot per person, in two groups. A count, never a person: the page carries no names. */
-function Dots({ card }: { card: Card }) {
+function Dots({ card, words }: { card: Card; words: GroupWords }) {
   const g = card.groups;
   if (!g) return null;
   const row = (label: string, count: number, perPerson: number | null, ink: string) => (
@@ -55,14 +55,14 @@ function Dots({ card }: { card: Card }) {
   ];
   return (
     <div>
-      {row('Hand whole work over', g.deep.people, g.deep.perPerson, PETROL)}
-      {row('Do not', g.shallow.people, g.shallow.perPerson, PALE)}
+      {row(`Mostly ${words.deep}`, g.deep.people, g.deep.perPerson, PETROL)}
+      {row(`Mostly ${words.other}`, g.shallow.people, g.shallow.perPerson, PALE)}
       {counts.filter(([, , , total]) => total > 0).map(([label, d, sh]) => {
         const widest = Math.max(d ?? 0, sh ?? 0, 1);
         return (
           <div key={label} className="mt-2 pt-2 border-t border-[#F2F2F2]">
-            {bar(`${label} per person, handed over`, d, widest, PETROL)}
-            {bar(`${label} per person, not`, sh, widest, PALE)}
+            {bar(`${label} each, first group`, d, widest, PETROL)}
+            {bar(`${label} each, the rest`, sh, widest, PALE)}
           </div>
         );
       })}
@@ -231,7 +231,7 @@ function SoWhatBody() {
               <>
                 {card.groups && (
                   <div className="mt-3 pt-3 border-t border-[#F2F2F2]">
-                    <Dots card={card} />
+                    <Dots card={card} words={data!.words} />
                   </div>
                 )}
                 <p className={cx('m-0 text-[12px] text-[#8F8F8F] leading-5', card.groups ? 'mt-2' : 'mt-3')}>{card.caption}</p>

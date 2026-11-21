@@ -18,6 +18,7 @@ import { listDecisions } from '@/lib/pulse/code/decision-log';
 import { buildSoWhat, workDecisions, type Question } from '@/lib/pulse/cowork/so-what';
 import { coachingScope } from '@/lib/pulse/coaching-scope';
 import { keptFigures } from '@/lib/kept-figures';
+import { getTierNames } from '@/lib/pulse/tier-config';
 
 export const dynamic = 'force-dynamic';
 
@@ -80,6 +81,7 @@ export async function GET(request: NextRequest) {
         )
         : undefined,
       nowS: Math.floor(Date.now() / 1000),
+      tierNames: await getTierNames(),
     });
     return NextResponse.json({ ...out, department: scope.department });
   } catch (err) {

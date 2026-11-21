@@ -15,8 +15,15 @@ import { listDecisions } from '@/lib/pulse/code/decision-log';
 import { getFinds } from '@/lib/pulse/code/so-what-finds';
 import { buildSoWhat, type Question } from '@/lib/pulse/code/so-what';
 import { coachingScope } from '@/lib/pulse/coaching-scope';
+import { getCodeClassifierConfig } from '@/lib/pulse/code/tier-config';
 
 export const dynamic = 'force-dynamic';
+
+/** Developer Pulse's tier names as an admin has set them. */
+async function codeTierNames() {
+  const t = (await getCodeClassifierConfig()).tiers;
+  return { t1: t.tier1.name, t2: t.tier2.name, t3: t.tier3.name };
+}
 
 /** How many engineers a team has asked for. A question, not a stored figure. */
 const MAX_HIRES = 99;
@@ -70,6 +77,7 @@ export async function GET(request: NextRequest) {
       // can see every team gets it.
       finds: scope.teams.length > 1 ? await getFinds(vendor, (card, department) => kept.has(`${card}\u0000${department}`)) : undefined,
       nowS: Math.floor(Date.now() / 1000),
+      tierNames: await codeTierNames(),
     });
     return NextResponse.json({ ...out, department: scope.department });
   } catch (err) {

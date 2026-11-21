@@ -12,7 +12,7 @@
  * the same figures then and now, said as "since then", never "because of".
  *
  * Work Pulse holds no count of how much each person produced, only whether a session produced
- * something, so no card here can say how many people a gap is worth, and the team cards say so.
+ * something, so no card here can say how many people a gap is worth.
  * Measured and judged figures are never added together: depth is the classifier's judgement of
  * each prompt; time and output are measured. The by-hand estimate is not used on this page.
  */
@@ -21,7 +21,7 @@ import { GAP_MIN, MIN_GROUP, MIN_MEASURED, WINDOW_DAYS, type WorkGroups } from '
 import type {
   Evenings, KeyPeople, RarelyUsed, Rollout, StandardJob, TimeFreed, Wave, WorkFinds,
 } from '@/lib/pulse/cowork/so-what-finds';
-import { MEANINGFUL_WORK } from '@/lib/pulse/cowork/coaching-words';
+import { tierNamesOr, type TierNames } from '@/lib/pulse/tier-names';
 
 export type CardKind = 'hire' | 'backfill' | 'standard_job' | 'expand' | 'rarely_used' | 'key_people' | 'rollout' | 'time_freed' | 'evenings';
 
@@ -91,9 +91,24 @@ export interface Card {
 
 export type Question = 'hire' | 'backfill';
 
+/** How the cards name the two groups, from the tier names an admin has set. */
+export interface GroupWords {
+  /** The work the first group mostly does: the top two tiers, e.g. "Meaningful or Frontier work". */
+  deep: string;
+  /** The work everyone else mostly does: the first tier, e.g. "Administrative work". */
+  other: string;
+}
+
+export function groupWords(names?: TierNames | null): GroupWords {
+  const t = tierNamesOr(names);
+  return { deep: `${t.t2} or ${t.t3} work`, other: `${t.t1} work` };
+}
+
 export interface SoWhat {
   /** Teams a leader can ask about, biggest first. */
   teams: string[];
+  /** How the cards and the picture name the two groups. */
+  words: GroupWords;
   asked: { department: string; question: Question; hires: number } | null;
   cards: Card[];
   lookAgainDays: number;
@@ -113,107 +128,110 @@ export function cardFigures(g: WorkGroups): CardFigures {
   return { deepPeople: g.deep.people, shallowPeople: g.shallow.people, deepShare: g.deep.share, shallowShare: g.shallow.share };
 }
 
-/** Why a team's figures cannot answer a question, in the leader's words. Null when they can. */
-export function refusalFor(g: WorkGroups): string | null {
+/** Why a team's figures cannot answer a question, in plain words. Null when they can. */
+export function refusalFor(g: WorkGroups, w: GroupWords = groupWords()): string | null {
   if (g.verdict === 'too_few') {
     const small = [
-      g.deep.people < MIN_GROUP ? `${people(g.deep.people)} ${g.deep.people === 1 ? 'does' : 'do'} mostly ${MEANINGFUL_WORK}` : null,
-      g.shallow.people < MIN_GROUP ? `${people(g.shallow.people)} ${g.shallow.people === 1 ? 'does' : 'do'} not` : null,
+      g.deep.people < MIN_GROUP ? `${people(g.deep.people)} mostly ${g.deep.people === 1 ? 'does' : 'do'} ${w.deep}` : null,
+      g.shallow.people < MIN_GROUP ? `${people(g.shallow.people)} mostly ${g.shallow.people === 1 ? 'does' : 'do'} ${w.other}` : null,
     ].filter(Boolean).join(' and ');
-    return `Too few people to tell. ${small ? `${small[0].toUpperCase()}${small.slice(1)}, ` : ''}so the two groups cannot be compared without pointing at individuals.`;
+    return `Too few people to compare. Only ${small}, and comparing groups that small would single people out.`;
   }
   if (g.verdict === 'not_measured') {
-    return `Too little was measured to tell. Each group needs at least ${MIN_MEASURED} sessions where Command Centre could see whether something was produced.`;
+    return `Too little to compare yet. Each group needs at least ${MIN_MEASURED} sessions where we could see whether something was made.`;
   }
   return null;
 }
 
+/** The people left off the picture, if any. */
 function cannotSeeLine(g: WorkGroups): string {
-  const parts = ['Work Pulse cannot count how much each person produces, only whether a session produced something, so it cannot say how many people a gap is worth'];
-  if (g.light > 0) parts.push(`${people(g.light)} used it too little to judge and ${g.light === 1 ? 'is' : 'are'} in neither group`);
-  if (g.hardly > 0) parts.push(`${people(g.hardly)} hardly used it and ${g.hardly === 1 ? 'is' : 'are'} in neither group`);
-  return `${parts.join('. ')}.`;
+  const left = g.light + g.hardly;
+  return left > 0 ? `${people(left)} used it too little to include.` : '';
 }
 
-const groupsCaption = (g: WorkGroups) =>
-  `A dot per person. The bars are the share of each group's sessions over the last ${WINDOW_DAYS} days that produced something: a file saved, sent or published, an artifact or file in Claude Chat, a file listed on a ChatGPT reply. Measured, and a floor: a file was made, not that anyone used it. Which group a person is in comes from the AI-judged tiers. ${g.deep.measured + g.shallow.measured} sessions were measured.`;
+const groupsCaption = () =>
+  `One dot per person, last ${WINDOW_DAYS} days. A session makes something when it saves, sends or publishes a file, or makes an artifact.`;
 
-/** The gap, said with both shares. */
-function gapSentence(g: WorkGroups): string {
-  return `${g.deep.people} of ${g.deep.people + g.shallow.people} do mostly ${MEANINGFUL_WORK}. Their sessions produced something ${pct(g.deep.share!)} of the time. For the other ${g.shallow.people} it was ${pct(g.shallow.share!)}.`;
+/** The two groups, side by side: who they are and how often their sessions make something. */
+function gapLines(g: WorkGroups, w: GroupWords): string[] {
+  return [
+    `${g.deep.people} of the team's ${g.deep.people + g.shallow.people} people mostly do ${w.deep}: ${pct(g.deep.share!)} of their sessions make something.`,
+    `The other ${g.shallow.people} mostly do ${w.other}: ${pct(g.shallow.share!)} of their sessions make something.`,
+  ];
 }
 
-/** Why there is no gap, said with both shares and never rounder than the figures are. */
-function noGapSentence(g: WorkGroups): string {
-  if (g.shallow.people === 0) return `All ${g.deep.people} already do mostly ${MEANINGFUL_WORK}.`;
-  const both = `(${pct(g.deep.share!)} against ${pct(g.shallow.share!)})`;
-  const first = `The ${g.deep.people} who do mostly ${MEANINGFUL_WORK}`;
-  const second = `the ${g.shallow.people} who do not`;
-  return g.gap !== null && g.gap > 0
-    ? `${first} produce something a little more often than ${second} ${both}, a difference under ${Math.round(GAP_MIN * 100)} points.`
-    : `${first} produce something no more often than ${second} ${both}.`;
+/** Why there is no gap to close, with both shares. */
+function noGapLine(g: WorkGroups, w: GroupWords): string {
+  if (g.shallow.people === 0) return `All ${g.deep.people} people already mostly do ${w.deep}.`;
+  const how = g.gap !== null && g.gap > 0 ? 'a little more often than' : 'no more often than';
+  return `The ${g.deep.people} who mostly do ${w.deep} make something ${how} the other ${g.shallow.people} (${pct(g.deep.share!)} against ${pct(g.shallow.share!)}).`;
 }
 
-/** Should this team hire? Hold while there is a gap to close; approve when there is none. */
-export function hireCard(g: WorkGroups, hires: number, decision: DecisionRecord | undefined, nowS: number): Card {
-  const refusal = refusalFor(g);
+const coachLine = (g: WorkGroups) =>
+  `Help those ${g.shallow.people} work like the ${g.deep.people}, then look again in ${LOOK_AGAIN_DAYS} days.`;
+
+/** Should this team hire? Coach first while there is a gap to close; approve when there is none. */
+export function hireCard(g: WorkGroups, hires: number, decision: DecisionRecord | undefined, nowS: number, w: GroupWords = groupWords()): Card {
+  const refusal = refusalFor(g, w);
   const gap = refusal === null && g.gap !== null && g.gap >= GAP_MIN;
+  const asked = `${g.department} asked for ${hires} ${hiresWord(hires)}.`;
   const body: string[] = [];
   let headline: string;
   if (refusal !== null) {
-    headline = `${g.department} has asked for ${hires} ${hiresWord(hires)}.`;
+    headline = asked;
     body.push(refusal);
   } else if (gap) {
-    headline = `Hold the ${hires} ${hiresWord(hires)}. Close the gap first.`;
-    body.push(gapSentence(g), 'We cannot count how much each person produces, so we cannot say how many hires closing the gap is worth.', `Look again in ${LOOK_AGAIN_DAYS} days.`);
+    headline = `${asked} Coach the ${g.shallow.people} first.`;
+    body.push(...gapLines(g, w), coachLine(g));
   } else {
-    headline = `Approve the ${hires} ${hiresWord(hires)}.`;
-    body.push(noGapSentence(g), 'There is no gap to close here, so more output means more people.');
+    headline = `${asked} Approve ${hires === 1 ? "it" : "them"}.`;
+    body.push(noGapLine(g, w), 'So coaching the rest would not add much. More work needs more people.');
   }
   const recommended: Choice = refusal === null && gap ? 'hold' : 'go';
   return {
     kind: 'hire', cardId: 'hire', key: `hire:${g.department}`, department: g.department, touches: g.people,
-    headline, body, caption: groupsCaption(g), cannotSee: cannotSeeLine(g), groups: g,
+    headline, body, caption: groupsCaption(), cannotSee: cannotSeeLine(g), groups: g,
     recommended,
     buttons: recommended === 'hold'
-      ? { hold: `Hold the ${hiresWord(hires)}`, go: 'Hire anyway' }
+      ? { hold: 'Coach first', go: 'Hire anyway' }
       : { go: `Approve the ${hiresWord(hires)}`, hold: 'Hold anyway' },
-    decided: decidedFrom(decision, g, nowS),
+    decided: decidedFrom(decision, g, nowS, w),
     refusal,
     link: `/pulse/dept?dept=${encodeURIComponent(g.department)}`,
   };
 }
 
 /** Someone has left. Replace them unless there is a gap the team could close first. */
-export function backfillCard(g: WorkGroups, decision: DecisionRecord | undefined, nowS: number): Card {
-  const refusal = refusalFor(g);
+export function backfillCard(g: WorkGroups, decision: DecisionRecord | undefined, nowS: number, w: GroupWords = groupWords()): Card {
+  const refusal = refusalFor(g, w);
   const gap = refusal === null && g.gap !== null && g.gap >= GAP_MIN;
+  const left = `Someone has left ${g.department}.`;
   const body: string[] = [];
   let headline: string;
   if (refusal !== null) {
-    headline = `Someone has left ${g.department}.`;
+    headline = left;
     body.push(refusal);
   } else if (gap) {
-    headline = 'Do not replace them yet. Close the gap first.';
-    body.push(gapSentence(g), 'We cannot count how much each person produces, so we cannot say whether closing the gap covers the one who left.', `Look again in ${LOOK_AGAIN_DAYS} days.`);
+    headline = `${left} Coach the ${g.shallow.people} before replacing them.`;
+    body.push(...gapLines(g, w), coachLine(g));
   } else {
-    headline = 'Replace them.';
-    body.push('Nothing in how this team works would make up the difference.', "Losing one person loses one person's work.");
+    headline = `${left} Replace them.`;
+    body.push(noGapLine(g, w), 'So coaching the rest would not cover their work.');
   }
   const recommended: Choice = refusal === null && gap ? 'hold' : 'go';
   return {
     kind: 'backfill', cardId: 'backfill', key: `backfill:${g.department}`, department: g.department, touches: g.people,
-    headline, body, caption: groupsCaption(g), cannotSee: cannotSeeLine(g), groups: g,
+    headline, body, caption: groupsCaption(), cannotSee: cannotSeeLine(g), groups: g,
     recommended,
-    buttons: recommended === 'hold' ? { hold: 'Do not replace', go: 'Replace anyway' } : { go: 'Replace them', hold: 'Hold anyway' },
-    decided: decidedFrom(decision, g, nowS),
+    buttons: recommended === 'hold' ? { hold: 'Coach first', go: 'Replace anyway' } : { go: 'Replace them', hold: 'Hold anyway' },
+    decided: decidedFrom(decision, g, nowS, w),
     refusal,
     link: `/pulse/dept?dept=${encodeURIComponent(g.department)}`,
   };
 }
 
 /** The decided state of an asked card, and the follow-up once the look-again date has passed. */
-export function decidedFrom(d: DecisionRecord | undefined, g: WorkGroups, nowS: number): Decided | null {
+export function decidedFrom(d: DecisionRecord | undefined, g: WorkGroups, nowS: number, w: GroupWords = groupWords()): Decided | null {
   if (!d) return null;
   const then = d.figures as unknown as CardFigures;
   return {
@@ -223,27 +241,27 @@ export function decidedFrom(d: DecisionRecord | undefined, g: WorkGroups, nowS: 
     at: d.decidedAt,
     note: d.note,
     lookAgainAt: d.lookAgainAt,
-    followUp: nowS >= d.lookAgainAt ? { sentence: followUpSentence(then, cardFigures(g)) } : null,
+    followUp: nowS >= d.lookAgainAt ? { sentence: followUpSentence(then, cardFigures(g), w) } : null,
   };
 }
 
 /** What arrived since. Says "since then", never "because of", and says plainly when nothing moved. */
-export function followUpSentence(then: CardFigures, now: CardFigures): string {
+export function followUpSentence(then: CardFigures, now: CardFigures, w: GroupWords = groupWords()): string {
   const thenTotal = then.deepPeople + then.shallowPeople;
   const nowTotal = now.deepPeople + now.shallowPeople;
   const parts: string[] = [];
   if (thenTotal > 0 && nowTotal > 0) {
     parts.push(now.deepPeople === then.deepPeople
-      ? `${now.deepPeople} of ${nowTotal} ${now.deepPeople === 1 ? 'does' : 'do'} mostly ${MEANINGFUL_WORK}, the same as then.`
-      : `Since then, ${now.deepPeople} of ${nowTotal} ${now.deepPeople === 1 ? 'does' : 'do'} mostly ${MEANINGFUL_WORK}. It was ${then.deepPeople} of ${thenTotal} when you decided.`);
+      ? `${now.deepPeople} of ${nowTotal} mostly ${now.deepPeople === 1 ? 'does' : 'do'} ${w.deep}, the same as then.`
+      : `Since then, ${now.deepPeople} of ${nowTotal} mostly ${now.deepPeople === 1 ? 'does' : 'do'} ${w.deep}. It was ${then.deepPeople} of ${thenTotal} when you decided.`);
   }
   if (then.shallowShare !== null && now.shallowShare !== null) {
     const moved = Math.round((now.shallowShare - then.shallowShare) * 100);
     parts.push(moved === 0
-      ? `The other group's sessions produce something as often as they did, ${pct(now.shallowShare)} of the time.`
-      : `The other group's sessions produced something ${pct(now.shallowShare)} of the time, against ${pct(then.shallowShare)} then.`);
+      ? `The rest still make something in ${pct(now.shallowShare)} of their sessions, as they did then.`
+      : `The rest now make something in ${pct(now.shallowShare)} of their sessions, against ${pct(then.shallowShare)} then.`);
   } else {
-    parts.push('Too little is measured now to compare what the sessions produced.');
+    parts.push('Too little was measured to compare what the sessions made.');
   }
   return parts.join(' ');
 }
@@ -323,14 +341,14 @@ function weeksWord(weeks: number): string {
 }
 
 /** Make a kind of work several people repeat with no skill behind it the standard way. */
-export function standardJobCard(j: StandardJob, decision: DecisionRecord | undefined, nowS: number): Card {
+export function standardJobCard(j: StandardJob, decision: DecisionRecord | undefined, nowS: number, w: GroupWords = groupWords()): Card {
   const body = [
     // A decided card is still read after people start using a skill, so this follows the figure.
     `${j.people} people in ${j.department} did ${j.label} ${j.prompts} times in the last ${WINDOW_DAYS} days, across ${j.sessions} ${j.sessions === 1 ? 'session' : 'sessions'}. ${j.skillShare === 0 ? 'None of them used a skill.' : `${pct(j.skillShare)} of those sessions used a skill.`}`,
   ];
   if (j.measuredHours !== null) body.push(`It took ${minutesWord(j.measuredHours * 60)} of measured time.`);
   if (j.deepMinutes !== null && j.otherMinutes !== null) {
-    body.push(`Done as ${MEANINGFUL_WORK}, a session of it took ${minutesWord(j.deepMinutes)}. Otherwise it took ${minutesWord(j.otherMinutes)}.`);
+    body.push(`Done as ${w.deep}, a session of it took ${minutesWord(j.deepMinutes)}. Otherwise it took ${minutesWord(j.otherMinutes)}.`);
   }
   return foundCard({
     kind: 'standard_job',
@@ -339,21 +357,21 @@ export function standardJobCard(j: StandardJob, decision: DecisionRecord | undef
     touches: j.people,
     headline: `Make ${j.label} a standard skill in ${j.department}.`,
     body,
-    caption: `Counted from prompts over the last ${WINDOW_DAYS} days. Times are measured active time, not an estimate of how long the work would take by hand. The kind of work is the classifier's judgement of each prompt.`,
+    caption: `Counted from prompts over the last ${WINDOW_DAYS} days. Times are measured time in the tool.`,
     measure: { label: 'The share of its sessions that used a skill', value: j.skillShare * 100, unit: '%', lowerIsBetter: false },
     link: teamLink(j.department),
   }, decision, nowS);
 }
 
 /** Give it to the next wave of people, or hold: how long the last waves took to get there. */
-export function expandCard(waves: Wave[], decision: DecisionRecord | undefined, nowS: number): Card | null {
+export function expandCard(waves: Wave[], decision: DecisionRecord | undefined, nowS: number, w: GroupWords = groupWords()): Card | null {
   const measured = waves.filter(w => w.weeksToHalf !== null);
   const last = measured[0];
   if (!last) return null;
   // The newest wave may not be halfway yet; then the card is about the latest one that is.
   const newest = waves[0] === last;
   const body = [
-    `${newest ? 'Your last wave' : 'Your latest wave to get there'}, of ${last.people}, took ${weeksWord(last.weeksToHalf!)} for half of them to start doing ${MEANINGFUL_WORK}.`,
+    `${newest ? 'Your last wave' : 'Your latest wave to get there'}, of ${last.people}, took ${weeksWord(last.weeksToHalf!)} for half of them to start doing ${w.deep}.`,
     `${last.reached === last.people ? (last.people === 1 ? 'They have' : `All ${last.people} have`) : `${last.reached} of the ${last.people} have`} got there so far.`,
   ];
   if (measured.length > 1) {
@@ -368,7 +386,7 @@ export function expandCard(waves: Wave[], decision: DecisionRecord | undefined, 
     touches: last.people,
     headline: (last.weeksToHalf ?? 0) <= 12 ? 'Give AI to the next wave of people.' : 'Hold the next wave until this one lands.',
     body,
-    caption: `A wave is everyone whose first prompt was in the same month. Measured to their first prompt the classifier judged ${MEANINGFUL_WORK} or better.`,
+    caption: `A wave is everyone who started in the same month.`,
     measure: { label: 'The time for half a wave to get there', value: last.weeksToHalf ?? 0, unit: ' weeks', lowerIsBetter: true },
     link: '/pulse/cio',
   }, decision, nowS);
@@ -395,9 +413,9 @@ export function rarelyUsedCard(r: RarelyUsed, decision: DecisionRecord | undefin
 }
 
 /** A team where one or two people hold most of the meaningful work. */
-export function keyPeopleCard(k: KeyPeople, decision: DecisionRecord | undefined, nowS: number): Card {
+export function keyPeopleCard(k: KeyPeople, decision: DecisionRecord | undefined, nowS: number, w: GroupWords = groupWords()): Card {
   const who = k.holders === 1 ? 'one person' : 'two people';
-  const body = [`${pct(k.share)} of the ${MEANINGFUL_WORK} in this team of ${k.people} comes from ${who}.`];
+  const body = [`${pct(k.share)} of the ${w.deep} in this team of ${k.people} comes from ${who}.`];
   if (k.soloKinds > 0) {
     body.push(`${k.soloKinds === 1 ? 'One kind' : `${k.soloKinds} kinds`} of work in the team ${k.soloKinds === 1 ? 'is' : 'are'} done by one person alone.`);
   }
@@ -409,7 +427,7 @@ export function keyPeopleCard(k: KeyPeople, decision: DecisionRecord | undefined
     touches: k.people,
     headline: `Spread what ${who} in ${k.department} ${k.holders === 1 ? 'knows' : 'know'}.`,
     body,
-    caption: `Counted from prompts over the last ${WINDOW_DAYS} days. Whether a prompt was ${MEANINGFUL_WORK} is the classifier's judgement. The people are named on the team's own coaching plan, not here.`,
+    caption: `Counted from prompts over the last ${WINDOW_DAYS} days. The people are named on the team's coaching plan.`,
     measure: { label: 'The share held by those people', value: k.share * 100, unit: '%', lowerIsBetter: true },
     link: teamLink(k.department),
   }, decision, nowS);
@@ -427,7 +445,7 @@ export function rolloutCard(r: Rollout, decision: DecisionRecord | undefined, no
       `It was confirmed as a new way of working in ${r.department} on ${dateWord(r.confirmedAt)}.`,
       `${people(r.people)} in ${r.teams} other ${r.teams === 1 ? 'team' : 'teams'} did the same kind of work, ${r.label}, in the last ${WINDOW_DAYS} days.`,
     ],
-    caption: `Confirmed on New ways of working. The kind of work is the classifier's judgement of the prompt it was found in. People are counted from prompts.`,
+    caption: `Confirmed on New ways of working. People are counted from prompts.`,
     measure: { label: 'The number of teams with a confirmed way of working for it', value: r.teamsWithOne, unit: '', lowerIsBetter: false },
     link: '/pulse/cio',
   }, decision, nowS);
@@ -446,7 +464,7 @@ export function timeFreedCard(t: TimeFreed, decision: DecisionRecord | undefined
       `At ${t.sessions} ${t.sessions === 1 ? 'session' : 'sessions'} a month, that is about ${minutesWord(t.hoursAMonth * 60)} a month the team has back.`,
       'Decide where it goes: work the team has not had time for, or a team that is short of time.',
     ],
-    caption: `Measured time in the tool over the last ${WINDOW_DAYS} days, against the ${WINDOW_DAYS} days that ended two months ago. It shows the work got quicker, not that less of it was done, and it cannot see time spent outside the tool. The kind of work is the classifier's judgement.`,
+    caption: `Measured time in the tool, last ${WINDOW_DAYS} days against the ${WINDOW_DAYS} days that ended two months ago. The work got quicker; it does not mean less of it was done.`,
     measure: { label: 'The time a session takes', value: t.nowMinutes, unit: ' minutes', lowerIsBetter: true },
     link: teamLink(t.department),
     buttons: { go: 'Plan for the time', hold: 'Not now' },
@@ -481,10 +499,13 @@ export interface BuildInput {
   /** What the page found on its own. Omitted where only the asked question matters. */
   finds?: WorkFinds;
   nowS: number;
+  /** The tier names an admin has set; the shipped names when left out. */
+  tierNames?: TierNames | null;
 }
 
 /** The page: the question at the top, and a card for each choice, biggest first. */
-export function buildSoWhat({ groups, decisions, asked, finds, nowS }: BuildInput): SoWhat {
+export function buildSoWhat({ groups, decisions, asked, finds, nowS, tierNames }: BuildInput): SoWhat {
+  const w = groupWords(tierNames);
   const byKey = new Map(decisions.map(d => [`${d.card}:${d.department}`, d]));
   const cards: Card[] = [];
 
@@ -492,17 +513,17 @@ export function buildSoWhat({ groups, decisions, asked, finds, nowS }: BuildInpu
   // though somebody has left.
   if (asked) {
     const g = groups.find(x => x.department === asked.department);
-    if (g && asked.question === 'hire') cards.push(hireCard(g, asked.hires, byKey.get(`hire:${g.department}`), nowS));
-    if (g && asked.question === 'backfill') cards.push(backfillCard(g, byKey.get(`backfill:${g.department}`), nowS));
+    if (g && asked.question === 'hire') cards.push(hireCard(g, asked.hires, byKey.get(`hire:${g.department}`), nowS, w));
+    if (g && asked.question === 'backfill') cards.push(backfillCard(g, byKey.get(`backfill:${g.department}`), nowS, w));
   }
 
   if (finds) {
     const found: Card[] = [];
-    for (const j of finds.jobs) found.push(standardJobCard(j, byKey.get(`standard_job:${j.taskType}:${j.department}`), nowS));
-    const expand = expandCard(finds.waves, byKey.get(`expand:${EVERYONE}`), nowS);
+    for (const j of finds.jobs) found.push(standardJobCard(j, byKey.get(`standard_job:${j.taskType}:${j.department}`), nowS, w));
+    const expand = expandCard(finds.waves, byKey.get(`expand:${EVERYONE}`), nowS, w);
     if (expand) found.push(expand);
     if (finds.rarelyUsed) found.push(rarelyUsedCard(finds.rarelyUsed, byKey.get(`rarely_used:${EVERYONE}`), nowS));
-    for (const k of finds.keyPeople) found.push(keyPeopleCard(k, byKey.get(`key_people:${k.department}`), nowS));
+    for (const k of finds.keyPeople) found.push(keyPeopleCard(k, byKey.get(`key_people:${k.department}`), nowS, w));
     for (const r of finds.rollouts) found.push(rolloutCard(r, byKey.get(`rollout:${r.eventId}:${r.department}`), nowS));
     for (const t of finds.timeFreed) found.push(timeFreedCard(t, byKey.get(`time_freed:${t.taskType}:${t.department}`), nowS));
     for (const e of finds.evenings) found.push(eveningsCard(e, byKey.get(`evenings:${e.department}`), nowS));
@@ -528,7 +549,7 @@ export function buildSoWhat({ groups, decisions, asked, finds, nowS }: BuildInpu
   // A decision already taken comes back to the top once it is due to be looked at again.
   cards.sort((a, b) => Number(!!b.decided?.followUp) - Number(!!a.decided?.followUp));
 
-  return { teams: groups.map(g => g.department), asked, cards, lookAgainDays: LOOK_AGAIN_DAYS, windowDays: WINDOW_DAYS };
+  return { teams: groups.map(g => g.department), words: w, asked, cards, lookAgainDays: LOOK_AGAIN_DAYS, windowDays: WINDOW_DAYS };
 }
 
 /** The decision log's rows that belong to Work Pulse, with DECISION_PREFIX taken off. */
