@@ -4,8 +4,9 @@
 // Async Drizzle on Postgres. Follows the
 // standard pattern: getTypedClient() + schema.<table>. No
 // aggregates here (plain DISTINCT read), so no Number()-coercion is needed.
+import { codeUsageIn, OPEN_END, readCodeUsage } from '@/lib/pulse/code/usage-daily';
 import { NextRequest, NextResponse } from 'next/server';
-import { and, eq, ne } from 'drizzle-orm';
+import { and, eq, ne, sql } from 'drizzle-orm';
 import { getAdminSession } from '@/lib/auth/admin-auth';
 import { getTypedClient } from '@/lib/db/client';
 import { schema } from '@/lib/db/schema';
@@ -27,11 +28,10 @@ export async function GET(request: NextRequest) {
 
   // Models seen in telemetry with no rate entry — surfaced as "unpriced"
   const client = await getTypedClient();
-  const cam = schema.codeAssistantMeta;
-  const seenModels = await client
-    .selectDistinct({ model: cam.model })
-    .from(cam)
-    .where(ne(cam.model, ''));
+  // Every Claude Code model seen, from the daily totals (lib/pulse/code/usage-daily.ts).
+  const now = Math.floor(Date.now() / 1000);
+  const seenModels = await readCodeUsage<{ model: string | null }>(sql`
+    SELECT DISTINCT model FROM (${codeUsageIn(0, OPEN_END, { nowS: now })}) u WHERE model <> ''`);
   // Codex models (OpenAI Compliance API) are priced from this same table.
   const codexModels = await client
     .selectDistinct({ model: schema.codexTurns.model })

@@ -14,6 +14,7 @@
 // card needs, then every card at once (each card's own queries also run side by
 // side, waiting only where one query needs another's result). The database
 // pool queues whatever does not fit at once.
+import { codeUsageIn, OPEN_END, readCodeUsage } from '@/lib/pulse/code/usage-daily';
 import { getCodeWorkTypeDefinitions } from '@/lib/pulse/code/tier-config';
 import { codeWorkTypeLabel, codeWorkTypeDefinition } from '@/lib/pulse/code/work-type-labels';
 import { visibleVendor, visibleOpenAi } from '@/lib/sources/openai-visibility';
@@ -39,7 +40,6 @@ export async function buildCodeOrgSummary(vendorParam: string | null) {
   const thirtyDaysAgo = now - 30 * 24 * 3600;
   const sevenDaysAgo = now - 7 * 24 * 3600;
 
-  const cam = schema.codeAssistantMeta;
   const css = schema.codeSessionStats;
   const csi = schema.coworkSkillInvocations;
   const cmi = schema.coworkMcpInvocations;
@@ -146,20 +146,15 @@ export async function buildCodeOrgSummary(vendorParam: string | null) {
   // turns (uncached and cached input, output) in the views that include it.
   const readModelMix = async () => {
     const [modelMixRaw, codexModels] = await Promise.all([
-      !withClaude ? [] : client
-        .select({
-          model: cam.model,
-          input_tokens: sql<number | string>`SUM(${cam.input_tokens})`,
-          output_tokens: sql<number | string>`SUM(${cam.output_tokens})`,
-          cache_creation_tokens: sql<number | string>`SUM(${cam.cache_creation_tokens})`,
-          cache_read_tokens: sql<number | string>`SUM(${cam.cache_read_tokens})`,
-          // Turns are PROMPTS: a prompt stores one row per model call.
-          turns: sql<number | string>`COUNT(DISTINCT COALESCE(${cam.prompt_id}, ${cam.id}))`,
-        })
-        .from(cam)
-        .where(and(gte(cam.occurred_at, thirtyDaysAgo), ne(cam.model, '')))
-        .groupBy(cam.model)
-        .orderBy(desc(sql`SUM(${cam.input_tokens}) + SUM(${cam.output_tokens})`)),
+      // Turns are PROMPTS: model_prompts counts each prompt once per model.
+      !withClaude ? [] : readCodeUsage<{ model: string; input_tokens: string; output_tokens: string; cache_creation_tokens: string; cache_read_tokens: string; turns: string }>(sql`
+        SELECT model, SUM(input_tokens) AS input_tokens, SUM(output_tokens) AS output_tokens,
+               SUM(cache_creation_tokens) AS cache_creation_tokens, SUM(cache_read_tokens) AS cache_read_tokens,
+               SUM(model_prompts) AS turns
+          FROM (${codeUsageIn(thirtyDaysAgo, OPEN_END, { nowS: now, prompts: true })}) u
+         WHERE model <> ''
+         GROUP BY model
+         ORDER BY SUM(input_tokens) + SUM(output_tokens) DESC`),
       !withCodex ? null : client
         .select({
           model: schema.codexTurns.model,
@@ -206,17 +201,11 @@ export async function buildCodeOrgSummary(vendorParam: string | null) {
     ) / 1000);
 
     async function sumPricedSpend(sinceEpochS: number): Promise<number> {
-      const rows = await client
-        .select({
-          model: cam.model,
-          inp: sql<number | string>`SUM(${cam.input_tokens})`,
-          outp: sql<number | string>`SUM(${cam.output_tokens})`,
-          cw: sql<number | string>`SUM(${cam.cache_creation_tokens})`,
-          cr: sql<number | string>`SUM(${cam.cache_read_tokens})`,
-        })
-        .from(cam)
-        .where(and(gte(cam.occurred_at, sinceEpochS), ne(cam.model, '')))
-        .groupBy(cam.model);
+      const rows = await readCodeUsage<{ model: string; inp: string; outp: string; cw: string; cr: string }>(sql`
+        SELECT model, SUM(input_tokens) AS inp, SUM(output_tokens) AS outp, SUM(cache_creation_tokens) AS cw, SUM(cache_read_tokens) AS cr
+          FROM (${codeUsageIn(sinceEpochS, OPEN_END, { nowS: now })}) u
+         WHERE model <> ''
+         GROUP BY model`);
       let total = 0;
       for (const r of rows) {
         const usd = priceTokens(r.model as string, {
@@ -245,18 +234,11 @@ export async function buildCodeOrgSummary(vendorParam: string | null) {
       // Spend concentration (30d): how much of total priced spend comes from the top
       // few users. Priced per-user from the same token rates as everything else —
       // measured, not estimated. Hidden below a minimum spender count (see helper).
-      !withClaude ? [] : client
-        .select({
-          user_id: cam.user_id,
-          model: cam.model,
-          inp: sql<number | string>`SUM(${cam.input_tokens})`,
-          outp: sql<number | string>`SUM(${cam.output_tokens})`,
-          cw: sql<number | string>`SUM(${cam.cache_creation_tokens})`,
-          cr: sql<number | string>`SUM(${cam.cache_read_tokens})`,
-        })
-        .from(cam)
-        .where(and(isNotNull(cam.user_id), ne(cam.user_id, ''), gte(cam.occurred_at, thirtyDaysAgo), ne(cam.model, '')))
-        .groupBy(cam.user_id, cam.model),
+      !withClaude ? [] : readCodeUsage<{ user_id: string; model: string; inp: string; outp: string; cw: string; cr: string }>(sql`
+        SELECT user_id, model, SUM(input_tokens) AS inp, SUM(output_tokens) AS outp, SUM(cache_creation_tokens) AS cw, SUM(cache_read_tokens) AS cr
+          FROM (${codeUsageIn(thirtyDaysAgo, OPEN_END, { nowS: now })}) u
+         WHERE user_id <> '' AND model <> ''
+         GROUP BY user_id, model`),
       withCodex ? codexSpendByPerson() : [],
       withClaude ? sumPricedSpend(monthStart) : 0,
       codexPriced(monthStart),
@@ -366,21 +348,15 @@ export async function buildCodeOrgSummary(vendorParam: string | null) {
   // priced with the same model rates as total spend. Source: the api_request
   // enrichment columns (migration 051). Unpriced models contribute turns but null spend.
   const leverageBy = async (column: 'skill_name' | 'agent_name') => {
-    const col = cam[column];
-    const grouped = await client
-      .select({
-        name: col,
-        model: cam.model,
-        inp: sql<number | string>`SUM(${cam.input_tokens})`,
-        outp: sql<number | string>`SUM(${cam.output_tokens})`,
-        cw: sql<number | string>`SUM(${cam.cache_creation_tokens})`,
-        cr: sql<number | string>`SUM(${cam.cache_read_tokens})`,
-        // Turns are PROMPTS: a prompt stores one row per model call.
-        turns: sql<number | string>`COUNT(DISTINCT COALESCE(${cam.prompt_id}, ${cam.id}))`,
-      })
-      .from(cam)
-      .where(and(isNotNull(col), ne(col, ''), gte(cam.occurred_at, thirtyDaysAgo), ne(cam.model, '')))
-      .groupBy(col, cam.model);
+    // Turns are PROMPTS: skill_prompts / agent_prompts count each prompt once per name and model.
+    const prompts = sql.raw(column === 'skill_name' ? 'skill_prompts' : 'agent_prompts');
+    const col = sql.raw(column);
+    const grouped = await readCodeUsage<{ name: string; model: string; inp: string; outp: string; cw: string; cr: string; turns: string }>(sql`
+      SELECT ${col} AS name, model, SUM(input_tokens) AS inp, SUM(output_tokens) AS outp,
+             SUM(cache_creation_tokens) AS cw, SUM(cache_read_tokens) AS cr, SUM(${prompts}) AS turns
+        FROM (${codeUsageIn(thirtyDaysAgo, OPEN_END, { nowS: now, prompts: true })}) u
+       WHERE ${col} <> '' AND model <> ''
+       GROUP BY ${col}, model`);
     const byName = new Map<string, { name: string; turns: number; tokens: number; spend: number; anyPriced: boolean }>();
     for (const r of grouped) {
       const name = r.name as string;
@@ -409,13 +385,10 @@ export async function buildCodeOrgSummary(vendorParam: string | null) {
     const [skillLeverage, agentLeverage, autonomyRows] = await Promise.all([
       withClaude ? leverageBy('skill_name') : [],
       withClaude ? leverageBy('agent_name') : [],
-      client
-        .select({
-          subagent: sql<number | string | null>`SUM(CASE WHEN ${cam.agent_name} IS NOT NULL AND ${cam.agent_name} != '' THEN 1 ELSE 0 END)`,
-          total: sql<number | string | null>`COUNT(*)`,
-        })
-        .from(cam)
-        .where(and(gte(cam.occurred_at, thirtyDaysAgo), ne(cam.model, ''))),
+      readCodeUsage<{ subagent: string | null; total: string | null }>(sql`
+        SELECT SUM(CASE WHEN agent_name <> '' THEN calls ELSE 0 END) AS subagent, SUM(calls) AS total
+          FROM (${codeUsageIn(thirtyDaysAgo, OPEN_END, { nowS: now })}) u
+         WHERE model <> ''`),
     ]);
     const autonomyRow = autonomyRows[0];
     const autonomyTotal = Number(autonomyRow?.total ?? 0);
@@ -467,7 +440,6 @@ export async function buildCodeOrgSummary(vendorParam: string | null) {
     // Day-grain AI-assisted commits — same rows the aggregator sums into
     // code_metrics.commit_count, re-bucketed by UTC day for the alignment
     // series. UTC day expression (idiom: lib/pulse/stickiness.ts).
-    const dayExpr = sql<string>`to_char(to_timestamp(${cam.occurred_at}) AT TIME ZONE 'UTC', 'YYYY-MM-DD')`;
     const ca = schema.codexActions;
     const codexDay = sql<string>`to_char(to_timestamp(${ca.occurred_at}) AT TIME ZONE 'UTC', 'YYYY-MM-DD')`;
 
@@ -484,11 +456,10 @@ export async function buildCodeOrgSummary(vendorParam: string | null) {
         .from(grs)
         .where(and(gte(grs.date, windowDays[0]), inArray(grs.repo, mappedRepos)))
         .groupBy(grs.repo),
-      client
-        .select({ day: dayExpr, commits: sql<number | string>`SUM(${cam.commit_count})` })
-        .from(cam)
-        .where(gte(cam.occurred_at, thirtyDaysAgo))
-        .groupBy(sql`1`),
+      readCodeUsage<{ day: string; commits: string }>(sql`
+        SELECT to_char(to_timestamp(day_start) AT TIME ZONE 'UTC', 'YYYY-MM-DD') AS day, SUM(commit_count) AS commits
+          FROM (${codeUsageIn(thirtyDaysAgo, OPEN_END, { nowS: now })}) u
+         GROUP BY 1`),
       !withCodex ? null : client
         .select({ day: codexDay, commits: sql<number | string>`SUM(${ca.commit_count})` })
         .from(ca)

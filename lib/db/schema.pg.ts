@@ -229,7 +229,7 @@ export const codeUsageDaily = pgTable('code_usage_daily', {
     agent_name: text().notNull().default(''),
     skill_name: text().notNull().default(''),
     effort: text().notNull().default(''),
-    recorded: integer().notNull().default(0),
+    query_source: text().notNull().default(''),
     source: text().notNull().default(''),
     calls: integer().notNull().default(0),
     model_prompts: integer().notNull().default(0),
@@ -245,7 +245,7 @@ export const codeUsageDaily = pgTable('code_usage_daily', {
     first_at: bigint({ mode: 'number' }).notNull(),
     last_at: bigint({ mode: 'number' }).notNull(),
 }, (t) => [
-    primaryKey({ columns: [t.session_id, t.day_start, t.user_id, t.model, t.agent_name, t.skill_name, t.effort, t.recorded, t.source] }),
+    primaryKey({ columns: [t.session_id, t.day_start, t.user_id, t.model, t.agent_name, t.skill_name, t.effort, t.query_source, t.source] }),
     index('idx_cud_day').on(t.day_start),
     index('idx_cud_user_day').on(t.user_id, t.day_start),
 ]);

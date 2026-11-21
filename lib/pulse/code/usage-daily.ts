@@ -25,6 +25,8 @@ import { withTx } from '@/lib/db/with-tx';
 import { getConfigValue, setConfigValue } from '@/lib/config';
 
 export const DAY = 86_400;
+/** End of a window with no upper limit ("since" reads), so calls stamped a little in the future still count. */
+export const OPEN_END = 32_503_680_000;
 const SETTLE_SECONDS = 60;
 const PAGE = 5000;
 const PAIRS_PER_FLUSH = 500;
@@ -43,12 +45,22 @@ interface RawFacade { execute: (q: unknown) => Promise<{ rows: unknown[] }> }
  * `grp` (rows read for one day's rebuild, kept apart from another day's in the same statement),
  * grouped by the summary's key.
  */
-function aggregateFrom(source: SQL): SQL {
+function aggregateFrom(source: SQL, withPrompts = true): SQL {
+  // Without prompt counts (spend, tokens, calls) the rows need no window functions.
+  const ranked = withPrompts ? sql`
+        SELECT c.*,
+               ROW_NUMBER() OVER (PARTITION BY c.session_id, c.grp, COALESCE(c.prompt_id, c.id), COALESCE(c.model, '')
+                                  ORDER BY c.occurred_at, c.id) AS rn_m,
+               ROW_NUMBER() OVER (PARTITION BY c.session_id, c.grp, COALESCE(c.prompt_id, c.id), COALESCE(c.skill_name, ''), COALESCE(c.model, '')
+                                  ORDER BY c.occurred_at, c.id) AS rn_s,
+               ROW_NUMBER() OVER (PARTITION BY c.session_id, c.grp, COALESCE(c.prompt_id, c.id), COALESCE(c.agent_name, ''), COALESCE(c.model, '')
+                                  ORDER BY c.occurred_at, c.id) AS rn_a
+          FROM (${source}) c` : sql`SELECT c.*, 0 AS rn_m, 0 AS rn_s, 0 AS rn_a FROM (${source}) c`;
   return sql`
-    SELECT session_id, day,
+    SELECT session_id, day AS day_start,
            COALESCE(user_id, '') AS user_id, COALESCE(model, '') AS model,
            COALESCE(agent_name, '') AS agent_name, COALESCE(skill_name, '') AS skill_name,
-           COALESCE(effort, '') AS effort, (CASE WHEN query_source IS NOT NULL THEN 1 ELSE 0 END) AS recorded,
+           COALESCE(effort, '') AS effort, COALESCE(query_source, '') AS query_source,
            COALESCE(source, '') AS source,
            COUNT(*) AS calls,
            COUNT(*) FILTER (WHERE rn_m = 1) AS model_prompts,
@@ -59,19 +71,10 @@ function aggregateFrom(source: SQL): SQL {
            COALESCE(SUM(commit_count), 0) AS commit_count, COALESCE(SUM(error_count), 0) AS error_count,
            COALESCE(SUM(tool_use_count), 0) AS tool_use_count,
            MIN(occurred_at) AS first_at, MAX(occurred_at) AS last_at
-      FROM (
-        SELECT c.*,
-               ROW_NUMBER() OVER (PARTITION BY c.session_id, c.grp, COALESCE(c.prompt_id, c.id), COALESCE(c.model, '')
-                                  ORDER BY c.occurred_at, c.id) AS rn_m,
-               ROW_NUMBER() OVER (PARTITION BY c.session_id, c.grp, COALESCE(c.prompt_id, c.id), COALESCE(c.skill_name, ''), COALESCE(c.model, '')
-                                  ORDER BY c.occurred_at, c.id) AS rn_s,
-               ROW_NUMBER() OVER (PARTITION BY c.session_id, c.grp, COALESCE(c.prompt_id, c.id), COALESCE(c.agent_name, ''), COALESCE(c.model, '')
-                                  ORDER BY c.occurred_at, c.id) AS rn_a
-          FROM (${source}) c
-      ) r
+      FROM (${ranked}) r
      WHERE counted
      GROUP BY session_id, day, COALESCE(user_id, ''), COALESCE(model, ''), COALESCE(agent_name, ''), COALESCE(skill_name, ''),
-              COALESCE(effort, ''), (CASE WHEN query_source IS NOT NULL THEN 1 ELSE 0 END), COALESCE(source, '')`;
+              COALESCE(effort, ''), COALESCE(query_source, ''), COALESCE(source, '')`;
 }
 
 /** Recomputes the given session-days from code_assistant_meta. Returns the rows written. */
@@ -83,7 +86,7 @@ export async function recomputeCodeUsageDays(pairs: Array<{ sid: string; day: nu
     const t = tx as unknown as RawFacade;
     await t.execute(sql`DELETE FROM code_usage_daily WHERE (session_id, day_start) IN (SELECT sid, day FROM (VALUES ${values}) AS v(sid, day))`);
     const written = await t.execute(sql`
-      INSERT INTO code_usage_daily (session_id, day_start, user_id, model, agent_name, skill_name, effort, recorded, source,
+      INSERT INTO code_usage_daily (session_id, day_start, user_id, model, agent_name, skill_name, effort, query_source, source,
         calls, model_prompts, skill_prompts, agent_prompts, input_tokens, output_tokens, cache_creation_tokens, cache_read_tokens,
         commit_count, error_count, tool_use_count, first_at, last_at)
       ${aggregateFrom(sql`
@@ -104,7 +107,7 @@ export async function pruneCodeUsageDaily(tx: unknown, cutoff: number): Promise<
   const day = dayStart(cutoff);
   await t.execute(sql`DELETE FROM code_usage_daily WHERE day_start <= ${day}`);
   await t.execute(sql`
-    INSERT INTO code_usage_daily (session_id, day_start, user_id, model, agent_name, skill_name, effort, recorded, source,
+    INSERT INTO code_usage_daily (session_id, day_start, user_id, model, agent_name, skill_name, effort, query_source, source,
       calls, model_prompts, skill_prompts, agent_prompts, input_tokens, output_tokens, cache_creation_tokens, cache_read_tokens,
       commit_count, error_count, tool_use_count, first_at, last_at)
     ${aggregateFrom(sql`SELECT m.*, ${day}::bigint AS day, 0 AS grp, TRUE AS counted FROM code_assistant_meta m WHERE m.occurred_at >= ${day} AND m.occurred_at < ${day + DAY}`)}`);
@@ -163,10 +166,11 @@ export async function runCodeUsageDaily(nowS = Math.floor(Date.now() / 1000)): P
 }
 
 /** The whole UTC days inside [start, end) that come from the summary; the rest come from raw calls. */
-export function wholeDays(start: number, end: number, nowS: number): { from: number; to: number } | null {
-  // The first day always comes from the raw calls too, even when the window starts at midnight:
-  // a prompt already running at the window's start counts in the window, as it does in the raw calls.
-  const from = dayStart(start) + DAY;
+export function wholeDays(start: number, end: number, nowS: number, withPrompts = true): { from: number; to: number } | null {
+  // With prompt counts, the first day always comes from the raw calls too, even when the window
+  // starts at midnight: a prompt already running at the window's start counts in the window, as it
+  // does in the raw calls.
+  const from = withPrompts || dayStart(start) !== start ? dayStart(start) + DAY : start;
   // Today always comes from the raw calls: the summary can be a few minutes behind.
   const to = Math.min(dayStart(end), dayStart(nowS));
   return to > from ? { from, to } : null;
@@ -176,19 +180,22 @@ export function wholeDays(start: number, end: number, nowS: number): { from: num
  * Claude Code use in [start, end) in the summary's shape: whole days from code_usage_daily and the
  * part-days at either end (and today) added up from code_assistant_meta. Use as a FROM source and
  * group or filter it like the summary table. `rawWhere` narrows the raw calls (column names of
- * code_assistant_meta) and `summaryWhere` the summary rows the same way.
+ * code_assistant_meta, alias m) and `summaryWhere` the summary rows the same way. Prompt columns are
+ * 0 unless `prompts` is set.
  */
-export function codeUsageIn(start: number, end: number, opts: { nowS?: number; rawWhere?: SQL; summaryWhere?: SQL } = {}): SQL {
+export function codeUsageIn(start: number, end: number, opts: { nowS?: number; rawWhere?: SQL; summaryWhere?: SQL; prompts?: boolean } = {}): SQL {
   const nowS = opts.nowS ?? Math.floor(Date.now() / 1000);
-  const whole = wholeDays(start, end, nowS);
+  // Prompt counts cost window functions over the part-days; leave them out unless a reader uses them.
+  const withPrompts = opts.prompts ?? false;
+  const whole = wholeDays(start, end, nowS, withPrompts);
   const rawWhere = opts.rawWhere ? sql` AND ${opts.rawWhere}` : sql``;
   const summaryWhere = opts.summaryWhere ? sql` AND ${opts.summaryWhere}` : sql``;
   // Raw calls in [a, b), looking back to `lookFrom` so a prompt already counted on an earlier
   // summary day is not counted again.
   const raw = (a: number, b: number, lookFrom: number) => aggregateFrom(sql`
     SELECT m.*, ${sql.raw(`(m.occurred_at - (((m.occurred_at % ${DAY}) + ${DAY}) % ${DAY}))`)} AS day, 0 AS grp, (m.occurred_at >= ${a}) AS counted
-      FROM code_assistant_meta m WHERE m.occurred_at >= ${lookFrom} AND m.occurred_at < ${b}${rawWhere}`);
-  const cols = sql`session_id, day_start, user_id, model, agent_name, skill_name, effort, recorded, source,
+      FROM code_assistant_meta m WHERE m.occurred_at >= ${withPrompts ? lookFrom : a} AND m.occurred_at < ${b}${rawWhere}`, withPrompts);
+  const cols = sql`session_id, day_start, user_id, model, agent_name, skill_name, effort, query_source, source,
     calls, model_prompts, skill_prompts, agent_prompts, input_tokens, output_tokens, cache_creation_tokens, cache_read_tokens,
     commit_count, error_count, tool_use_count, first_at, last_at`;
   if (!whole) return sql`SELECT * FROM (${raw(start, end, start)}) r0`;
@@ -196,4 +203,10 @@ export function codeUsageIn(start: number, end: number, opts: { nowS?: number; r
   if (start < whole.from) parts.push(sql`SELECT * FROM (${raw(start, whole.from, start)}) r1`);
   if (whole.to < end) parts.push(sql`SELECT * FROM (${raw(whole.to, end, Math.max(start, whole.to - DAY))}) r2`);
   return sql.join(parts, sql` UNION ALL `);
+}
+
+/** Runs a query over codeUsageIn and returns its rows. */
+export async function readCodeUsage<T>(query: SQL): Promise<T[]> {
+  const db = (await getTypedClient()) as unknown as RawFacade;
+  return (await db.execute(query)).rows as T[];
 }

@@ -15,6 +15,7 @@
  * `unallocated` rather than being dropped, so the report always reconciles:
  * `grandTotalUsd === Σ costCentres.totalUsd + unallocated.totalUsd` (±0.005).
  */
+import { codeUsageIn } from '@/lib/pulse/code/usage-daily';
 import { sql } from 'drizzle-orm';
 import { openaiShown } from '@/lib/sources/openai-visibility';
 import { getTypedClient } from '@/lib/db/client';
@@ -228,6 +229,16 @@ async function loadLookups(db: unknown): Promise<ChargebackLookups> {
   return { rates, deptByUserId, deptToCentre, openai: { chatgpt: o?.chatgpt === true, codex: o?.codex === true, shown } };
 }
 
+type CodeSpendRow = {
+  user_id: string | null;
+  model: string | null;
+  i: number | string | null;
+  o: number | string | null;
+  cw: number | string | null;
+  cr: number | string | null;
+  seg: number | string | null;
+};
+
 export async function buildChargeback(
   period: string,
   nowS: number = Math.floor(Date.now() / 1000),
@@ -327,24 +338,27 @@ export async function buildChargeback(
   };
   const [codeRows, coworkRows, coworkTokenRows, chatgptRows, codexRows] = await Promise.all([
     // Code tokens per (user_id, model).
-    rawAll<{
-      user_id: string | null;
-      model: string | null;
-      i: number | string | null;
-      o: number | string | null;
-      cw: number | string | null;
-      cr: number | string | null;
-      seg: number | string | null;
-    }>(
-      db,
-      sql`SELECT user_id, model,
-                SUM(input_tokens) AS i, SUM(output_tokens) AS o,
-                SUM(cache_creation_tokens) AS cw, SUM(cache_read_tokens) AS cr,
-                ${segOf('code_assistant_meta', 'occurred_at')} AS seg
-         FROM code_assistant_meta
-         WHERE occurred_at >= ${start} AND occurred_at < ${end}${forUsers('user_id')}
-         GROUP BY user_id, model, seg`
-    ),
+    // From the daily totals (lib/pulse/code/usage-daily.ts) when nobody moved department this
+    // month; a move splits a person's spend at its exact time, so those months read the calls.
+    moverIds.length > 0
+      ? rawAll<CodeSpendRow>(
+          db,
+          sql`SELECT user_id, model,
+                    SUM(input_tokens) AS i, SUM(output_tokens) AS o,
+                    SUM(cache_creation_tokens) AS cw, SUM(cache_read_tokens) AS cr,
+                    ${segOf('code_assistant_meta', 'occurred_at')} AS seg
+             FROM code_assistant_meta
+             WHERE occurred_at >= ${start} AND occurred_at < ${end}${forUsers('user_id')}
+             GROUP BY user_id, model, seg`
+        )
+      : rawAll<CodeSpendRow>(
+          db,
+          sql`SELECT NULLIF(user_id, '') AS user_id, NULLIF(model, '') AS model,
+                    SUM(input_tokens) AS i, SUM(output_tokens) AS o,
+                    SUM(cache_creation_tokens) AS cw, SUM(cache_read_tokens) AS cr, 0 AS seg
+             FROM (${codeUsageIn(start, end, { nowS, ...(only ? { rawWhere: sql`m.user_id IN (${only.length ? sql.join(only.map(id => sql`${id}`), sql`, `) : sql`NULL`})`, summaryWhere: sql`user_id IN (${only.length ? sql.join(only.map(id => sql`${id}`), sql`, `) : sql`NULL`})` } : {}) })}) u
+             GROUP BY NULLIF(user_id, ''), NULLIF(model, '')`
+        ),
     // Cowork spend per user.
     rawAll<{ user_id: string | null; c: number | string | null; seg: number | string | null }>(
       db,
