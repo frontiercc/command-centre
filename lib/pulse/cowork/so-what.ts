@@ -168,7 +168,7 @@ function noGapLine(g: WorkGroups, w: GroupWords): string {
 }
 
 const coachLine = (g: WorkGroups) =>
-  `Help those ${g.shallow.people} work like the ${g.deep.people}, then look again in ${LOOK_AGAIN_DAYS} days.`;
+  `Help the other ${g.shallow.people} work like the first ${g.deep.people}, then look again in ${LOOK_AGAIN_DAYS} days.`;
 
 /** Should this team hire? Coach first while there is a gap to close; approve when there is none. */
 export function hireCard(g: WorkGroups, hires: number, decision: DecisionRecord | undefined, nowS: number, w: GroupWords = groupWords()): Card {

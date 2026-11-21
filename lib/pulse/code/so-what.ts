@@ -193,7 +193,7 @@ function noGapLines(g: OutputGroups, w: GroupWords): string[] {
 }
 
 const worthLine = (g: OutputGroups, worth: number) =>
-  `If the ${g.shallow.people} worked like the ${g.deep.people}, the team would get as much done as ${round1(worth)} more ${peopleNoun(round1(worth))}`;
+  `If the other ${g.shallow.people} worked like the first ${g.deep.people}, the team would get as much done as ${round1(worth)} more ${peopleNoun(round1(worth))}`;
 
 /**
  * Should this team hire? Coach first when the people who do not hand work over, working like the
