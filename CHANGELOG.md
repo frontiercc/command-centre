@@ -1,5 +1,12 @@
 # Changelog
 
+## 1.4.7 (2026-11-21)
+
+- **Faster Audit Log:** each page looks up Claude Code figures for its own prompts only, instead of adding up every Claude Code model call. Later pages no longer skip or repeat rows when several sources are shown together.
+- **Faster My Pulse and department pages:** spend is worked out for the people shown only.
+- **Spend Review:** no longer fails when a month has a lot of activity, and compares each person with colleagues in one pass.
+- New indexes for System health and the Audit Log list (migration 0062).
+
 ## 1.4.6 (2026-11-20)
 
 - **Faster pages:** the heavy pages (Dashboard, Work Pulse, Developer Pulse, both Users lists, FinOps) read figures prepared in the background every 5 minutes, instead of working them out on each visit. Figures are at most a few minutes old.
