@@ -8,6 +8,7 @@
 // COUNT/SUM/AVG aggregate is Number()-coerced (bigint/numeric come
 // back as STRINGS on Postgres). otel_events.tool_input is jsonb on Postgres —
 // its `decision` field is read with `->>'decision'`.
+import { coworkUsageIn, OPEN_END } from '@/lib/pulse/cowork/usage-daily';
 import { getTierNames } from '@/lib/pulse/tier-config';
 import { and, eq, gte, isNotNull, lt, sql } from 'drizzle-orm';
 import { weekStarts } from '@/lib/pulse/period';
@@ -120,12 +121,11 @@ export async function buildOrgSummary(vendor: Vendor, quarterly: boolean) {
   const tierRow = tierRows[0];
 
   // OTel model mix — top models by request count (30 days)
+  // From the Cowork daily totals (lib/pulse/cowork/usage-daily.ts).
   const modelMixRaw = await rawAll<{ model: string; cnt: number | string }>(client, sql`
-    SELECT model, COUNT(*) AS cnt
-    FROM cowork_messages
-    WHERE message_type = 'cowork_api_request'
-      AND occurred_at >= ${thirtyDaysAgo}
-      AND model IS NOT NULL
+    SELECT model, SUM(calls) AS cnt
+    FROM (${coworkUsageIn(thirtyDaysAgo, OPEN_END)}) u
+    WHERE model <> ''
     GROUP BY model
     ORDER BY cnt DESC
   `);
