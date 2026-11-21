@@ -14,6 +14,7 @@
  *    Task). Both are captured from migration 0036 onwards; a launch from before
  *    then has no name and counts only in the headline launch figure.
  */
+import { coworkUsageIn } from '@/lib/pulse/cowork/usage-daily';
 import { codeUsageIn, OPEN_END } from '@/lib/pulse/code/usage-daily';
 import { sql } from 'drizzle-orm';
 import { getTypedClient } from '@/lib/db/client';
@@ -117,13 +118,12 @@ export async function buildSubagentRegister(nowS: number = Math.floor(Date.now()
 
   // Cowork model calls inside subagents (cost as the client reports it).
   for (const r of await rows(sql`
-    SELECT agent_name, MAX(query_source) AS query_source, user_id, model,
-           COUNT(*) AS calls, SUM(cost_usd) AS cost, COUNT(cost_usd) AS costed,
+    SELECT agent_name, NULLIF(MAX(query_source), '') AS query_source, NULLIF(user_id, '') AS user_id, NULLIF(model, '') AS model,
+           SUM(calls) AS calls, SUM(cost_usd) AS cost, SUM(costed) AS costed,
            array_agg(DISTINCT session_id) AS sessions
-      FROM cowork_messages
-     WHERE message_type = 'cowork_api_request' AND surface = 'cowork'
-       AND agent_name IS NOT NULL AND occurred_at >= ${since}
-     GROUP BY agent_name, user_id, model`)) {
+      FROM (${coworkUsageIn(since, OPEN_END, { nowS })}) u
+     WHERE surface = 'cowork' AND agent_name <> ''
+     GROUP BY agent_name, NULLIF(user_id, ''), NULLIF(model, '')`)) {
     facts.push({
       surface: 'cowork', name: String(r.agent_name), querySource: (r.query_source as string | null) ?? null,
       userId: (r.user_id as string | null) ?? null, model: (r.model as string | null) ?? null,
@@ -159,9 +159,9 @@ export async function buildSubagentRegister(nowS: number = Math.floor(Date.now()
     }, rates));
   }
   const [coworkTotalRow] = await rows(sql`
-    SELECT SUM(cost_usd) AS cost, COUNT(cost_usd) AS costed
-      FROM cowork_messages
-     WHERE message_type = 'cowork_api_request' AND surface = 'cowork' AND occurred_at >= ${since}`);
+    SELECT SUM(cost_usd) AS cost, SUM(costed) AS costed
+      FROM (${coworkUsageIn(since, OPEN_END, { nowS })}) u
+     WHERE surface = 'cowork'`);
   const coworkTotal = coworkTotalRow && num(coworkTotalRow.costed) > 0 ? num(coworkTotalRow.cost) : null;
 
   // Aggregate named facts per subagent; an unnamed launch counts only in the headline.
