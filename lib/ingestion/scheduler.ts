@@ -178,8 +178,9 @@ async function runCycle(): Promise<void> {
   // the rest of this cycle's jobs beside it.
   if (generation !== schedulerGeneration) return;
 
-  // Claude Code daily totals (lib/pulse/code/usage-daily.ts): every five minutes, add the model
-  // calls that arrived since the last run to code_usage_daily, which the Claude Code pages read.
+  // Claude Code and Cowork daily totals (lib/pulse/code/usage-daily.ts, lib/pulse/cowork/usage-daily.ts):
+  // every five minutes, add the model calls that arrived since the last run to the daily totals the
+  // pages read. One after the other, so they never compete for the database.
   // STARTED, NOT AWAITED: the first run builds every day and must not hold up the jobs after it.
   if (!codeUsageInFlight && Date.now() - codeUsageLastAt >= CODE_USAGE_EVERY_MS) {
     codeUsageInFlight = true;
@@ -187,7 +188,12 @@ async function runCycle(): Promise<void> {
     void runJob('code_usage_daily', 'Claude Code daily totals', async () => {
       const { runCodeUsageDaily } = await import('@/lib/pulse/code/usage-daily');
       await runCodeUsageDaily();
-    }).finally(() => { codeUsageInFlight = false; });
+    })
+      .then(() => runJob('cowork_usage_daily', 'Cowork daily totals', async () => {
+        const { runCoworkUsageDaily } = await import('@/lib/pulse/cowork/usage-daily');
+        await runCoworkUsageDaily();
+      }))
+      .finally(() => { codeUsageInFlight = false; });
   }
 
   // Page figures (lib/kept-figures.ts): every few minutes, rebuild the heavy pages' figures so a

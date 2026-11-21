@@ -250,6 +250,35 @@ export const codeUsageDaily = pgTable('code_usage_daily', {
     index('idx_cud_user_day').on(t.user_id, t.day_start),
 ]);
 
+// Cowork model calls added up per session, UTC day and model (migration 0064), kept current by
+// lib/pulse/cowork/usage-daily.ts. Text columns use '' for "none" so they can be in the key.
+export const coworkUsageDaily = pgTable('cowork_usage_daily', {
+    session_id: text().notNull(),
+    day_start: bigint({ mode: 'number' }).notNull(),
+    user_id: text().notNull().default(''),
+    model: text().notNull().default(''),
+    agent_name: text().notNull().default(''),
+    skill_name: text().notNull().default(''),
+    query_source: text().notNull().default(''),
+    product: text().notNull().default(''),
+    surface: text().notNull().default(''),
+    source: text().notNull().default(''),
+    calls: integer().notNull().default(0),
+    cost_usd: numeric(),
+    costed: integer().notNull().default(0),
+    with_usage: integer().notNull().default(0),
+    input_tokens: bigint({ mode: 'number' }).notNull().default(0),
+    output_tokens: bigint({ mode: 'number' }).notNull().default(0),
+    cache_creation_tokens: bigint({ mode: 'number' }).notNull().default(0),
+    cache_read_tokens: bigint({ mode: 'number' }).notNull().default(0),
+    first_at: bigint({ mode: 'number' }).notNull(),
+    last_at: bigint({ mode: 'number' }).notNull(),
+}, (t) => [
+    primaryKey({ columns: [t.session_id, t.day_start, t.user_id, t.model, t.agent_name, t.skill_name, t.query_source, t.product, t.surface, t.source] }),
+    index('idx_wud_day').on(t.day_start),
+    index('idx_wud_user_day').on(t.user_id, t.day_start),
+]);
+
 // ChatGPT and Codex spend from OpenAI's Compliance API (migration 0043), kept apart
 // from Claude's spend so no page shows it under a Claude label.
 
@@ -655,6 +684,7 @@ export const coworkMessages = pgTable('cowork_messages', {
     index('idx_cowork_messages_flagged').on(t.flagged),
     index('idx_cowork_messages_session').on(t.session_id, t.occurred_at),
     index('idx_cowork_messages_agent_name').on(t.agent_name, t.occurred_at).where(sql`agent_name IS NOT NULL`),
+    index('idx_cowork_messages_api_ingested').on(t.ingested_at, t.id).where(sql`message_type = 'cowork_api_request'`),
     // Whether a person has ever sent a Work Pulse prompt, per vendor (migration 0056).
     index('idx_cowork_wp_people_claude').on(t.user_id).where(sql`message_type = 'cowork_user_message' AND (surface IN ('cowork', 'chat') OR surface IS NULL) AND (source IS NULL OR source NOT IN ('chatgpt_chat', 'chatgpt_work', 'codex'))`),
     index('idx_cowork_wp_people_openai').on(t.user_id).where(sql`message_type = 'cowork_user_message' AND (surface IN ('cowork', 'chat') OR surface IS NULL) AND source IN ('chatgpt_chat', 'chatgpt_work', 'codex')`),
@@ -1551,6 +1581,7 @@ export const pgSchema = {
   askLog,
   codeAssistantMeta,
   codeUsageDaily,
+  coworkUsageDaily,
   codeMetrics,
   codeOtelMetrics,
   codeSessionClassifications,

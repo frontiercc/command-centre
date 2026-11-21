@@ -23,6 +23,7 @@ export interface JobCatalogEntry {
 export const JOB_CATALOG: readonly JobCatalogEntry[] = [
   { name: 'compliance_sync', label: 'Compliance sync' },
   { name: 'code_usage_daily', label: 'Claude Code daily totals' },
+  { name: 'cowork_usage_daily', label: 'Cowork daily totals' },
   { name: 'kept_figures_refresh', label: 'Page figures refresh' },
   { name: 'openai_sync', label: 'OpenAI sync' },
   { name: 'analytics_ingest', label: 'Analytics ingest', infrequent: true },
