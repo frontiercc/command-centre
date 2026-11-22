@@ -148,7 +148,7 @@ export function WorkPulsePanel({ data, product, title = 'Work Pulse', actions = 
         />
         <QuestionCard
           question={`${t.t3} work`}
-          value={half !== null && d ? <span className="text-[14px] leading-5 font-medium tracking-normal">{(d.frontierPeople30d ?? 0).toLocaleString('en-GB')} people did {(frontierTasks ?? 0).toLocaleString('en-GB')} {t.t3.toLowerCase()} tasks. {half.toLocaleString('en-GB')} of them did 50% of those tasks.</span> : undefined}
+          value={half !== null && d ? <span className="text-[14px] leading-5 font-normal tracking-normal">{(d.frontierPeople30d ?? 0).toLocaleString('en-GB')} people did {(frontierTasks ?? 0).toLocaleString('en-GB')} {t.t3.toLowerCase()} tasks. {half.toLocaleString('en-GB')} of them did 50% of those tasks.</span> : undefined}
           notMeasured={half === null ? `No ${t.t3.toLowerCase()} work in ${span}` : undefined}
         />
       </div>
