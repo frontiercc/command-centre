@@ -107,5 +107,14 @@ export function shareWords(v: number): string {
   if (v <= 0.1) return 'very few';
   return Math.abs(near[0] - v) <= 0.04 ? near[1] : `${Math.round(v * 100)}%`;
 }
+/**
+ * Two shares said the same way, so a sentence never mixes "three in four" with "87%": words when
+ * both have a plain word form, percentages for both otherwise.
+ */
+export function sharePair(now: number, before: number): [string, string] {
+  const a = shareWords(now);
+  const b = shareWords(before);
+  return a.endsWith('%') || b.endsWith('%') ? [`${Math.round(now * 100)}%`, `${Math.round(before * 100)}%`] : [a, b];
+}
 export const cap = (t: string) => t.charAt(0).toUpperCase() + t.slice(1);
 

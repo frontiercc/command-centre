@@ -67,7 +67,7 @@ export default function ModelMixBar({ items, title = 'Model mix' }: { items: Mod
                   <th scope="col" className={T.thRight}>Share</th>
                   <th scope="col" className={T.thRight}>Tokens</th>
                   <th scope="col" className={T.thRight}>Turns</th>
-                  {totalCache > 0 && <th scope="col" className={T.thRight}>Cache</th>}
+                  {totalCache > 0 && <th scope="col" className={T.thRight}>Cached tokens</th>}
                 </tr>
               </thead>
               <tbody>
@@ -98,7 +98,7 @@ export default function ModelMixBar({ items, title = 'Model mix' }: { items: Mod
                           className={cx(T.tdRight, 'text-[#8F8F8F]')}
                           title="Cache tokens for this model: billed (at a discount), not counted in the % or bar above"
                         >
-                          {modelCache > 0 ? `+${formatTokens(modelCache)}` : 'none'}
+                          {modelCache > 0 ? formatTokens(modelCache) : 'none'}
                         </td>
                       )}
                     </tr>
@@ -109,8 +109,8 @@ export default function ModelMixBar({ items, title = 'Model mix' }: { items: Mod
           </div>
           {totalCache > 0 && (
             <PanelFoot>
-              Plus {formatTokens(totalCache)} cache tokens ({formatTokens(cacheRead)} read · {formatTokens(cacheCreation)} write),
-              billed at a discount, not counted in the mix above.
+              Plus {formatTokens(totalCache)} cached tokens: earlier conversation Claude stored ({formatTokens(cacheCreation)}) and read back ({formatTokens(cacheRead)}).
+              They are billed at a discount and left out of the mix above.
             </PanelFoot>
           )}
         </>

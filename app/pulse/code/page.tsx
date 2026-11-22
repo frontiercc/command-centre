@@ -143,7 +143,7 @@ function buildVerdicts(d: OrgSummary, vendor: Vendor): Verdict[] {
 
   const autonomy = m?.autonomy_ratio ?? null;
   const subagentPct = d.subagentShare != null ? Math.round(d.subagentShare * 100) : null;
-  const subagentNote = subagentPct != null ? ` ${subagentPct}% of turns were subagent-driven, a measure of delegation depth.` : '';
+  const subagentNote = subagentPct != null ? ` ${subagentPct}% of its steps were handed to helper agents.` : '';
   const commits = m?.commit_count ?? 0;
   const darkCount = d.darkRepos.length;
   const activeCount = m?.repo_count ?? 0;
@@ -166,14 +166,15 @@ function buildVerdicts(d: OrgSummary, vendor: Vendor): Verdict[] {
         ? 'Includes provider-routed usage estimated at list pricing'
         : undefined,
       projection: d.spendProjection != null
-        ? `≈ ${formatCurrency(d.spendProjection.projected)} projected month-end (estimate)`
+        ? `≈ ${formatCurrency(d.spendProjection.projected)} for this calendar month at the current pace (estimate)`
         : undefined,
       split: part(r => r.spend_usd, formatCurrency),
     },
     {
       question: 'Are developers delegating, or just typing faster?',
       value: autonomy == null ? 'Not measured' : `${autonomy.toFixed(1)}× `,
-      status: autonomy == null ? 'neutral' : autonomy >= 3 ? 'good' : autonomy >= 1 ? 'building' : 'attention',
+      // A sharp fall is worth a look whatever the level, so a falling figure is never called healthy.
+      status: autonomy == null ? 'neutral' : (priorPeriodChange(autonomy, p?.autonomy_ratio) ?? 0) <= -0.2 ? 'attention' : autonomy >= 3 ? 'good' : autonomy >= 1 ? 'building' : 'attention',
       plain: (autonomy == null
         ? 'No activity to judge yet.'
         : autonomy >= 3
@@ -188,7 +189,8 @@ function buildVerdicts(d: OrgSummary, vendor: Vendor): Verdict[] {
     {
       question: 'Is AI-assisted work actually shipping?',
       value: String(commits),
-      status: commits > 0 ? 'good' : 'attention',
+      // Commits Claude Code recorded but none reaching the tracked repos is worth a look, not healthy.
+      status: commits > 0 && !(d.githubOverlay && d.githubOverlay.trackedRepoCount > 0 && d.githubOverlay.totalCommits7d === 0) ? 'good' : 'attention',
       plain: (commits > 0
         ? `${commits} AI-assisted commit${commits === 1 ? '' : 's'} from ${w.sessions} in the last 30 days.`
         : `No AI-assisted commits in ${w.sessions} in the last 30 days. Activity may be exploration, review, or Q&A rather than shipping.`)
@@ -318,8 +320,8 @@ function EfficiencyCard({ metrics, claude, codexView = false }: { metrics: CodeM
   // Nothing to show until the productivity metrics arrive.
   if (linesPerHour == null && tokensPerAccept == null) return empty("Not measured yet. Lines and accepted edits arrive with Claude Code's productivity metrics.");
   const cells = [
-    { label: 'Lines per engaged hour', value: linesPerHour == null ? 'Not measured' : linesPerHour.toLocaleString() },
-    { label: 'Tokens per accepted edit', value: tokensPerAccept == null ? 'Not measured' : formatTokens(Math.round(tokensPerAccept)) },
+    { label: 'Lines added per engaged hour', value: linesPerHour == null ? 'Not measured' : linesPerHour.toLocaleString() },
+    { label: 'Tokens used per accepted edit', value: tokensPerAccept == null ? 'Not measured' : formatTokens(Math.round(tokensPerAccept)) },
   ];
   return (
     <Panel title="Efficiency" subtitle="30 days" flush>
@@ -574,7 +576,7 @@ export default function CodePulseOverviewPage() {
                 title={codexPresent ? 'Leverage: Claude Code spend by skill and subagent' : 'Leverage: spend by skill and subagent'}
                 subtitle="30 days"
                 right={data?.subagentShare != null
-                  ? <span className="text-[13px] text-[#666666] tabular-nums">{Math.round(data.subagentShare * 100)}% of turns subagent-driven</span>
+                  ? <span className="text-[13px] text-[#666666] tabular-nums">{Math.round(data.subagentShare * 100)}% of steps run by helper agents</span>
                   : undefined}
                 flush
               >

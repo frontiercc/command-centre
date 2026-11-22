@@ -43,7 +43,7 @@ export default function CodeProductivityStrip({ metrics }: { metrics: CodeMetric
       label: 'Engaged time · 30 days',
       value: hasAny ? formatDuration(engagedTotal) : null,
       sublabel: 'Active AI-assisted engineering time',
-      hint: `${formatDuration(m?.active_time_user_s ?? 0)} interacting · ${formatDuration(m?.active_time_cli_s ?? 0)} processing`,
+      hint: `${formatDuration(m?.active_time_user_s ?? 0)} people at the keyboard · ${formatDuration(m?.active_time_cli_s ?? 0)} Claude working`,
     },
     {
       label: 'Code output · 30 days',

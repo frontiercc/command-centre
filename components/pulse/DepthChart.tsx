@@ -15,7 +15,7 @@
  * it never grows with the page width.
  */
 import type { ReactNode } from 'react';
-import { DASH_SHADES, shareWords } from '@/components/dashboard/QuestionCard';
+import { DASH_SHADES, sharePair } from '@/components/dashboard/QuestionCard';
 import { deepWords, tierList, type TierNames } from '@/lib/pulse/tier-names';
 
 export interface TierWeek { weekStart: number; t1: number; t2: number; t3: number }
@@ -71,7 +71,6 @@ export function depthColumns(weeks: TierWeek[], window: DepthWindow, nowS: numbe
 
 const total = (c: { t1: number; t2: number; t3: number }) => c.t1 + c.t2 + c.t3;
 const realShare = (cs: DepthColumn[]) => { const a = cs.reduce((s, c) => s + total(c), 0); return a > 0 ? cs.reduce((s, c) => s + c.t2 + c.t3, 0) / a : null; };
-const words = (v: number) => (v < 0.15 ? `${Math.round(v * 100)}%` : shareWords(v));
 const plural = (c: number, one: string, many: string) => `${c} ${c === 1 ? one : many}`;
 
 /**
@@ -91,7 +90,7 @@ export function depthSentence(cols: DepthColumn[], window: DepthWindow, whose: s
   const monthName = new Date(cols[firstIdx[0]].start * 1000).toLocaleDateString('en-GB', { month: 'long', timeZone: 'UTC' });
   const firstWhen = !startsLate ? 'in its first month'
     : window === 52 ? `in ${monthName}, the first month with work` : `in the first month with work, from ${cols[firstIdx[0]].label}`;
-  return <>{verdict}Over {SPAN_WORDS[window]}, {deepWords(names)} work went from <b>{words(first)}</b> of {whose ? `${whose} ` : ''}{unit}s {firstWhen} to <b>{words(last)}</b> in its last month.</>;
+  return <>{verdict}Over {SPAN_WORDS[window]}, {deepWords(names)} work went from <b>{sharePair(first, last)[1]}</b> of {whose ? `${whose} ` : ''}{unit}s {firstWhen} to <b>{sharePair(first, last)[0]}</b> in its last month.</>;
 }
 
 /** The grid's sentence: this week first, because that is what a new starter needs to see. */

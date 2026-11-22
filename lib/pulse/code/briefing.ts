@@ -46,6 +46,8 @@ Rules:
 - Say tool actions per prompt as what it is, for example "AI took about 4.7 actions for each prompt". Never call it delegation depth, a depth, a score, an index or a ratio.
 - The work-type mix is an AI judgement. When you reference it, attribute it ("sessions Claude judged to be…"). Everything else is measured telemetry.
 - Be direct about weak signals; no cheerleading.
+- Write money with a thousands comma and two decimals, for example $4,353.60. Write counts with a thousands comma, for example 1,354.
+- Write in full sentences. Never use a colon to join two clauses or to set off an aside.
 
 Respond with ONLY JSON, no markdown fences:
 {"paragraphs": ["...", "...", "..."], "suggestion": "one concrete, grounded action"}
@@ -120,7 +122,7 @@ async function buildDataSummary(codexPresent: boolean): Promise<string> {
 
   if (!m) return '';
   const spendUsd = m.spend_usd !== null && m.spend_usd !== undefined ? Math.round(Number(m.spend_usd) * 100) / 100 : null; // pence, so the briefing never quotes $8.18486
-  lines.push(`this_week: spend_usd=${spendUsd ?? 'unpriced'}, sessions=${Number(m.session_count)}, active_repos=${Number(m.repo_count)}, ${codexPresent ? 'commits_in_ai_coding_sessions' : 'commits_in_claude_sessions'}=${Number(m.commit_count)}, tool_actions_per_human_prompt=${m.autonomy_ratio?.toFixed(1) ?? 'n/a'}, context_served_from_cache=${m.cache_hit_ratio !== null && m.cache_hit_ratio !== undefined ? Math.round(m.cache_hit_ratio * 100) + '%' : 'n/a'}`);
+  lines.push(`this_week: spend_usd=${spendUsd ?? 'unpriced'}, sessions=${Number(m.session_count)}, ${Number(m.repo_count) > 0 ? `active_repos=${Number(m.repo_count)}, ` : ''}${codexPresent ? 'commits_in_ai_coding_sessions' : 'commits_in_claude_sessions'}=${Number(m.commit_count)}, tool_actions_per_human_prompt=${m.autonomy_ratio?.toFixed(1) ?? 'n/a'}, context_served_from_cache=${m.cache_hit_ratio !== null && m.cache_hit_ratio !== undefined ? Math.round(m.cache_hit_ratio * 100) + '%' : 'n/a'}`);
   if (prior) {
     const priorSpend = prior.spend_usd !== null && prior.spend_usd !== undefined ? Math.round(Number(prior.spend_usd) * 100) / 100 : null;
     lines.push(`prior_week: spend_usd=${priorSpend ?? 'unpriced'}, sessions=${Number(prior.session_count)}, commits=${Number(prior.commit_count)}, tool_actions_per_prompt=${prior.autonomy_ratio?.toFixed(1) ?? 'n/a'}`);
@@ -205,23 +207,6 @@ async function buildDataSummary(codexPresent: boolean): Promise<string> {
   const darkReposCount = Number(darkRepos?.c ?? 0);
   if (darkReposCount > 0) lines.push(`repos_gone_quiet_30_days: ${darkReposCount}`);
 
-  const friction = await rawGet<{ c: number | string }>(client, sql`
-    SELECT COUNT(*) AS c FROM code_session_stats
-    WHERE last_at >= ${now - 7 * 24 * 3600} AND tool_use_count >= 5
-      AND CAST(error_count AS REAL) / tool_use_count > 0.25
-  `);
-  // Codex sessions' actions live in codex_actions, not Claude Code's telemetry: the same rule over
-  // them, as the Overview's friction panel reads it.
-  const codexFriction = codexPresent ? await rawGet<{ c: number | string }>(client, sql`
-    SELECT COUNT(*) AS c FROM (
-      SELECT session_id FROM codex_actions
-      WHERE occurred_at >= ${now - 7 * 24 * 3600}
-      GROUP BY session_id
-      HAVING COUNT(*) >= 5 AND CAST(SUM(failed) AS REAL) / COUNT(*) > 0.25
-    ) AS codex_friction
-  `) : undefined;
-  const frictionCount = Number(friction?.c ?? 0) + Number(codexFriction?.c ?? 0);
-  if (frictionCount > 0) lines.push(`high_friction_sessions_this_week: ${frictionCount} (over a quarter of tool actions failed)`);
 
   return lines.join('\n');
 }

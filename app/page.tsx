@@ -36,7 +36,7 @@ interface DashboardData {
     codeEvents: number;
     codeFlagged: number;
     /** cowork is the Work box: Claude Cowork and ChatGPT Work. */
-    avgSessionsPerWeek: { cowork: number; code: number; chat: number };
+    avgSessionsPerWeek: { cowork: number; code: number; chat: number; codeAutomated?: number };
     otelConfigured: boolean;
   };
   vendor: Vendor;
@@ -278,14 +278,14 @@ export default function DashboardPage() {
           <StatCard
             title="Chat conversations"
             value={stats.avgSessionsPerWeek.chat}
-            change="avg / week"
+            change="a week, last 4 weeks"
             subtitle={flaggedLine(stats.chatFlagged)}
             action={split ? formatSplit(data.products.sessions.chat, 'ChatGPT') : undefined}
           />
           <StatCard
             title="Work sessions"
             value={stats.avgSessionsPerWeek.cowork}
-            change="avg / week"
+            change="a week, last 4 weeks"
             subtitle={flaggedLine(stats.coworkFlagged)}
             action={
               split ? formatSplit(data.products.sessions.work, 'ChatGPT')
@@ -297,8 +297,10 @@ export default function DashboardPage() {
           <StatCard
             title="Code sessions"
             value={stats.avgSessionsPerWeek.code}
-            change="avg / week"
-            subtitle={flaggedLine(stats.codeFlagged)}
+            change="a week, last 4 weeks"
+            subtitle={stats.avgSessionsPerWeek.codeAutomated
+              ? `${stats.avgSessionsPerWeek.codeAutomated.toLocaleString('en-GB')} of them started by scripts · ${flaggedLine(stats.codeFlagged)}`
+              : flaggedLine(stats.codeFlagged)}
             action={split ? formatSplit(data.products.sessions.code, 'Codex') : undefined}
           />
         </Strip>

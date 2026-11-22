@@ -185,8 +185,8 @@ function priorMonthName(period: string): string {
 function paceVsPrior(vsPriorPct: number | null | undefined, prior: string): string | null {
   if (vsPriorPct == null) return null;
   const r = Math.round(vsPriorPct);
-  if (r === 0) return `About the same as ${prior}`;
-  return `${Math.abs(r)}% ${r < 0 ? 'less' : 'more'} than ${prior}`;
+  if (r === 0) return `About the same as ${prior}'s total`;
+  return `${Math.abs(r)}% ${r < 0 ? 'less' : 'more'} than ${prior}'s total`;
 }
 
 /** Cost centre rows shown before "Show all". */
@@ -568,7 +568,7 @@ export default function CostChargebackPage() {
                 label={<span className="inline-flex items-center gap-2">Caching saved {estimateTag}</span>}
                 value={report.cacheSavingsUsd != null ? fmtUsd(report.cacheSavingsUsd) : notShown('Not measured')}
                 tone="judged"
-                sub={report.cacheSavingsUsd != null ? 'at list rates' : undefined}
+                sub={report.cacheSavingsUsd != null ? 'what re-read conversation would have cost at full price' : undefined}
               />
             </Strip>
 

@@ -18,7 +18,7 @@ import { useSessionRole } from '@/components/shared/useSessionRole';
 import { useAskPageNote } from '@/components/ask/useAskAvailable';
 import { deepWords, tierNamesOr, type TierNames } from '@/lib/pulse/tier-names';
 import { NEW_WAYS_OF_WORKING } from '@/lib/pulse/cowork/coaching-words';
-import { QuestionCard, DASH, DASH_SHADES, shareWords, cap } from '@/components/dashboard/QuestionCard';
+import { QuestionCard, DASH, DASH_SHADES, shareWords, sharePair, cap } from '@/components/dashboard/QuestionCard';
 
 type Tier = { t1: number; t2: number; t3: number };
 
@@ -48,6 +48,10 @@ export interface OrgSummary {
     deepPeople30d?: number;
     deepPeopleWeeks?: number[];
     frontierPeople30d?: number;
+    /** Frontier tasks in the window, the total "half" is half of. */
+    frontierTasks30d?: number;
+    /** The first day judged tasks are kept from, when that is inside the window (older ones were deleted by retention). */
+    keptFrom?: number | null;
     frontierHalfPeople?: number | null;
     /** On All, the half-the-work count for each product; frontierHalfPeople is their sum. */
     frontierHalfSplit?: { claude: number; openai: number } | null;
@@ -71,7 +75,8 @@ export function WorkPulsePanel({ data, product, title = 'Work Pulse', actions = 
   // The review queue is an admin page and only admins confirm other people's work, so only they get the link.
   const isAdmin = useSessionRole() === 'admin';
   const q = d?.window === 'quarter';
-  const span = q ? 'the last quarter' : 'the last 30 days';
+  const keptDay = d?.keptFrom ? new Date(d.keptFrom * 1000).toLocaleDateString('en-GB', { day: 'numeric', month: 'short', timeZone: 'UTC' }) : null;
+  const span = keptDay ? `the weeks since ${keptDay}` : q ? 'the last quarter' : 'the last 30 days';
   const prior = q ? 'the quarter before' : 'the 30 days before';
   // Tell Ask the data's drawer which window this panel shows.
   useAskPageNote('work-pulse', d ? `The Work Pulse panel shows ${q ? 'the last quarter (the last 13 completed weeks)' : 'the last 30 days'}.` : null);
@@ -81,9 +86,12 @@ export function WorkPulsePanel({ data, product, title = 'Work Pulse', actions = 
   const people = d?.deepPeople30d ?? null;
   const active = d?.activePeople30d ?? null;
   const half = d?.frontierHalfPeople ?? null;
+  const [nowSaid, beforeSaid] = now !== null && before !== null ? sharePair(now, before) : [now !== null ? shareWords(now) : '', ''];
   const shareChange = now !== null && before !== null
-    ? (Math.round(now * 100) === Math.round(before * 100) ? `the same as ${prior}` : `${now > before ? 'up' : 'down'} from ${shareWords(before) === 'half' ? 'about half' : shareWords(before)} ${prior}`)
+    ? (Math.round(now * 100) === Math.round(before * 100) ? `the same as ${prior}` : `${now > before ? 'up' : 'down'} from ${beforeSaid === 'half' ? 'about half' : beforeSaid} ${prior}`)
     : null;
+  const frontierTasks = d?.frontierTasks30d ?? null;
+  const seeWho = <Link href={`/pulse/people?list=frontier-half&window=${q ? 'quarter' : 'month'}`} className="text-[#1F6F8B] font-medium hover:underline">See who</Link>;
   const answer = people !== null && active !== null && people > 0
     ? <><b>{people} of {active}</b> people handed {product} {deepName} work in {span}{now !== null ? <>, and <b>{shareWords(now)}</b> {shareWords(now) === 'all' ? '' : 'of all '}the tasks they gave it were {deepName}</> : null}.</>
     : now !== null
@@ -94,7 +102,9 @@ export function WorkPulsePanel({ data, product, title = 'Work Pulse', actions = 
       <div className="flex items-baseline gap-2 flex-wrap">
         <h2 className="m-0 text-[14px] font-semibold text-[#0A0A0A]">{title}</h2>
         <Tag tone="neutral">AI-judged</Tag>
-        <span className="ml-auto text-[12px] text-[#8F8F8F]">{q ? 'Last quarter against the quarter before' : 'Last 30 days against the 30 before'}</span>
+        <span className="ml-auto text-[12px] text-[#8F8F8F]">{keptDay
+          ? `Since ${keptDay}: older tasks are not kept`
+          : q ? 'Last quarter against the quarter before' : 'Last 30 days against the 30 before'}</span>
       </div>
       {answer && <p className="m-0 mt-2 text-[14px] leading-[22px] text-[#1A1A1A] [&_b]:font-semibold">{answer}</p>}
       <div className="grid grid-cols-2 xl:grid-cols-4 gap-2.5 mt-3">
@@ -115,7 +125,7 @@ export function WorkPulsePanel({ data, product, title = 'Work Pulse', actions = 
           question={`Tasks that are ${deepName}`}
           value={now !== null ? `${(tc.t2 + tc.t3).toLocaleString('en-GB')} of ${total(tc).toLocaleString('en-GB')}` : undefined}
           unit="tasks"
-          change={now !== null ? `${shareWords(now)}${shareChange ? `, ${shareChange}` : ''}` : undefined}
+          change={now !== null ? `${nowSaid}${shareChange ? `, ${shareChange}` : ''}` : undefined}
           trend={d?.tierWeeks.map(t => (t ? deep(t) : null))}
           notMeasured={now === null ? `No classified work in ${span}` : undefined}
           todo={actions && now !== null && before !== null
@@ -138,14 +148,14 @@ export function WorkPulsePanel({ data, product, title = 'Work Pulse', actions = 
           todo={actions && d ? (d.capabilitiesPending > 0 ? (isAdmin ? 'Confirm the ones that are real, below.' : 'Each person, or an admin, confirms the ones that are real.') : 'Nothing waiting for review.') : undefined}
         />
         <QuestionCard
-          question={`${t.t3} work rests on`}
+          question={`Half the ${t.t3.toLowerCase()} tasks come from`}
           value={half !== null ? (half === 1 ? 'One person' : `${half} people`) : undefined}
-          sub={half !== null && d ? <>{d.frontierHalfSplit
-            ? <>{d.frontierHalfSplit.claude} on Claude and {d.frontierHalfSplit.openai} on ChatGPT do half of each one&apos;s {t.t3.toLowerCase()} work, out of {d.frontierPeople30d} doing any.</>
-            : <>They do half of it, out of {d.frontierPeople30d} doing any.</>} <Link href={`/pulse/people?list=frontier-half&window=${q ? 'quarter' : 'month'}`} className="text-[#1F6F8B] font-medium hover:underline">See who</Link></> : undefined}
+          sub={half !== null && d ? <>{d.frontierPeople30d} {d.frontierPeople30d === 1 ? 'person' : 'people'} did {frontierTasks !== null ? `${frontierTasks.toLocaleString('en-GB')} ` : ''}{t.t3.toLowerCase()} tasks. {d.frontierHalfSplit
+            ? <>{d.frontierHalfSplit.claude} on Claude and {d.frontierHalfSplit.openai} on ChatGPT did half of each product&apos;s.</>
+            : <>{half === 1 ? 'One of them' : `${half} of them`} did half of those tasks.</>} {seeWho}</> : undefined}
           notMeasured={half === null ? `No ${t.t3.toLowerCase()} work in ${span}` : undefined}
           todo={actions && d?.frontierTopShare != null
-            ? <>If the busiest person left, {d.frontierTopShare < 0.15 ? `${Math.round(d.frontierTopShare * 100)}%` : shareWords(d.frontierTopShare)} of it would go. <Link href={`/pulse/people?list=frontier-half&window=${q ? 'quarter' : 'month'}`} className="text-[#1F6F8B] font-medium hover:underline">See who</Link></>
+            ? <>The busiest person did {Math.round(d.frontierTopShare * 100)}% of those tasks. {seeWho}</>
             : undefined}
         />
       </div>
@@ -176,7 +186,7 @@ function DepthPanel({ now, before, product, names }: { now: Tier; before: Tier |
         {t.t2 > 0 && <span style={{ flex: t.t2, background: T2 }} title={`${tn.t2} ${pct(t.t2 / total(t))}`} />}
         {t.t3 > 0 && <span style={{ flex: t.t3, background: T3 }} title={`${tn.t3} ${pct(t.t3 / total(t))}`} />}
       </div>
-      <span className={`text-right tabular-nums ${bold ? 'font-semibold text-[#0A0A0A]' : 'text-[#666666]'}`}>{pct(deep(t)!)}</span>
+      <span className={`text-right tabular-nums ${bold ? 'font-semibold text-[#0A0A0A]' : 'text-[#666666]'}`}>{pct(f(t))}</span>
     </div>
   );
   return (
@@ -193,7 +203,7 @@ function DepthPanel({ now, before, product, names }: { now: Tier; before: Tier |
         <span className="inline-flex items-center gap-1.5"><span className="w-2.5 h-2.5 rounded-[2px]" style={{ background: T1 }} />{tn.t1}</span>
         <span className="inline-flex items-center gap-1.5"><span className="w-2.5 h-2.5 rounded-[2px]" style={{ background: T2 }} />{tn.t2}</span>
         <span className="inline-flex items-center gap-1.5"><span className="w-2.5 h-2.5 rounded-[2px]" style={{ background: T3 }} />{tn.t3}</span>
-        <span className="ml-auto">right: {deepWords(names)}</span>
+        <span className="ml-auto">right: share that is {tn.t3.toLowerCase()}</span>
       </div>
     </section>
   );
@@ -202,6 +212,8 @@ function DepthPanel({ now, before, product, names }: { now: Tier; before: Tier |
 /* ── 13: Which skills and connectors are spreading? ─────────────── */
 
 function formatName(kind: 'skills' | 'connectors', name: string): string {
+  // Claude Code sends custom_skill for a person's own skill when tool details are off.
+  if (kind === 'skills' && name === 'custom_skill') return 'Own skills (names not sent)';
   return kind === 'skills' ? name.replace(':', ' · ') : name.replace(/^mcp__/, '').replace(/_/g, ' ');
 }
 

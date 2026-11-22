@@ -11,7 +11,7 @@
  */
 import Link from 'next/link';
 import { useEffect, useState } from 'react';
-import { QuestionCard, shareWords, cap } from '@/components/dashboard/QuestionCard';
+import { QuestionCard, shareWords, sharePair, cap } from '@/components/dashboard/QuestionCard';
 import { B, Muted, LOAD_FAILED } from '@/components/precision/ui';
 import { Frame, Track, linkCls } from '@/components/pulse/WorkPulseOverview';
 import {
@@ -90,7 +90,7 @@ export function WorkPanel({ q, product, who, period, onPeriod, onDrill, drill, r
   // Nothing before to compare with: say nothing rather than filling the line with it.
   const shareChange = q.share.before === null || q.share.now === null ? null
       : Math.round(q.share.now * 100) === Math.round(q.share.before * 100) ? `the same as ${shape.prior}`
-        : `${q.share.now > q.share.before ? 'up' : 'down'} from ${words(q.share.before)} ${shape.prior}`;
+        : `${q.share.now > q.share.before ? 'up' : 'down'} from ${sharePair(q.share.now, q.share.before)[1]} ${shape.prior}`;
   return (
     <Frame
       title={who.you ? 'Your work' : `${who.name}'s work`}

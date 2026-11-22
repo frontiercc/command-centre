@@ -34,7 +34,7 @@ describe('CodeProductivityStrip', () => {
   const html = renderToStaticMarkup(createElement(CodeProductivityStrip, { metrics }));
 
   it('shows engaged time as the sum of its rounded parts', () => {
-    expect(html).toContain('51m interacting · 10m processing');
+    expect(html).toContain('51m people at the keyboard · 10m Claude working');
     expect(html).toContain('1h 1m');
   });
 

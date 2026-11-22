@@ -250,7 +250,7 @@ describe('number check', () => {
 });
 
 describe('Codex in the briefing', () => {
-  it('counts Codex sessions where over a quarter of actions failed in the friction line', async () => {
+  it('gives the briefing no failed-action count, even when Codex sessions failed actions', async () => {
     await seedOrgRollingMetric();
     await setConfigValue('anthropicAiApiKey', 'sk-test-key');
     // Codex data exists, and one Codex session failed 3 of its 6 actions this week.
@@ -269,7 +269,7 @@ describe('Codex in the briefing', () => {
         return mockBriefingResponse(['A steady week.', 'Work carried on.', 'Nothing stood out.'], 'Keep going.');
       });
       await generateCodeBriefing();
-      expect(prompt).toContain('high_friction_sessions_this_week: 1 (over a quarter of tool actions failed)');
+      expect(prompt).not.toContain('friction');
     } finally {
       await sql.exec(`DELETE FROM codex_actions; DELETE FROM cowork_messages WHERE id = 'cx-p';`);
     }

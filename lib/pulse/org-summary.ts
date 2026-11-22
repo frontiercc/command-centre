@@ -342,6 +342,14 @@ export async function buildOrgSummary(vendor: Vendor, quarterly: boolean) {
       AND ${sql.raw(vendorClause(vendor, 'cm.'))}
   `);
 
+  // Retention deletes old prompts and their judgements, so a quarter can reach back past the
+  // oldest task still kept; the panel then says which weeks it really covers.
+  const keptRow = await rawGet<{ first_at: number | string | null }>(client, sql`
+    SELECT MIN(pc.msg_occurred_at) AS first_at FROM pulse_classifications pc WHERE pc.classifier_status = 'classified'
+  `);
+  const firstKept = keptRow?.first_at == null ? null : Number(keptRow.first_at);
+  const keptFrom = firstKept !== null && firstKept > bStart ? firstKept : null;
+
   const dashboard = {
     window: quarterly ? 'quarter' as const : 'month' as const,
     weeks,
@@ -349,6 +357,8 @@ export async function buildOrgSummary(vendor: Vendor, quarterly: boolean) {
     deepPeople30d: Number(deepPeopleRow?.n ?? 0),
     deepPeopleWeeks: weeks.map((_, i) => deepPeopleByWeek.get(i) ?? 0),
     frontierPeople30d: frontierByPerson.length,
+    frontierTasks30d: frontierTotal,
+    keptFrom,
     frontierHalfPeople: frontierTotal > 0 ? frontierHalfPeople : null,
     frontierHalfSplit,
     frontierTopShare: frontierTotal > 0 ? frontierByPerson[0] / frontierTotal : null,

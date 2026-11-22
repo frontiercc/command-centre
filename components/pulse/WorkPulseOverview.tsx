@@ -11,7 +11,7 @@
 import Link from 'next/link';
 import { useEffect, useState, type ReactNode } from 'react';
 import { Tag, B, Muted, LOAD_FAILED } from '@/components/precision/ui';
-import { DASH, shareWords, cap } from '@/components/dashboard/QuestionCard';
+import { DASH, shareWords, sharePair, cap } from '@/components/dashboard/QuestionCard';
 import { cleanTitle } from '@/components/pulse/CapabilityLog';
 import type { ByProductData } from '@/components/pulse/ByProductPanel';
 import type { SessionOutputReport } from '@/components/pulse/SessionOutputCard';
@@ -131,8 +131,8 @@ export function BiggerJobs({ weeks, departments, product, window, onWindow, name
           {falling.slice(0, 3).map(d => (
             <div key={d.dept} className="flex gap-2.5 items-center py-1 text-[13px]">
               <Link href={`/pulse/dept?dept=${encodeURIComponent(d.dept)}`} className="text-[#0A0A0A] hover:text-[#1F6F8B]">{d.dept}</Link>
-              <span className="text-[#777777]">{deepWords(names)} work is now {words(d.thenVsNow!.now)} of tasks</span>
-              <span className="ml-auto text-[#333333]">down from {words(d.thenVsNow!.then)}</span>
+              <span className="text-[#777777]">{deepWords(names)} work was {sharePair(d.thenVsNow!.now, d.thenVsNow!.then)[0]} of tasks in the latest weeks</span>
+              <span className="ml-auto text-[#333333]">down from {sharePair(d.thenVsNow!.now, d.thenVsNow!.then)[1]} at the start</span>
             </div>
           ))}
         </div>
@@ -295,7 +295,7 @@ export function NewWaysOfWorking({ confirmedTotal, confirmedRecent, vendor }: { 
     load();
   };
   const oldest = [...list].sort((a, b) => a.detected_at - b.detected_at);
-  const days = (s: number) => { const d = Math.floor((Date.now() / 1000 - s) / 86400); return d <= 0 ? 'today' : `${d} ${d === 1 ? 'day' : 'days'}`; };
+  const days = (s: number) => { const d = Math.floor((Date.now() / 1000 - s) / 86400); return d <= 0 ? 'under a day' : `${d} ${d === 1 ? 'day' : 'days'}`; };
   return (
     <Frame
       title="New ways of working"
@@ -311,7 +311,7 @@ export function NewWaysOfWorking({ confirmedTotal, confirmedRecent, vendor }: { 
           {oldest.slice(0, 3).map(c => (
             <div key={c.id} className="flex items-center gap-2.5 py-1.5 border-b border-[#F2F2F2] last:border-b-0 text-[13px]">
               <span className="min-w-0 truncate text-[#0A0A0A]">{cleanTitle(c.title)}</span>
-              <span className="text-[#777777] whitespace-nowrap">{c.department ? `${c.department} · ` : ''}{days(c.detected_at)}</span>
+              <span className="text-[#777777] whitespace-nowrap">{c.display_name ? `${c.display_name} · ` : ''}{c.department ? `${c.department} · ` : ''}{days(c.detected_at)} ago</span>
               <span className="ml-auto flex gap-1.5 shrink-0">
                 <button type="button" disabled={busy === c.id} onClick={() => act(c.id, 'confirm')} className={`${B.secondary} !py-0.5 !px-2 !text-[12px]`}>Confirm</button>
                 <button type="button" disabled={busy === c.id} onClick={() => act(c.id, 'dismiss')} className={`${B.secondary} !py-0.5 !px-2 !text-[12px]`}>Dismiss</button>
