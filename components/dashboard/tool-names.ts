@@ -18,8 +18,3 @@ export function connectorLabel(name: string): string {
   const plain = name.replace(/^mcp__/, '').replace(/^claude_ai_/i, '').replace(/_/g, ' ').trim();
   return plain || name;
 }
-
-/** A tool of either kind. */
-export function toolLabel(kind: 'skill' | 'connector', name: string): string {
-  return kind === 'skill' ? skillLabel(name) : connectorLabel(name);
-}
