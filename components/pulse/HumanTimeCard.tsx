@@ -28,7 +28,7 @@ export interface HumanTimeSummary {
 
 function hours(minutes: number): string {
   const h = minutes / 60;
-  return h < 10 ? h.toFixed(1) : Math.round(h).toLocaleString();
+  return h < 10 ? h.toFixed(1) : Math.round(h).toLocaleString('en-GB');
 }
 
 function monthName(period: string): string {
@@ -39,7 +39,8 @@ function monthName(period: string): string {
 /** A kind of work's name on a by-hand panel, as Work Pulse or Developer Pulse names it. */
 export function humanTimeKindLabel(k: string, surface: 'code' | 'cowork'): string {
   if (surface === 'code') return codeWorkTypeLabel(k);
-  return k.replace(/_/g, ' ').replace(/\b\w/g, c => c.toUpperCase());
+  const t = k.replace(/_/g, ' ');
+  return t.charAt(0).toUpperCase() + t.slice(1);
 }
 
 export default function HumanTimeCard({ summary, surface, scope, className = '', view = 'claude' }: {
@@ -114,10 +115,10 @@ export default function HumanTimeCard({ summary, surface, scope, className = '',
             <p className="m-0 text-[14px] text-[#333333]">About {summary.ratio < 10 ? summary.ratio.toFixed(1) : Math.round(summary.ratio)}× faster</p>
           )}
           <p className="m-0 text-[13px] text-[#8F8F8F] leading-5">
-            {summary.sessions.toLocaleString()} sessions in the top two tiers over the last {summary.windowDays} days. The by-hand figure is an AI estimate per session
-            (range {hours(low)}–{hours(high)} hours); {name} time is measured active time{surface === 'cowork' && name !== 'Claude' ? ', for ChatGPT from the times of its prompts and replies' : ''}.{' '}
+            {summary.sessions.toLocaleString('en-GB')} sessions in the top two tiers over the last {summary.windowDays} days. The by-hand time is an AI estimate for each session,
+            added up: between {hours(low)} and {hours(high)} hours in all. {name} time is measured active time{surface === 'cowork' && name !== 'Claude' ? ', for ChatGPT from the times of its prompts and replies' : ''}.{' '}
             {summary.check
-              ? <>Spot-check: {summary.check.aboutRight} of {summary.check.reviewed} estimates judged about right in {monthName(summary.check.period)}.</>
+              ? <>Spot-check: {summary.check.aboutRight.toLocaleString('en-GB')} of {summary.check.reviewed.toLocaleString('en-GB')} estimates judged about right in {monthName(summary.check.period)}.</>
               : <>The estimates have not yet been spot-checked.</>}
           </p>
         </div>
@@ -132,7 +133,7 @@ export default function HumanTimeCard({ summary, surface, scope, className = '',
                     <span className="text-[14px] text-[#0A0A0A]">{k.label}</span>
                     <span className="shrink-0 tabular-nums text-[#8F8F8F]">
                       <span className="text-[#1F6F8B]">~{hours(k.humanMinutes)}</span> by hand ·{' '}
-                      <span className="text-[#1F6F8B]">{hours(k.claudeMinutes)}</span> with {name} · {k.sessions} sessions
+                      <span className="text-[#1F6F8B]">{hours(k.claudeMinutes)}</span> with {name} · {k.sessions.toLocaleString('en-GB')} sessions
                     </span>
                   </div>
                   <Bar pct={pct(k.humanMinutes)} tone="judged" height={4} />

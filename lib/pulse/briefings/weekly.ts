@@ -86,7 +86,7 @@ export async function generateUserWeeklyBriefing(
       deepWork.push(`Main kind of ${deepest} work over the last 30 days: ${kindText(view.mainstay.item.taskType)} (${view.mainstay.count} of ${view.mainstay.tier3Sessions} ${deepest} sessions)`);
     }
     for (const c of view.capabilities.filter(c => c.occurredAt >= periodStart)) {
-      deepWork.push(`New capability this week: ${describeWork(c, names)} (${c.capability?.status === 'confirmed' ? 'confirmed' : 'awaiting review'})`);
+      deepWork.push(`New way of working this week: ${describeWork(c, names)} (${c.capability?.status === 'confirmed' ? 'confirmed' : 'awaiting review'})`);
     }
   } catch (err) {
     console.error('[weekly-briefing] deep-work facts unavailable', err instanceof Error ? err.message : err);

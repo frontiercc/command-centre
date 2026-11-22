@@ -89,7 +89,7 @@ export default function CodePulseBand({ vendor = 'all' }: { vendor?: 'all' | 'cl
           question="What did it cost?"
           value={spend !== null ? formatCurrency(spend) : undefined}
           change={spendChange}
-          sub={data.spendProjection ? `on pace for ${formatCurrency(data.spendProjection.projected)} this month (estimate)` : undefined}
+          sub={data.spendProjection ? `on pace for ${formatCurrency(data.spendProjection.projected)} for ${new Date().toLocaleDateString('en-GB', { month: 'long', timeZone: 'UTC' })} (estimate)` : undefined}
           trend={series(data.trends?.spend.series)}
           trendKind="bars"
           notMeasured={spend === null ? 'No priced model calls in the last 30 days' : undefined}
@@ -106,7 +106,7 @@ export default function CodePulseBand({ vendor = 'all' }: { vendor?: 'all' | 'cl
         <QuestionCard
           question="How much do developers delegate?"
           value={autonomy !== null ? autonomy.toFixed(1) : undefined}
-          unit="actions per prompt"
+          unit="actions for each instruction a person gives"
           change={changeFrom(autonomy, priorAutonomy, v => v.toFixed(1), 'the 30 days before')}
           trend={series(data.trends?.autonomy.series)}
           notMeasured={autonomy === null ? 'Needs sessions with tool actions' : undefined}

@@ -10,6 +10,7 @@
  */
 import { Frame } from '@/components/pulse/WorkPulseOverview';
 import type { TierNames } from '@/lib/pulse/tier-names';
+import { skillLabel } from '@/components/dashboard/tool-names';
 
 interface ConcentrationRiskEntry {
   user_id: string;
@@ -80,7 +81,7 @@ export default function ConcentrationRisk({ risks, detail, skillConcentration }:
           {soleSkills.map(s => (
             <p key={s.user_id} className="m-0 flex items-baseline gap-2 py-1 text-[13px]">
               <span className="text-[#0A0A0A] truncate">{s.display_name ?? s.user_id}</span>
-              <span className="ml-auto text-[#777777] truncate">{s.skills.join(', ')}</span>
+              <span className="ml-auto text-[#777777] truncate">{s.skills.map(skillLabel).join(', ')}</span>
             </p>
           ))}
         </div>

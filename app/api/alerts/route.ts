@@ -5,7 +5,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { getAlerts, getAlertById, updateAlertStatus, bulkUpdateAlertStatus, deleteClosedAlerts } from '@/lib/db/queries';
 import { requireAdmin, getAdminSession, canAccessCorePlatform, isDeptScoped } from '@/lib/auth/admin-auth';
 import { logAccess } from '@/lib/audit/log';
-import { typesForCategory } from '@/lib/alerts/categories';
+import { typesForCategoryParam } from './alert-counts';
 import { applyAlertEvidenceRule } from '@/lib/alerts/evidence-visibility';
 
 // Disable Next.js route caching — all API routes read live data from the database
@@ -36,12 +36,12 @@ export async function GET(request: NextRequest) {
   // optionally filter via ?department= (e.g. a manager narrowing the view).
   const department = isDeptScoped(session.role) ? (session.department || undefined) : (params.get('department') || undefined);
   const category = params.get('category') || undefined;
-  const types = category ? typesForCategory(category) : [];
+  const types = await typesForCategoryParam(category);
   // The access-log write and the alert read do not depend on each other, so
   // they run at the same time. logAccess never rejects.
   const [, alerts] = await Promise.all([
     logAccess({ actorId: session.userId!, actorEmail: session.email!, actorIp: request.headers.get('x-forwarded-for') || undefined, resource: 'alerts', action: 'READ', outcome: 'success' }),
-    getAlerts({ status, department, types: types.length ? types : undefined }),
+    getAlerts({ status, department, types: types ?? undefined }),
   ]);
   return NextResponse.json(await applyAlertEvidenceRule(request, session, alerts));
 }
@@ -63,8 +63,8 @@ export async function PATCH(request: NextRequest) {
     if (!validStatuses.includes(bulk_from)) {
       return NextResponse.json({ error: `Invalid bulk_from status` }, { status: 400 });
     }
-    const types = category ? typesForCategory(category) : [];
-    const updated = await bulkUpdateAlertStatus(bulk_from, status, resolved_by, types.length ? types : undefined);
+    const types = await typesForCategoryParam(category);
+    const updated = await bulkUpdateAlertStatus(bulk_from, status, resolved_by, types ?? undefined);
     return NextResponse.json({ ok: true, updated });
   }
 

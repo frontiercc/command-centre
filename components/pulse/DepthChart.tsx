@@ -71,26 +71,40 @@ export function depthColumns(weeks: TierWeek[], window: DepthWindow, nowS: numbe
 
 const total = (c: { t1: number; t2: number; t3: number }) => c.t1 + c.t2 + c.t3;
 const realShare = (cs: DepthColumn[]) => { const a = cs.reduce((s, c) => s + total(c), 0); return a > 0 ? cs.reduce((s, c) => s + c.t2 + c.t3, 0) / a : null; };
-const plural = (c: number, one: string, many: string) => `${c} ${c === 1 ? one : many}`;
+const plural = (c: number, one: string, many: string) => `${c.toLocaleString('en-GB')} ${c === 1 ? one : many}`;
+
+/** The top two tiers' share in the span's first month and in its last; null with too few weeks of work. */
+function firstAndLast(cols: DepthColumn[], window: DepthWindow): { first: number; last: number; firstIdx: number[] } | null {
+  const per = window === 52 ? 1 : 4; // columns in a month
+  const withData = cols.map((c, i) => (total(c) > 0 ? i : -1)).filter(i => i >= 0);
+  if (withData.length < per * 2) return null;
+  const firstIdx = withData.slice(0, per), lastIdx = withData.slice(-per);
+  return { first: realShare(firstIdx.map(i => cols[i]))!, last: realShare(lastIdx.map(i => cols[i]))!, firstIdx };
+}
+
+/** Which way the top two tiers' share moved over the span: more than 2 points up or down, else flat. */
+export function depthDirection(cols: DepthColumn[], window: DepthWindow): 'up' | 'down' | 'flat' | null {
+  const f = firstAndLast(cols, window);
+  if (!f) return null;
+  const up = Math.round(f.last * 100) - Math.round(f.first * 100);
+  return up > 2 ? 'up' : up < -2 ? 'down' : 'flat';
+}
 
 /**
  * One sentence on the whole span shown: the top two tiers' share in its first month against its last.
  * A first month with no work is skipped and the sentence says where the work starts.
  */
 export function depthSentence(cols: DepthColumn[], window: DepthWindow, whose: string, names?: TierNames, unit: 'task' | 'session' = 'task'): ReactNode {
-  const per = window === 52 ? 1 : 4; // columns in a month
-  const withData = cols.map((c, i) => (total(c) > 0 ? i : -1)).filter(i => i >= 0);
-  if (withData.length < per * 2) return <>Not enough weeks of work yet to compare over {SPAN_WORDS[window]}.</>;
-  const firstIdx = withData.slice(0, per), lastIdx = withData.slice(-per);
-  const first = realShare(firstIdx.map(i => cols[i]))!;
-  const last = realShare(lastIdx.map(i => cols[i]))!;
-  const up = Math.round(last * 100) - Math.round(first * 100);
-  const verdict = up > 2 ? 'Yes. ' : up < -2 ? 'No. ' : 'About the same. ';
+  const f = firstAndLast(cols, window);
+  if (!f) return <>Not enough weeks of work yet to compare over {SPAN_WORDS[window]}.</>;
+  const { first, last, firstIdx } = f;
+  const dir = depthDirection(cols, window);
+  const verdict = dir === 'up' ? 'Yes. ' : dir === 'down' ? 'No. ' : 'About the same. ';
   const startsLate = firstIdx[0] > 0;
   const monthName = new Date(cols[firstIdx[0]].start * 1000).toLocaleDateString('en-GB', { month: 'long', timeZone: 'UTC' });
   const firstWhen = !startsLate ? 'in its first month'
     : window === 52 ? `in ${monthName}, the first month with work` : `in the first month with work, from ${cols[firstIdx[0]].label}`;
-  return <>{verdict}Over {SPAN_WORDS[window]}, {deepWords(names)} work went from <b>{sharePair(first, last)[1]}</b> of {whose ? `${whose} ` : ''}{unit}s {firstWhen} to <b>{sharePair(first, last)[0]}</b> in its last month.</>;
+  return <>{verdict}Over {SPAN_WORDS[window]}, {deepWords(names)} work went from <b>{sharePair(first, last)[0]}</b> of {whose ? `${whose} ` : ''}{unit}s {firstWhen} to <b>{sharePair(first, last)[1]}</b> in its last month.</>;
 }
 
 /** The grid's sentence: this week first, because that is what a new starter needs to see. */
@@ -102,10 +116,10 @@ export function gridSentence(grid: TierWeek[], whose: string, names?: TierNames,
   if (six === 0) return <>No classified {unit}s in the last six weeks.</>;
   const deep = deepWords(names);
   if (total(now) > 0) {
-    return <>This week so far, {who}<b>{plural(total(now), unit, `${unit}s`)}</b>, {real(now) === 0 ? <>none of them {deep} yet</> : <><b>{real(now)} of them</b> {deep}</>}. Six weeks: {plural(six, unit, `${unit}s`)}.</>;
+    return <>This week so far, {who}<b>{plural(total(now), unit, `${unit}s`)}</b>, {real(now) === 0 ? <>none of them {deep} yet</> : <><b>{real(now).toLocaleString('en-GB')} of them</b> {deep}</>}. Six weeks: {plural(six, unit, `${unit}s`)}.</>;
   }
   if (prev && total(prev) > 0) {
-    return <>Nothing yet this week. Last week {who}<b>{plural(total(prev), unit, `${unit}s`)}</b>, {real(prev)} of them {deep}.</>;
+    return <>Nothing yet this week. Last week {who}<b>{plural(total(prev), unit, `${unit}s`)}</b>, {real(prev).toLocaleString('en-GB')} of them {deep}.</>;
   }
   return <>Nothing in the last two weeks. Six weeks: {plural(six, unit, `${unit}s`)}.</>;
 }

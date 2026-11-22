@@ -10,6 +10,7 @@
 import Link from 'next/link';
 import type { WorkItem } from '@/lib/pulse/frontier-view';
 import { Tag } from '@/components/precision/ui';
+import { skillLabel, connectorLabel } from '@/components/dashboard/tool-names';
 
 export function kindLabel(taskType: string): string {
   const s = taskType.replace(/_/g, ' ');
@@ -27,12 +28,6 @@ function activeLabel(secs: number): string {
   const h = Math.floor(mins / 60);
   const m = mins % 60;
   return m ? `${h} h ${m} min active` : `${h} h active`;
-}
-
-/** Skill names arrive as `marketplace:name`; the name alone reads better. */
-function skillName(s: string): string {
-  const i = s.lastIndexOf(':');
-  return i >= 0 ? s.slice(i + 1) : s;
 }
 
 function plural(n: number, one: string, many: string): string {
@@ -98,7 +93,7 @@ export default function WorkDetail({ item, showName, canOpenUseCases, compact = 
     f.steps != null && f.steps > 0 ? plural(f.steps, 'step', 'steps') : null,
   ].filter((x): x is string => !!x);
 
-  const systems = [...f.connectors, ...f.skills.map(skillName)];
+  const systems = [...f.connectors.map(connectorLabel), ...f.skills.map(skillLabel)];
   const inputs = f.inputs.length
     ? `${f.inputs.join(' and ')} uploaded`
     : (f.uploads != null && f.uploads > 0 ? `${plural(f.uploads, 'document', 'documents')} uploaded` : null);

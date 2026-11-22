@@ -60,11 +60,9 @@ async function runSpec(): Promise<void> {
     // Running it again changes nothing.
     expect(await markAutomatedRuns(client, nowS, 1800)).toBe(0);
 
-    // Team coaching: the runs show as their own kind of work, labelled, but are not people's sessions.
+    // Team coaching: the runs are scripts, not people's sessions, so no kind of work counts them.
     const lab = (await getCoachingFigures('all', nowS)).teams.find(t => t.department === 'Lab')!;
-    const automated = lab.work.find(w => w.workType === AUTOMATED_WORK_TYPE)!;
-    expect(automated.label).toBe('Automated runs');
-    expect(automated.sessions).toBe(AUTOMATED_MIN_SESSIONS);
+    expect(lab.work.find(w => w.workType === AUTOMATED_WORK_TYPE)).toBeUndefined();
     expect(lab.sessions).toBe((AUTOMATED_MIN_SESSIONS - 1) + (AUTOMATED_MIN_SESSIONS + 2));
     expect(lab.people).toBe(2);
 

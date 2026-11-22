@@ -6,15 +6,15 @@
  * a legend line per product (spend and share of the total). Purely
  * presentational: every figure is read from the already-fetched
  * ChargebackReport.surfaces, the same figures and rounding the by-surface
- * tiles used. A product with no measured spend is named in words, never drawn
- * as $0.
+ * tiles used. A product with no measured spend is never drawn as $0.
  */
 import type { ReactNode } from 'react';
 import { Panel } from '@/components/precision/ui';
 import { PRODUCT_COLOR } from '@/lib/ui/chart-colours';
+import { usdWhole } from '@/lib/finance/spend-review-format';
 import { BASIS_TEXT, type SurfaceSpend, type SurfaceSummary } from '@/components/finance/SurfaceTiles';
 
-const fmtUsd = (n: number) => n.toLocaleString('en-US', { style: 'currency', currency: 'USD' });
+const fmtUsd = usdWhole;
 
 const fmtTokensCompact = (n: number) =>
   n >= 1e9 ? `${(n / 1e9).toFixed(1)}B`
@@ -104,11 +104,10 @@ export default function WhereItGoes({ surfaces, openaiOnly = false, right, child
             })}
           </div>
         )}
-        {notMeasured.length > 0 && (
+        {/* A product not captured here is simply left out; OpenAI products still waiting on cost records are named. */}
+        {notMeasured.some(i => i.spend.basis !== 'dormant') && (
           <p className="m-0 text-[12px] text-[#8F8F8F]">
-            {notMeasured.map(i => (i.spend.basis === 'dormant'
-              ? `${i.label} is not captured on this deployment.`
-              : `${i.label}: no cost records from OpenAI yet.`)).join(' ')}
+            {notMeasured.filter(i => i.spend.basis !== 'dormant').map(i => `${i.label}: no cost records from OpenAI yet.`).join(' ')}
           </p>
         )}
         {children}

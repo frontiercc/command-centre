@@ -1,25 +1,27 @@
 // Copyright 2026 Lee James
 // SPDX-License-Identifier: Apache-2.0
 
-// shareWords (components/dashboard/QuestionCard.tsx): a share as plain words, "all" and "none" at
-// the ends and "nearly all" and "very few" only in between.
+// shareWords and sharePair (components/dashboard/QuestionCard.tsx): a share as a percentage,
+// "all" and "none" only at the ends, never a word fraction like "three in four".
 import { describe, it, expect } from 'vitest';
-import { shareWords } from '@/components/dashboard/QuestionCard';
+import { shareWords, sharePair } from '@/components/dashboard/QuestionCard';
 
 describe('shareWords', () => {
   it('says all and none at the ends', () => {
     expect(shareWords(1)).toBe('all');
     expect(shareWords(0)).toBe('none');
   });
-  it('keeps nearly all and very few for the ranges in between', () => {
-    expect(shareWords(0.9)).toBe('nearly all');
-    expect(shareWords(0.99)).toBe('nearly all');
-    expect(shareWords(0.1)).toBe('very few');
-    expect(shareWords(0.01)).toBe('very few');
+  it('gives a percentage in between, never rounding to the ends', () => {
+    expect(shareWords(0.73)).toBe('73%');
+    expect(shareWords(0.5)).toBe('50%');
+    expect(shareWords(0.999)).toBe('99%');
+    expect(shareWords(0.001)).toBe('1%');
   });
-  it('keeps the plain fractions', () => {
-    expect(shareWords(0.5)).toBe('half');
-    expect(shareWords(0.66)).toBe('two in three');
-    expect(shareWords(0.55)).toBe('55%');
+});
+
+describe('sharePair', () => {
+  it('gives both shares as percentages, in the order asked', () => {
+    expect(sharePair(0.6, 0.75)).toEqual(['60%', '75%']);
+    expect(sharePair(1, 0)).toEqual(['100%', '0%']);
   });
 });

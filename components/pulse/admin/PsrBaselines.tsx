@@ -102,7 +102,7 @@ export default function PsrBaselines({ isAdmin = true }: { isAdmin?: boolean }) 
                   <p className="m-0 text-[14px] font-medium text-[#0A0A0A]">{t.teamName}</p>
                   <p className="m-0 mt-0.5 text-[13px] text-[#8F8F8F] tabular-nums">
                     Suggested from your data: {t.suggestion} distinct recurring task types (last 30d)
-                    {t.confirmedCapabilities > 0 && ` · ${t.confirmedCapabilities} confirmed capabilities`}
+                    {t.confirmedCapabilities > 0 && ` · ${t.confirmedCapabilities.toLocaleString('en-GB')} confirmed ${t.confirmedCapabilities === 1 ? 'new way of working' : 'new ways of working'}`}
                   </p>
                 </div>
                 <div className="flex items-center gap-2 flex-shrink-0">

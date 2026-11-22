@@ -30,6 +30,8 @@ interface SessionRow {
   repo: string | null;
   git_branch: string | null;
   first_at: number;
+  /** Measured active time in seconds; null when not measured. */
+  active_secs?: number | string | null;
   last_at: number;
   user_msg_count: number;
   assistant_turns: number;
@@ -94,14 +96,23 @@ function TrendCard({ label, trend, change }: { label: string; trend?: WeeklyTren
   );
 }
 
-function formatDuration(first: number, last: number): string {
-  const mins = Math.max(1, Math.round((last - first) / 60));
-  if (mins < 60) return `${mins}m`;
-  return `${Math.floor(mins / 60)}h ${mins % 60}m`;
+/**
+ * How long a session was worked on: its measured active time (gaps of 30 minutes or less), never
+ * the time it stayed open. With no active time measured, the dates it spanned.
+ */
+function sessionLength(s: { first_at: number; last_at: number; active_secs?: number | string | null }): string {
+  if (s.active_secs !== null && s.active_secs !== undefined) {
+    const mins = Math.round(Number(s.active_secs) / 60);
+    if (mins < 1) return 'under 1m active';
+    if (mins < 60) return `${mins}m active`;
+    return `${Math.floor(mins / 60).toLocaleString('en-GB')}h ${mins % 60}m active`;
+  }
+  const a = formatDate(s.first_at), b = formatDate(s.last_at);
+  return a === b ? a : `${a} to ${b}`;
 }
 
 function formatDate(epoch: number): string {
-  return new Date(epoch * 1000).toLocaleDateString('en-GB', { month: 'short', day: 'numeric' });
+  return new Date(epoch * 1000).toLocaleDateString('en-GB', { day: 'numeric', month: 'short' });
 }
 
 function RecentSessions({ sessions }: { sessions: SessionRow[] }) {
@@ -121,7 +132,7 @@ function RecentSessions({ sessions }: { sessions: SessionRow[] }) {
                   )}
                 </span>
                 <span className="block text-[13px] text-[#8F8F8F] tabular-nums">
-                  {s.repo ? `${formatDate(s.last_at)} · ` : ''}{formatDuration(s.first_at, s.last_at)} · {s.user_msg_count} prompt{s.user_msg_count === 1 ? '' : 's'} · {s.tool_use_count} action{s.tool_use_count === 1 ? '' : 's'}
+                  {s.repo ? `${formatDate(s.last_at)} · ` : ''}{sessionLength(s)} · {s.user_msg_count.toLocaleString('en-GB')} prompt{s.user_msg_count === 1 ? '' : 's'} · {s.tool_use_count.toLocaleString('en-GB')} action{s.tool_use_count === 1 ? '' : 's'}
                 </span>
               </div>
               <div className="shrink-0 text-right flex flex-col items-end gap-0.5">
@@ -133,7 +144,7 @@ function RecentSessions({ sessions }: { sessions: SessionRow[] }) {
                     ? 'not measured'
                     : `${formatTokens(s.input_tokens + s.output_tokens)} tokens`}
                 </span>
-                <Tag>{s.source === 'codex' ? 'Codex' : s.source === 'otel' ? 'OTel' : 'Agent'}</Tag>
+                {s.source === 'codex' && <Tag>Codex</Tag>}
               </div>
             </li>
           ))}

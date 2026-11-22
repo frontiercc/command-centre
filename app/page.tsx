@@ -116,8 +116,11 @@ function formatChange(current: number, previous: number): string {
   return 'no change';
 }
 
+/** Prompts flagged for personal data across the whole 4 weeks (lib/dashboard/queries.ts), not per week. */
 function flaggedLine(n: number): string {
-  return n > 0 ? `${n} flagged for PII` : 'no PII flags';
+  return n > 0
+    ? `${n.toLocaleString('en-GB')} ${n === 1 ? 'prompt' : 'prompts'} flagged for personal data in the 4 weeks`
+    : 'no prompts flagged for personal data';
 }
 
 function formatAlertSeverity(bySeverity: Record<string, number>): string {

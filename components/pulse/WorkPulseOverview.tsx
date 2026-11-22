@@ -17,7 +17,7 @@ import type { ByProductData } from '@/components/pulse/ByProductPanel';
 import type { SessionOutputReport } from '@/components/pulse/SessionOutputCard';
 import type { HumanTimeSummary } from '@/components/pulse/HumanTimeCard';
 import type { ActNextItem, DeptProcessBoxItem } from '@/components/pulse/ActNextPanel';
-import { depthColumns, depthSentence, DepthChart, DepthSwitch, type DepthWindow, type TierWeek } from '@/components/pulse/DepthChart';
+import { depthColumns, depthDirection, depthSentence, DepthChart, DepthSwitch, type DepthWindow, type TierWeek } from '@/components/pulse/DepthChart';
 import { deepWords, tierNamesOr, type TierNames } from '@/lib/pulse/tier-names';
 import { FAMILY_LABEL, PRODUCT_FAMILY, PRODUCT_LABEL, type WorkProduct } from '@/lib/pulse/cowork/products';
 import { NEW_WAYS_OF_WORKING } from '@/lib/pulse/cowork/coaching-words';
@@ -116,7 +116,12 @@ export function BiggerJobs({ weeks, departments, product, window, onWindow, name
 }) {
   const t = tierNamesOr(names);
   const cols = depthColumns(weeks, window, Math.floor(Date.now() / 1000));
-  const falling = departments.filter(d => d.thenVsNow?.arrow === 'down').sort((a, b) => a.thenVsNow!.deltaPp - b.thenVsNow!.deltaPp);
+  // Only departments moving against the organisation: falling when it rises, rising when it falls.
+  const dir = depthDirection(cols, window);
+  const against = dir === 'up' ? 'down' : dir === 'down' ? 'up' : null;
+  const falling = against === null ? [] : departments
+    .filter(d => d.thenVsNow?.arrow === against)
+    .sort((a, b) => Math.abs(b.thenVsNow!.deltaPp) - Math.abs(a.thenVsNow!.deltaPp));
   const others = falling.length === 1 ? ` ${falling[0].dept} is going the other way.` : falling.length > 1 ? ` ${falling.length} departments are going the other way.` : '';
   return (
     <Frame
@@ -134,7 +139,7 @@ export function BiggerJobs({ weeks, departments, product, window, onWindow, name
             <div key={d.dept} className="flex gap-2.5 items-center py-1 text-[13px]">
               <Link href={`/pulse/dept?dept=${encodeURIComponent(d.dept)}`} className="text-[#0A0A0A] hover:text-[#1F6F8B]">{d.dept}</Link>
               <span className="text-[#777777]">{deepWords(names)} work was {sharePair(d.thenVsNow!.now, d.thenVsNow!.then)[0]} of tasks in the last {weeksWord(d.thenVsNow!.dataWeeks)}</span>
-              <span className="ml-auto text-[#333333]">down from {sharePair(d.thenVsNow!.now, d.thenVsNow!.then)[1]} in the first {weeksWord(d.thenVsNow!.dataWeeks)}</span>
+              <span className="ml-auto text-[#333333]">{against} from {sharePair(d.thenVsNow!.now, d.thenVsNow!.then)[1]} in the first {weeksWord(d.thenVsNow!.dataWeeks)}</span>
             </div>
           ))}
         </div>
@@ -283,6 +288,7 @@ export function Products({ data, names, loading = false }: { data: ByProductData
 
 interface Candidate { id: number; title: string; detected_at: number; department: string | null; display_name: string | null; description?: string | null }
 
+/** `confirmedRecent` is the number confirmed in the last 30 days, by the date each was confirmed (the signals panel's figure). */
 export function NewWaysOfWorking({ confirmedTotal, confirmedRecent, vendor }: { confirmedTotal: number | null; confirmedRecent: number; vendor: Vendor }) {
   const [list, setList] = useState<Candidate[] | null>(null);
   const [busy, setBusy] = useState<number | null>(null);
@@ -301,10 +307,10 @@ export function NewWaysOfWorking({ confirmedTotal, confirmedRecent, vendor }: { 
   return (
     <Frame
       title="New ways of working"
-      period="Last quarter"
-      answer={list.length > 0
-        ? <><b>{list.length}</b> {list.length === 1 ? 'is' : 'are'} waiting for your review. {confirmedRecent === 0 ? 'None were' : `${confirmedRecent} ${confirmedRecent === 1 ? 'was' : 'were'}`} confirmed in the last quarter.</>
-        : <>Nothing is waiting for review. {confirmedRecent === 0 ? 'None were' : `${confirmedRecent} ${confirmedRecent === 1 ? 'was' : 'were'}`} confirmed in the last quarter.</>}
+      answer={<>
+        {list.length > 0 ? <><b>{list.length.toLocaleString('en-GB')}</b> {list.length === 1 ? 'is' : 'are'} waiting for your review.</> : <>Nothing is waiting for review.</>}
+        {' '}{confirmedRecent === 0 ? 'None were' : `${confirmedRecent.toLocaleString('en-GB')} ${confirmedRecent === 1 ? 'was' : 'were'}`} confirmed in the last 30 days.
+      </>}
       note={NEW_WAYS_OF_WORKING}
     >
       {oldest.length > 0 && (
@@ -324,7 +330,7 @@ export function NewWaysOfWorking({ confirmedTotal, confirmedRecent, vendor }: { 
       )}
       <div className="mt-1.5 text-[13px]">
         {oldest.length > 3 && <><Link href="/admin/pulse?tab=overview" className={linkCls}>and {oldest.length - 3} more</Link> · </>}
-        <Link href="#capability-log" className={linkCls}>{confirmedTotal ?? 0} confirmed so far</Link>
+        <Link href="#capability-log" className={linkCls}>{(confirmedTotal ?? 0).toLocaleString('en-GB')} confirmed in all</Link>
       </div>
     </Frame>
   );

@@ -4,9 +4,10 @@
 /**
  * Work Pulse figures for one period: this week, this month or this quarter, each against the
  * same length before it. One person (My Pulse, Users) or a set of people (Departments). The week
- * and the month END NOW, so work done today counts and someone in their first week sees their own
- * figures the day they start. The quarter is the 13 completed Monday-UTC weeks, the overview's
- * quarter (app/api/pulse/org-summary), so the two pages compare the same weeks.
+ * the month and the quarter END NOW, so work done today counts, someone in their first week sees
+ * their own figures the day they start, and a quarter never shows less than the last 30 days. The
+ * quarter is the last 13 weeks to now, the same window as the overview's quarter
+ * (lib/pulse/org-window.ts), so the two pages count the same days.
  *
  * Trend bars follow the window: one bar a day for the week and the month, one a week for the
  * quarter. The depth chart reads a year of completed weeks separately, for its longer settings.
@@ -20,7 +21,6 @@ import { getTypedClient } from '@/lib/db/client';
 import { vendorClause, workPulseToolClause, personPerProduct } from '@/lib/dashboard/product-sql';
 import { isBuiltInTool } from '@/lib/finance/spend-review-builtins';
 import { categorizeFilePath } from '@/lib/pulse/cowork/file-categories';
-import { weekStart } from '@/lib/pulse/period';
 import type { Vendor } from '@/lib/dashboard/vendor';
 import { PERIOD_SHAPE, type MyPeriod, type PeriodTierWeek, type PulsePeriod } from '@/lib/pulse/period-shape';
 
@@ -37,14 +37,10 @@ async function rows<T>(q: SQL): Promise<T[]> {
 }
 const n = (v: unknown) => Number(v ?? 0);
 
-/**
- * The period's window. The week and the month end now; the quarter is the 13 completed
- * Monday-UTC weeks before the current one, the same weeks as the overview's quarter.
- */
+/** The period's window: the last week, month or quarter (13 weeks), each ending now. */
 export function periodWindow(period: PulsePeriod, nowS: number): { start: number; end: number } {
   const { buckets, bucketSecs } = PERIOD_SHAPE[period];
-  const end = period === 'quarter' ? weekStart(nowS) : nowS;
-  return { start: end - buckets * bucketSecs, end };
+  return { start: nowS - buckets * bucketSecs, end: nowS };
 }
 
 function mondayOf(ts: number): number {

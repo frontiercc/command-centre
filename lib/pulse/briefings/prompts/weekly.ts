@@ -3,6 +3,7 @@
 
 import { productFactsBlock, PRODUCT_NAMING_RULE } from '@/lib/pulse/briefings/product-facts';
 import { DESCRIBE_NOT_SCORE_RULE } from '@/lib/pulse/briefings/described-facts';
+import { briefingCount } from '@/lib/pulse/briefings/format';
 
 export interface WeeklyBriefingContext {
   user_id: string;
@@ -34,7 +35,7 @@ OUTPUT FORMAT (respond with a JSON object only):
 }
 
 PARAGRAPH 1: What happened this week. State the numbers matter-of-factly, using only the numbers given, exactly as written: never calculate new ones (no sums, differences or percentages of your own). Mention specific task types if they are interesting. Do not pad.
-PARAGRAPH 2: What the pattern means. If there was deep work or a new capability, name the kind of work and what it involved, using only the facts given. If the numbers are flat, say so without apology. Be honest about weak weeks.
+PARAGRAPH 2: What the pattern means. If there was deep work or a new way of working, name the kind of work and what it involved, using only the facts given. If the numbers are flat, say so without apology. Be honest about weak weeks.
 PARAGRAPH 3: How this fits the longer arc. Keep it brief. Do not project too far forward.
 
 Tone constraints:
@@ -62,7 +63,7 @@ export function buildWeeklyBriefingUserMessage(ctx: WeeklyBriefingContext): stri
 PERIOD: ${ctx.period_start_label} to ${ctx.period_end_label}
 
 ACTIVITY THIS WEEK
-Tasks Claude judged: ${totalTasks}
+Tasks Claude judged: ${briefingCount(totalTasks)}
 ${ctx.tier_lines.join('\n')}
 ${ctx.produced_line}
 

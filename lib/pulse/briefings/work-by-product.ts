@@ -16,6 +16,7 @@
  */
 import { and, eq, gte, inArray, lt, sql } from 'drizzle-orm';
 import { getTypedClient } from '@/lib/db/client';
+import { briefingCount } from '@/lib/pulse/briefings/format';
 import { schema } from '@/lib/db/schema';
 import { getConfigValue } from '@/lib/config';
 import { openaiShown } from '@/lib/sources/openai-visibility';
@@ -72,7 +73,7 @@ export function workByProductLines(activity: ProductActivity[]): string[] {
   if (used.length < 2) return [];
   return [
     `Where the work happened, ${used.length} products in total (measured sessions and people):`,
-    ...used.map(a => `${productName(a.product)}: ${a.sessions} ${a.sessions === 1 ? 'session' : 'sessions'} by ${a.people} ${a.people === 1 ? 'person' : 'people'}`),
+    ...used.map(a => `${productName(a.product)}: ${briefingCount(a.sessions)} ${a.sessions === 1 ? 'session' : 'sessions'} by ${briefingCount(a.people)} ${a.people === 1 ? 'person' : 'people'}`),
   ];
 }
 

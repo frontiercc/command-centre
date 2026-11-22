@@ -11,7 +11,7 @@
  * Consumes `GET /api/finance/model-efficiency?surface=&period=` (Tasks 3-5)
  * and does no recomputation of its own beyond formatting/rounding for
  * display. Honesty split preserved throughout: the activity axis + any
- * savings estimate are JUDGED (violet); spend/tokens/model-split/friction
+ * savings estimate are JUDGED (violet); spend/tokens/model-split
  * are MEASURED (blue). Copy is always "worth reviewing", never
  * "overspending" — CCC does not measure output quality.
  *
@@ -31,6 +31,7 @@ import type {
 import { formatModelLabel } from '@/lib/pulse/code/model-label';
 import { Panel, Tag, Pill, T, Segmented, Notice, Muted, SubHead, cx, LOAD_FAILED } from '@/components/precision/ui';
 import { useConnectedProducts } from '@/components/shared/VendorSwitch';
+import { usdWhole } from '@/lib/finance/spend-review-format';
 
 /** A surface's name in this box. With OpenAI connected, Claude's say Claude. */
 function surfaceLabel(surface: Surface, openai: boolean): string {
@@ -90,7 +91,7 @@ function reviewChipFor(activity: ActivityRow, belowVolumeKeys: Set<string>): Rev
     return { label: 'Worth reviewing', tone: 'warn' };
   }
   if (activity.flag?.suppressedReason === 'high_friction') {
-    return { label: 'High friction', tone: 'neutral' };
+    return { label: 'Not flagged', tone: 'neutral' };
   }
   if (activity.flag?.suppressedReason === 'low_volume' || belowVolumeKeys.has(activity.key)) {
     return { label: 'Low volume', tone: 'neutral' };
@@ -178,16 +179,13 @@ function ActivityTableRow({
         <td className={cx(T.tdRight, 'font-medium')}>
           {fmtUsd(activity.totalSpendUsd)}
         </td>
-        <td className={cx(T.tdRight, 'text-[#666666]')}>
-          {activity.friction === null ? 'not measured' : fmtPct(activity.friction)}
-        </td>
         <td className={T.tdRight}>
           <Pill tone={chip.tone}>{chip.label}</Pill>
         </td>
       </tr>
       {expanded && (
         <tr className="border-t border-[#F2F2F2] bg-[#FAFAFA]">
-          <td colSpan={5} className="px-4 py-2">
+          <td colSpan={4} className="px-4 py-2">
             {activity.measuredBreakdown.length === 0 ? (
               <Muted>No skill, subagent or connector breakdown for this activity.</Muted>
             ) : (
@@ -215,7 +213,7 @@ function OpportunityCard({ activity }: { activity: ActivityRow }) {
       </p>
       {flag.estCeilingUsd !== null && flag.targetModel ? (
         <p className="m-0 text-[13px] text-[#1F6F8B] tabular-nums">
-          About {fmtUsd(Math.round(flag.estCeilingUsd))} estimated ceiling if repriced at {prettyModel(flag.targetModel)}
+          Up to about {usdWhole(flag.estCeilingUsd)} less on {prettyModel(flag.targetModel)} (estimate)
         </p>
       ) : (
         <p className="m-0 text-[13px] text-[#8F8F8F]">Concentration only</p>
@@ -431,7 +429,7 @@ export default function ModelEfficiencySection({ period }: { period: string }) {
   return (
     <Panel
       title="Model efficiency"
-      subtitle={<>Activity is <span className="text-[#1F6F8B]">AI-judged</span>; spend, model split and friction are <span className="text-[#1F6F8B] font-medium">measured</span></>}
+      subtitle={<>Activity is <span className="text-[#1F6F8B]">AI-judged</span>; spend and model split are <span className="text-[#1F6F8B] font-medium">measured</span></>}
       right={
         <Segmented<Surface>
           label="Surface"
@@ -455,7 +453,6 @@ export default function ModelEfficiencySection({ period }: { period: string }) {
                   <th scope="col" className={T.th}>Activity</th>
                   <th scope="col" className={T.th}>Model split</th>
                   <th scope="col" className={T.thRight}>Spend</th>
-                  <th scope="col" className={T.thRight}>Friction</th>
                   <th scope="col" className={T.thRight}>Review</th>
                 </tr>
               </thead>
@@ -482,7 +479,7 @@ export default function ModelEfficiencySection({ period }: { period: string }) {
               </span>
             ))}
             {report.modelOrder.length > 0 && <span>most expensive first</span>}
-            <span className="sm:ml-auto">Measured spend, model mix and cache usage for this period. Recent sessions classify once idle.</span>
+            <span className="sm:ml-auto">Measured spend, model mix and cache usage for this period.</span>
           </div>
 
           {report.unpricedModels.length > 0 && (
@@ -510,7 +507,7 @@ export default function ModelEfficiencySection({ period }: { period: string }) {
             <div className="border-t border-[#EAEAEA] px-4 py-3 flex flex-col gap-2">
               <span className="text-[14px] font-semibold text-[#0A0A0A]">Opportunities to review</span>
               {isShareBasedOnly && (
-                <Notice tone="info">Share-based: there is no friction check on {surfaceLabel(surface, openai)}, so review manually before acting.</Notice>
+                <Notice tone="info">Review these manually before acting.</Notice>
               )}
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
                 {opportunities.map((activity) => (

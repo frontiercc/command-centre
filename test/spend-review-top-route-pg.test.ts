@@ -83,7 +83,7 @@ describe('spend review index top route (postgres)', () => {
       expect(routes.some(r => r.kind === 'tool')).toBe(true);
       const savings = routes.map(r => (r.kind === 'model' ? r.estSavingUsd : null)).filter((v): v is number => v !== null);
       expect(savings.length).toBeGreaterThan(0);
-      expect(toby.topRoute).toMatchObject({ kind: 'model', direction: 'trial', fromModel: 'claude-opus-4-6', toModel: 'claude-haiku-5-5', workLabel: 'Structured Report', surface: 'cowork' });
+      expect(toby.topRoute).toMatchObject({ kind: 'model', direction: 'trial', fromModel: 'claude-opus-4-6', toModel: 'claude-haiku-5-5', workLabel: 'Structured report', surface: 'cowork' });
       expect(toby.topRoute!.estSavingUsd).toBeCloseTo(Math.max(...savings), 6);
       expect(toby.topRoute!.workShare).toBeCloseTo(1, 6);
 

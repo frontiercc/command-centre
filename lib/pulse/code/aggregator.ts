@@ -674,21 +674,91 @@ async function runCodeHourlyAggregationInner(client: TypedClient): Promise<void>
   const inPrior = (s: { last_at: number }) => s.last_at >= priorPeriodStart && s.last_at < rollingPeriodStart;
   const inSevenDays = (s: { last_at: number }) => s.last_at >= sevenDayPeriodStart;
 
+  // A window counts only the work done inside it. A Claude Code session that
+  // stays open for weeks used to bring every call it ever made into the window
+  // its last activity fell in, which overstated 30-day spend and commits.
+  // Claude Code sessions are therefore re-summed per window from their model
+  // calls (code_assistant_meta) and prompts made inside the window; Codex
+  // sessions keep their whole totals and are placed by last_at, as before.
+  const sessionInfo = new Map(allSessions.map(s => [s.session_id, s]));
+  type ModelTotals = Record<string, { input: number; output: number; cache_creation: number; cache_read: number }>;
+  async function windowSessions(start: number, end: number): Promise<SessionRow[]> {
+    const calls = await rawAll<{
+      session_id: string; model: string | null; user_id: string | null;
+      tool_use_count: number | string; error_count: number | string; commit_count: number | string;
+      input_tokens: number | string; output_tokens: number | string;
+      cache_creation_tokens: number | string; cache_read_tokens: number | string;
+    }>(client, sql`
+      SELECT session_id, model, MAX(user_id) AS user_id,
+             SUM(tool_use_count) AS tool_use_count, SUM(error_count) AS error_count,
+             SUM(commit_count) AS commit_count,
+             SUM(input_tokens) AS input_tokens, SUM(output_tokens) AS output_tokens,
+             SUM(cache_creation_tokens) AS cache_creation_tokens, SUM(cache_read_tokens) AS cache_read_tokens
+      FROM code_assistant_meta
+      WHERE occurred_at >= ${start} AND occurred_at < ${end}
+      GROUP BY session_id, model`);
+    const prompts = await rawAll<{ session_id: string; user_id: string | null; n: number | string }>(client, sql`
+      SELECT session_id, MAX(user_id) AS user_id, COUNT(*) AS n
+      FROM cowork_messages
+      WHERE surface = 'code' AND message_type = 'code_user_message'
+        AND occurred_at >= ${start} AND occurred_at < ${end}
+      GROUP BY session_id`);
+
+    const rows = new Map<string, { row: SessionRow; models: ModelTotals }>();
+    const rowFor = (sessionId: string, userId: string | null) => {
+      let r = rows.get(sessionId);
+      if (!r) {
+        const info = sessionInfo.get(sessionId);
+        r = {
+          row: {
+            session_id: sessionId, user_id: info?.user_id ?? userId, repo: info?.repo ?? null,
+            user_msg_count: 0, tool_use_count: 0, error_count: 0, commit_count: 0,
+            input_tokens: 0, output_tokens: 0, cache_creation_tokens: 0, cache_read_tokens: 0,
+            models_json: null,
+          },
+          models: {},
+        };
+        rows.set(sessionId, r);
+      }
+      return r;
+    };
+    for (const c of calls) {
+      if (isCodexSession(c)) continue;
+      const { row, models } = rowFor(c.session_id, c.user_id);
+      const inp = Number(c.input_tokens ?? 0), outp = Number(c.output_tokens ?? 0);
+      const cw = Number(c.cache_creation_tokens ?? 0), cr = Number(c.cache_read_tokens ?? 0);
+      row.tool_use_count += Number(c.tool_use_count ?? 0);
+      row.error_count += Number(c.error_count ?? 0);
+      row.commit_count += Number(c.commit_count ?? 0);
+      row.input_tokens += inp; row.output_tokens += outp;
+      row.cache_creation_tokens += cw; row.cache_read_tokens += cr;
+      if (c.model) {
+        const m = (models[c.model] ??= { input: 0, output: 0, cache_creation: 0, cache_read: 0 });
+        m.input += inp; m.output += outp; m.cache_creation += cw; m.cache_read += cr;
+      }
+    }
+    for (const p of prompts) {
+      if (isCodexSession(p)) continue;
+      rowFor(p.session_id, p.user_id).row.user_msg_count += Number(p.n ?? 0);
+    }
+    const claude: SessionRow[] = [...rows.values()].map(({ row, models }) => ({
+      ...row, models_json: Object.keys(models).length > 0 ? JSON.stringify(models) : null,
+    }));
+    const codex = allSessions.filter(s => isCodexSession(s) && s.last_at >= start && s.last_at < end);
+    return [...claude, ...codex];
+  }
+
   // The last 30 days (the headline figures), the 30 days before them (what
   // they are compared with), and the last 7 days (the weekly readers).
-  await writeScopes(allSessions.filter(inRolling), rollingPeriodStart, 'rolling');
-  await writeScopes(allSessions.filter(inPrior), priorPeriodStart, 'rolling_prior', undefined, rollingPeriodStart);
-  await writeScopes(allSessions.filter(inSevenDays), sevenDayPeriodStart, 'rolling_7d');
+  const windowEnd = now + 1;
+  await writeScopes(await windowSessions(rollingPeriodStart, windowEnd), rollingPeriodStart, 'rolling');
+  await writeScopes(await windowSessions(priorPeriodStart, rollingPeriodStart), priorPeriodStart, 'rolling_prior', undefined, rollingPeriodStart);
+  await writeScopes(await windowSessions(sevenDayPeriodStart, windowEnd), sevenDayPeriodStart, 'rolling_7d');
 
-  // Calendar-week window (new) — upserted, immutable once the week rolls over.
-  // Weekly rows attribute a session's FULL totals to the week containing its
-  // last_at — a session spanning the Monday 00:00 UTC boundary contributes
-  // its whole-session totals to both adjacent weeks' rolling writes, and any
-  // sub-hour tail activity after the week's final hourly run never reaches
-  // the completed row.
+  // Calendar-week window — upserted, immutable once the week rolls over.
+  // Counts only the work done this week, like the windows above.
   const weeklyPeriodStart = weekStart(now);
-  const weeklySessions = allSessions.filter(s => s.last_at >= weeklyPeriodStart);
-  await writeScopes(weeklySessions, weeklyPeriodStart, 'week');
+  await writeScopes(await windowSessions(weeklyPeriodStart, windowEnd), weeklyPeriodStart, 'week');
 
   // Per-product figures (code_metrics_vendor), once Codex data exists: all
   // products, Claude Code only and Codex only. A Codex session counts its

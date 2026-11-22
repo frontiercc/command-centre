@@ -6,6 +6,7 @@
 import { codeWorkTypeLabel } from '@/lib/pulse/code/work-type-labels';
 import { useEffect, useState } from 'react';
 import TopBar from '@/components/layout/TopBar';
+import { connectorLabel, skillLabel } from '@/components/dashboard/tool-names';
 import LoadingSpinner from '@/components/shared/LoadingSpinner';
 import { type CodeMetricsRow, formatCurrency, formatTokens, FigureGrid } from '@/components/pulse/code/CodeStatStrip';
 import CodeProductivityStrip from '@/components/pulse/code/CodeProductivityStrip';
@@ -145,6 +146,13 @@ function buildVerdicts(d: OrgSummary, vendor: Vendor): Verdict[] {
   const subagentPct = d.subagentShare != null ? Math.round(d.subagentShare * 100) : null;
   const subagentNote = subagentPct ? ` ${subagentPct}% of its steps were handed to helper agents.` : '';
   const commits = m?.commit_count ?? 0;
+  const fmtN = (v: number) => v.toLocaleString('en-GB');
+  const autonomyChange = priorPeriodChange(autonomy, p?.autonomy_ratio);
+  // A sharp fall is worth a look whatever the level, so the sentence says so rather than praising it.
+  const autonomyFalling = autonomyChange !== null && autonomyChange <= -0.2;
+  const gh = d.githubOverlay;
+  // Commits recorded with Claude Code but none reaching the tracked repos on GitHub.
+  const ghQuiet = !!gh && gh.trackedRepoCount > 0 && gh.totalCommits7d === 0;
   const darkCount = d.darkRepos.length;
   const activeCount = m?.repo_count ?? 0;
   const hasRepoData = activeCount > 0 || darkCount > 0 || (d.activeRepos?.length ?? 0) > 0;
@@ -156,7 +164,7 @@ function buildVerdicts(d: OrgSummary, vendor: Vendor): Verdict[] {
       status: 'neutral',
       plain: m?.spend_usd == null
         ? 'No priced activity in the window yet.'
-        : `${formatCurrency(m.spend_usd)} in the last 30 days across ${m.session_count} sessions` +
+        : `${formatCurrency(m.spend_usd)} in the last 30 days across ${fmtN(m.session_count)} sessions` +
           (spendPerSession !== null ? ` (${formatCurrency(spendPerSession)} per session)` : '') +
           (spendTrend ? `, ${spendTrend} against the 30 days before` : '') +
           '.',
@@ -174,32 +182,36 @@ function buildVerdicts(d: OrgSummary, vendor: Vendor): Verdict[] {
       question: 'Are developers delegating, or just typing faster?',
       value: autonomy == null ? 'Not measured' : `${autonomy.toFixed(1)}× `,
       // A sharp fall is worth a look whatever the level, so a falling figure is never called healthy.
-      status: autonomy == null ? 'neutral' : (priorPeriodChange(autonomy, p?.autonomy_ratio) ?? 0) <= -0.2 ? 'attention' : autonomy >= 3 ? 'good' : autonomy >= 1 ? 'building' : 'attention',
+      status: autonomy == null ? 'neutral' : autonomyFalling ? 'attention' : autonomy >= 3 ? 'good' : autonomy >= 1 ? 'building' : 'attention',
       plain: (autonomy == null
         ? 'No activity to judge yet.'
+        : autonomyFalling
+          ? `${w.actor} takes ${autonomy.toFixed(1)} actions for each instruction a person gives, down ${Math.round(Math.abs(autonomyChange!) * 100)}% on the 30 days before.`
         : autonomy >= 3
           ? `${w.actor} takes ${autonomy.toFixed(1)} actions for each instruction a person gives: developers are supervising delegated work, not dictating keystrokes.`
           : autonomy >= 1
             ? `${w.actor} takes ${autonomy.toFixed(1)} actions per instruction: delegation is forming but still hands-on.`
             : `Under one action per instruction: ${w.actor === 'The AI' ? 'AI' : w.actor} is being used as a conversational aid more than a delegate. Expect this to rise as trust builds.`) + subagentNote,
       trend: d.trends?.autonomy,
-      change: priorPeriodChange(autonomy, p?.autonomy_ratio),
+      change: autonomyChange,
       split: part(r => r.autonomy_ratio, v => `${v.toFixed(1)}×`),
     },
     {
       question: 'Is AI-assisted work actually shipping?',
-      value: String(commits),
+      value: fmtN(commits),
       // Commits Claude Code recorded but none reaching the tracked repos is worth a look, not healthy.
-      status: commits > 0 && !(d.githubOverlay && d.githubOverlay.trackedRepoCount > 0 && d.githubOverlay.totalCommits7d === 0) ? 'good' : 'attention',
+      status: commits > 0 && !ghQuiet ? 'good' : 'attention',
       plain: (commits > 0
-        ? `${commits} AI-assisted commit${commits === 1 ? '' : 's'} from ${w.sessions} in the last 30 days.`
+        ? `${fmtN(commits)} AI-assisted commit${commits === 1 ? '' : 's'} from ${w.sessions} in the last 30 days.`
         : `No AI-assisted commits in ${w.sessions} in the last 30 days. Activity may be exploration, review, or Q&A rather than shipping.`)
-        + (d.githubOverlay
-            ? ` Shipping context: the ${d.githubOverlay.trackedRepoCount} tracked repo${d.githubOverlay.trackedRepoCount === 1 ? '' : 's'} saw ${d.githubOverlay.totalCommits7d} commit${d.githubOverlay.totalCommits7d === 1 ? '' : 's'} and ${d.githubOverlay.totalPrs7d} merged PR${d.githubOverlay.totalPrs7d === 1 ? '' : 's'} on GitHub in the last 7 days.`
+        + (gh
+            ? ghQuiet
+              ? ` But the ${fmtN(gh.trackedRepoCount)} tracked repo${gh.trackedRepoCount === 1 ? '' : 's'} saw no commits on GitHub in the last 7 days${gh.totalPrs7d > 0 ? ` and ${fmtN(gh.totalPrs7d)} merged PR${gh.totalPrs7d === 1 ? '' : 's'}` : ''}.`
+              : ` The ${fmtN(gh.trackedRepoCount)} tracked repo${gh.trackedRepoCount === 1 ? '' : 's'} saw ${fmtN(gh.totalCommits7d)} commit${gh.totalCommits7d === 1 ? '' : 's'} and ${fmtN(gh.totalPrs7d)} merged PR${gh.totalPrs7d === 1 ? '' : 's'} on GitHub in the last 7 days.`
             : ' Add repositories in admin to see GitHub shipping volume alongside this.'),
       trend: d.trends?.commits,
       change: priorPeriodChange(m?.commit_count, p?.commit_count),
-      split: part(r => r.commit_count ?? null, v => String(v)),
+      split: part(r => r.commit_count ?? null, fmtN),
     },
     {
       question: 'How much of our codebase does this reach?',
@@ -240,7 +252,7 @@ function buildVerdicts(d: OrgSummary, vendor: Vendor): Verdict[] {
 
 function VerdictPanel({ v }: { v: Verdict }) {
   return (
-    <Panel title={v.question} right={<Pill tone={STATUS_TONE[v.status]}>{STATUS_LABEL[v.status]}</Pill>}>
+    <Panel title={v.question} right={v.status === 'neutral' ? undefined : <Pill tone={STATUS_TONE[v.status]}>{STATUS_LABEL[v.status]}</Pill>}>
       <div className="flex flex-col gap-2.5">
         <div className="flex items-end gap-4">
           <span className="text-[28px] leading-8 font-semibold tracking-[-0.03em] tabular-nums text-[#0A0A0A]">{v.value}</span>
@@ -281,7 +293,7 @@ function LanguageMixCard({ items }: { items: Array<{ language: string; edits: nu
   return (
     <Panel title="Language mix" subtitle="30 days" flush>
       <div className="px-4 pt-3 pb-2">
-        <Muted>Edits by language: what the team is actually building in (from edit-decision telemetry).</Muted>
+        <Muted>Edits by language: what the team is actually building in.</Muted>
       </div>
       {items.length === 0 ? (
         <div className="px-4 pb-4"><Muted>No edit-decision data yet.</Muted></div>
@@ -290,8 +302,8 @@ function LanguageMixCard({ items }: { items: Array<{ language: string; edits: nu
           {items.map(l => (
             <BarRow
               key={l.language}
-              label={l.language}
-              value={`${l.edits.toLocaleString()} edit${l.edits === 1 ? '' : 's'}`}
+              label={l.language === 'unknown' ? 'Unknown' : l.language}
+              value={`${l.edits.toLocaleString('en-GB')} edit${l.edits === 1 ? '' : 's'}`}
               pct={max > 0 ? Math.round((l.edits / max) * 100) : 0}
               tone="measured"
             />
@@ -320,7 +332,7 @@ function EfficiencyCard({ metrics, claude, codexView = false }: { metrics: CodeM
   // Nothing to show until the productivity metrics arrive.
   if (linesPerHour == null && tokensPerAccept == null) return empty("Not measured yet. Lines and accepted edits arrive with Claude Code's productivity metrics.");
   const cells = [
-    { label: 'Lines added per engaged hour', value: linesPerHour == null ? 'Not measured' : linesPerHour.toLocaleString() },
+    { label: 'Lines added per engaged hour', value: linesPerHour == null ? 'Not measured' : linesPerHour.toLocaleString('en-GB') },
     { label: 'Tokens used per accepted edit', value: tokensPerAccept == null ? 'Not measured' : formatTokens(Math.round(tokensPerAccept)) },
   ];
   return (
@@ -342,7 +354,7 @@ function SpendConcentrationCard({ data }: { data: OrgSummary['spendConcentration
     <Panel title="Spend concentration" subtitle="30 days" flush>
       <div className="px-4 pt-3">
         <Muted>
-          Share of Claude Code spend from the people who spend most, out of {data.spenderCount} people who used it.
+          Share of Claude Code spend from the people who spend most, out of {data.spenderCount.toLocaleString('en-GB')} people who used it.
         </Muted>
       </div>
       <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 p-4">
@@ -367,7 +379,7 @@ function leverageValue(item: { turns: number; spend_usd: number | null }): strin
   const costPerPromptDisplay = costPerPrompt != null
     ? costPerPrompt < 0.005 ? '<$0.01 per prompt' : `$${costPerPrompt.toFixed(2)} per prompt`
     : null;
-  return `${item.spend_usd == null ? 'unpriced' : formatCurrency(item.spend_usd)} · ${item.turns} prompt${item.turns === 1 ? '' : 's'}${costPerPromptDisplay ? ` · ${costPerPromptDisplay}` : ''}`;
+  return `${item.spend_usd == null ? 'unpriced' : formatCurrency(item.spend_usd)} · ${item.turns.toLocaleString('en-GB')} prompt${item.turns === 1 ? '' : 's'}${costPerPromptDisplay ? ` · ${costPerPromptDisplay}` : ''}`;
 }
 
 function LeverageRow({ item, max }: { item: { name: string; turns: number; spend_usd: number | null }; max: number }) {
@@ -507,8 +519,8 @@ export default function CodePulseOverviewPage() {
                               </span>
                             }
                             value={view === 'all' && codexPresent && w.claude != null && w.openai != null
-                              ? <span className="flex flex-col items-end leading-tight"><span>{`${w.sessions} session${w.sessions === 1 ? '' : 's'}${w.tier3 > 0 ? ` · ${w.tier3} frontier` : ''}`}</span><span className="text-[12px] text-[#8F8F8F]">{formatSplit({ claude: w.claude, openai: w.openai }, 'Codex').replace(/^Claude/, 'Claude Code')}</span></span>
-                              : `${w.sessions} session${w.sessions === 1 ? '' : 's'}${w.tier3 > 0 ? ` · ${w.tier3} frontier` : ''}`}
+                              ? <span className="flex flex-col items-end leading-tight"><span>{`${w.sessions.toLocaleString('en-GB')} session${w.sessions === 1 ? '' : 's'}${w.tier3 > 0 ? ` · ${w.tier3.toLocaleString('en-GB')} frontier` : ''}`}</span><span className="text-[12px] text-[#8F8F8F]">{formatSplit({ claude: w.claude, openai: w.openai }, 'Codex').replace(/^Claude/, 'Claude Code')}</span></span>
+                              : `${w.sessions.toLocaleString('en-GB')} session${w.sessions === 1 ? '' : 's'}${w.tier3 > 0 ? ` · ${w.tier3.toLocaleString('en-GB')} frontier` : ''}`}
                             pct={Math.round((w.sessions / max) * 100)}
                             tone="judged"
                           />
@@ -517,7 +529,7 @@ export default function CodePulseOverviewPage() {
                     </div>
                   )}
                   <PanelFoot>
-                    Session digests classified by Claude. The Work mix, the By hand estimate and the AI summary are judged; everything else is measured.
+                    Claude judges each session once it ends.
                   </PanelFoot>
                 </Panel>
               ) : (
@@ -540,8 +552,8 @@ export default function CodePulseOverviewPage() {
                         <BarRow
                           key={s.skill_name}
                           rank={i + 1}
-                          label={s.skill_name.replace(':', ' · ')}
-                          value={`${s.uses}×${s.agent_chained > 0 ? ` · ${s.agent_chained} agent-chained` : ''}`}
+                          label={skillLabel(s.skill_name)}
+                          value={`${s.uses.toLocaleString('en-GB')}×${s.agent_chained > 0 ? ` · ${s.agent_chained.toLocaleString('en-GB')} agent-chained` : ''}`}
                           pct={Math.round((s.uses / data!.topSkills[0].uses) * 100)}
                           tone="measured"
                         />
@@ -558,8 +570,8 @@ export default function CodePulseOverviewPage() {
                         <BarRow
                           key={c.mcp_server}
                           rank={i + 1}
-                          label={c.mcp_server}
-                          value={`${c.uses}×`}
+                          label={connectorLabel(c.mcp_server)}
+                          value={`${c.uses.toLocaleString('en-GB')}×`}
                           pct={Math.round((c.uses / data!.topConnectors[0].uses) * 100)}
                           tone="measured"
                         />
@@ -580,7 +592,7 @@ export default function CodePulseOverviewPage() {
                 flush
               >
                 <div className="px-4 pt-3">
-                  <Muted>API spend and turns attributed to the skill or subagent active during each request: which capabilities actually drive cost and output.</Muted>
+                  <Muted>What each skill and subagent costs, and how much work it does.</Muted>
                 </div>
                 <div className="grid grid-cols-1 md:grid-cols-2 mt-2 border-t border-[#F2F2F2]">
                   <div className="pt-3 pb-1">
@@ -611,11 +623,7 @@ export default function CodePulseOverviewPage() {
 
             <SpendConcentrationCard data={data?.spendConcentration ?? null} />
 
-            <Muted>
-              The Work mix, the By hand estimate and the AI summary are judged; everything else is measured from
-              session telemetry: token counts, tool actions, commits, repositories.
-              {data && data.metrics ? ` Window: 30 days · ${formatTokens(data.metrics.input_tokens + data.metrics.output_tokens)} tokens processed.` : ''}
-            </Muted>
+            {data && data.metrics ? <Muted>Last 30 days · {formatTokens(data.metrics.input_tokens + data.metrics.output_tokens)} tokens processed.</Muted> : null}
           </>
         )}
       </PageBody>

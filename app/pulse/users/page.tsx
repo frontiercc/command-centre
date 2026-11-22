@@ -147,7 +147,7 @@ export default function UsersPickerPage() {
 
   if (!adminChecked) return (
     <>
-      <TopBar title="Users" subtitle="Per-user delegation pulse" />
+      <TopBar title="Users" subtitle="What each person hands to AI and what it produces" />
       <LoadingSpinner />
     </>
   );
@@ -155,7 +155,7 @@ export default function UsersPickerPage() {
   if (adminChecked && deptScoped && !userDept) {
     return (
       <>
-        <TopBar title="Users" subtitle="Per-user delegation pulse" />
+        <TopBar title="Users" subtitle="What each person hands to AI and what it produces" />
         <PageBody>
           <Notice tone="warn" title="No department assigned.">
             Your account doesn&apos;t have a department set yet. Ask your admin to assign you to a department so you can see your team&apos;s Pulse data.
@@ -172,7 +172,7 @@ export default function UsersPickerPage() {
     <>
       <TopBar
         title="Users"
-        subtitle={displayName ? `Delegation pulse · ${displayName}` : 'Select a user'}
+        subtitle={displayName ? `What ${displayName} hands to AI and what it produces` : 'Select a user'}
       />
       <PageBody className="dash-compact">
 

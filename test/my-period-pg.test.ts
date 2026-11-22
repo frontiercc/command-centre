@@ -2,7 +2,7 @@
 // SPDX-License-Identifier: Apache-2.0
 
 // My Pulse and Departments' period figures on Postgres (lib/pulse/my-period.ts): the quarter is
-// the 13 completed weeks, and "What you produced" counts Claude Cowork's saved files, what Claude
+// the last 13 weeks to now, and "What you produced" counts Claude Cowork's saved files, what Claude
 // Chat's replies made and the files ChatGPT's replies listed, following the vendor switch.
 import { describe, it, expect, beforeAll, afterAll } from 'vitest';
 import type { TestSql } from './helpers/sql';
@@ -27,7 +27,7 @@ beforeAll(async () => {
   const judge = (id: string, user: string, tier: number) =>
     sql.run(`INSERT INTO pulse_classifications (cowork_message_id, user_id, tier, task_type, classifier_confidence, classifier_model, classified_at)
              VALUES (?, ?, ?, 'analysis', 0.9, 'm', ?)`, [id, user, tier, NOW]);
-  // Claude Cowork: a saved report last week, and a judged task this week (outside the quarter).
+  // Claude Cowork: a saved report last week, and a judged task this week.
   await prompt('cw-1', 'cw-s1', 'me', 'cowork', 'otel', t, 'board-note.docx');
   await judge('cw-1', 'me', 2);
   await prompt('cw-2', 'cw-s2', 'me', 'cowork', 'otel', MONDAY + DAY);
@@ -52,11 +52,11 @@ const build = async (vendor: 'all' | 'claude' | 'openai', period: 'week' | 'quar
 };
 
 describe('buildMyPeriod', () => {
-  it('reads the quarter as the 13 completed weeks, leaving out the current week', async () => {
+  it('reads the quarter as the last 13 weeks to now, so this week counts', async () => {
     const q = await build('all');
-    expect(q.end).toBe(MONDAY);
-    expect(q.start).toBe(MONDAY - 13 * 7 * DAY);
-    expect(q.realWork.now).toBe(1);
+    expect(q.end).toBe(NOW);
+    expect(q.start).toBe(NOW - 13 * 7 * DAY);
+    expect(q.realWork.now).toBe(2);
     // The week still ends now, so this week's task counts there.
     const w = await build('all', 'week');
     expect(w.end).toBe(NOW);
@@ -69,7 +69,7 @@ describe('buildMyPeriod', () => {
     expect(all.byKind).toEqual(expect.arrayContaining([
       { kind: 'Reports', files: 1 }, { kind: 'Spreadsheets', files: 1 }, { kind: 'Presentations', files: 1 },
     ]));
-    expect(all.sessions).toBe(3);
+    expect(all.sessions).toBe(4);
     expect((await build('claude')).produced.files).toBe(2);
     expect((await build('openai')).produced.files).toBe(1);
   });

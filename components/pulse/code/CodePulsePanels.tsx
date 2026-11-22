@@ -8,7 +8,7 @@
  * written here from the figures, one chart colour (petrol). The same shapes as Work Pulse, so the
  * two read alike; the words differ because the unit of work is a coding session, not a task.
  */
-import { QuestionCard, shareWords } from '@/components/dashboard/QuestionCard';
+import { QuestionCard } from '@/components/dashboard/QuestionCard';
 import { Frame, Track } from '@/components/pulse/WorkPulseOverview';
 import { PeriodSwitch, type Who } from '@/components/pulse/MyPulsePanels';
 import { type PulsePeriod } from '@/lib/pulse/period-shape';
@@ -92,7 +92,7 @@ export function CodeWorkPanel({ w, who, period, onPeriod, product }: {
           Measured from the sessions themselves.
           {w.automation !== null ? ` The AI took ${w.automation.toFixed(1)} actions per instruction.` : ''}
           {w.editAcceptance !== null ? ` ${Math.round(w.editAcceptance * 100)}% of its edits were accepted.` : ''}
-          {w.cacheHit !== null ? ` ${Math.round(w.cacheHit * 100)}% of context came from cache, not re-billed.` : ''}
+          {w.cacheHit !== null ? ` ${Math.round(w.cacheHit * 100)}% of context came from cache, not re-billed (${w.label.toLowerCase()}).` : ''}
           {w.repos !== null && w.repos > 0 ? ` ${plural(w.repos, 'codebase', 'codebases')} touched.` : ''}
         </>
       }
@@ -182,8 +182,11 @@ export function CodeWorkMix({ rows, who, names }: { rows: CodeWorkMixRow[]; who:
       title={`${who.you ? 'Your' : 'Their'} work mix`}
       judged
       period="Last 30 days"
-      // "Most of" only when it is over half; otherwise it is just the commonest kind.
-      answer={<>{top.sessions / total > 0.5 ? 'Most of' : 'The commonest kind of'} {poss(who)} coding work is <b>{top.label.toLowerCase()}</b>: {shareWords(top.sessions / total)} of {plural(total, 'session', 'sessions')}.</>}
+      answer={total === 1
+        ? <>{who.you ? 'Your' : `${who.name}'s`} one session was <b>{top.label.toLowerCase()}</b>.</>
+        : top.sessions === total
+          ? <>All {total.toLocaleString('en-GB')} of {poss(who)} sessions were <b>{top.label.toLowerCase()}</b>.</>
+          : <>{Math.max(1, Math.min(99, Math.round((top.sessions / total) * 100)))}% of {poss(who)} {total.toLocaleString('en-GB')} sessions were <b>{top.label.toLowerCase()}</b>, the commonest kind of work.</>}
       note={<>Claude judges each session once it ends. &ldquo;Deeper&rdquo; means {deepWords(names)}, the top two tiers.</>}
     >
       {rows.slice(0, 6).map(r => (
@@ -191,7 +194,7 @@ export function CodeWorkMix({ rows, who, names }: { rows: CodeWorkMixRow[]; who:
           <span className="text-[#333333] leading-4">{r.label}</span>
           <Track value={r.sessions / max} />
           <span className="text-right tabular-nums text-[#333333] whitespace-nowrap">
-            {r.sessions} · {r.deep} deeper
+            {r.sessions.toLocaleString('en-GB')} · {r.deep.toLocaleString('en-GB')} deeper
           </span>
         </div>
       ))}

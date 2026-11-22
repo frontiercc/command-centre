@@ -9,6 +9,7 @@
 import { and, eq, gte, inArray, lt, sql } from 'drizzle-orm';
 import { openaiShown } from '@/lib/sources/openai-visibility';
 import { getTypedClient } from '@/lib/db/client';
+import { briefingCount } from '@/lib/pulse/briefings/format';
 import { schema } from '@/lib/db/schema';
 import { productExpr, vendorExpr } from '@/lib/dashboard/product-sql';
 import { PRODUCTS } from '@/lib/dashboard/vendor';
@@ -69,7 +70,7 @@ export async function buildProductFacts(opts: {
 
   const lines = WORK_PULSE_PRODUCTS.map(p => {
     const c = counts.get(p.id) ?? { prompts: 0, people: 0 };
-    return `${p.label}: ${c.prompts} classified prompts, ${c.people} ${c.people === 1 ? 'person' : 'people'}`;
+    return `${p.label}: ${briefingCount(c.prompts)} classified prompts, ${briefingCount(c.people)} ${c.people === 1 ? 'person' : 'people'}`;
   });
   const t = await getTierNames();
   lines.push(`Share of work that was ${t.t2.toLowerCase()} or ${t.t3.toLowerCase()}: Claude ${share('claude')}, ChatGPT ${share('openai')}`);

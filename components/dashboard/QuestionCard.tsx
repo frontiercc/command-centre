@@ -94,30 +94,19 @@ export function changeFrom(now: number | null, before: number | null, fmt: (v: n
   return `${now > before ? 'up' : 'down'} from ${fmt(before)} ${period}`;
 }
 
-/** A share as plain words: "all", "two in three", "half", "one in four", "none"; a percentage otherwise. */
+/**
+ * A share as a percentage ("73%"), or "all" / "none" when it is exactly that. A share short of all
+ * never rounds up to 100%, and one above none never rounds down to 0%.
+ */
 export function shareWords(v: number): string {
-  const nice: Array<[number, string]> = [
-    [1 / 5, 'one in five'], [1 / 4, 'one in four'], [1 / 3, 'one in three'], [2 / 5, 'two in five'],
-    [1 / 2, 'half'], [3 / 5, 'three in five'], [2 / 3, 'two in three'], [3 / 4, 'three in four'], [4 / 5, 'four in five'],
-  ];
-  const near = nice.reduce((b, n) => (Math.abs(n[0] - v) < Math.abs(b[0] - v) ? n : b));
   if (v >= 1) return 'all';
   if (v <= 0) return 'none';
-  if (v >= 0.9) return 'nearly all';
-  if (v <= 0.1) return 'very few';
-  return Math.abs(near[0] - v) <= 0.04 ? near[1] : `${Math.round(v * 100)}%`;
+  return `${Math.min(99, Math.max(1, Math.round(v * 100)))}%`;
 }
-/**
- * Two shares said the same way, so a sentence never mixes "three in four" with "87%": words when
- * both have a plain word form, percentages for both otherwise.
- */
+/** Two shares, both as percentages, for "from 60% to 73%". */
 export function sharePair(now: number, before: number): [string, string] {
-  const a = shareWords(now);
-  const b = shareWords(before);
-  // Percentages when either has no word form, or when both round to the same words but differ
-  // ("three in four, down from three in four" says nothing).
-  const same = a === b && Math.round(now * 100) !== Math.round(before * 100);
-  return a.endsWith('%') || b.endsWith('%') || same ? [`${Math.round(now * 100)}%`, `${Math.round(before * 100)}%`] : [a, b];
+  const p = (v: number) => (v >= 1 ? '100%' : v <= 0 ? '0%' : shareWords(v));
+  return [p(now), p(before)];
 }
 export const cap = (t: string) => t.charAt(0).toUpperCase() + t.slice(1);
 

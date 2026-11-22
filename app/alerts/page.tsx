@@ -3,11 +3,12 @@
 
 'use client';
 
-import { useEffect, useRef, useState } from 'react';
+import { useEffect, useState } from 'react';
 import Link from 'next/link';
 import TopBar from '@/components/layout/TopBar';
 import LoadingSpinner from '@/components/shared/LoadingSpinner';
-import { ALL_CATEGORIES, CATEGORY_LABELS, alertTypeLabel, categoryForType } from '@/lib/alerts/categories';
+import { ALL_CATEGORIES, CATEGORY_LABELS, alertTypeLabel, categoryForType, type AlertCategory } from '@/lib/alerts/categories';
+import { plainStoredAlertText } from '@/lib/alerts/plain-text';
 import { useCorePlatformGuard } from '@/components/shared/useCorePlatformGuard';
 import { useSessionRole } from '@/components/shared/useSessionRole';
 import { PageBody, Panel, Segmented, Chip, Dot, Pill, Empty, Notice, B, SEVERITY_COLOR } from '@/components/precision/ui';
@@ -42,8 +43,7 @@ const STATUS_TONE: Record<string, 'bad' | 'warn' | 'good' | 'neutral'> = {
   dismissed: 'neutral',
 };
 
-/** getAlerts caps a list at 500 rows; past that, per-status counts would be wrong. */
-const ALERT_LIST_CAP = 500;
+interface AlertCountRow { status: string; alert_type: string; count: number }
 
 export default function AlertsPage() {
   useCorePlatformGuard();
@@ -55,76 +55,49 @@ export default function AlertsPage() {
   const [filter, setFilter] = useState('');
   const [category, setCategory] = useState('');
   const [expandedId, setExpandedId] = useState<string | null>(null);
-  // Status-filtered (but category-independent) set used only to power the count strip,
-  // so pill counts stay visible across all categories even once one is selected.
-  const [statusAlerts, setStatusAlerts] = useState<Alert[]>([]);
-  // Unfiltered set used only for the counts on the status switch.
-  const [allAlerts, setAllAlerts] = useState<Alert[] | null>(null);
+  // Counts by status and type, read uncapped by /api/alerts/count, so the
+  // status and category counts match the dashboard's open-alert figure.
+  const [countRows, setCountRows] = useState<AlertCountRow[] | null>(null);
 
   // Bumped after a status change or a clear, to reload the list and the status counts.
   const [reloadKey, setReloadKey] = useState(0);
-  const lastLoad = useRef<{ filter: string; category: string; reloadKey: number } | null>(null);
 
-  // One effect loads the three sets the page shows: the list (status and
-  // category), the status-only set (category counts) and the unfiltered set
-  // (status counts). They often name the same address (no status or no
-  // category picked), so each distinct address is requested once per load and
-  // its answer shared. Before, three separate effects each fetched on page
-  // open, so the same request went out three times.
   useEffect(() => {
-    const prev = lastLoad.current;
-    lastLoad.current = { filter, category, reloadKey };
-
-    const requests = new Map<string, Promise<{ ok: boolean; status: number; data: unknown }>>();
-    const get = (url: string) => {
-      let p = requests.get(url);
-      if (!p) {
-        p = fetch(url).then(async r => ({ ok: r.ok, status: r.status, data: r.ok ? await r.json() : null }));
-        requests.set(url, p);
-      }
-      return p;
-    };
-
-    // The list: on every change.
     const params = new URLSearchParams();
     if (filter) params.set('status', filter);
     if (category) params.set('category', category);
     const qs = params.toString();
-    get(`/api/alerts${qs ? `?${qs}` : ''}`)
-      .then(r => { if (!r.ok) throw new Error(String(r.status)); return r.data; })
+    fetch(`/api/alerts${qs ? `?${qs}` : ''}`)
+      .then(r => { if (!r.ok) throw new Error(String(r.status)); return r.json(); })
       .then(d => { setAlerts(d as Alert[]); setFailed(false); })
       .catch(e => { console.error(e); setFailed(true); })
       .finally(() => setLoading(false));
-
-    // The status-only set: on first load and when the status changes.
-    if (!prev || prev.filter !== filter) {
-      get(`/api/alerts${filter ? `?status=${filter}` : ''}`)
-        .then(r => { if (!r.ok) throw new Error(String(r.status)); return r.data; })
-        .then(d => setStatusAlerts(d as Alert[]))
-        .catch(console.error);
-    }
-
-    // The unfiltered set: on first load and after a change to alerts.
-    if (!prev || prev.reloadKey !== reloadKey) {
-      get('/api/alerts')
-        .then(r => setAllAlerts(Array.isArray(r.data) ? (r.data as Alert[]) : null))
-        .catch(() => setAllAlerts(null));
-    }
   }, [filter, category, reloadKey]);
 
-  const categoryCounts = ALL_CATEGORIES.reduce<Record<string, number>>((acc, cat) => {
-    acc[cat] = statusAlerts.filter(a => categoryForType(a.alert_type) === cat).length;
+  useEffect(() => {
+    fetch('/api/alerts/count?detail=1')
+      .then(r => (r.ok ? r.json() : null))
+      .then(d => setCountRows(Array.isArray(d?.rows) ? (d.rows as AlertCountRow[]) : null))
+      .catch(() => setCountRows(null));
+  }, [reloadKey]);
+
+  const countWhere = (pred: (r: AlertCountRow) => boolean) =>
+    (countRows ?? []).filter(pred).reduce((sum, r) => sum + r.count, 0);
+
+  const statusCounts: Record<string, number> | null = countRows
+    ? STATUSES.reduce<Record<string, number>>((acc, s) => {
+        acc[s] = countWhere(r => !s || r.status === s);
+        return acc;
+      }, {})
+    : null;
+
+  // Category counts for the chosen status. "Other" is listed whenever it has
+  // alerts, so the categories always add up to the status count.
+  const categoryCounts = [...ALL_CATEGORIES, 'other' as AlertCategory].reduce<Record<string, number>>((acc, cat) => {
+    acc[cat] = countWhere(r => (!filter || r.status === filter) && categoryForType(r.alert_type) === cat);
     return acc;
   }, {});
-
-  // Counts only when the unfiltered list is complete; a capped list would undercount.
-  const statusCounts: Record<string, number> | null =
-    allAlerts && allAlerts.length < ALERT_LIST_CAP
-      ? STATUSES.reduce<Record<string, number>>((acc, s) => {
-          acc[s] = s ? allAlerts.filter(a => a.status === s).length : allAlerts.length;
-          return acc;
-        }, {})
-      : null;
+  const shownCategories: AlertCategory[] = categoryCounts.other > 0 ? [...ALL_CATEGORIES, 'other'] : ALL_CATEGORIES;
 
   const notifySidebar = () => window.dispatchEvent(new Event('alertsChanged'));
 
@@ -152,6 +125,11 @@ export default function AlertsPage() {
   const actionableAlerts = alerts.filter(a => a.status === 'open' || a.status === 'acknowledged');
   const closedAlerts = alerts.filter(a => a.status === 'resolved' || a.status === 'dismissed');
   const showBulkActions = isAdmin && actionableAlerts.length > 1;
+  // The bulk buttons change every alert in the chosen status (and category), not
+  // only the rows listed, so the figure beside them is the full count.
+  const bulkFrom = filter || 'open';
+  const bulkCount = countWhere(r => r.status === bulkFrom && (!category || categoryForType(r.alert_type) === category));
+  const closedCount = countWhere(r => r.status === 'resolved' || r.status === 'dismissed');
 
   const clearClosed = async () => {
     await fetch('/api/alerts', { method: 'DELETE' });
@@ -174,7 +152,7 @@ export default function AlertsPage() {
               label: (
                 <>
                   {STATUS_LABEL[s]}
-                  {statusCounts && <span className="ml-1 text-[#8F8F8F] tabular-nums">{statusCounts[s]}</span>}
+                  {statusCounts && <span className="ml-1 text-[#8F8F8F] tabular-nums">{statusCounts[s].toLocaleString('en-GB')}</span>}
                 </>
               ),
             }))}
@@ -187,7 +165,7 @@ export default function AlertsPage() {
               className={B.select}
             >
               <option value="">All categories</option>
-              {ALL_CATEGORIES.map(cat => (
+              {shownCategories.map(cat => (
                 <option key={cat} value={cat}>{CATEGORY_LABELS[cat]}</option>
               ))}
             </select>
@@ -197,7 +175,7 @@ export default function AlertsPage() {
             <div className="hidden lg:flex ml-auto items-center gap-2 text-[13px] text-[#666666]">
               {showBulkActions && (
                 <>
-                  <span className="tabular-nums">{actionableAlerts.length} actionable</span>
+                  <span className="tabular-nums">{bulkCount.toLocaleString('en-GB')} {STATUS_LABEL[bulkFrom].toLowerCase()}</span>
                   <button type="button" onClick={() => bulkUpdate('resolved')} className={B.secondary}>
                     Resolve all
                   </button>
@@ -209,7 +187,7 @@ export default function AlertsPage() {
               {isAdmin && closedAlerts.length > 0 && (
                 <>
                   {showBulkActions && <span className="w-px h-4 bg-[#EAEAEA]" aria-hidden="true" />}
-                  <span className="tabular-nums">{closedAlerts.length} closed</span>
+                  <span className="tabular-nums">{closedCount.toLocaleString('en-GB')} closed</span>
                   <button type="button" onClick={clearClosed} className={B.danger}>
                     Clear resolved
                   </button>
@@ -221,9 +199,9 @@ export default function AlertsPage() {
 
         {/* Category counts */}
         <div className="flex flex-wrap gap-2">
-          {ALL_CATEGORIES.map(cat => (
+          {shownCategories.map(cat => (
             <Chip key={cat} on={category === cat} onClick={() => setCategory(cat)}>
-              {CATEGORY_LABELS[cat]} <span className="tabular-nums text-[#8F8F8F]">{categoryCounts[cat] ?? 0}</span>
+              {CATEGORY_LABELS[cat]} <span className="tabular-nums text-[#8F8F8F]">{(categoryCounts[cat] ?? 0).toLocaleString('en-GB')}</span>
             </Chip>
           ))}
         </div>
@@ -253,12 +231,12 @@ export default function AlertsPage() {
 
                       <div className="flex-1 min-w-0 flex flex-col gap-1">
                         <div className="flex items-center gap-2 flex-wrap">
-                          <h3 className="m-0 text-[14px] font-semibold text-[#0A0A0A]">{alert.title}</h3>
+                          <h3 className="m-0 text-[14px] font-semibold text-[#0A0A0A]">{plainStoredAlertText(alert.title)}</h3>
                           <Pill tone={STATUS_TONE[alert.status] ?? 'neutral'}>
                             <span className="capitalize">{alert.status}</span>
                           </Pill>
                         </div>
-                        <p className="m-0 text-[14px] leading-5 text-[#4D4D4D]">{alert.explanation}</p>
+                        <p className="m-0 text-[14px] leading-5 text-[#4D4D4D]">{alert.alert_type === 'policy' ? plainStoredAlertText(alert.explanation) : alert.explanation}</p>
                         <p className="m-0 text-[13px] text-[#8F8F8F] tabular-nums">
                           {[
                             alert.user_id ? `User: ${alert.user_display_name || alert.user_id}` : null,

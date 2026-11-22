@@ -194,7 +194,7 @@ export async function GET(request: NextRequest) {
   const rawSessions = await client
     .select({
       session_id: css.session_id, repo: css.repo, git_branch: css.git_branch,
-      first_at: css.first_at, last_at: css.last_at,
+      first_at: css.first_at, last_at: css.last_at, active_secs: css.active_secs,
       user_msg_count: css.user_msg_count, assistant_turns: css.assistant_turns, tool_use_count: css.tool_use_count,
       input_tokens: css.input_tokens, output_tokens: css.output_tokens, cache_read_tokens: css.cache_read_tokens,
       models_json: css.models_json,

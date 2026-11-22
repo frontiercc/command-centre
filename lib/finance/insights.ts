@@ -13,6 +13,7 @@ import type { ChargebackReport } from '@/lib/finance/chargeback';
 import type { SpendProjection } from '@/lib/pulse/code/projection';
 import { computeSpendConcentration } from '@/lib/pulse/code/concentration';
 import { MIN_PROJECTION_DAYS } from '@/lib/finance/finops-projection';
+import { usdWhole } from '@/lib/finance/spend-review-format';
 
 export interface InsightFacts {
   /** Cost centre with the largest positive spend increase vs the prior period, or null. For the month in
@@ -117,7 +118,7 @@ export function buildInsightFacts(
  * here comes straight from `InsightFacts`.
  */
 export function composeInsightNarrative(facts: InsightFacts): string {
-  const usd = (n: number) => n.toLocaleString('en-US', { style: 'currency', currency: 'USD' });
+  const usd = usdWhole;
   const pct = (n: number) => `${Math.round(n)}%`;
   const parts: string[] = [];
 
@@ -138,7 +139,10 @@ export function composeInsightNarrative(facts: InsightFacts): string {
     parts.push(`At the current run-rate the month is on pace for ${usd(p.projectedUsd)}${vs}.`);
   }
   const dq: string[] = [];
-  if (facts.dataQuality.unallocatedPct > 0) dq.push(`${pct(facts.dataQuality.unallocatedPct)} unallocated`);
+  // A share that rounds to 0% must not read as none when some spend is unallocated.
+  if (facts.dataQuality.unallocatedPct > 0) {
+    dq.push(`${facts.dataQuality.unallocatedPct < 1 ? 'under 1%' : pct(facts.dataQuality.unallocatedPct)} unallocated`);
+  }
   if (facts.dataQuality.unpricedModelCount > 0) {
     dq.push(`${facts.dataQuality.unpricedModelCount} unpriced model${facts.dataQuality.unpricedModelCount > 1 ? 's' : ''}`);
   }

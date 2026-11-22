@@ -16,6 +16,9 @@ import {
   PageBody, Toolbar, Panel, PanelFoot, Strip, Figure, Bar, T, Tag, B, Chip, Notice, Muted, cx,
 } from '@/components/precision/ui';
 
+
+/** A count with thousands separators. */
+const num = (n: number | string) => Number(n).toLocaleString('en-GB');
 interface LibraryEntry {
   id: number;
   name: string;
@@ -255,9 +258,9 @@ function HeadlineStrip({ data }: { data: LibraryData }) {
     <Strip cols={5}>
       <div className="p-4 flex flex-col gap-1.5 min-w-0">
         <span className="text-[13px] text-[#666666]">Claimed</span>
-        <span className="text-[24px] leading-7 font-semibold tracking-[-0.02em] tabular-nums text-[#0A0A0A]">{pct}%</span>
+        <span className="text-[24px] leading-7 font-semibold tracking-[-0.02em] tabular-nums text-[#0A0A0A]">{num(claimed)} of {num(total)}</span>
         <Bar pct={pct} tone="measured" height={4} />
-        <span className="text-[13px] text-[#8F8F8F] tabular-nums">{claimed} of {total} have an owner</span>
+        <span className="text-[13px] text-[#8F8F8F]">have an owner</span>
       </div>
       <Figure
         label="Skill uses this week"
@@ -274,8 +277,8 @@ function HeadlineStrip({ data }: { data: LibraryData }) {
           sub={
             <>
               <span className="tabular-nums">{ur.total_count.toLocaleString()} uses</span>
-              {gapToNext > 0 && <span className="tabular-nums"> · {gapToNext} behind #{ur.rank - 1}</span>}
-              <span className="block tabular-nums">{ur.skill_count} skill · {ur.connector_count} connector</span>
+              {gapToNext > 0 && <span className="tabular-nums"> · {num(gapToNext)} behind #{ur.rank - 1}</span>}
+              <span className="block tabular-nums">{num(ur.skill_count)} skill · {num(ur.connector_count)} connector</span>
             </>
           }
         />
@@ -355,7 +358,7 @@ function Highlights({ entries, recentEntries, deptPicks, userDept }: {
     .map(e => ({
       id: e.id, name: e.name, type: e.type, description: e.description, install_guide: e.install_guide,
       badge: `+${e.trend_pct}%`, badgeTone: 'measured',
-      meta: `${e.week_count} uses this week · ${e.week_user_count ?? 0} ${e.week_user_count === 1 ? 'user' : 'users'}`,
+      meta: `${num(e.week_count)} uses this week · ${num(e.week_user_count ?? 0)} ${e.week_user_count === 1 ? 'user' : 'users'}`,
     }));
 
   const newCards: StripCard[] = recentEntries.slice(0, 3).map(e => ({
@@ -370,8 +373,8 @@ function Highlights({ entries, recentEntries, deptPicks, userDept }: {
     .slice(0, 3)
     .map(e => ({
       id: e.id, name: e.name, type: e.type, description: e.description, install_guide: e.install_guide,
-      badge: `${e.vote_count} ${e.vote_count === 1 ? 'vote' : 'votes'}`, badgeTone: 'measured',
-      meta: `${e.invocation_count} total uses · ${e.user_count} ${e.user_count === 1 ? 'user' : 'users'}`,
+      badge: `${num(e.vote_count)} ${e.vote_count === 1 ? 'vote' : 'votes'}`, badgeTone: 'measured',
+      meta: `${num(e.invocation_count)} total uses · ${num(e.user_count)} ${e.user_count === 1 ? 'user' : 'users'}`,
     }));
 
   const unclaimed: StripCard[] = entries
@@ -381,13 +384,13 @@ function Highlights({ entries, recentEntries, deptPicks, userDept }: {
     .map(e => ({
       id: e.id, name: e.name, type: e.type, description: e.description, install_guide: null,
       badge: 'No owner', badgeTone: 'neutral',
-      meta: `${e.invocation_count} uses · nobody has claimed this yet`,
+      meta: `${num(e.invocation_count)} uses · nobody has claimed this yet`,
     }));
 
   const deptCards: StripCard[] = deptPicks.slice(0, 3).map(e => ({
     id: e.id, name: e.name, type: e.type, description: e.description, install_guide: e.install_guide,
-    badge: `${e.invocation_count}×`, badgeTone: 'measured',
-    meta: `${e.user_count} ${e.user_count === 1 ? 'teammate' : 'teammates'} in ${userDept ?? 'your department'}`,
+    badge: `${num(e.invocation_count)}×`, badgeTone: 'measured',
+    meta: `${num(e.user_count)} ${e.user_count === 1 ? 'teammate' : 'teammates'} in ${userDept ?? 'your department'}`,
   }));
 
   const slides: Array<{ key: SlideKey; label: string; cards: StripCard[] }> = [
@@ -520,8 +523,8 @@ function TabbedTopList({
                       <div className="mt-1.5 max-w-[360px]"><Bar pct={barPct} tone="measured" /></div>
                     </td>
                     <td className="px-2 py-2.5 align-top text-right whitespace-nowrap tabular-nums">
-                      <div className="font-medium">{e.invocation_count}×</div>
-                      <div className="text-[13px] text-[#8F8F8F]">{e.user_count} {e.user_count === 1 ? 'user' : 'users'}</div>
+                      <div className="font-medium">{num(e.invocation_count)}×</div>
+                      <div className="text-[13px] text-[#8F8F8F]">{num(e.user_count)} {e.user_count === 1 ? 'user' : 'users'}</div>
                     </td>
                     <td className="pl-2 pr-4 py-2.5 align-top text-right whitespace-nowrap">
                       <div className="inline-flex items-center gap-1.5">
@@ -547,7 +550,7 @@ function TabbedTopList({
       )}
       {totalPages > 1 && (
         <div className="px-4 py-2.5 border-t border-[#F2F2F2] flex items-center gap-3 text-[13px] text-[#666666]">
-          <span className="tabular-nums">{page + 1} of {totalPages} · {allEntries.length} total</span>
+          <span className="tabular-nums">{page + 1} of {totalPages} · {num(allEntries.length)} total</span>
           <span className="ml-auto flex items-center gap-3">
             <button
               type="button"
@@ -635,7 +638,7 @@ function LeaderboardSidebar({
                 </div>
               )}
               <span className="text-[12px] text-[#8F8F8F] tabular-nums">
-                {u.skill_count} skill · {u.connector_count} connector
+                {num(u.skill_count)} skill · {num(u.connector_count)} connector
               </span>
             </span>
             <span className="font-medium tabular-nums shrink-0">{u.total_count.toLocaleString()}</span>
@@ -690,7 +693,7 @@ function SkillsToTry({ skills }: { skills: SkillToTry[] }) {
             <span className="font-mono text-[13px] font-medium text-[#0A0A0A] group-hover:underline truncate">{fmt(s.name)}</span>
             {s.description && <span className="text-[13px] text-[#8F8F8F] truncate">{s.description}</span>}
           </Link>
-          <span className="text-[13px] text-[#8F8F8F] tabular-nums shrink-0">{s.user_count} {s.user_count === 1 ? 'user' : 'users'}</span>
+          <span className="text-[13px] text-[#8F8F8F] tabular-nums shrink-0">{num(s.user_count)} {s.user_count === 1 ? 'user' : 'users'}</span>
           <div className="relative shrink-0">
             <InstallButton
               eligible={!!s.install_guide}
@@ -723,7 +726,7 @@ function DeptBreakdown({ rows }: { rows: DeptRow[] }) {
             <div className="flex items-baseline gap-2 min-w-0">
               <span className="text-[14px] font-medium text-[#0A0A0A] truncate">{r.department}</span>
               <span className="text-[13px] text-[#8F8F8F] tabular-nums truncate">
-                {r.skill_uses} skill {r.skill_uses === 1 ? 'use' : 'uses'} · {r.connector_uses} connector {r.connector_uses === 1 ? 'use' : 'uses'} · {r.user_count} {r.user_count === 1 ? 'person' : 'people'}
+                {num(r.skill_uses)} skill {r.skill_uses === 1 ? 'use' : 'uses'} · {num(r.connector_uses)} connector {r.connector_uses === 1 ? 'use' : 'uses'} · {num(r.user_count)} {r.user_count === 1 ? 'person' : 'people'}
               </span>
               <span className="ml-auto text-[13px] font-medium text-[#0A0A0A] tabular-nums shrink-0">{r.total_uses.toLocaleString()}</span>
             </div>
@@ -749,7 +752,7 @@ function DeptBreakdown({ rows }: { rows: DeptRow[] }) {
 
 // ── Unclaimed banner ──────────────────────────────────────────────────────────
 
-function UnclaimedBanner({ count, onDismiss, onClaim }: { count: number; onDismiss: () => void; onClaim: () => void }) {
+function UnclaimedBanner({ count, inUse, onDismiss, onClaim }: { count: number; inUse: number; onDismiss: () => void; onClaim: () => void }) {
   if (count === 0) return null;
   return (
     <Notice
@@ -757,7 +760,10 @@ function UnclaimedBanner({ count, onDismiss, onClaim }: { count: number; onDismi
       title={
         <>
           <LineIcon d={ICON.flag} className="inline-block align-[-2px] mr-1.5" />
-          {count === 1 ? '1 skill or connector in use has no owner.' : `${count} skills and connectors in use have no owner.`}
+          {/* The same count as the Unclaimed filter, with how many of them are in use. */}
+          {count === 1
+            ? `1 skill or connector has no owner${inUse === 1 ? ', and it is in use' : ''}.`
+            : `${num(count)} skills and connectors have no owner, ${num(inUse)} of them in use.`}
         </>
       }
       action={
@@ -910,7 +916,7 @@ function FilteredList({ entries, onVote }: { entries: LibraryEntry[]; onVote: (i
               </div>
               <div className="flex items-center gap-2 shrink-0">
                 <span className="text-[13px] text-[#666666] tabular-nums whitespace-nowrap">
-                  {e.invocation_count}× · {e.user_count} {e.user_count === 1 ? 'user' : 'users'}
+                  {num(e.invocation_count)}× · {num(e.user_count)} {e.user_count === 1 ? 'user' : 'users'}
                 </span>
                 {isUnclaimed ? (
                   <Link
@@ -968,7 +974,20 @@ export default function LibraryPage() {
     try {
       const res = await fetch(`/api/library?${p}`);
       if (!res.ok) throw new Error(String(res.status));
-      setData(await res.json());
+      const first = await res.json() as LibraryData;
+      // The API returns at most 200 entries a page. Read the rest too, so the
+      // Skills and Connectors tabs list and count every entry, matching the
+      // headline figures.
+      const pages = Math.ceil((first.total ?? 0) / 200);
+      const rest = await Promise.all(Array.from({ length: Math.max(0, pages - 1) }, (_, i) => {
+        const pp = new URLSearchParams(p);
+        pp.set('page', String(i + 2));
+        return fetch(`/api/library?${pp}`).then(r => {
+          if (!r.ok) throw new Error(String(r.status));
+          return r.json() as Promise<LibraryData>;
+        });
+      }));
+      setData({ ...first, entries: [...first.entries, ...rest.flatMap(d => d.entries)] });
       setFailed(false);
     } catch {
       // A failed load says so, and never leaves the last filter's entries on show.
@@ -1050,9 +1069,10 @@ export default function LibraryPage() {
         {data && <HeadlineStrip data={data} />}
 
         {/* Unclaimed banner */}
-        {!bannerDismissed && data && (data.unclaimed_in_use_count ?? 0) > 0 && (
+        {!bannerDismissed && data && (data.unclaimed_count ?? 0) > 0 && (
           <UnclaimedBanner
-            count={data.unclaimed_in_use_count ?? 0}
+            count={data.unclaimed_count ?? 0}
+            inUse={data.unclaimed_in_use_count ?? 0}
             onDismiss={() => setBannerDismissed(true)}
             onClaim={() => { setTypeFilter(''); setClaimedFilter('false'); setSourceFilter(''); }}
           />
@@ -1081,7 +1101,7 @@ export default function LibraryPage() {
             >
               {f.label}
               {f.claimed === 'false' && data?.unclaimed_count ? (
-                <span className="ml-1.5 tabular-nums">{data.unclaimed_count}</span>
+                <span className="ml-1.5 tabular-nums">{num(data.unclaimed_count)}</span>
               ) : null}
             </Chip>
           ))}

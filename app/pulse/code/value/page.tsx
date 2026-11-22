@@ -40,7 +40,7 @@ function ProvenanceTag({ p }: { p: ResolvedField['provenance'] }) {
   return <Tag tone={p === 'from_data' ? 'measured' : 'neutral'}>{PROV_LABEL[p]}</Tag>;
 }
 
-function fmtHours(h: number) { return `${Math.round(h).toLocaleString()} hrs`; }
+function fmtHours(h: number) { return `${Math.round(h).toLocaleString('en-GB')} hrs`; }
 
 export default function CodeValuePage() {
   const [data, setData] = useState<ValueData | null>(null);
@@ -75,7 +75,7 @@ export default function CodeValuePage() {
     { label: 'Value (annual)', value: e ? formatCurrency(e.valueAnnual) : 'Not estimated' },
     { label: 'Return', value: e?.returnMultiple != null ? `${e.returnMultiple.toFixed(0)}×` : 'Not estimated' },
     { label: 'Net value', value: e ? formatCurrency(e.netValue) : 'Not estimated' },
-    { label: 'Time recovered', value: e ? fmtHours(e.timeRecoveredHours) : 'Not estimated' },
+    { label: 'Time recovered a year', value: e ? fmtHours(e.timeRecoveredHours) : 'Not estimated' },
   ];
 
   return (
@@ -116,9 +116,6 @@ export default function CodeValuePage() {
           <>
             {/* Estimate hero — violet */}
             <Panel title="Industry benchmark model" subtitle="Annualised" right={<Tag tone="judged">Estimate</Tag>} flush>
-              <div className="px-4 pt-3">
-                <Muted>The planning estimate before your own data exists. As measured usage accrues, the figures tagged Measured below progressively replace it.</Muted>
-              </div>
               <FigureGrid cols={4}>
                 {heroCells.map(c => <Figure key={c.label} label={c.label} value={c.value} tone="judged" />)}
               </FigureGrid>
@@ -133,8 +130,8 @@ export default function CodeValuePage() {
                 </button>
                 {showFormula && cal && (
                   <p className="m-0 mt-2 text-[13px] leading-[1.6] text-[#666666]">
-                    Value = team size ({cal.teamSize.value}) × productivity lift ({cal.liftPct.value}%) × loaded comp ({formatCurrency(cal.loadedComp.value)}).
-                    Recovered coding hours are valued at full loaded compensation spread over coding hours only (the aggressive end of the estimate), so the figure
+                    Value = team size ({cal.teamSize.value.toLocaleString('en-GB')}) × productivity lift ({cal.liftPct.value}%) × loaded cost per developer ({formatCurrency(cal.loadedComp.value)}).
+                    Recovered coding hours are valued at the full loaded cost spread over coding hours only (the aggressive end of the estimate), so the figure
                     scales with headcount and the benchmark lift, not with the coding-hours input. Productivity lift is an industry benchmark; adjust it to your own
                     measurement in Admin → Developer Pulse → Value. Spend excludes unpriced models.
                   </p>
@@ -144,19 +141,19 @@ export default function CodeValuePage() {
 
             {/* Time Saved (bottom-up estimate) — violet, a second method sitting beside the top-down one */}
             {data?.timeSaved != null ? (
-              <Panel title="Time saved" right={<Tag tone="judged">Estimate</Tag>} flush>
+              <Panel title="Time saved" subtitle={data.timeSaved.rows.some(r => r.windowDays != null) ? `Measured work, last ${data.timeSaved.rows.find(r => r.windowDays != null)!.windowDays} days` : 'Measured work'} right={<Tag tone="judged">Estimate</Tag>} flush>
                 <div className="p-4 flex flex-col gap-1.5">
                   <span className="text-[24px] leading-7 font-semibold tracking-[-0.02em] tabular-nums text-[#1F6F8B]">
-                    ~{data.timeSaved.totalHours.toLocaleString()} hours
+                    ~{Math.round(data.timeSaved.totalHours).toLocaleString('en-GB')} hours
                   </span>
-                  <span className="text-[13px] text-[#8F8F8F]">from measured coding work over the windows shown</span>
+                  <span className="text-[13px] text-[#8F8F8F]">from the pull requests and commits counted below</span>
                 </div>
                 <ul className="m-0 p-0 list-none">
                   {/* Largest share first; each bar is the row's share of the total hours. */}
                   {[...data.timeSaved.rows].sort((a, b) => b.hours - a.hours).map(r => (
                     <li key={r.label} className="px-4 py-2 border-t border-[#F2F2F2] flex flex-col gap-1">
                       <div className="flex items-baseline gap-3 text-[14px] text-[#4D4D4D] tabular-nums">
-                        <span className="min-w-0">{r.count.toLocaleString()} {r.label} × {r.minutesEach} min{r.windowDays != null ? ` · last ${r.windowDays}d` : ''}</span>
+                        <span className="min-w-0">{r.count.toLocaleString('en-GB')} {r.label} × {r.minutesEach} min{r.windowDays != null ? ` · last ${r.windowDays} days` : ''}</span>
                         <span className="ml-auto text-[13px] text-[#8F8F8F] whitespace-nowrap">≈{fmtHours(r.hours)}</span>
                       </div>
                       <Bar pct={data.timeSaved!.totalHours > 0 ? (r.hours / data.timeSaved!.totalHours) * 100 : 0} />
@@ -174,12 +171,11 @@ export default function CodeValuePage() {
               <Panel title="Observed signal" right={<Tag tone="judged">Beta</Tag>}>
                 <div className="flex flex-col gap-2">
                   <p className="m-0 text-[20px] leading-7 font-semibold tabular-nums text-[#1F6F8B]">
-                    {data.observedLift.liftPct >= 0 ? '+' : ''}{Math.round(data.observedLift.liftPct * 100)}% output rate in higher-AI weeks
+                    {data.observedLift.liftPct >= 0 ? '+' : ''}{Math.round(data.observedLift.liftPct * 100)}% commits in the weeks with most Claude Code use
                   </p>
                   <p className="m-0 text-[13px] leading-[1.6] text-[#666666]">
-                    Comparing AI-assisted commits/week across the {data.observedLift.highWeeks} highest vs {data.observedLift.lowWeeks} lowest AI-engaged-time weeks of the last 8 completed weeks, org-wide.
-                    {data.split?.codex ? ' Claude Code only: Codex reports no engaged time to compare against. ' : ' '}
-                    This is a <span className="font-semibold">correlation, not causation</span>: shown separately from the benchmark estimate above, never mixed into it.
+                    Commits made with Claude Code per week, in the {data.observedLift.highWeeks} weeks when people spent most time working with it against the {data.observedLift.lowWeeks} weeks when they spent least, across the last 8 complete weeks.
+                    {' '}This is a <span className="font-semibold">correlation, not causation</span>.
                   </p>
                 </div>
               </Panel>
@@ -188,7 +184,7 @@ export default function CodeValuePage() {
             {/* Measured anchor — blue (Claude Code plus Codex when shown, each part under the figure) */}
             <Panel title="Measured, not estimated" right={<Tag tone="measured">Measured</Tag>} flush>
               <div className="px-4 pt-3">
-                <Muted>The hard numbers behind the estimate. Spend is a 30-day priced total{data?.split ? ' across Claude Code and Codex' : ''}{me!.metricsWindowDays ? `; productivity over the latest ${me!.metricsWindowDays}-day window` : ''}.</Muted>
+                <Muted>{me!.metricsWindowDays ? `Last ${me!.metricsWindowDays} days` : 'Last 30 days'}{data?.split ? ', Claude Code and Codex' : ''}.</Muted>
               </div>
               <FigureGrid cols={5}>
                 {[
@@ -199,18 +195,18 @@ export default function CodeValuePage() {
                       : undefined,
                   },
                   {
-                    label: 'Active Code users', value: String(me!.activeUsers),
+                    label: 'Active Code users', value: me!.activeUsers.toLocaleString('en-GB'),
                     sub: data?.split
                       ? `Claude Code ${data.split.claudeCode.activeUsers.toLocaleString('en-GB')} · Codex ${data.split.codex.activeUsers === null ? 'not measured' : data.split.codex.activeUsers.toLocaleString('en-GB')}`
                       : undefined,
                   },
                   {
-                    label: 'Commits', value: String(me!.commitCount),
+                    label: 'Commits', value: me!.commitCount.toLocaleString('en-GB'),
                     sub: data?.split
                       ? `Claude Code ${data.split.claudeCode.commitCount.toLocaleString('en-GB')} · Codex ${data.split.codex.commitCount === null ? 'not measured' : data.split.codex.commitCount.toLocaleString('en-GB')}`
                       : undefined,
                   },
-                  { label: 'Pull requests opened', value: me!.prCount === null ? notMeasured : String(me!.prCount) },
+                  { label: 'Pull requests opened', value: me!.prCount === null ? notMeasured : me!.prCount.toLocaleString('en-GB') },
                   { label: 'Engaged hours', value: me!.engagedHours === null ? notMeasured : fmtHours(me!.engagedHours) },
                 ].map(c => <Figure key={c.label} label={c.label} value={c.value} sub={c.sub} tone="measured" />)}
               </FigureGrid>
@@ -239,9 +235,9 @@ export default function CodeValuePage() {
               <Panel title="Calibrations" subtitle="Set by an administrator in Admin → Developer Pulse → Value" flush>
                 <FigureGrid cols={5}>
                   {[
-                    { label: 'Team size', f: cal.teamSize, fmt: (v: number) => String(v) },
+                    { label: 'Team size', f: cal.teamSize, fmt: (v: number) => v.toLocaleString('en-GB') },
                     { label: 'Productivity lift', f: cal.liftPct, fmt: (v: number) => `${v}%` },
-                    { label: 'Loaded comp', f: cal.loadedComp, fmt: (v: number) => formatCurrency(v) },
+                    { label: 'Loaded cost per developer', f: cal.loadedComp, fmt: (v: number) => formatCurrency(v) },
                     { label: 'Coding hrs / week', f: cal.codingHrs, fmt: (v: number) => String(v) },
                     { label: 'Annual spend', f: cal.annualSpend, fmt: (v: number) => formatCurrency(v) },
                   ].map(c => (

@@ -92,7 +92,7 @@ export default function ModelMixBar({ items, title = 'Model mix' }: { items: Mod
                       </td>
                       <td className={T.tdRight}>{Math.round((m.total / grand) * 100)}%</td>
                       <td className={T.tdRight}>{formatTokens(m.total)}</td>
-                      <td className={T.tdRight}>{m.turns.toLocaleString()}</td>
+                      <td className={T.tdRight}>{m.turns.toLocaleString('en-GB')}</td>
                       {totalCache > 0 && (
                         <td
                           className={cx(T.tdRight, 'text-[#8F8F8F]')}

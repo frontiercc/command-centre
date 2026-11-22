@@ -31,6 +31,8 @@ export const HARDLY_USED_SESSIONS = 2;
 export const CHAMPION_SHARE = 0.5;
 /** Someone with at least this many sessions is using it properly, whatever they get from it. */
 export const STUCK_MIN_SESSIONS = 5;
+/** Fewer sessions than this is too few to hold someone up as one to learn from. */
+export const CHAMPION_MIN_SESSIONS = STUCK_MIN_SESSIONS;
 /** ...and below this share of multi-step work, they are getting little back. */
 export const STUCK_SHARE = 0.2;
 /** A kind of work repeated at least this many times, by this many people, with no skill behind it. */
@@ -158,7 +160,7 @@ function peopleFigures(rows: Row[]): {
     by.set(r.user_id, e);
   }
   const champions = [...by.entries()]
-    .filter(([, v]) => v.sessions >= HARDLY_USED_SESSIONS && v.deep / v.sessions > CHAMPION_SHARE)
+    .filter(([, v]) => v.sessions >= CHAMPION_MIN_SESSIONS && v.deep / v.sessions > CHAMPION_SHARE)
     .sort((a, b) => b[1].deep / b[1].sessions - a[1].deep / a[1].sessions || b[1].sessions - a[1].sessions)
     .slice(0, CHAMPIONS_PER_TEAM)
     .map(([userId, v]) => ({ userId, name: v.name, sessions: v.sessions, deepShare: v.deep / v.sessions }));
@@ -215,9 +217,11 @@ function repeatedWithoutSkill(rows: Row[], labels: Map<string, string | undefine
 }
 
 /** People whose very first session was inside NEW_STARTER_DAYS, and how far they have got. */
-function newStarters(rows: Row[], firstEver: Map<string, number>, nowS: number): TeamFigures['newStarters'] {
+function newStarters(rows: Row[], firstEver: Map<string, number>, nowS: number, exclude: Set<string> = new Set()): TeamFigures['newStarters'] {
   const by = new Map<string, { name: string; sessions: number; deep: number }>();
   for (const r of rows) {
+    // Someone already named as one to learn from is not also someone to pair up.
+    if (exclude.has(r.user_id)) continue;
     const first = firstEver.get(r.user_id);
     if (first === undefined || first < nowS - NEW_STARTER_DAYS * DAY) continue;
     const e = by.get(r.user_id) ?? { name: r.name ?? r.user_id, sessions: 0, deep: 0 };
@@ -308,9 +312,8 @@ export async function getCoachingFigures(vendor: Vendor, nowS = Math.floor(Date.
     return a + rj > 0 ? a / (a + rj) : null;
   };
 
-  // Every session counts in the kinds of work, automated runs included, so they show as their own
-  // kind. The figures about people (who goes deep, who is stuck, the team's deep share) read only the
-  // sessions people ran themselves.
+  // Automated runs are scripts, not people's work: every figure here, the kinds of work included,
+  // reads only the sessions people ran themselves.
   const inWindowAll = rows.filter(r => n(r.last_at) >= since);
   const inWindow = inWindowAll.filter(r => r.work_type !== AUTOMATED_WORK_TYPE);
   const before = rows.filter(r => n(r.last_at) < since && r.work_type !== AUTOMATED_WORK_TYPE);
@@ -322,11 +325,9 @@ export async function getCoachingFigures(vendor: Vendor, nowS = Math.floor(Date.
     rs.length === 0 || people < MIN_TEAM_PEOPLE ? null : rs.filter(r => n(r.tier) >= 2).length / rs.length;
 
   const byTeam = new Map<string, Row[]>();
-  const byTeamAll = new Map<string, Row[]>();
   const byTeamBefore = new Map<string, Row[]>();
   for (const r of inWindowAll) {
     const d = r.department || NO_DEPARTMENT;
-    byTeamAll.set(d, [...(byTeamAll.get(d) ?? []), r]);
     if (r.work_type !== AUTOMATED_WORK_TYPE) byTeam.set(d, [...(byTeam.get(d) ?? []), r]);
     else if (!byTeam.has(d)) byTeam.set(d, []);
   }
@@ -349,12 +350,12 @@ export async function getCoachingFigures(vendor: Vendor, nowS = Math.floor(Date.
       priorDeepShare: deepShare(priorRows, priorPeople),
       hardlyUsed: p.hardlyUsed,
       hardlyUsedShare: p.people >= MIN_TEAM_PEOPLE ? p.hardlyUsed / p.people : null,
-      work: shares(byTeamAll.get(department) ?? rs, targets, labels),
+      work: shares(rs, targets, labels),
       champions: p.champions,
       stuck: p.stuck,
       freed: freedFrom(rs, labels),
       repeated: repeatedWithoutSkill(rs, labels),
-      newStarters: newStarters(rs, firstEver, nowS),
+      newStarters: newStarters(rs, firstEver, nowS, new Set(p.champions.map(c => c.userId))),
       longNothing: longNothing(rs),
       editAcceptance: (() => {
         // Edit decisions come from Claude Code's telemetry alone; Codex sends none.
@@ -376,7 +377,7 @@ export async function getCoachingFigures(vendor: Vendor, nowS = Math.floor(Date.
       deepShare: deepShare(inWindow, orgPeople.people),
       priorDeepShare: deepShare(before, orgBeforePeople),
       hardlyUsedShare: orgPeople.people > 0 ? orgPeople.hardlyUsed / orgPeople.people : null,
-      work: shares(inWindowAll, targets, labels),
+      work: shares(inWindow, targets, labels),
     },
     teams,
     targets,

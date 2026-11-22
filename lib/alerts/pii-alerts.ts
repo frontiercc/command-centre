@@ -16,6 +16,7 @@ import { detectPiiWithMatches, type PiiMatch } from '@/lib/pii/detect';
 import { needsConfirmation } from '@/lib/pii/confirm-scope';
 import { confirmPiiMatch, type PiiVerdict } from '@/lib/pii/confirm';
 import { applyPiiVerdicts } from '@/lib/pii/flag-reason';
+import { piiAlertExplanation } from './plain-text';
 
 // ── Severity mapping: PII type → alert severity ──────────────────────────
 
@@ -144,7 +145,7 @@ export async function createPiiAlertsWithDedup(
         severity,
         title,
         // Every title already ends "detected" (the fallback starts "PII detected").
-        explanation: `${title} via ${via}. Flagged automatically by PII pattern detection.`,
+        explanation: piiAlertExplanation(title, via),
         raw_evidence: JSON.stringify({
           surface,
           message_id: messageId,
@@ -232,7 +233,7 @@ export async function createPiiAlerts(
         alert_type: 'policy',
         severity,
         title,
-        explanation: `${title} in ${surface} surface. Flagged automatically by PII pattern detection.`,
+        explanation: piiAlertExplanation(title),
         raw_evidence: JSON.stringify({ surface, message_id: messageId, pii_type: piiType, masked_value: masked }),
       });
     }
@@ -255,7 +256,7 @@ export async function createPiiAlerts(
       alert_type: 'policy',
       severity,
       title,
-      explanation: `${title} in ${surface} surface. Flagged automatically by PII pattern detection.`,
+      explanation: piiAlertExplanation(title),
       raw_evidence: JSON.stringify({ surface, message_id: messageId, pii_type: piiType }),
     });
   }

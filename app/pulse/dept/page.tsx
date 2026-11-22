@@ -149,7 +149,7 @@ export default function DeptPickerPage() {
     <>
       <TopBar
         title="Departments"
-        subtitle={selectedDept ? `Delegation pulse · ${selectedDept}` : 'Select a department'}
+        subtitle={selectedDept ? `What ${selectedDept} hands to AI, what it produces and who is in it` : 'Select a department'}
       />
       <PageBody className="dash-compact">
 
@@ -254,6 +254,7 @@ export default function DeptPickerPage() {
                   <div className="grid grid-cols-1 xl:grid-cols-2 gap-4">
                     <CapabilitiesPanel
                       items={d.frontier?.capabilities ?? []}
+                      all={d.frontier?.feed ?? []}
                       pending={d.frontier?.capabilityPending ?? 0}
                       canReview={d.frontierAccess?.canReview ?? false}
                       onChanged={() => loadDept(selectedDept, true)}

@@ -14,6 +14,8 @@ import { and, desc, eq, gte, sql } from 'drizzle-orm';
 import { getConfigValue, getAllConfig } from '@/lib/config';
 import { getAdminSession, canAccessCorePlatform } from '@/lib/auth/admin-auth';
 import { listUseCases } from '@/lib/usecases/queries';
+import { getTierNames } from '@/lib/pulse/tier-config';
+import { briefingCount, briefingUsd, largestTierLine, wholeShares } from '@/lib/pulse/briefings/format';
 import { listOpenDeptBoxes } from '@/lib/usecases/suggestion-store';
 import { logAccess } from '@/lib/audit/log';
 import {
@@ -33,14 +35,26 @@ import {
   getSessionsThisWeekByProduct,
   getTierMixThisWeekByVendor,
   hasOpenAiData,
-  tierMixShares,
 } from '@/lib/dashboard/queries';
 
 /** The Code snapshot without its session count, which includes Codex sessions. */
-function withoutSessionCount<T extends { session_count: unknown }>(m: T): Omit<T, 'session_count'> {
-  const { session_count: _omit, ...rest } = m;
-  void _omit;
-  return rest;
+/**
+ * The week's tier mix as shares of the classified prompts, each under the customer's own tier
+ * name, adding up to 100, with the largest kind named so the model cannot call a smaller share
+ * "mostly". Null when nothing was classified (not measured, not 0%).
+ */
+function namedTierMix(
+  names: { t1: string; t2: string; t3: string },
+  mix: { tier1: number; tier2: number; tier3: number },
+): { shareOfClassifiedPrompts: Record<string, string>; largestKindOfWork: string } | null {
+  const counts: [number, number, number] = [mix.tier1, mix.tier2, mix.tier3];
+  const shares = wholeShares(counts);
+  const largest = largestTierLine([names.t1, names.t2, names.t3], counts);
+  if (!shares || !largest) return null;
+  return {
+    shareOfClassifiedPrompts: { [names.t1]: `${shares[0]}%`, [names.t2]: `${shares[1]}%`, [names.t3]: `${shares[2]}%` },
+    largestKindOfWork: largest.replace(/^Largest kind of work: /, ''),
+  };
 }
 
 // Disable Next.js route caching — all API routes read live data from the database
@@ -112,6 +126,7 @@ export async function GET(request: NextRequest) {
     strategicBets: number; strategicUnhealthy: number;
     adoptedTitles: string[]; atRiskTitles: string[];
     deptOpportunities?: Array<{ department: string; count: number }>;
+    openDepartmentOpportunitiesTotal?: number;
   } | null = null;
   if (useCasesEnabled) {
     const active = (await listUseCases()).filter(u => u.status !== 'archived');
@@ -139,6 +154,9 @@ export async function GET(request: NextRequest) {
         const boxes = await listOpenDeptBoxes();
         if (boxes.length > 0) {
           useCases.deptOpportunities = boxes.map(b => ({ department: b.department, count: b.suggestions.length }));
+          // The total is given, so the model never sums the departments or borrows another
+          // total for it (it once quoted the open-alert count as the opportunities count).
+          useCases.openDepartmentOpportunitiesTotal = useCases.deptOpportunities.reduce((a, d) => a + d.count, 0);
         }
       } catch { /* contributes nothing */ }
     }
@@ -156,9 +174,7 @@ export async function GET(request: NextRequest) {
       spend_usd: schema.codeMetrics.spend_usd,
       input_tokens: schema.codeMetrics.input_tokens,
       output_tokens: schema.codeMetrics.output_tokens,
-      autonomy_ratio: schema.codeMetrics.autonomy_ratio,
       cache_hit_ratio: schema.codeMetrics.cache_hit_ratio,
-      session_count: schema.codeMetrics.session_count,
       repo_count: schema.codeMetrics.repo_count,
       commit_count: schema.codeMetrics.commit_count,
     })
@@ -172,11 +188,22 @@ export async function GET(request: NextRequest) {
     .orderBy(desc(schema.codeMetrics.computed_at))
     .limit(1);
   const codeMetricsRaw = codeMetricsRows[0];
-  // spend_usd is numeric() on pg -> comes back as a STRING (Postgres returns bigint and numeric as strings).
-  // Rounded to cents, as the Code briefing does, so the model never quotes $2337.7414230499985.
+  // Written as the briefing should quote them: whole dollars and counts with separators, so the
+  // model never quotes $2337.7414230499985. session_count is left out (it counts Codex sessions
+  // too, and sessionsThisWeek names each product's sessions); the autonomy ratio is an internal
+  // score the briefing must never report, so it is not passed at all.
   const codeMetrics = codeMetricsRaw
-    ? { ...codeMetricsRaw, spend_usd: codeMetricsRaw.spend_usd !== null ? Math.round(Number(codeMetricsRaw.spend_usd) * 100) / 100 : null }
+    ? {
+        spend: briefingUsd(codeMetricsRaw.spend_usd) ?? 'not priced',
+        input_tokens: briefingCount(codeMetricsRaw.input_tokens),
+        output_tokens: briefingCount(codeMetricsRaw.output_tokens),
+        shareOfContextReused: codeMetricsRaw.cache_hit_ratio !== null && codeMetricsRaw.cache_hit_ratio !== undefined
+          ? `${Math.round(Number(codeMetricsRaw.cache_hit_ratio) * 100)}%` : undefined,
+        repo_count: Number(codeMetricsRaw.repo_count ?? 0) > 0 ? briefingCount(codeMetricsRaw.repo_count) : undefined,
+        commit_count: briefingCount(codeMetricsRaw.commit_count),
+      }
     : null;
+  const codeCommitCount = Number(codeMetricsRaw?.commit_count ?? 0);
 
   const codeLabel = await getCodeWorkTypeLabeller();
   const codeWorkMix = await getConfigValue('codeClassifierEnabled') !== 'false'
@@ -187,7 +214,7 @@ export async function GET(request: NextRequest) {
         .where(and(eq(schema.codeSessionClassifications.status, 'classified'), gte(schema.codeSessionStats.last_at, sevenDaysAgo)))
         .groupBy(schema.codeSessionClassifications.work_type)
         .orderBy(desc(sql`COUNT(*)`))
-      ).map(r => ({ work_type: codeLabel(r.work_type), sessions: Number(r.sessions) }))
+      ).map(r => ({ work_type: codeLabel(r.work_type), sessions: briefingCount(r.sessions) }))
     : null;
 
   const sevenDaysAgoDateStr = new Date(sevenDaysAgo * 1000).toISOString().slice(0, 10);
@@ -203,9 +230,10 @@ export async function GET(request: NextRequest) {
     .from(schema.pulseEvents)
     .where(and(eq(schema.pulseEvents.event_type, 'capability_creation'), eq(schema.pulseEvents.status, 'confirmed')));
   const capabilitiesConfirmed = Number(capabilitiesConfirmedRows[0]?.c ?? 0);
+  const tierNames = await getTierNames();
 
   // Changes and shares worked out here, so the model never calculates a figure.
-  const aiShare = codeMetrics && githubCommits7d > 0 ? pctOf(Number(codeMetrics.commit_count ?? 0), githubCommits7d) : null;
+  const aiShare = codeMetrics && githubCommits7d > 0 ? pctOf(codeCommitCount, githubCommits7d) : null;
   const derived = {
     activeUsersChangeVsLastWeek: pctChange(Number(activeThisWeek), Number(activeLastWeek)) ?? undefined,
     aiAssistedShareOfShippedCommits: aiShare !== null && aiShare <= 100 ? `${aiShare}%` : undefined,
@@ -216,30 +244,30 @@ export async function GET(request: NextRequest) {
     sessionsThisWeek,
     ...(openaiPresent ? { activeUsersByVendor: activeByVendor } : {}),
     workPulse: {
-      // Shares, not prompt counts, so they are never read beside session counts.
+      // Shares, not prompt counts, so they are never read beside session counts. Each tier
+      // under the customer's own name, adding up to 100, with the largest kind named.
       tierMixThisWeek: openaiPresent
-        ? { claude: tierMixShares(tierMixByVendor.claude), openai: tierMixShares(tierMixByVendor.openai) }
-        : tierMixShares(tierMixByVendor.claude),
-      capabilitiesConfirmedTotal: capabilitiesConfirmed,
+        ? { claude: namedTierMix(tierNames, tierMixByVendor.claude), openai: namedTierMix(tierNames, tierMixByVendor.openai) }
+        : namedTierMix(tierNames, tierMixByVendor.claude),
+      newWaysOfWorkingConfirmedAllTime: briefingCount(capabilitiesConfirmed),
     },
-    // session_count is left out: it counts Codex sessions too, and
-    // sessionsThisWeek.code names each product's sessions.
     codePulse: codeMetrics ? {
-      sevenDay: withoutSessionCount(codeMetrics),
+      sevenDay: codeMetrics,
       workMixAiJudged: codeWorkMix,
-      githubTotalCommitsInMappedRepos: githubCommits7d > 0 ? githubCommits7d : undefined,
+      githubTotalCommitsInMappedRepos: githubCommits7d > 0 ? briefingCount(githubCommits7d) : undefined,
     } : null,
     ...(useCases ? { useCases } : {}),
-    activeThisWeek, activeLastWeek, totalUsers,
-    openAlerts, alertsBySeverity, otelConfigured,
+    activeThisWeek: briefingCount(activeThisWeek), activeLastWeek: briefingCount(activeLastWeek), totalUsers: briefingCount(totalUsers),
+    // Open alerts, never anything else: named so the model cannot read it as another count.
+    openAlertsTotal: briefingCount(openAlerts), openAlertsBySeverity: alertsBySeverity, otelConfigured,
     // Its Code count includes Codex prompts unlabelled, so it goes once OpenAI data exists.
     ...(openaiPresent ? {} : { surfaceBreakdown: surface }),
     recentAlerts: recentAlerts.map(a => ({ severity: a.severity, title: a.title, type: a.alert_type, status: a.status })),
     snapshotSummary: {
       totalSnapshots: snapshots.length,
       uniqueUsers: new Set(snapshots.map(s => s.user_id)).size,
-      totalMessages: snapshots.reduce((s, r) => s + r.messages_sent, 0),
-      totalCodeCommits: snapshots.reduce((s, r) => s + r.code_commits, 0),
+      totalMessages: briefingCount(snapshots.reduce((s, r) => s + r.messages_sent, 0)),
+      totalCodeCommits: briefingCount(snapshots.reduce((s, r) => s + r.code_commits, 0)),
     },
   }, null, 2);
 
@@ -256,11 +284,14 @@ export async function GET(request: NextRequest) {
 
 WRITING STYLE (mandatory):
 - Use British English spelling throughout (e.g. organisation, behaviour, categorise, licence, colour).
-- All money in the data is in US dollars: always write it with a dollar sign (for example $1,917), never £ or €.
+- All money in the data is in US dollars and is already written the way to write it, in whole dollars with a dollar sign and a thousands comma. Copy it exactly as given, never with decimals, never £ or €. Counts are already written with a thousands comma; copy them exactly as given.
+- Write percentages as figures with a % sign, never as word fractions such as "a quarter" or "half".
+- Never use a colon as a dash or to join two clauses.
+- Never judge a kind of work as good or bad, passive or valuable. Never give a reason for a figure that the data does not state.
 - Use British punctuation conventions (single quotes for speech, logical comma placement).
 - NEVER use em dashes (—) or en dashes (–). Use commas, colons, semicolons, or full stops instead.
-- Plain business language only. This rule is absolute: NEVER put an internal metric name or jargon phrase in the output. Banned phrases include (not limited to) "autonomy ratio", "DDS", "OTI", "ORS", "cache hit ratio", "tier 1/2/3", "tool actions per instruction".
-- Describe EVERY product in the data (Claude Cowork, Claude Code, Claude Chat, and ChatGPT Chat, ChatGPT Work and Codex when present) the same way: by concrete measured activity in plain words. Lead with things a manager can picture (sessions run, commits shipped, capabilities confirmed, flags raised, users active) and treat cost as context. NEVER present an internal ratio or score as a headline measure (no "autonomy ratio", no "N tool actions per instruction", no numeric scores). If you describe how deep, autonomous, or sophisticated the work is, say it in plain words and attribute anything Claude judged (e.g. "work Claude judged to be mostly routine admin, with a growing share of multi-step tasks"). Never use tier numbers. Say "routine admin tasks / multi-step work / high-stakes autonomous work". For efficiency, say "most context is reused, keeping costs down" NOT "cache hit ratio of 83%".
+- Plain business language only. This rule is absolute: NEVER put an internal metric name or jargon phrase in the output. Banned phrases include (not limited to) autonomy ratio, delegation depth, DDS, output throughput, output quality, OTI, resilience score, ORS, PSR, friction, cache hit ratio, Tier 1, Tier 2, Tier 3, routine admin, multi-step work, high-stakes autonomous, tool actions per instruction.
+- Describe EVERY product in the data (Claude Cowork, Claude Code, Claude Chat, and ChatGPT Chat, ChatGPT Work and Codex when present) the same way: by concrete measured activity in plain words. Lead with things a manager can picture (sessions run, commits shipped, new ways of working confirmed, flags raised, users active) and treat cost as context. NEVER present an internal ratio or score as a headline measure (no "autonomy ratio", no "N tool actions per instruction", no numeric scores). If you describe how deep the work is, use the tier names given in workPulse.tierMixThisWeek and attribute it to Claude's judgement (e.g. "of the prompts Claude judged, the largest share was <tier name> work"). Never use tier numbers or any other names for the tiers. For efficiency, say "most context is reused, keeping costs down" NOT "cache hit ratio of 83%".
 
 TONE CALIBRATION (this is critical):
 - You are a helpful advisor, NOT a threat detection system.
@@ -269,6 +300,8 @@ TONE CALIBRATION (this is critical):
 - A single PII flag does not warrant "high severity" language. It's a nudge to set up guidelines.
 - Recommendations should be practical next steps, not emergency actions. "Consider adding a data handling reminder to onboarding" not "Address PII exposure immediately".
 - Only use "high" priority for things that genuinely need urgent attention (actual credential exposure, a real policy violation, a user exfiltrating data at scale).
+
+ALERTS: "openAlertsTotal" is the number of open alerts and nothing else; "openAlertsBySeverity" splits it by severity. Never use either for any other count.
 
 ALERT TYPE UNDERSTANDING. There are three distinct alert types you will see in the data:
 - "policy" alerts: PII or credential detection. Regex matched sensitive data patterns (credit cards, API keys, SSNs, etc.) in a message. These are data presence alerts.
@@ -292,7 +325,7 @@ RISK SCORE CALIBRATION:
 
 Return a JSON object with exactly these fields:
 {
-  "briefing": "4-6 sentences. ONE executive narrative covering the whole platform, in this order of usefulness: (1) adoption and governance state from Command Centre, with alerts by type, proportionate; (2) knowledge work (Work and Chat): sessions run in each product and capabilities confirmed, plus in plain words how the character of the work is shifting (attribute the judged part); (3) Code: engineering scale and shipping (sessions run in each product and commits made in Claude Code sessions), with cost as context. Weave them into one story, do not write three labelled sections. British English. Conversational but professional.",
+  "briefing": "4-6 sentences. ONE executive narrative covering the whole platform, in this order of usefulness: (1) adoption and governance state from Command Centre, with alerts by type, proportionate; (2) knowledge work (Work and Chat): sessions run in each product and new ways of working confirmed, plus in plain words how the work splits across the tiers (attribute the judged part); (3) Code: engineering scale and shipping (sessions run in each product and commits made in Claude Code sessions), with cost as context. Weave them into one story, do not write three labelled sections. British English. Conversational but professional.",
   "risk_score": <number 0-100>,
   "risk_label": "low" | "moderate" | "elevated" | "high" | "critical",
   "risk_reasoning": "1-2 sentences explaining the score. Be proportionate. Reference specific data points.",
@@ -314,17 +347,17 @@ PRODUCTS AND SESSIONS:
 - Write activeThisWeek as "N active users", exactly as the dashboard does. NEVER set activeThisWeek or activeLastWeek against totalUsers or any other total: no "N of M", no share of all users. totalUsers is how many people Command Centre has a record for, not a ceiling on active users.
 
 WORK PULSE DATA UNDERSTANDING:
-- Report knowledge work by concrete activity first: the Work and Chat sessions in sessionsThisWeek, and workPulse.capabilitiesConfirmedTotal (new processes now handled end to end, confirmed by a human; this is the "shipping" signal for knowledge work).
-- workPulse.tierMixThisWeek is an AI-JUDGED read of the character of the prompts (Claude judges every product's prompts): mostly routine admin tasks, meaningful multi-step / connector-assisted work, or high-stakes autonomous work. It gives each kind of work as a share of the week's classified prompts (tier1 = routine admin, tier2 = multi-step, tier3 = high-stakes autonomous), and is null when no prompt was classified. The shares cover Claude Chat, Cowork and the Office and Google apps prompts together, not any one product. NEVER pair a share with a session count, never describe it as a share of sessions or of one product's activity, and never turn it back into a number of prompts. When it has "claude" and "openai" parts, they cover prompts sent to Claude and prompts sent to ChatGPT. Use it only to describe in plain words how the character of work is shifting, always attributed ("work Claude judged to be…"). Never quote tier numbers, a score, or the phrase "DDS".
+- Report knowledge work by concrete activity first: the Work and Chat sessions in sessionsThisWeek, and workPulse.newWaysOfWorkingConfirmedAllTime (new ways of working a person has confirmed, counted since Command Centre started, not this week). Call them "new ways of working confirmed", never "capabilities".
+- workPulse.tierMixThisWeek is an AI-JUDGED read of the prompts (Claude judges every product's prompts). shareOfClassifiedPrompts gives each tier, under the organisation's own tier name, as a share of the week's classified prompts; the shares add up to 100%. largestKindOfWork names the tier with the largest share: only that tier may be described as the largest or as "most" of the work. It is null when no prompt was classified. Name the tiers only by these names. The shares cover Claude Chat, Cowork and the Office and Google apps prompts together, not any one product. NEVER pair a share with a session count, never describe it as a share of sessions or of one product's activity, and never turn it back into a number of prompts. When it has "claude" and "openai" parts, they cover prompts sent to Claude and prompts sent to ChatGPT. Use it only to describe in plain words how the character of work is shifting, always attributed ("work Claude judged to be…"). Never quote tier numbers or a score.
 
 DEVELOPER PULSE DATA UNDERSTANDING:
-- Report Code by concrete activity: the Code sessions in sessionsThisWeek, and from codePulse.sevenDay commit_count (git commits shipped inside Claude Code sessions, the "shipping" signal), repo_count, and spend_usd (cost, as context not a verdict). commit_count and spend_usd cover Claude Code only; Codex spend and commits are not measured yet, so never attribute them to Codex or say Codex costs nothing.
-- codePulse.sevenDay also carries internal efficiency signals (autonomy_ratio and cache_hit_ratio) that are NOT measures to report. Do NOT put them, or any per-instruction / tool-count figure, in the narrative. At most describe efficiency in plain words ("most context is reused, keeping costs down"). Never say "autonomy ratio", "tool actions per instruction", or "cache hit ratio".
+- Report Code by concrete activity: the Code sessions in sessionsThisWeek, and from codePulse.sevenDay commit_count (git commits shipped inside Claude Code sessions, the "shipping" signal), repo_count when present, and spend (cost, as context not a verdict). commit_count and spend cover Claude Code only; Codex spend and commits are not measured yet, so never attribute them to Codex or say Codex costs nothing. When repo_count is absent, say nothing about repositories.
+- codePulse.sevenDay.shareOfContextReused is how much of the context Claude Code reused rather than re-read. At most describe it in plain words ("most context is reused, keeping costs down"). Never say "cache hit ratio".
 - codePulse.workMixAiJudged is an AI judgement of what kind of work the sessions were. When you cite it, attribute it (e.g. "sessions Claude judged to be mostly exploration"). All other codePulse numbers are measured, not judged.
 - codePulse.githubTotalCommitsInMappedRepos, when present, is the total commits shipped in GitHub repos mapped for the overlay; derived.aiAssistedShareOfShippedCommits, when present, is the AI-assisted share of that shipping.
 
 NUMBERS (mandatory): use only numbers that appear in the data, exactly as written (rounding is fine). Never calculate a new figure: no sums, differences, ratios or percentages of your own. Every change or share you may need is already in "derived" (e.g. activeUsersChangeVsLastWeek). The only number you author yourself is risk_score.
-- Spend is context, not a verdict: rising spend with rising delegation and commits is healthy; rising spend without them is worth a look.
+- Spend is context, not a verdict: rising spend with more sessions and commits is healthy; rising spend without them is worth a look.
 
 Return exactly 6 recommendations (the dashboard shows them as two rows of three). Do not manufacture concerns. If things are genuinely fine, say so and focus recommendations on growth and efficiency rather than inventing risks.
 NEVER recommend configuring OpenTelemetry, observability, or telemetry setup. This is handled by the collector setup and is not a user action.
@@ -334,7 +367,7 @@ The organisation has declared specific AI use cases and Command Centre tracks wh
 - "declared" = how many use cases are being tracked (non-archived). Each sits in one measured lifecycle: "adopted" (in regular use by several people), "piloting" (some early activity), "atRisk" (was seen, now gone quiet) or "notSeen" (declared but no matching activity yet). These are MEASURED from telemetry, not judged.
 - Weave ONE plain sentence into the briefing narrative about how the declared use cases are landing: how many are in regular use, and name any that are newly adopted ("adoptedTitles") or that have gone quiet ("atRiskTitles"). Use the titles verbatim, as they are the organisation's own labels. Example: "Of nine declared use cases, five are now in regular use, including Monthly budget reconciliation; Contract review has gone quiet and is worth a nudge."
 - "strategicBets" = use cases leadership flagged as strategic priorities; "strategicUnhealthy" = how many of those are at risk or not yet seen. A strategic bet that is not landing is a legitimate, proportionate reason to raise a "use_case" recommendation (suggest the owner review adoption or run a short enablement session). Do NOT treat quiet use cases as a security or risk concern.
-- "deptOpportunities" (when present) = open department process opportunities Command Centre has drafted from the organisation's own activity, awaiting human review on the Use Cases register. The counts and department names are MEASURED. Weave in at most one sentence saying how many are open and where they concentrate; never invent their names or contents, and never treat them as risks.
+- "openDepartmentOpportunitiesTotal" (when present) = how many open department process opportunities Command Centre has drafted from the organisation's own activity, awaiting human review on the Use Cases register; "deptOpportunities" gives the count per department. These counts and department names are MEASURED. Weave in at most one sentence saying how many are open (use openDepartmentOpportunitiesTotal, never any other number such as openAlertsTotal) and where they concentrate; never invent their names or contents, and never treat them as risks.
 - If "declared" is 0, do not mention use cases at all.
 ` : ''}${aup ? `
 ACCEPTABLE USE POLICY:

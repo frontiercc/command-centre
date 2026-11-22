@@ -126,9 +126,7 @@ export default function OfficeSpendPanel({ data, scope = 'organisation' }: { dat
         </p>
       )}
       <PanelFoot>
-        Office and Google send tokens but no cost, so this is the tokens priced from the model rates on Admin → Developer Pulse. It is an
-        estimate, for visibility, not billing, and is never added to Cowork&apos;s reported spend, the totals or the cost centres.
-        {showPeople && ' App users counts a person once for each app they used.'}
+        Priced from model rates (estimate).{scope === 'organisation' && ' Not included in the totals above.'}
         {data.total.unpricedModels.length > 0 && ` Not priced, so left out: ${data.total.unpricedModels.join(', ')}. Add a rate to include it.`}
       </PanelFoot>
     </Panel>

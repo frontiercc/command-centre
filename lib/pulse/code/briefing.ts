@@ -34,6 +34,7 @@ import { ORG_SCOPE_ID } from '@/lib/pulse/code/aggregator';
 import { createGroundedJson, paragraphsShape, pctChange, pctOf } from '@/lib/anthropic/grounded-json';
 import { hasCodexData, pickCodeMetricsSource } from '@/lib/pulse/code/vendor-view';
 import { buildDailyWindow } from '@/lib/pulse/code/shipping-alignment';
+import { briefingCount, briefingUsd, wholeShares } from '@/lib/pulse/briefings/format';
 
 export const CODE_BRIEFING_SCOPE_ID = 'code-org';
 
@@ -46,8 +47,11 @@ Rules:
 - Say tool actions per prompt as what it is, for example "AI took about 4.7 actions for each prompt". Never call it delegation depth, a depth, a score, an index or a ratio.
 - The work-type mix is an AI judgement. When you reference it, attribute it ("sessions Claude judged to be…"). Everything else is measured telemetry.
 - Be direct about weak signals; no cheerleading.
-- Write money with a thousands comma and two decimals, for example $4,353.60. Write counts with a thousands comma, for example 1,354.
-- Write in full sentences. Never use a colon to join two clauses or to set off an aside.
+- Money and counts are already written the way to write them (whole dollars with a dollar sign and a thousands comma; counts with a thousands comma). Copy them exactly as given, never with decimals.
+- Write percentages as figures with a % sign, never as word fractions.
+- Write in full sentences. Never use a colon to join two clauses, to set off an aside or as a dash.
+- Never judge a kind of work as good or bad, passive or valuable (for example never call understanding or reviewing code passive or say it builds no capability). Say what the work was, not what it is worth.
+- Never give a reason for a figure that the data does not state, and never mention something that is not in the data.
 
 Respond with ONLY JSON, no markdown fences:
 {"paragraphs": ["...", "...", "..."], "suggestion": "one concrete, grounded action"}
@@ -122,10 +126,10 @@ async function buildDataSummary(codexPresent: boolean): Promise<string> {
 
   if (!m) return '';
   const spendUsd = m.spend_usd !== null && m.spend_usd !== undefined ? Math.round(Number(m.spend_usd) * 100) / 100 : null; // pence, so the briefing never quotes $8.18486
-  lines.push(`this_week: spend_usd=${spendUsd ?? 'unpriced'}, sessions=${Number(m.session_count)}, ${Number(m.repo_count) > 0 ? `active_repos=${Number(m.repo_count)}, ` : ''}${codexPresent ? 'commits_in_ai_coding_sessions' : 'commits_in_claude_sessions'}=${Number(m.commit_count)}, tool_actions_per_human_prompt=${m.autonomy_ratio?.toFixed(1) ?? 'n/a'}, context_served_from_cache=${m.cache_hit_ratio !== null && m.cache_hit_ratio !== undefined ? Math.round(m.cache_hit_ratio * 100) + '%' : 'n/a'}`);
+  lines.push(`this_week: spend=${briefingUsd(spendUsd) ?? 'unpriced'}, sessions=${briefingCount(m.session_count)}, ${Number(m.repo_count) > 0 ? `active_repos=${briefingCount(m.repo_count)}, ` : ''}${codexPresent ? 'commits_in_ai_coding_sessions' : 'commits_in_claude_sessions'}=${briefingCount(m.commit_count)}, tool_actions_per_human_prompt=${m.autonomy_ratio?.toFixed(1) ?? 'n/a'}, context_served_from_cache=${m.cache_hit_ratio !== null && m.cache_hit_ratio !== undefined ? Math.round(m.cache_hit_ratio * 100) + '%' : 'n/a'}`);
   if (prior) {
     const priorSpend = prior.spend_usd !== null && prior.spend_usd !== undefined ? Math.round(Number(prior.spend_usd) * 100) / 100 : null;
-    lines.push(`prior_week: spend_usd=${priorSpend ?? 'unpriced'}, sessions=${Number(prior.session_count)}, commits=${Number(prior.commit_count)}, tool_actions_per_prompt=${prior.autonomy_ratio?.toFixed(1) ?? 'n/a'}`);
+    lines.push(`prior_week: spend=${briefingUsd(priorSpend) ?? 'unpriced'}, sessions=${briefingCount(prior.session_count)}, commits=${briefingCount(prior.commit_count)}, tool_actions_per_prompt=${prior.autonomy_ratio?.toFixed(1) ?? 'n/a'}`);
     // Changes worked out here, so the model never has to calculate them.
     const changes = ([
       ['spend', pctChange(spendUsd, priorSpend)],
@@ -157,7 +161,7 @@ async function buildDataSummary(codexPresent: boolean): Promise<string> {
       const spend = p.spend_usd !== null && p.spend_usd !== undefined ? Math.round(Number(p.spend_usd) * 100) / 100 : null;
       const sessionShare = pctOf(Number(p.session_count), totalSessions);
       const spendShare = spend !== null && totalSpend !== null ? pctOf(spend, totalSpend) : null;
-      lines.push(`${name}: spend_usd=${spend ?? 'unpriced'}${spendShare !== null ? ` (${spendShare}% of spend)` : ''}, sessions=${Number(p.session_count)}${sessionShare !== null ? ` (${sessionShare}% of sessions)` : ''}, commits=${Number(p.commit_count)}, tool_actions_per_human_prompt=${p.autonomy_ratio?.toFixed(1) ?? 'n/a'}`);
+      lines.push(`${name}: spend=${briefingUsd(spend) ?? 'unpriced'}${spendShare !== null ? ` (${spendShare}% of spend)` : ''}, sessions=${briefingCount(p.session_count)}${sessionShare !== null ? ` (${sessionShare}% of sessions)` : ''}, commits=${briefingCount(p.commit_count)}, tool_actions_per_human_prompt=${p.autonomy_ratio?.toFixed(1) ?? 'n/a'}`);
     }
   }
 
@@ -180,7 +184,7 @@ async function buildDataSummary(codexPresent: boolean): Promise<string> {
     // Only when every commit in the window has been matched to a tool or none; otherwise no share.
     const share = Number(overlay?.split_total ?? 0) === overlayCount ? pctOf(Number(overlay?.matched ?? 0), overlayCount) : null;
     const shareKey = codexPresent ? 'share_of_shipped_commits_matched_to_claude_code_or_codex' : 'share_of_shipped_commits_matched_to_claude_code';
-    lines.push(`github_overlay: total_commits_shipped_in_mapped_repos=${overlayCount}${share !== null ? `, ${shareKey}=${share}%` : ''}`);
+    lines.push(`github_overlay: total_commits_shipped_in_mapped_repos=${briefingCount(overlayCount)}${share !== null ? `, ${shareKey}=${share}%` : ''}`);
   }
 
   if ((await getConfigValue('codeClassifierEnabled')) !== 'false') {
@@ -194,7 +198,9 @@ async function buildDataSummary(codexPresent: boolean): Promise<string> {
     `);
     if (mixRows.length > 0) {
       const total = mixRows.reduce((sum, w) => sum + Number(w.n), 0);
-      lines.push(`work_mix_ai_judged_this_week (${total} classified sessions in total, ${mixRows.length} kinds of work): ${mixRows.map(w => `"${codeLabel(w.work_type)}"=${Number(w.n)} (${pctOf(Number(w.n), total)}%)`).join(', ')}`);
+      // Shares that add up to 100, so the mix never reads 101%.
+      const shares = wholeShares(mixRows.map(w => Number(w.n))) ?? mixRows.map(() => 0);
+      lines.push(`work_mix_ai_judged_this_week (${briefingCount(total)} classified sessions in total, ${mixRows.length} kinds of work): ${mixRows.map((w, i) => `"${codeLabel(w.work_type)}"=${briefingCount(w.n)} (${shares[i]}%)`).join(', ')}`);
     }
   }
 
@@ -205,7 +211,7 @@ async function buildDataSummary(codexPresent: boolean): Promise<string> {
     ) AS quiet_repos
   `);
   const darkReposCount = Number(darkRepos?.c ?? 0);
-  if (darkReposCount > 0) lines.push(`repos_gone_quiet_30_days: ${darkReposCount}`);
+  if (darkReposCount > 0) lines.push(`repos_gone_quiet_30_days: ${briefingCount(darkReposCount)}`);
 
 
   return lines.join('\n');

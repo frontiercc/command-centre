@@ -22,6 +22,7 @@ import type {
   Evenings, KeyPeople, RarelyUsed, Rollout, StandardJob, TimeFreed, Wave, WorkFinds,
 } from '@/lib/pulse/cowork/so-what-finds';
 import { tierNamesOr, type TierNames } from '@/lib/pulse/tier-names';
+import { cleanTitle } from '@/lib/pulse/capability-title';
 
 export type CardKind = 'hire' | 'backfill' | 'standard_job' | 'expand' | 'rarely_used' | 'key_people' | 'rollout' | 'time_freed' | 'evenings';
 
@@ -118,7 +119,10 @@ export interface SoWhat {
 /** A card about the whole organisation rather than one team. */
 export const EVERYONE = 'Everyone';
 
-const people = (c: number) => `${c} ${c === 1 ? 'person' : 'people'}`;
+const people = (c: number) => `${c.toLocaleString('en-GB')} ${c === 1 ? 'person' : 'people'}`;
+const num = (c: number) => c.toLocaleString('en-GB');
+/** A stored capability title as the kind of work alone, in sentence case: "Template population". */
+const capabilityName = (title: string) => { const t = cleanTitle(title).trim(); return t.charAt(0).toUpperCase() + t.slice(1).toLowerCase(); };
 const pct = (v: number) => `${Math.round(v * 100)}%`;
 const hiresWord = (h: number) => (h === 1 ? 'hire' : 'hires');
 const dateWord = (s: number) => new Date(s * 1000).toLocaleDateString('en-GB', { day: 'numeric', month: 'long' });
@@ -344,7 +348,7 @@ function weeksWord(weeks: number): string {
 export function standardJobCard(j: StandardJob, decision: DecisionRecord | undefined, nowS: number, w: GroupWords = groupWords()): Card {
   const body = [
     // A decided card is still read after people start using a skill, so this follows the figure.
-    `${j.people} people in ${j.department} did ${j.label} ${j.prompts} times in the last ${WINDOW_DAYS} days, across ${j.sessions} ${j.sessions === 1 ? 'session' : 'sessions'}. ${j.skillShare === 0 ? 'None of them used a skill.' : `${pct(j.skillShare)} of those sessions used a skill.`}`,
+    `${num(j.people)} people in ${j.department} did ${j.label} ${num(j.prompts)} times in the last ${WINDOW_DAYS} days, across ${num(j.sessions)} ${j.sessions === 1 ? 'session' : 'sessions'}. ${j.skillShare === 0 ? 'None of them used a skill.' : `${pct(j.skillShare)} of those sessions used a skill.`}`,
   ];
   if (j.measuredHours !== null) body.push(`It took ${minutesWord(j.measuredHours * 60)} of measured time.`);
   if (j.deepMinutes !== null && j.otherMinutes !== null) {
@@ -394,11 +398,10 @@ export function expandCard(waves: Wave[], decision: DecisionRecord | undefined, 
 
 /** People who were given it and have hardly used it since. */
 export function rarelyUsedCard(r: RarelyUsed, decision: DecisionRecord | undefined, nowS: number): Card {
-  const body = [`${r.people} ${r.people === 1 ? 'person has' : 'people have'} had fewer than two sessions in ${r.days} days.`];
+  const body = [`${num(r.people)} ${r.people === 1 ? 'person has' : 'people have'} had fewer than two sessions in ${r.days} days.`];
   body.push(r.costAMonth === null
     ? 'What that costs is not shown because no seat price is set on Admin → System.'
     : `At the Claude seat price an admin has set, that is an estimated $${Math.round(r.costAMonth).toLocaleString('en-GB')} a month (an estimate: the seat price times these people).`);
-  body.push('This counts people, not seats. Seats are held for the whole organisation, so the page cannot say how many a team holds.');
   return foundCard({
     kind: 'rarely_used',
     cardId: 'rarely_used',
@@ -406,7 +409,7 @@ export function rarelyUsedCard(r: RarelyUsed, decision: DecisionRecord | undefin
     touches: r.people,
     headline: `Decide what to do about ${people(r.people)} who ${r.people === 1 ? 'has' : 'have'} hardly used it.`,
     body,
-    caption: `Counted from sessions, over the last ${r.days} days. No card here recommends anything about a person's job.`,
+    caption: `Counted from sessions, over the last ${r.days} days.`,
     measure: { label: 'The number of people who have hardly used it', value: r.people, unit: '', lowerIsBetter: true },
     link: '/pulse/coaching',
   }, decision, nowS);
@@ -440,7 +443,7 @@ export function rolloutCard(r: Rollout, decision: DecisionRecord | undefined, no
     cardId: `rollout:${r.eventId}`,
     department: r.department,
     touches: r.people,
-    headline: `Take "${r.title.trim()}" from ${r.department} to ${r.teams} more ${r.teams === 1 ? 'team' : 'teams'}.`,
+    headline: `Take "${capabilityName(r.title)}" from ${r.department} to ${r.teams} more ${r.teams === 1 ? 'team' : 'teams'}.`,
     body: [
       `It was confirmed as a new way of working in ${r.department} on ${dateWord(r.confirmedAt)}.`,
       `${people(r.people)} in ${r.teams} other ${r.teams === 1 ? 'team' : 'teams'} did the same kind of work, ${r.label}, in the last ${WINDOW_DAYS} days.`,
@@ -461,7 +464,7 @@ export function timeFreedCard(t: TimeFreed, decision: DecisionRecord | undefined
     headline: `Decide what ${t.department} does with the time ${t.label} has freed.`,
     body: [
       `A session of ${t.label} now takes ${minutesWord(t.nowMinutes)}, down from ${minutesWord(t.beforeMinutes)} in the ${WINDOW_DAYS} days to ${dateWord(t.beforeFrom + WINDOW_DAYS * 86400)}.`,
-      `At ${t.sessions} ${t.sessions === 1 ? 'session' : 'sessions'} a month, that is about ${minutesWord(t.hoursAMonth * 60)} a month the team has back.`,
+      `At ${num(t.sessions)} ${t.sessions === 1 ? 'session' : 'sessions'} a month, that is about ${minutesWord(t.hoursAMonth * 60)} a month the team has back.`,
       'Decide where it goes: work the team has not had time for, or a team that is short of time.',
     ],
     caption: `Measured time in the tool, last ${WINDOW_DAYS} days against the ${WINDOW_DAYS} days that ended two months ago. The work got quicker; it does not mean less of it was done.`,
@@ -481,7 +484,7 @@ export function eveningsCard(e: Evenings, decision: DecisionRecord | undefined, 
     headline: `Look at the workload in ${e.department}.`,
     body: [
       `${pct(e.share)} of the AI work in ${e.department} in the last ${WINDOW_DAYS} days was in the evening or at the weekend, against ${pct(e.orgShare)} across the organisation.`,
-      `${e.peopleOutOfHours} of the ${e.people} people in the team did some of it then.`,
+      `${num(e.peopleOutOfHours)} of the ${num(e.people)} people in the team did some of it then.`,
       'It may be choice, deadlines or too much work. Asking the team is the way to know.',
     ],
     caption: `Measured from when each prompt was sent, in ${e.timezone} time: weekdays before 7am or from 7pm, and weekends. A count for the team, never about one person.`,

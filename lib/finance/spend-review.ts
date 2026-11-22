@@ -203,7 +203,10 @@ function loadCodeDefs(): Promise<CodeDefs> {
 
 export function workLabel(surface: ReviewSurface, workKey: string | null, codeDefs?: CodeDefs): string {
   if (!workKey) return 'Not classified yet';
-  return codeLike(surface) ? codeWorkTypeLabel(workKey, codeDefs?.get(workKey)) : formatTaskType(workKey);
+  if (codeLike(surface)) return codeWorkTypeLabel(workKey, codeDefs?.get(workKey));
+  // Sentence case: "Autonomous workflow", not "Autonomous Workflow".
+  const label = formatTaskType(workKey);
+  return label.charAt(0) + label.slice(1).toLowerCase();
 }
 
 /** What the classifier was told a kind of work covers (Code only; the Cowork labels carry their own meaning). */

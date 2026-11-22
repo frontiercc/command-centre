@@ -107,7 +107,11 @@ export default function CodeUserTable({ users, showDepartment = true, githubBasi
                 No coding activity captured yet.
               </td>
             </tr>
-          ) : sorted.map(u => (
+          ) : sorted.map(u => {
+            // Someone in the team who has not used it: a dash, not "not measured".
+            const unused = u.session_count === 0;
+            const dash = '—';
+            return (
             <tr key={u.user_id} className={T.row}>
               <td className={T.td}>
                 {canOpen ? (
@@ -118,21 +122,22 @@ export default function CodeUserTable({ users, showDepartment = true, githubBasi
               </td>
               {showDepartment && <td className={T.tdMute}>{u.department ?? 'No department'}</td>}
               <td className={cx(T.tdRight, 'font-medium')}>
-                {u.spend_hidden ? 'hidden' : u.spend_usd === null ? (u.input_tokens + u.output_tokens === 0 ? 'not measured' : 'not priced') : formatCurrency(u.spend_usd)}
+                {u.spend_hidden ? 'hidden' : unused ? dash : u.spend_usd === null ? (u.input_tokens + u.output_tokens === 0 ? 'not measured' : 'not priced') : formatCurrency(u.spend_usd)}
               </td>
               <td className={T.tdRight}>
-                {u.autonomy_ratio === null ? 'not measured' : `${u.autonomy_ratio.toFixed(1)}×`}
+                {unused ? dash : u.autonomy_ratio === null ? 'not measured' : `${u.autonomy_ratio.toFixed(1)}×`}
               </td>
-              <td className={T.tdRight}>{u.session_count}</td>
-              <td className={T.tdRight}>{u.commit_count ?? 0}</td>
-              {showRepos && <td className={T.tdRight}>{u.repo_count}</td>}
-              {showGithubRepos && <td className={T.tdRight}>{u.github_repo_count ?? 0}</td>}
+              <td className={T.tdRight}>{unused ? dash : u.session_count.toLocaleString('en-GB')}</td>
+              <td className={T.tdRight}>{unused ? dash : (u.commit_count ?? 0).toLocaleString('en-GB')}</td>
+              {showRepos && <td className={T.tdRight}>{unused ? dash : u.repo_count.toLocaleString('en-GB')}</td>}
+              {showGithubRepos && <td className={T.tdRight}>{(u.github_repo_count ?? 0).toLocaleString('en-GB')}</td>}
               <td className={T.tdRight}>
-                {u.cache_hit_ratio === null ? 'not measured' : `${Math.round(u.cache_hit_ratio * 100)}%`}
+                {unused ? dash : u.cache_hit_ratio === null ? 'not measured' : `${Math.round(u.cache_hit_ratio * 100)}%`}
               </td>
-              <td className={cx(T.tdRight, 'text-[#8F8F8F]')}>{formatTokens(u.input_tokens + u.output_tokens)}</td>
+              <td className={cx(T.tdRight, 'text-[#8F8F8F]')}>{unused ? dash : formatTokens(u.input_tokens + u.output_tokens)}</td>
             </tr>
-          ))}
+            );
+          })}
         </tbody>
       </table>
     </div>

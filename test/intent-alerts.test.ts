@@ -72,7 +72,7 @@ describe('createIntentAlerts', () => {
     expect(alerts).toHaveLength(1);
     expect(alerts[0].alert_type).toBe('intent');
     expect(alerts[0].severity).toBe('high');
-    expect(alerts[0].title).toContain('Data Exfiltration');
+    expect(alerts[0].title).toContain('Data exfiltration');
   });
 
   it('stores rich evidence with matched patterns and AI reasoning', async () => {
@@ -138,10 +138,10 @@ describe('intent alerts name the product', () => {
     await createIntentAlerts('user-1', 'chat', 'm-chat', 'extract all', match);
     const alerts = await getAlerts() as Array<Record<string, unknown>>;
     const byMessage = new Map(alerts.map(a => [JSON.parse(a.raw_evidence as string).message_id as string, a]));
-    expect(byMessage.get('m-cowork')!.title).toBe('Data Exfiltration intent detected in Claude Cowork');
+    expect(byMessage.get('m-cowork')!.title).toBe('Data exfiltration intent detected in Claude Cowork');
     expect(evidenceOf(byMessage.get('m-cowork')!).product).toBe('Claude Cowork');
-    expect(byMessage.get('m-code')!.title).toBe('Data Exfiltration intent detected in Claude Code');
-    expect(byMessage.get('m-chat')!.title).toBe('Data Exfiltration intent detected in Claude Chat');
+    expect(byMessage.get('m-code')!.title).toBe('Data exfiltration intent detected in Claude Code');
+    expect(byMessage.get('m-chat')!.title).toBe('Data exfiltration intent detected in Claude Chat');
   });
 
   it('records the product a caller names (Codex, ChatGPT, Claude in Excel) and keeps the surface', async () => {
@@ -150,10 +150,10 @@ describe('intent alerts name the product', () => {
     await createIntentAlerts('user-1', 'cowork', 'm-excel', 'extract all', match, 'Claude in Excel');
     const alerts = await getAlerts() as Array<Record<string, unknown>>;
     const byMessage = new Map(alerts.map(a => [JSON.parse(a.raw_evidence as string).message_id as string, a]));
-    expect(byMessage.get('m-codex')!.title).toBe('Data Exfiltration intent detected in Codex');
+    expect(byMessage.get('m-codex')!.title).toBe('Data exfiltration intent detected in Codex');
     expect(evidenceOf(byMessage.get('m-codex')!)).toMatchObject({ surface: 'code', product: 'Codex' });
     expect(evidenceOf(byMessage.get('m-work')!)).toMatchObject({ surface: 'cowork', product: 'ChatGPT Work' });
-    expect(byMessage.get('m-excel')!.title).toBe('Data Exfiltration intent detected in Claude in Excel');
+    expect(byMessage.get('m-excel')!.title).toBe('Data exfiltration intent detected in Claude in Excel');
   });
 
   it('labels an Office or Google app the way the Office receiver passes it', async () => {

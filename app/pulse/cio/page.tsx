@@ -215,7 +215,7 @@ export default function CioPulsePage() {
           </div>
           <div className="flex flex-col gap-4 min-w-0">
             <Products data={orgSummary?.byProduct} names={orgFull?.tierNames ?? undefined} loading={orgState === 'loading'} />
-            <NewWaysOfWorking confirmedTotal={data.signalCards.psr} confirmedRecent={orgFull?.dashboard?.capabilitiesRecent ?? 0} vendor={vendor} />
+            <NewWaysOfWorking confirmedTotal={data.signalCards.psr} confirmedRecent={orgMonth?.dashboard?.capabilitiesRecent ?? 0} vendor={vendor} />
           </div>
         </div>
 

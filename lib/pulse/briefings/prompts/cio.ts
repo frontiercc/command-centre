@@ -3,6 +3,7 @@
 
 import { productFactsBlock, PRODUCT_NAMING_RULE } from '@/lib/pulse/briefings/product-facts';
 import { DESCRIBE_NOT_SCORE_RULE } from '@/lib/pulse/briefings/described-facts';
+import { briefingCount } from '@/lib/pulse/briefings/format';
 
 export interface CioBriefingContext {
   period_label: string;           // e.g. "May 2026"
@@ -66,8 +67,8 @@ export function buildCioBriefingUserMessage(ctx: CioBriefingContext): string {
 PERIOD: ${ctx.period_label}
 
 ADOPTION
-Active users this month: ${ctx.weekly_active_users}
-Tasks Claude judged: ${ctx.total_classified_events}
+Active users this month: ${briefingCount(ctx.weekly_active_users)}
+Tasks Claude judged: ${briefingCount(ctx.total_classified_events)}
 ${ctx.tier_lines.join('\n')}
 ${ctx.work_by_product?.length ? `
 WHERE THE WORK HAPPENED

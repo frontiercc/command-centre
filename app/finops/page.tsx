@@ -22,6 +22,7 @@ import { MIN_PROJECTION_DAYS } from '@/lib/finance/finops-projection';
 import { useOpenAiOnly } from '@/components/shared/VendorSwitch';
 import { useAskPageNote } from '@/components/ask/useAskAvailable';
 import { sharedGet } from '@/components/shared/shared-get';
+import { usdWhole } from '@/lib/finance/spend-review-format';
 
 interface CodeTokens {
   input: number;
@@ -110,6 +111,9 @@ const FORBIDDEN = 'FinOps is for admins and managers.';
 const fmtUsd = (n: number) =>
   n.toLocaleString('en-US', { style: 'currency', currency: 'USD' });
 
+/** Whole dollars for the page's figures; the cost-centre table keeps cents. */
+const fmtUsd0 = usdWhole;
+
 const fmtTokens = (n: number) => n.toLocaleString('en-US');
 
 const fmtTokensCompact = (n: number) =>
@@ -142,7 +146,7 @@ function buildDataQualityNotes(report: ChargebackReport, includeUnallocated = tr
   const notes: string[] = [];
   // The figure strip already shows unallocated spend, so the warning under it leaves it out.
   if (includeUnallocated && report.unallocated.totalUsd > 0) {
-    notes.push(`${fmtUsd(report.unallocated.totalUsd)} is unallocated: no department on file for those users.`);
+    notes.push(`${fmtUsd0(report.unallocated.totalUsd)} is unallocated: no department on file for those users.`);
   }
   if (report.unpricedModels.length > 0) {
     notes.push(
@@ -476,10 +480,10 @@ export default function CostChargebackPage() {
   const openai = report.vendors !== undefined;
   const claudeShown = !openai || !openaiOnly;
   const basisTag = !openai
-    ? 'Code estimated · Cowork actual'
+    ? 'Code priced from list rates (estimate) · Cowork as reported'
     : openaiOnly
       ? "ChatGPT and Codex at OpenAI's USD token rates"
-      : "Claude Code estimated · Claude Cowork actual · ChatGPT and Codex at OpenAI's USD token rates";
+      : "Claude Code priced from list rates (estimate) · Claude Cowork as reported · ChatGPT and Codex at OpenAI's USD token rates";
 
   const exportButton = (
     <a href={`/api/finance/chargeback/export?period=${encodeURIComponent(period)}`} className={B.secondary}>
@@ -533,15 +537,15 @@ export default function CostChargebackPage() {
             <Strip cols={4}>
               <Figure
                 label={report.monthToDate ? 'Spend so far' : 'Spend'}
-                value={fmtUsd(report.grandTotalUsd)}
+                value={fmtUsd0(report.grandTotalUsd)}
                 tone="measured"
                 sub={openai && !openaiOnly && report.vendors
-                  ? `Claude ${fmtUsd(report.vendors.claudeUsd)} · ChatGPT and Codex ${fmtUsd(report.vendors.openaiUsd)}`
+                  ? `Claude ${fmtUsd0(report.vendors.claudeUsd)} · ChatGPT and Codex ${fmtUsd0(report.vendors.openaiUsd)}`
                   : undefined}
               />
               <Figure
                 label={<span className="inline-flex items-center gap-2">On pace for {estimateTag}</span>}
-                value={pace ? fmtUsd(pace.totalUsd) : notShown('Not projected')}
+                value={pace ? fmtUsd0(pace.totalUsd) : notShown('Not projected')}
                 tone="judged"
                 sub={!projection
                   ? 'Only shown for the current, in-progress month.'
@@ -551,7 +555,7 @@ export default function CostChargebackPage() {
               />
               <Figure
                 label="Unallocated"
-                value={fmtUsd(report.unallocated.totalUsd)}
+                value={fmtUsd0(report.unallocated.totalUsd)}
                 tone="measured"
                 sub={
                   <>
@@ -566,9 +570,9 @@ export default function CostChargebackPage() {
               />
               <Figure
                 label={<span className="inline-flex items-center gap-2">Caching saved {estimateTag}</span>}
-                value={report.cacheSavingsUsd != null ? fmtUsd(report.cacheSavingsUsd) : notShown('Not measured')}
+                value={report.cacheSavingsUsd != null ? fmtUsd0(report.cacheSavingsUsd) : notShown('Not measured')}
                 tone="judged"
-                sub={report.cacheSavingsUsd != null ? 'what re-read conversation would have cost at full price, so it can be more than the spend' : undefined}
+                sub={report.cacheSavingsUsd != null ? 'what re-reading earlier conversation would have cost at full price, so it can be more than the spend' : undefined}
               />
             </Strip>
 
@@ -631,7 +635,7 @@ export default function CostChargebackPage() {
                         className="text-[13px] text-[#8F8F8F] tabular-nums cursor-help"
                         title={surfaceTokensTitle(report.surfaces)}
                       >
-                        {fmtTokensCompact(tokensTotal(report.surfaces.total.tokens))} tokens
+                        {fmtTokensCompact(tokensTotal(report.surfaces.total.tokens))} tokens this month, cache reads included
                       </span>
                     )}
                     {/* A long pricing note: wraps on narrow screens instead of widening the page. */}
@@ -779,7 +783,7 @@ export default function CostChargebackPage() {
                       <p className="m-0 text-[#4D4D4D]">
                         {report.chatgptSeats.monthlyLicenceUsd != null ? (
                           <>
-                            ChatGPT licence: {report.chatgptSeats.licensed} seats at {fmtUsd(report.chatgptSeats.monthlyPriceUsd ?? 0)} a month, {fmtUsd(report.chatgptSeats.monthlyLicenceUsd)}.
+                            ChatGPT licence: {report.chatgptSeats.licensed} seats at {fmtUsd(report.chatgptSeats.monthlyPriceUsd ?? 0)} a month, {fmtUsd0(report.chatgptSeats.monthlyLicenceUsd)}.
                             OpenAI charges it apart from usage, so it is not in the figures above.
                           </>
                         ) : (
@@ -797,7 +801,7 @@ export default function CostChargebackPage() {
                             {report.seats.unused} of {report.seats.licensed} licensed {openai ? 'Claude ' : ''}seats unused in the last 30 days
                             {report.seats.estUnusedUsd != null && (
                               <span className="text-[#1F6F8B]">
-                                {' '}(about {fmtUsd(report.seats.estUnusedUsd)} a month, estimate, for visibility, not billing)
+                                {' '}(about {fmtUsd0(report.seats.estUnusedUsd)} a month, estimate, for visibility, not billing)
                               </span>
                             )}
                           </>

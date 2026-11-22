@@ -18,6 +18,7 @@ import { schema } from '@/lib/db/schema';
 import { insertAlert } from '@/lib/db/queries';
 import { assessIntent } from '@/lib/intent/assess';
 import type { IntentMatch } from '@/lib/intent/types';
+import { sentenceCaseName } from './plain-text';
 
 
 /**
@@ -74,7 +75,7 @@ export async function createIntentAlerts(
       // The product is in the title, not only the explanation: the
       // explanation is the AI reasoning, which viewers outside the Audit Log
       // rule do not see (lib/alerts/evidence-visibility.ts).
-      title: `${match.categoryName} intent detected in ${productLabel}`,
+      title: `${sentenceCaseName(match.categoryName)} intent detected in ${productLabel}`,
       explanation: assessment.reasoning,
       raw_evidence: JSON.stringify({
         surface,

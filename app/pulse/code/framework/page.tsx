@@ -63,7 +63,7 @@ export default function FrameworkPage() {
 
   return (
     <>
-      <TopBar title="Dev Framework Alignment" subtitle="How Command Centre's AI-adoption signals map onto DORA · SPACE · DX Core 4" />
+      <TopBar title="Dev Framework Alignment" subtitle="How Command Centre's Claude Code signals map onto DORA · SPACE · DX Core 4" />
       <PageBody>
         {/* Honesty legend */}
         <Toolbar
