@@ -2,9 +2,11 @@
 
 ## 1.4.9 (2026-11-22)
 
-- Plainer wording on the Dashboard, Work Pulse, Developer Pulse and FinOps.
+- Plainer wording on every page: percentages, separators, whole dollars, plain tool names.
 - Frontier work box: "7 people did 14 frontier tasks. 3 of them did 50% of those tasks."
-- The Work Pulse overview counts active users in the last 30 days, the same as the Dashboard.
+- Claude Code spend and commits count only work inside each window.
+- A quarter runs to today; open alerts counted the same way on every page.
+- Briefings get labelled, formatted figures and no old metric names.
 - No migrations.
 
 ## 1.4.8 (2026-11-21)
