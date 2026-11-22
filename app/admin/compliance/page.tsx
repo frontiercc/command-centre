@@ -8,6 +8,7 @@ import TopBar from '@/components/layout/TopBar';
 import { PageBody, Panel, Bar, Dot, Muted, B, C, cx, type Tone } from '@/components/precision/ui';
 import { Switch, ToggleRow, Field } from '@/components/admin/precision-admin';
 import { useToast } from '@/components/shared/ToastProvider';
+import { complianceFieldStatuses } from '@/lib/admin/compliance-declarations';
 
 export default function AdminCompliancePage() {
   const { showToast } = useToast();
@@ -87,24 +88,11 @@ export default function AdminCompliancePage() {
   };
 
   // Compute completeness
-  const fieldStatuses = [
-    ...(gdprApplicable ? [
-      { label: 'DPO assigned', done: !!dataProtectionOfficer.trim() },
-      { label: 'DPIA completed', done: dpiaCompleted },
-      { label: 'DPIA date set', done: !!(dpiaCompleted && dpiaDate) },
-    ] : []),
-    ...(lgpdApplicable ? [
-      { label: 'Encarregado assigned', done: !!dataProtectionEncarregado.trim() },
-      { label: 'RIPD completed', done: ripdCompleted },
-      { label: 'RIPD date set', done: !!(ripdCompleted && ripdDate) },
-    ] : []),
-    { label: 'AI Act risk assessed', done: aiActRiskTier !== 'not-assessed' },
-    { label: 'Transparency notice', done: aiActTransparencyNotice },
-    { label: 'ISMS control owner', done: !!isoControlOwner.trim() },
-    { label: 'ISO certification status set', done: isoCertificationStatus !== 'not-started' },
-    { label: 'AIMS owner', done: !!iso42001Owner.trim() },
-    { label: 'ISO 42001 assessment set', done: iso42001AssessmentStatus !== 'not-started' },
-  ];
+  const fieldStatuses = complianceFieldStatuses({
+    dpiaCompleted, dpiaDate, dataProtectionOfficer, aiActRiskTier, aiActTransparencyNotice,
+    isoControlOwner, isoCertificationStatus, iso42001Owner, iso42001AssessmentStatus,
+    gdprApplicable, lgpdApplicable, dataProtectionEncarregado, ripdCompleted, ripdDate,
+  });
   const completedCount = fieldStatuses.filter(f => f.done).length;
   const total = fieldStatuses.length;
   const progressPct = Math.round((completedCount / total) * 100);

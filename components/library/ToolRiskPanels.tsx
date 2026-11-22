@@ -15,7 +15,16 @@ export interface SoleRow { kind: 'skill' | 'connector'; name: string; tag: strin
 export interface UnusedRow { id: number; name: string; kind: string; author: string | null; claimed: boolean; lastUsed: number | null }
 
 const kindWord = (k: string) => (k === 'connector' ? 'connector' : 'skill');
-const plural = (n: number, one: string, many: string) => `${n} ${n === 1 ? one : many}`;
+const num = (n: number) => n.toLocaleString('en-GB');
+
+/** One sentence: how many claimed entries went unused this month, and how many were never used. */
+function unusedSentence(n: number, of: number, never: number): string {
+  const who = of === 1 ? 'The one claimed skill or connector'
+    : n === of ? `All ${num(of)} claimed skills and connectors`
+    : `${num(n)} of ${num(of)} claimed skills and connectors`;
+  if (never === n) return `${who} ${n === 1 ? 'has' : 'have'} never been used.`;
+  return `${who} went unused this month${never > 0 ? `, ${num(never)} of them never used` : ''}.`;
+}
 const dateOf = (s: number) => new Date(s * 1000).toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric' });
 
 function Stuck({ rows }: { rows: SoleRow[] }) {
@@ -32,7 +41,7 @@ function Stuck({ rows }: { rows: SoleRow[] }) {
         <div key={`${r.kind}:${r.name}`} className="flex items-baseline gap-2.5 py-1.5 border-b border-[#F2F2F2] last:border-b-0 text-[13px]">
           <span className="min-w-0 truncate text-[#0A0A0A]">{r.name}</span>
           <span className="text-[#777777] whitespace-nowrap">{kindWord(r.kind)} · only {r.who ?? 'one person'}{r.department ? ` · ${r.department}` : ''}</span>
-          <span className="ml-auto tabular-nums text-[#333333] whitespace-nowrap">{plural(r.uses, 'use', 'uses')}</span>
+          <span className="ml-auto tabular-nums text-[#333333] whitespace-nowrap">{num(r.uses)} {r.uses === 1 ? 'use' : 'uses'}</span>
         </div>
       ))}
     </Frame>
@@ -51,9 +60,8 @@ function Unused({ rows, of }: { rows: UnusedRow[]; of: number }) {
       title="Used by nobody"
       period="Last 30 days"
       answer={rows.length === 0
-        ? <>Every one of the {of} skills and connectors people have claimed was used this month.</>
-        : <><b>{rows.length} of {of}</b> skills and connectors people have claimed went unused this month.{never > 0 ? ` ${never === 1 ? 'One has' : `${never} have`} never been used at all.` : ''}</>}
-      note="Only claimed entries are counted: someone wrote a guide and put their name on it. Worth retiring, or worth a nudge."
+        ? <>Every one of the {num(of)} claimed skills and connectors was used this month.</>
+        : <>{unusedSentence(rows.length, of, never)}</>}
     >
       {rows.length > 0 && <div className="mb-2"><Track value={rows.length / of} /></div>}
       {rows.slice(0, 10).map(r => (
@@ -65,7 +73,7 @@ function Unused({ rows, of }: { rows: UnusedRow[]; of: number }) {
           </span>
         </div>
       ))}
-      {rows.length > 10 && <p className="m-0 mt-1.5 text-[13px] text-[#8F8F8F]">and {rows.length - 10} more.</p>}
+      {rows.length > 10 && <p className="m-0 mt-1.5 text-[13px] text-[#8F8F8F]">and {num(rows.length - 10)} more.</p>}
     </Frame>
   );
 }

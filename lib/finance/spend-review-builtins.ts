@@ -34,5 +34,8 @@ const CONNECTORS = new Set(BUILT_IN_CONNECTOR_NAMES.map(normToolName));
 const SKILLS = new Set(BUILT_IN_SKILL_NAMES.map(normToolName));
 
 export function isBuiltInTool(type: 'skill' | 'connector', name: string): boolean {
-  return (type === 'skill' ? SKILLS : CONNECTORS).has(normToolName(name));
+  const n = normToolName(name);
+  // Every ccd_ server is the Claude desktop app's own (ccd_turn, ccd_session_mgmt and the rest).
+  if (type === 'connector' && n.startsWith('ccd-')) return true;
+  return (type === 'skill' ? SKILLS : CONNECTORS).has(n);
 }

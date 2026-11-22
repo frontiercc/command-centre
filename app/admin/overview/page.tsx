@@ -8,22 +8,12 @@ import { useEffect, useState } from 'react';
 import Link from 'next/link';
 import TopBar from '@/components/layout/TopBar';
 import { PageBody, cx } from '@/components/precision/ui';
+import { complianceFieldStatuses, complianceDeclarationsFromConfig } from '@/lib/admin/compliance-declarations';
 
 // --- Types ---
 
 interface DbStats {
   fileSizeBytes: number;
-}
-
-interface ConfigData {
-  dpiaCompleted?: string | boolean;
-  dpiaDate?: string;
-  dataProtectionOfficer?: string;
-  aiActRiskTier?: string;
-  aiActTransparencyNotice?: string | boolean;
-  isoControlOwner?: string;
-  isoCertificationStatus?: string;
-  organisationName?: string;
 }
 
 // --- Helpers ---
@@ -33,16 +23,9 @@ function formatBytes(bytes: number): string {
   return (bytes / 1024).toFixed(1) + ' KB';
 }
 
-function countComplianceFields(config: ConfigData): number {
-  let count = 0;
-  if (config.dpiaCompleted === true || config.dpiaCompleted === 'true') count++;
-  if (config.dpiaDate) count++;
-  if (config.dataProtectionOfficer) count++;
-  if (config.aiActRiskTier && config.aiActRiskTier !== 'not-assessed') count++;
-  if (config.aiActTransparencyNotice === true || config.aiActTransparencyNotice === 'true') count++;
-  if (config.isoControlOwner) count++;
-  if (config.isoCertificationStatus && config.isoCertificationStatus !== 'not-started') count++;
-  return count;
+function countComplianceFields(config: Record<string, unknown>): { done: number; total: number } {
+  const fields = complianceFieldStatuses(complianceDeclarationsFromConfig(config));
+  return { done: fields.filter(f => f.done).length, total: fields.length };
 }
 
 // --- Sub-components ---
@@ -139,21 +122,21 @@ export default function AdminOverviewPage() {
   const [alertCount, setAlertCount] = useState<number | null>(null);
   const [eventsLast24h, setEventsLast24h] = useState<number | null>(null);
   const [archiveEnabled, setArchiveEnabled] = useState<boolean | null>(null);
-  const [complianceScore, setComplianceScore] = useState<number | null>(null);
+  const [complianceScore, setComplianceScore] = useState<{ done: number; total: number } | null>(null);
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
     Promise.all([
       fetch('/api/users').then(r => r.json()).catch(() => []),
       fetch('/api/db/stats').then(r => r.json()).catch(() => null),
-      fetch('/api/alerts?status=open').then(r => r.json()).catch(() => []),
+      fetch('/api/alerts/count').then(r => r.json()).catch(() => null),
       fetch('/api/dashboard').then(r => r.json()).catch(() => null),
       fetch('/api/archive/config').then(r => r.json()).catch(() => null),
       fetch('/api/config').then(r => r.json()).catch(() => null),
     ]).then(([usersData, stats, alertsData, dashData, archData, configData]) => {
       setUserCount(Array.isArray(usersData) ? usersData.length : 0);
       setDbStats(stats);
-      setAlertCount(Array.isArray(alertsData) ? alertsData.length : 0);
+      setAlertCount(typeof alertsData?.count === 'number' ? alertsData.count : null);
       setEventsLast24h(dashData?.stats?.eventsLast24h ?? null);
       setArchiveEnabled(archData?.archiveEnabled ?? null);
       setComplianceScore(configData ? countComplianceFields(configData) : null);
@@ -194,7 +177,7 @@ export default function AdminOverviewPage() {
               href="/alerts"
               title="Open alerts"
               icon={<IconBell />}
-              value={alertCount ?? 'Not available'}
+              value={alertCount != null ? alertCount.toLocaleString('en-GB') : 'Not available'}
               valueClassName={alertCount != null && alertCount > 0 ? 'text-[#B42318]' : undefined}
               caption={alertCount === 1 ? 'open alert' : 'open alerts'}
             />
@@ -217,17 +200,17 @@ export default function AdminOverviewPage() {
               href="/admin/compliance"
               title="Compliance"
               icon={<IconShield />}
-              value={complianceScore !== null ? `${complianceScore}/7` : 'Not available'}
+              value={complianceScore !== null ? `${complianceScore.done} of ${complianceScore.total}` : 'Not available'}
               valueClassName={
                 complianceScore === null
                   ? undefined
-                  : complianceScore === 7
+                  : complianceScore.done === complianceScore.total
                     ? 'text-[#1A7F37]'
-                    : complianceScore >= 4
+                    : complianceScore.done >= 4
                       ? 'text-[#B54708]'
                       : 'text-[#B42318]'
               }
-              caption={complianceScore !== null ? 'declarations complete' : undefined}
+              caption={complianceScore !== null ? 'fields completed' : undefined}
             />
 
           </div>

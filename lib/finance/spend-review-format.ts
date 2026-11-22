@@ -69,3 +69,9 @@ export function routeRank(r: { kind: string; direction?: string; estSavingUsd: n
   if (r.kind === 'model' && r.direction === 'trial' && r.estSavingUsd !== null) return 1;
   return 2;
 }
+
+/** Whole US dollars with separators ("$2,266"); a non-zero amount under a dollar reads "under $1". */
+export function usdWhole(n: number): string {
+  if (n !== 0 && Math.abs(n) < 1) return 'under $1';
+  return n.toLocaleString('en-US', { style: 'currency', currency: 'USD', maximumFractionDigits: 0, minimumFractionDigits: 0 });
+}

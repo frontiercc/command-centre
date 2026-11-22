@@ -39,10 +39,13 @@ export default function PeopleByDay({ days, products, activeThisWeek, activeLast
   const tickTop = Math.ceil(max / 5) * 5;
   const y = (v: number) => (1 - v / tickTop) * 100;
   const ticks = [0, Math.round(tickTop / 2), tickTop].filter((t, i, a) => a.indexOf(t) === i);
-  const yIdx = n >= 2 ? n - 2 : n - 1;
-  const top = shown.length > 0 ? [...shown].sort((a, b) => days[yIdx].products[b.id] - days[yIdx].products[a.id])[0] : null;
-  // Named only when someone used it yesterday: "the most people: 0" says nothing.
-  const lead = top && days[yIdx].products[top.id] > 0 ? top : null;
+  // A typical day: the average over the last 7 complete days (today, still in progress, left out).
+  const lastSeven = days.slice(Math.max(0, n - 8), Math.max(0, n - 1));
+  const avg = (id: Product['id']) => (lastSeven.length > 0 ? lastSeven.reduce((t, d) => t + d.products[id], 0) / lastSeven.length : 0);
+  const top = shown.length > 0 ? [...shown].sort((a, b) => avg(b.id) - avg(a.id))[0] : null;
+  // Named only when it has people on a typical day: "the most people: 0" says nothing.
+  const leadAvg = top ? Math.round(avg(top.id)) : 0;
+  const lead = top && leadAvg > 0 ? top : null;
   const diff = activeThisWeek - activeLastWeek;
   const change = diff === 0 ? 'the same as' : diff > 0 ? `${diff} more than` : `${-diff} fewer than`;
   const label = (d: string) => { const dt = new Date(`${d}T00:00:00Z`); return `${dt.getUTCDate()} ${dt.toLocaleString('en-GB', { month: 'short', timeZone: 'UTC' })}`; };
@@ -63,7 +66,7 @@ export default function PeopleByDay({ days, products, activeThisWeek, activeLast
         ) : (
           <><b className="font-semibold">{activeThisWeek.toLocaleString('en-GB')} {activeThisWeek === 1 ? 'person' : 'people'}</b> used {productNames} in the last 7 days, {change} the week before.</>
         )}
-        {lead ? <> {lead.label} has the most people each day: <b className="font-semibold">{days[yIdx].products[lead.id]}</b> yesterday.</> : null}
+        {lead ? <> {lead.label} has the most people on a typical day: <b className="font-semibold">{leadAvg.toLocaleString('en-GB')}</b> a day on average over the last 7 days.</> : null}
       </p>
       {shown.length === 0 ? (
         <p className="m-0 text-[13px] text-[#8F8F8F]">No activity in the last {n} days.</p>

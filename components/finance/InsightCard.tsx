@@ -10,7 +10,8 @@
  * either. Both are computed server-side and passed straight through; this
  * component does no recomputation and never invents numbers.
  */
-import { Panel, Tag, Muted } from '@/components/precision/ui';
+import { Panel, Tag } from '@/components/precision/ui';
+import { usdWhole } from '@/lib/finance/spend-review-format';
 
 export interface InsightFacts {
   biggestMover: { centre: string; deltaUsd: number; deltaPct: number | null; atPace?: boolean } | null;
@@ -24,8 +25,15 @@ export interface InsightCardProps {
   dataQualityNotes: string[];
 }
 
-const fmtUsd = (n: number) => n.toLocaleString('en-US', { style: 'currency', currency: 'USD' });
+const fmtUsd = usdWhole;
 const fmtPct = (n: number) => `${Math.round(n)}%`;
+
+/** "8% less than last month", "12% more than last month" or "about the same as last month". */
+function vsLastMonth(pct: number): string {
+  const r = Math.round(pct);
+  if (r === 0) return 'about the same as last month';
+  return `${Math.abs(r)}% ${r < 0 ? 'less' : 'more'} than last month`;
+}
 
 /** Deterministic bullets derived from server facts — no invented numbers. */
 function buildFactBullets(facts: InsightFacts, dataQualityNotes: string[]): string[] {
@@ -49,7 +57,7 @@ function buildFactBullets(facts: InsightFacts, dataQualityNotes: string[]): stri
     const { projectedUsd, vsPriorPct } = facts.projection;
     bullets.push(
       vsPriorPct != null
-        ? `On pace for ~${fmtUsd(projectedUsd)} by month end (${vsPriorPct >= 0 ? '+' : ''}${Math.round(vsPriorPct)}% vs last month).`
+        ? `On pace for ~${fmtUsd(projectedUsd)} by month end (${vsLastMonth(vsPriorPct)}).`
         : `On pace for ~${fmtUsd(projectedUsd)} by month end.`
     );
   }
@@ -69,7 +77,7 @@ export default function InsightCard({ insight, dataQualityNotes }: InsightCardPr
   const bullets = facts ? buildFactBullets(facts, dataQualityNotes) : dataQualityNotes;
 
   return (
-    <Panel title="This month in cost" subtitle="Deterministic facts, computed server-side" flush>
+    <Panel title="This month in cost" flush>
       {bullets.length > 0 && (
         <ul className="m-0 p-0 list-none">
           {bullets.map((b, i) => (
@@ -83,7 +91,6 @@ export default function InsightCard({ insight, dataQualityNotes }: InsightCardPr
         <div className={`px-4 py-3 ${bullets.length > 0 ? 'border-t border-[#EAEAEA]' : ''} flex flex-col items-start gap-1.5`}>
           <Tag tone="measured">Summary</Tag>
           <p className="m-0 text-[14px] leading-6 text-[#333333]">{narrative}</p>
-          <Muted>Built from the figures above.</Muted>
         </div>
       )}
     </Panel>

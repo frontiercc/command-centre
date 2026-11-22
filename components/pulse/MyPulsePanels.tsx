@@ -11,7 +11,7 @@
  */
 import Link from 'next/link';
 import { useEffect, useState } from 'react';
-import { QuestionCard, shareWords, cap } from '@/components/dashboard/QuestionCard';
+import { QuestionCard, shareWords, sharePair, cap } from '@/components/dashboard/QuestionCard';
 import { B, Muted, LOAD_FAILED } from '@/components/precision/ui';
 import { Frame, Track, linkCls } from '@/components/pulse/WorkPulseOverview';
 import {
@@ -24,6 +24,7 @@ import { deepWords, DeepWords, tierList, tierNamesOr, type TierNames } from '@/l
 import { NEW_WAYS_OF_WORKING } from '@/lib/pulse/cowork/coaching-words';
 import { humanTimeKindLabel } from '@/components/pulse/HumanTimeCard';
 import { useSessionRole } from '@/components/shared/useSessionRole';
+import { skillLabel, connectorLabel } from '@/components/dashboard/tool-names';
 
 const words = (v: number) => (v < 0.15 ? `${Math.round(v * 100)}%` : shareWords(v));
 const hours = (m: number) => { const h = m / 60; return h < 10 ? h.toFixed(1) : Math.round(h).toLocaleString('en-GB'); };
@@ -75,8 +76,9 @@ export function WorkPanel({ q, product, who, period, onPeriod, onDrill, drill, r
   const deep = deepWords(names);
   const t = tierNamesOr(names);
   const r = q.realWork;
+  // Nothing judged in the period before (none kept, or no work then): no comparison is made.
   const change = r.beforeAll === 0
-    ? `nothing classified ${shape.prior}`
+    ? null
     : r.before === r.now ? `the same as ${shape.prior}` : `${r.now > r.before ? 'up' : 'down'} from ${num(r.before)} ${shape.prior}`;
   // A department's page sets its share beside the rest of the organisation's; a person's page
   // sets their count beside their department's per-person average.
@@ -86,22 +88,22 @@ export function WorkPanel({ q, product, who, period, onPeriod, onDrill, drill, r
       ? 'Not enough work judged elsewhere yet to compare.'
       : `${pct(r.now / r.all)} of ${who.name}'s tasks are ${deep}, against ${pct(r.orgShare)} across the rest of the organisation.`)
     : r.deptAverage === null ? 'No department average yet.'
-      : `${r.now > r.deptAverage * 1.25 ? 'Above' : r.now < r.deptAverage * 0.75 ? 'Below' : 'About'} the department average of ${num(Math.round(r.deptAverage))}.`;
+      : `${r.now > r.deptAverage * 1.25 ? 'More than' : r.now < r.deptAverage * 0.75 ? 'Fewer than' : 'About the same as'} the average person in ${who.you ? 'your' : 'their'} department, who handed over ${plural(Math.round(r.deptAverage), `task judged ${deep}`, `tasks judged ${deep}`)}.`;
   // Nothing before to compare with: say nothing rather than filling the line with it.
   const shareChange = q.share.before === null || q.share.now === null ? null
       : Math.round(q.share.now * 100) === Math.round(q.share.before * 100) ? `the same as ${shape.prior}`
-        : `${q.share.now > q.share.before ? 'up' : 'down'} from ${words(q.share.before)} ${shape.prior}`;
+        : `${q.share.now > q.share.before ? 'up' : 'down'} from ${sharePair(q.share.now, q.share.before)[1]} ${shape.prior}`;
   return (
     <Frame
       title={who.you ? 'Your work' : `${who.name}'s work`}
       judged
       period={
         <span className="inline-flex items-center gap-2">
-          <span>{shape.label} against {shape.prior}</span>
+          <span>{change === null ? shape.label : `${shape.label} against ${shape.prior}`}</span>
           <PeriodSwitch period={period} onPeriod={onPeriod} />
         </span>
       }
-      answer={<>{subj(who)} handed {product} <b>{plural(r.now, 'task', 'tasks')} judged {deep}</b> {shape.label.toLowerCase()}, {change}.</>}
+      answer={<>{subj(who)} handed {product} <b>{r.now === 0 ? 'no tasks' : plural(r.now, 'task', 'tasks')} judged {deep}</b> {shape.label.toLowerCase()}{change ? <>, {change}</> : null}.</>}
       note={<>{t.t2} and {t.t3} are the top two tiers Claude judges each task against; the rest are {t.t1.toLowerCase()}. Click a figure to see the work behind it.</>}
     >
       <div className={`grid grid-cols-1 sm:grid-cols-${q.people ? '2 xl:grid-cols-4' : '3'} gap-2.5`}>
@@ -121,7 +123,7 @@ export function WorkPanel({ q, product, who, period, onPeriod, onDrill, drill, r
           question={`Tasks judged ${deep}`}
           value={`${num(r.now)} of ${num(r.all)}`}
           unit="tasks"
-          change={change}
+          change={change ?? undefined}
           sub={r.now > 0 ? <SeeLink onClick={() => onDrill(drill === 'realwork' ? null : 'realwork')}>See the {num(r.now)} tasks</SeeLink> : undefined}
           trend={r.trend}
           trendKind="bars"
@@ -205,7 +207,7 @@ export function ByHandPanel({ h, who, onSeeSessions, tool = 'Claude', surface = 
       period={`Last ${h.windowDays} days`}
       answer={<>By hand, {whose} would have taken about <b>{hours(h.humanMinutes.likely)} hours</b>, against <b>{hours(h.claudeMinutes)} hours</b> with {tool}{longer ? <>, {longer}</> : null}.</>}
       note={<>
-        {plural(h.sessions, 'session', 'sessions')} with an estimate. The by-hand figure is Claude&apos;s estimate per session (range {hours(h.humanMinutes.low)} to {hours(h.humanMinutes.high)} hours); the time with {tool} is measured active time.
+        {plural(h.sessions, 'session', 'sessions')} with an estimate. The by-hand time is Claude&apos;s estimate for each session, added up: between {hours(h.humanMinutes.low)} and {hours(h.humanMinutes.high)} hours in all. The time with {tool} is measured active time.
         {h.check ? ` Spot-checked in ${h.check.period}: ${num(h.check.aboutRight)} of ${num(h.check.reviewed)} about right.` : ' The estimates have not been spot-checked yet.'}
         {onSeeSessions ? <> <button type="button" onClick={onSeeSessions} className={linkCls}>See the sessions</button></> : null}
       </>}
@@ -386,6 +388,8 @@ export function PeoplePanel({ rows, dept, names, thenVsNow }: {
     return d <= 0 ? 'today' : d === 1 ? 'yesterday' : `${d} days ago`;
   };
   const arrow = { up: '↑', flat: '→', down: '↓' };
+  // Only the top two tiers count as deep work this week.
+  const deepThisWeek = rows.filter(r => (r.topTierThisWeek ?? 0) >= 2);
   const arrowInk = { up: '#1A7F37', flat: '#8F8F8F', down: '#B54708' };
   return (
     <Frame
@@ -393,7 +397,7 @@ export function PeoplePanel({ rows, dept, names, thenVsNow }: {
       judged
       period={plural(rows.length, 'person', 'people')}
       answer={<>
-        {top.share !== null ? <><b>{top.display_name ?? top.email}</b> does the deepest work, {words(top.share)} of their tasks.</> : <>Nobody has classified work in this period.</>}
+        {top.share !== null ? <><b>{top.display_name ?? top.email}</b> has the highest share of {deepWords(names)} work: {Math.round(top.share * 100)}% of their tasks.</> : <>Nobody has classified work in this period.</>}
         {quiet.length > 0 ? <> {quiet.length === 1 ? `${quiet[0].display_name ?? quiet[0].email} has` : `${num(quiet.length)} people have`} handed over nothing.</> : null}
       </>}
       note={`${canOpen ? "Click a name to open that person's page. " : ''}Sorted by how much of their work reached the top two tiers.`}
@@ -404,7 +408,8 @@ export function PeoplePanel({ rows, dept, names, thenVsNow }: {
         <span>Person</span><span className="text-right">{DeepWords(names)}</span><span /><span className="text-right">Share</span><span>Then and now</span><span className="text-right">Last active</span>
       </div>
       {rows.map(r => {
-        const t = thenVsNow?.get(r.id);
+        // Someone with no work in the period shows no trend.
+        const t = r.all > 0 ? thenVsNow?.get(r.id) : undefined;
         return (
           <div key={r.id} className="grid grid-cols-[minmax(0,1fr)_86px_minmax(0,120px)_52px_92px_80px] gap-2.5 items-center py-[3px] text-[13px] border-b border-[#F7F7F7] last:border-b-0">
             {canOpen
@@ -414,7 +419,7 @@ export function PeoplePanel({ rows, dept, names, thenVsNow }: {
             <span>{r.share !== null && <Track value={r.share} />}</span>
             <span className="text-right tabular-nums">{r.share !== null ? `${Math.round(r.share * 100)}%` : ''}</span>
             <span className="text-[12px] whitespace-nowrap" style={{ color: t ? arrowInk[t.arrow] : '#B3B3B3' }}>
-              {t ? `${Math.round(t.then * 100)}% ${arrow[t.arrow]} ${Math.round(t.now * 100)}%` : 'not enough weeks'}
+              {t ? `${Math.round(t.then * 100)}% ${arrow[t.arrow]} ${Math.round(t.now * 100)}%` : r.all > 0 ? 'not enough weeks' : ''}
             </span>
             <span className="text-right text-[12px] text-[#8F8F8F] whitespace-nowrap">{since(r.lastActive)}</span>
           </div>
@@ -422,7 +427,7 @@ export function PeoplePanel({ rows, dept, names, thenVsNow }: {
       })}
       </div></div>
       <p className="m-0 mt-2 text-[12px] text-[#8F8F8F]">
-        Deepest this week: {rows.filter(r => r.topTierThisWeek).length === 0 ? 'nobody yet' : rows.filter(r => r.topTierThisWeek).map(r => `${r.display_name ?? r.email} (${tiers[(r.topTierThisWeek ?? 1) - 1]})`).join(', ')}.
+        {DeepWords(names)} work this week: {deepThisWeek.length === 0 ? 'nobody yet' : deepThisWeek.map(r => `${r.display_name ?? r.email} (${tiers[(r.topTierThisWeek ?? 2) - 1]})`).join(', ')}.
       </p>
     </Frame>
   );
@@ -437,9 +442,14 @@ export function ProducedPanel({ q, who, period, uploads }: {
 }) {
   const p = q.produced;
   const max = Math.max(1, ...p.byKind.map(k => k.files));
-  // The second kind is named only when it is at least half the size of the first.
-  const named = p.byKind.filter(k => k.kind !== 'Other');
-  const top = named.slice(0, 2).filter((k, i) => i === 0 || k.files * 2 >= named[0].files).map(k => k.kind.toLowerCase());
+  // Named kinds largest first, files of no named kind last, whatever their number.
+  const named = p.byKind.filter(k => k.kind !== 'Other').sort((a, b) => b.files - a.files);
+  const other = p.byKind.filter(k => k.kind === 'Other');
+  const rows = [...named, ...other.map(k => ({ ...k, kind: 'Other files' }))];
+  // The second kind is named only when it is at least half the size of the first, and "mostly"
+  // is said only when the kinds named make up more than half of all the files.
+  const topKinds = named.slice(0, 2).filter((k, i) => i === 0 || k.files * 2 >= named[0].files);
+  const top = topKinds.reduce((n, k) => n + k.files, 0) * 2 > p.files ? topKinds.map(k => k.kind.toLowerCase()) : [];
   return (
     <Frame
       title={who.you ? 'What you produced' : 'What they produced'}
@@ -449,7 +459,7 @@ export function ProducedPanel({ q, who, period, uploads }: {
         : <><b>{plural(p.files, 'file', 'files')}</b> from {plural(p.sessions, 'session', 'sessions')}{top.length ? <>, mostly {top.join(' and ')}</> : null}.</>}
       note={<>A session produced a file when Claude saved, sent or published one, in Claude Chat when a reply made an artifact or a file, and in ChatGPT when a reply listed a file.{uploads && uploads.sessions > 0 ? ` ${num(uploads.sessions)} ${uploads.sessions === 1 ? 'session had' : 'sessions had'} documents brought in, ${plural(uploads.files, 'file', 'files')} in all.` : ''}</>}
     >
-      {p.byKind.map(k => (
+      {rows.map(k => (
         <div key={k.kind} className="grid grid-cols-[minmax(0,120px)_minmax(0,1fr)_36px] gap-2.5 items-center py-[3px] text-[13px]">
           <span className="truncate text-[#333333]">{k.kind}</span>
           <Track value={k.files / max} />
@@ -479,11 +489,11 @@ export function ColleagueToolsPanel({ q, who, department, period, team = false }
       answer={t.length === 0
         ? <>{who.you ? 'You use' : `${who.name} uses`} every skill and connector two or more colleagues {where} use.</>
         : <>Colleagues {where} use <b>{parts}</b> {who.you ? "you haven't" : "they haven't"} tried.</>}
-      note={q.ownTools.length > 0 ? <>{who.you ? 'Your own' : 'Their own'}: {q.ownTools.join(', ')}.</> : undefined}
+      note={q.ownTools.length > 0 ? <>{who.you ? 'Your own' : 'Their own'}: {q.ownTools.map(n => (n === 'custom_skill' || n.includes(':') ? skillLabel(n) : connectorLabel(n))).join(', ')}.</> : undefined}
     >
       {t.map(x => (
         <div key={`${x.type}:${x.name}`} className="flex items-center gap-2.5 py-1.5 border-b border-[#F2F2F2] last:border-b-0 text-[13px]">
-          <span className="min-w-0 truncate text-[#0A0A0A]">{x.name}</span>
+          <span className="min-w-0 truncate text-[#0A0A0A]">{x.type === 'skill' ? skillLabel(x.name) : connectorLabel(x.name)}</span>
           <span className="text-[#777777] whitespace-nowrap">{x.type} · {num(x.people)} {team ? (x.people === 1 ? 'person in other teams' : 'people in other teams') : (x.people === 1 ? 'colleague' : 'colleagues')}</span>
           {x.libraryId !== null && <Link href={`/library/${x.libraryId}`} className={`${linkCls} ml-auto`}>See it</Link>}
         </div>
@@ -504,8 +514,21 @@ export interface CapabilityItem {
   capability?: { eventId: number; status: 'candidate' | 'confirmed' };
 }
 
-export function CapabilitiesPanel({ items, pending, canReview, onChanged }: {
+/** One row per session: two flags on the same session read as one, confirmed if either is. */
+function onePerSession(list: CapabilityItem[]): CapabilityItem[] {
+  const by = new Map<string, CapabilityItem>();
+  for (const i of list) {
+    const had = by.get(i.sessionId);
+    if (!had || (had.capability?.status !== 'confirmed' && i.capability?.status === 'confirmed')) by.set(i.sessionId, i);
+  }
+  return [...by.values()].sort((a, b) => b.occurredAt - a.occurredAt);
+}
+
+export function CapabilitiesPanel({ items, all, pending, canReview, onChanged }: {
+  /** The newest few, shown as rows. */
   items: CapabilityItem[];
+  /** Every one from work in the last 30 days, when the page has them (a department), for the count. */
+  all?: CapabilityItem[];
   pending: number;
   canReview: boolean;
   onChanged: () => void;
@@ -520,18 +543,20 @@ export function CapabilitiesPanel({ items, pending, canReview, onChanged }: {
     setBusy(null);
     onChanged();
   };
-  const confirmed = items.filter(i => i.capability?.status === 'confirmed').length;
+  const shown = onePerSession(items);
+  const counted = onePerSession(all && all.length > 0 ? all : items);
+  const confirmed = counted.filter(i => i.capability?.status === 'confirmed').length;
   return (
     <Frame
       title="New ways of working"
       judged
-      period="Last 30 days"
-      answer={items.length === 0
-        ? <>Nothing new this month.</>
-        : <><b>{num(confirmed)} confirmed</b>{pending > 0 ? <>, and <b>{num(pending)}</b> {pending === 1 ? 'is' : 'are'} waiting for review</> : null}.</>}
+      period="From work in the last 30 days"
+      answer={counted.length === 0
+        ? <>Nothing new from work in the last 30 days.{pending > 0 ? <> <b>{num(pending)}</b> {pending === 1 ? 'is' : 'are'} waiting for review.</> : null}</>
+        : <><b>{num(confirmed)} confirmed</b> from work in the last 30 days{pending > 0 ? <>, and <b>{num(pending)}</b> {pending === 1 ? 'is' : 'are'} waiting for review</> : null}.</>}
       note={NEW_WAYS_OF_WORKING}
     >
-      {items.map(i => (
+      {shown.map(i => (
         <div key={i.sessionId} className="py-2 border-b border-[#F2F2F2] last:border-b-0 flex items-start gap-3">
           <div className="min-w-0 flex-1">
             <p className="m-0 flex items-baseline gap-2 flex-wrap text-[13px]">

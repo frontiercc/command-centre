@@ -181,7 +181,7 @@ describe('whether an action worked', () => {
   });
 
   it('puts the figure in plain words', () => {
-    expect(metricWords('deep_share')).toBe('Work the classifier judged meaningful work or better');
+    expect(metricWords('deep_share')).toBe('Work Claude judged meaningful work or better');
     expect(metricWords('hardly_used_share')).toBe('People who have hardly used it');
     expect(metricWords('produced_nothing_share')).toBe('Sessions that produced nothing');
     expect(metricWords(null)).toBeNull();

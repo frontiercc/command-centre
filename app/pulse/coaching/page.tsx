@@ -172,10 +172,10 @@ function TeamCoaching() {
               judged
               period="Last 30 days against the 30 before"
               answer={<>
-                <b>{plan.prompts.toLocaleString('en-GB')} {plan.prompts === 1 ? 'piece of work' : 'pieces of work'}</b> from {plan.people} {plan.people === 1 ? 'person' : 'people'} in the last 30 days.
+                <b>{plan.prompts.toLocaleString('en-GB')} {plan.prompts === 1 ? 'piece of work' : 'pieces of work'}</b> from {plan.people.toLocaleString('en-GB')} {plan.people === 1 ? 'person' : 'people'} in the last 30 days.
               </>}
               note={tiers
-                ? `${MEANINGFUL_WORK.charAt(0).toUpperCase()}${MEANINGFUL_WORK.slice(1)} means the classifier judged it "${tiers.t2}" or "${tiers.t3}": a whole piece of work handed over, rather than a question answered. Work it judged "${tiers.t1}" does not count. Those names are set on Admin → Work Pulse → Tier config, and the floor on Admin → System.`
+                ? `${MEANINGFUL_WORK.charAt(0).toUpperCase()}${MEANINGFUL_WORK.slice(1)} means Claude judged it "${tiers.t2}" or "${tiers.t3}": a whole piece of work handed over, rather than a question answered. Work it judged "${tiers.t1}" does not count.`
                 : undefined}
             >
               {plan.where.map((t, i) => <p key={i} className="m-0 py-0.5 text-[13px] leading-5 text-[#333333]">{t}</p>)}
@@ -203,7 +203,7 @@ function TeamCoaching() {
                 judged
                 period="Last 30 days"
                 answer={plan.workOn.length > 0 ? <>{plan.workOn[0]}</> : <>No kinds of work stand out.</>}
-                note="The kinds of work the team handed over, commonest first. How a session ran (through a skill or a connector) is not a kind of work, so those labels are left out."
+                note="The kinds of work the team handed over, commonest first."
               >
                 {plan.workOn.slice(1).map((t, i) => <p key={i} className="m-0 pb-1 text-[13px] leading-5 text-[#333333]">{t}</p>)}
                 {plan.figures.work.slice(0, 6).map(w => (
@@ -222,12 +222,11 @@ function TeamCoaching() {
                 answer={plan.learnFrom.length === 0
                   ? <>Nobody in this team is handing over much yet. The people to learn from are in other teams.</>
                   : <><b>{plan.learnFrom[0].name}</b> gets the most out of it, on {pct(plan.learnFrom[0].deepShare)} of their work.</>}
-                note="Named because this page is for admins and managers only."
               >
                 {plan.learnFrom.map(c => (
                   <div key={c.name} className="flex items-baseline gap-2.5 py-1.5 border-b border-[#F2F2F2] last:border-b-0 text-[13px]">
                     <span className="min-w-0 truncate text-[#0A0A0A]">{c.name}</span>
-                    <span className="text-[#777777] whitespace-nowrap">{c.prompts} {c.prompts === 1 ? 'piece' : 'pieces'}</span>
+                    <span className="text-[#777777] whitespace-nowrap">{c.prompts.toLocaleString('en-GB')} {c.prompts === 1 ? 'piece' : 'pieces'}</span>
                     <span className="ml-auto tabular-nums text-[#333333]">{pct(c.deepShare)}</span>
                   </div>
                 ))}
@@ -241,11 +240,11 @@ function TeamCoaching() {
                   tag="AI estimate"
                   period="Last 30 days"
                   answer={<>
-                    By hand, the team&rsquo;s {plan.figures.freed.sessions} estimated sessions would have taken about{' '}
+                    By hand, the team&rsquo;s {plan.figures.freed.sessions.toLocaleString('en-GB')} estimated sessions would have taken about{' '}
                     <b>{Math.round(plan.figures.freed.byHandHours).toLocaleString('en-GB')} hours</b>, against{' '}
                     <b>{Math.round(plan.figures.freed.aiHours).toLocaleString('en-GB')} hours</b> with {who}.
                   </>}
-                  note={`Claude's estimate per session, against measured active time. Only sessions carrying both are counted: Claude Cowork and Claude in Office/Google${chatgptShown ? ', and ChatGPT' : ''}. Claude Chat sessions carry no estimate.`}
+                  note={`By hand is Claude's estimate for each session, added up; with ${who} is measured active time. Only sessions carrying both are counted: Claude Cowork and Claude in Office/Google${chatgptShown ? ', and ChatGPT' : ''}. Claude Chat sessions carry no estimate.`}
                 >
                   {[[`With ${who}`, plan.figures.freed.aiHours, false] as const, ['By hand (estimate)', plan.figures.freed.byHandHours, true] as const].map(([l, h, est]) => (
                     <div key={l} className="grid grid-cols-[minmax(0,150px)_minmax(0,1fr)_64px] gap-2.5 items-center py-[3px] text-[13px]">
@@ -262,7 +261,7 @@ function TeamCoaching() {
                   title="Did the work come out"
                   period="Last 30 days"
                   answer={<>
-                    <b>{plan.figures.producedNothing.measured - plan.figures.producedNothing.sessions} of {plan.figures.producedNothing.measured} sessions</b> ended with something saved, sent or published.
+                    <b>{(plan.figures.producedNothing.measured - plan.figures.producedNothing.sessions).toLocaleString('en-GB')} of {plan.figures.producedNothing.measured.toLocaleString('en-GB')} sessions</b> ended with something saved, sent or published.
                   </>}
                   note={`A session counts as producing something when a file was written, sent or published in it, in Claude Chat when a reply made an artifact or a file${chatgptShown ? ', and in ChatGPT when a reply listed a file' : ''}. Sessions that could not be read are left out of both figures. Names are the file names and titles as they were saved, without folders, with personal data masked.`}
                 >
@@ -283,8 +282,7 @@ function TeamCoaching() {
               period={`Checked again ${plan.actions.some(a => a.done) ? 'from' : 'after'} ${data?.checkAfterDays ?? 30} days`}
               answer={plan.actions.length === 0
                 ? <>Nothing to suggest: this team is within reach of everything the figures look at.</>
-                : <><b>{plan.actions.length} {plan.actions.length === 1 ? 'thing' : 'things'}</b> worth trying, each tied to the figure it should move.</>}
-              note="Marking one done records the figure as it stands today across every platform, for the team and the organisation, so the page can tell you later whether it moved."
+                : <><b>{plan.actions.length.toLocaleString('en-GB')} {plan.actions.length === 1 ? 'thing' : 'things'}</b> worth trying, each tied to the figure it should move.</>}
             >
               {plan.actions.map(a => (
                 <div key={a.key} className="py-2 border-b border-[#F2F2F2] last:border-b-0">

@@ -32,6 +32,29 @@ function buildEndpoints(hubUrl: string) {
   };
 }
 
+// The public address shown beside the connector endpoints. Read from the
+// saved hub URLs in the same order as the password-reset link (SSO redirect
+// base, then the digest hub URL), never from the Host header. These URLs are
+// display-only. When the request itself arrived over HTTPS through a reverse
+// proxy (X-Forwarded-Proto: https) and the saved URL says http, the hub is
+// served over HTTPS, so the scheme is shown as https; the host is never
+// taken from the request.
+async function connectorHubOrigin(request: NextRequest): Promise<string> {
+  const forwardedProto = (request.headers.get('x-forwarded-proto') ?? '')
+    .split(',')[0].trim().toLowerCase();
+  for (const key of ['ssoRedirectBaseUrl', 'digestHubUrl'] as const) {
+    const configured = ((await getConfigValue(key)) ?? '').trim();
+    if (!configured) continue;
+    try {
+      const u = new URL(configured);
+      if (u.protocol !== 'https:' && u.protocol !== 'http:') continue;
+      if (u.protocol === 'http:' && forwardedProto === 'https') u.protocol = 'https:';
+      return u.origin;
+    } catch { /* malformed: try the next source */ }
+  }
+  return 'http://localhost:3001';
+}
+
 // Disable Next.js route caching — all API routes read live data from the database
 export const dynamic = 'force-dynamic';
 
@@ -45,7 +68,7 @@ export async function GET(request: NextRequest) {
   }
 
   try {
-    const hubUrl = (await getConfigValue('digestHubUrl')) || 'http://localhost:3001';
+    const hubUrl = await connectorHubOrigin(request);
     return NextResponse.json({
       tokens: await listConnectorTokens(),
       endpoints: buildEndpoints(hubUrl),

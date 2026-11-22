@@ -22,7 +22,6 @@ import type { CoachingFigures, TeamFigures, WorkShare } from '@/lib/pulse/code/c
 import { TARGET_GAP_PP, LONG_NOTHING_SHARE, ACCEPTANCE_GAP } from '@/lib/pulse/code/coaching-figures';
 import type { TierNames } from '@/lib/pulse/tier-names';
 import { BEYOND_QUICK } from '@/lib/pulse/code/coaching-words';
-import { formatModelLabel } from '@/lib/pulse/code/model-label';
 import {
   compareMetric as coreCompareMetric, coachingResult as coreCoachingResult,
   planAction as corePlanAction, pastActions as corePastActions,
@@ -68,7 +67,7 @@ export interface CoachingPlan {
 }
 
 const pct = (v: number) => `${Math.round(v * 100)}%`;
-const plural = (c: number, one: string, many: string) => `${c} ${c === 1 ? one : many}`;
+const plural = (c: number, one: string, many: string) => `${c.toLocaleString('en-GB')} ${c === 1 ? one : many}`;
 const list = (xs: string[]) => (xs.length <= 1 ? xs.join('') : `${xs.slice(0, -1).join(', ')} and ${xs[xs.length - 1]}`);
 const lower = (s: string) => s.charAt(0).toLowerCase() + s.slice(1);
 
@@ -226,7 +225,7 @@ export function teamParts(t: TeamFigures, f: CoachingFigures): { where: string[]
 
   // Long sessions that committed nothing: wrong-shaped task, or missing context.
   if (t.longNothing && t.longNothing.long >= 4 && t.longNothing.share >= LONG_NOTHING_SHARE) {
-    workOn.push(`${t.longNothing.sessions} of ${t.longNothing.long} sessions over an hour committed nothing.`);
+    workOn.push(`${t.longNothing.sessions.toLocaleString('en-GB')} of ${t.longNothing.long.toLocaleString('en-GB')} sessions over an hour committed nothing.`);
     actions.push({
       key: 'long_nothing',
       text: 'Take one of those long sessions and break the task into pieces the assistant can finish.',
@@ -255,11 +254,6 @@ export function teamParts(t: TeamFigures, f: CoachingFigures): { where: string[]
       because: `${plural(r.sessions, 'session', 'sessions')} of it across ${r.people} people, none using a skill.`,
       metric: null,
     });
-  }
-
-  // The dearest habit, pointed at the page that owns money.
-  if (t.costlyOnSimple) {
-    workOn.push(`More single-answer sessions ran on ${formatModelLabel(t.costlyOnSimple.model).label} than on any other model: ${plural(t.costlyOnSimple.sessions, 'session', 'sessions')}.`);
   }
 
   if (t.champions.length > 0) {

@@ -643,7 +643,7 @@ export default function AuditPage() {
             {!openaiOnly && (
               <optgroup label="Claude">
                 <option value="claude_chat">Claude Chat</option>
-                <option value="cowork">Cowork</option>
+                <option value="cowork">Claude Cowork</option>
                 {FAMILY_ORDER.filter(f => f !== 'cowork').map(f => [
                   <option key={f} value={f}>{FAMILY_LABEL[f]} (all apps)</option>,
                   ...productsIn(f).map(p => <option key={p} value={p}>{'  '}{productFullName(p)}</option>),

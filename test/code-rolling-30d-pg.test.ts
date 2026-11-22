@@ -78,6 +78,36 @@ async function route(path: string) {
 }
 
 describe('runCodeHourlyAggregation: 30-day windows', () => {
+  it('counts a long session in each window only for the calls it made there', async () => {
+    // One session open for 40 days: a call with a commit 40 days ago, another 2 days ago.
+    await sql.run(
+      `INSERT INTO code_session_stats (session_id, user_id, first_at, last_at, user_msg_count, tool_use_count, commit_count,
+         input_tokens, output_tokens, models_json, computed_at)
+       VALUES ('cc-long', 'user-1', ?, ?, 2, 2, 2, 2000000, 0, ?, ?)`,
+      [NOW - 40 * DAY, NOW - 2 * DAY, JSON.stringify({ 'claude-opus-5-5': { input: 2000000, output: 0, cache_creation: 0, cache_read: 0 } }), NOW],
+    );
+    for (const [id, daysAgo] of [['call-old', 40], ['call-new', 2]] as const) {
+      await sql.run(
+        `INSERT INTO code_assistant_meta (id, user_id, session_id, model, input_tokens, output_tokens, tool_use_count, commit_count, occurred_at)
+         VALUES (?, 'user-1', 'cc-long', 'claude-opus-5-5', 1000000, 0, 1, 1, ?)`,
+        [id, NOW - daysAgo * DAY],
+      );
+    }
+
+    const { runCodeHourlyAggregation } = await import('@/lib/pulse/code/aggregator');
+    await runCodeHourlyAggregation();
+
+    const spend = async (g: string) => Number((await sql.get<{ s: string }>(
+      `SELECT spend_usd AS s FROM code_metrics WHERE scope_type = 'organisation' AND granularity = ?`, [g]))!.s);
+    const org = await orgRows('code_metrics');
+    // The last 30 days: only the call 2 days ago (one million input tokens at $4 a million).
+    expect(org.rolling).toMatchObject({ session_count: 1, commit_count: 1 });
+    expect(await spend('rolling')).toBeCloseTo(4, 6);
+    // The 30 days before: the call 40 days ago, never the whole session's totals twice.
+    expect(org.rolling_prior).toMatchObject({ session_count: 1, commit_count: 1 });
+    expect(await spend('rolling_prior')).toBeCloseTo(4, 6);
+  });
+
   it('writes the last 30 days, the 30 days before and the last 7 days as their own rows', async () => {
     await seedSession('cc-2d', 2, 1);   // last 7 days, last 30 days
     await seedSession('cc-20d', 20, 2); // last 30 days only

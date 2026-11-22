@@ -140,6 +140,16 @@ export default function CioPulsePage() {
       .catch(() => { setOrgFull(null); setOrgSummary(null); setOrgState('failed'); });
   }, [refreshKey, vendor, vendorReady]);
 
+  // The signals panel counts active users in the last 30 days, the same as the Dashboard.
+  const [orgMonth, setOrgMonth] = useState<PulseOrgSummary | null>(null);
+  useEffect(() => {
+    if (!vendorReady) return;
+    fetch(`/api/pulse/org-summary?vendor=${vendor}${refreshKey > 0 ? '&fresh=1' : ''}`)
+      .then(r => r.ok ? r.json() : null)
+      .then(d => setOrgMonth(d))
+      .catch(() => setOrgMonth(null));
+  }, [refreshKey, vendor, vendorReady]);
+
 
   if (loading) return (
     <>
@@ -179,8 +189,8 @@ export default function CioPulsePage() {
         )}
 
         {/* 1. What the signals are telling you */}
-        {orgFull
-          ? <WorkPulsePanel data={orgFull} product={product} title="What the signals are telling you" actions />
+        {orgMonth
+          ? <WorkPulsePanel data={orgMonth} product={product} title="What the signals are telling you" actions />
           : <Panel title="What the signals are telling you"><Muted>{orgState === 'failed' ? LOAD_FAILED : 'Loading…'}</Muted></Panel>}
 
         {/* 2. Use cases to act on next */}
@@ -205,7 +215,7 @@ export default function CioPulsePage() {
           </div>
           <div className="flex flex-col gap-4 min-w-0">
             <Products data={orgSummary?.byProduct} names={orgFull?.tierNames ?? undefined} loading={orgState === 'loading'} />
-            <NewWaysOfWorking confirmedTotal={data.signalCards.psr} confirmedRecent={orgFull?.dashboard?.capabilitiesRecent ?? 0} vendor={vendor} />
+            <NewWaysOfWorking confirmedTotal={data.signalCards.psr} confirmedRecent={orgMonth?.dashboard?.capabilitiesRecent ?? 0} vendor={vendor} />
           </div>
         </div>
 

@@ -16,21 +16,26 @@ import { readWorkSessions } from '@/lib/pulse/cowork/work-sessions';
 import { isWorkPulseSurface } from '@/lib/pulse/work-surfaces';
 import { vendorClause } from '@/lib/dashboard/product-sql';
 import { tierNamesOr, type TierNames } from '@/lib/pulse/tier-names';
+import { briefingCount, largestTierLine, wholeShares } from '@/lib/pulse/briefings/format';
 
 /** The rule every Work Pulse briefing's system prompt carries. */
 export const DESCRIBE_NOT_SCORE_RULE =
-  'Never use scores, indexes or ratios: no delegation depth score, output or throughput index, resilience score or governance score, and no multipliers such as "2.5x". Describe the work with the counts and shares given, in plain words. Name the tiers by the names given, never by number. When you describe a tier, put its description in brackets after its name, and never use more than one colon in a sentence.';
+  'Never use scores, indexes or ratios, and never use any of these terms or anything like them: delegation depth, DDS, output throughput, output quality, output quality index, output transformation, OTI, resilience score, ORS, PSR, friction, high-friction, Tier 1, Tier 2, Tier 3, routine admin, routine single-step, high-stakes or high stakes. No multipliers (a number followed by x). Describe the work with the counts and shares given, in plain words. Name the tiers only by the names given, never by number. When you describe a tier, put its description in brackets after its name. The largest kind of work is stated in the data: never call a smaller share "mostly". Write percentages as figures with a % sign, never as word fractions such as "a quarter" or "half". Never use a colon as a dash, and never use more than one colon in a sentence. Never judge a kind of work as good or bad, passive or valuable. Never give a reason for a figure that the data does not state.';
 
-/** The three tiers as this customer names them, with a share of the total each, for the facts. */
+/** The three tiers as this customer names them, with a share of the total each, for the facts. Shares add up to 100. */
 export function tierLines(names: TierNames | null | undefined, counts: { 1: number; 2: number; 3: number }): string[] {
   const t = tierNamesOr(names);
-  const total = counts[1] + counts[2] + counts[3];
-  const share = (n: number) => (total > 0 ? ` (${Math.round((n / total) * 100)}% of tasks)` : '');
-  return [
-    `${t.t1} (single answers and routine tasks): ${counts[1]}${share(counts[1])}`,
-    `${t.t2} (whole pieces of work): ${counts[2]}${share(counts[2])}`,
-    `${t.t3} (the deepest work, multi-step and high stakes): ${counts[3]}${share(counts[3])}`,
+  const c: [number, number, number] = [counts[1], counts[2], counts[3]];
+  const shares = wholeShares(c);
+  const share = (i: number) => (shares ? ` (${shares[i]}% of tasks)` : '');
+  const lines = [
+    `${t.t1} (quick, single tasks): ${briefingCount(c[0])}${share(0)}`,
+    `${t.t2} (whole pieces of work): ${briefingCount(c[1])}${share(1)}`,
+    `${t.t3} (the deepest work): ${briefingCount(c[2])}${share(2)}`,
   ];
+  const largest = largestTierLine([t.t1, t.t2, t.t3], c);
+  if (largest) lines.push(largest);
+  return lines;
 }
 
 /**
@@ -42,7 +47,7 @@ export async function producedLine(userIds: string[] | null, since: number, unti
   const measured = sessions.filter(s => s.produced !== null);
   if (measured.length === 0) return 'Sessions that produced something: not measured in this period.';
   const produced = measured.filter(s => s.produced).length;
-  return `Sessions that produced something (a file saved, sent or published, an artifact, or a file listed on a reply): ${produced} of the ${measured.length} sessions where it could be seen (${Math.round((produced / measured.length) * 100)}%).`;
+  return `Sessions that produced something (a file saved, sent or published, an artifact, or a file listed on a reply): ${briefingCount(produced)} of the ${briefingCount(measured.length)} sessions where it could be seen (${Math.round((produced / measured.length) * 100)}%).`;
 }
 
 /** The admin's floor for a department's share of meaningful or frontier work, as the Overview reads it. */

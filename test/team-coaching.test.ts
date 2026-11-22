@@ -91,10 +91,10 @@ describe('what the plan says', () => {
     expect(workOn[0]).toBe('The commonest kinds of work were feature build and bug fixing: 50% of sessions each.');
   });
 
-  it('names the model of single-answer sessions as the Model mix does, not its raw id', () => {
+  it('says nothing about the model of single-answer sessions: there is no action behind it', () => {
     const t = team({ costlyOnSimple: { model: 'claude-opus-4-1-20250805', sessions: 12 } });
     const { workOn } = teamParts(t, figures(t));
-    expect(workOn.join(' ')).toContain('More single-answer sessions ran on Claude Opus 4.1 than on any other model: 12 sessions.');
+    expect(workOn.join(' ')).not.toContain('single-answer sessions ran on');
   });
 
   it('puts finding out what stopped people first when most have hardly used it', () => {

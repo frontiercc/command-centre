@@ -79,7 +79,6 @@ export async function generateCioBriefing(
   }
   const totalTier = tierCounts[1] + tierCounts[2] + tierCounts[3];
 
-  // Average DDS and OTI
   // Confirmed capability creation events this month
   const capRows = await client
     .select({ cnt: sql<number | string>`count(*)` })

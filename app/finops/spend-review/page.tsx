@@ -8,7 +8,7 @@ import Link from 'next/link';
 import { useSearchParams } from 'next/navigation';
 import TopBar from '@/components/layout/TopBar';
 import LoadingSpinner from '@/components/shared/LoadingSpinner';
-import { gapPct, routeRank } from '@/lib/finance/spend-review-format';
+import { gapPct, routeRank, usdWhole } from '@/lib/finance/spend-review-format';
 import { MonthPicker, monthOptions, money, pct, ukDate, LimitsNotice, LimitBar, UpdatedLine, type LimitsStatus } from '@/components/spend-review/shared';
 import { PageBody, Toolbar, Panel, PanelFoot, Strip, Figure, T, B, Tag, Chip, Notice, Muted, Segmented, cx } from '@/components/precision/ui';
 import { SURFACE_COLOR, PRODUCT_COLOR } from '@/lib/ui/chart-colours';
@@ -348,7 +348,7 @@ function BetterRoutes({ people, period, openai }: { people: Person[]; period: st
                     </td>
                     <td className={T.tdRight}>
                       {r.estSavingUsd !== null
-                        ? <span className="text-[#0A0A0A]">≈ {money(r.estSavingUsd)}</span>
+                        ? <span className="text-[#0A0A0A]">≈ {usdWhole(r.estSavingUsd)}</span>
                         : <span className="text-[12px] text-[#8F8F8F]">No saving estimate</span>}
                     </td>
                   </tr>
@@ -366,9 +366,7 @@ function BetterRoutes({ people, period, openai }: { people: Person[]; period: st
         </div>
       )}
       <PanelFoot>
-        One row per person: their largest saving that colleagues&apos; results back up, else their largest untested trial, else the route on their biggest work.
-        {' '}Savings are estimates: this month&apos;s sessions repriced at list price, a ceiling rather than a promise.
-        {' '}Open a person for all their routes and what colleagues do.
+        Savings are estimates: this month&apos;s sessions repriced at list price.
       </PanelFoot>
     </Panel>
   );
@@ -651,9 +649,9 @@ function SpendReviewIndex() {
                 />
                 <Figure
                   label="Where it sits"
-                  value={<>{s.halfSpendPeople ?? s.people}<span className="text-[14px] font-normal text-[#4D4D4D] tracking-normal"> {(s.halfSpendPeople ?? s.people) === 1 ? 'person' : 'people'}</span></>}
+                  value={<>{s.people.toLocaleString('en-GB')}<span className="text-[14px] font-normal text-[#4D4D4D] tracking-normal"> {s.people === 1 ? 'person' : 'people'} spent it</span></>}
                   sub={s.halfSpendPeople !== null
-                    ? `${s.halfSpendPeople === 1 ? 'makes' : 'make'} up half, across ${s.people}`
+                    ? `${s.halfSpendPeople.toLocaleString('en-GB')} of them spent 50%.`
                     : 'Too few people with spend to split'}
                 />
                 <Figure

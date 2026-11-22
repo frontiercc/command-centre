@@ -3,6 +3,7 @@
 
 import { productFactsBlock, PRODUCT_NAMING_RULE } from '@/lib/pulse/briefings/product-facts';
 import { DESCRIBE_NOT_SCORE_RULE } from '@/lib/pulse/briefings/described-facts';
+import { briefingCount } from '@/lib/pulse/briefings/format';
 
 export interface DeptBriefingContext {
   dept_name: string;
@@ -47,8 +48,8 @@ export function buildDeptBriefingUserMessage(ctx: DeptBriefingContext): string {
 Period: ${ctx.period_label}
 
 Data:
-- Active users: ${ctx.active_users}
-- Tasks Claude judged: ${ctx.total_classified}
+- Active users: ${briefingCount(ctx.active_users)}
+- Tasks Claude judged: ${briefingCount(ctx.total_classified)}
 ${ctx.tier_lines.map(l => `- ${l}`).join('\n')}
 - ${ctx.produced_line}
 - New ways of working confirmed: ${ctx.confirmed_capabilities}

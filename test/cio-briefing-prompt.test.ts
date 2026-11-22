@@ -47,8 +47,8 @@ describe('buildCioBriefingUserMessage — dept process opportunities', () => {
 describe('buildCioBriefingUserMessage — describes, never scores', () => {
   it('gives the tiers by name with their shares, what was produced and the departments below the floor', () => {
     const msg = buildCioBriefingUserMessage(base);
-    expect(msg).toContain('Administrative (single answers and routine tasks): 204 (60% of tasks)');
-    expect(msg).toContain('Frontier (the deepest work, multi-step and high stakes): 34 (10% of tasks)');
+    expect(msg).toContain('Administrative (quick, single tasks): 204 (60% of tasks)');
+    expect(msg).toContain('Frontier (the deepest work): 34 (10% of tasks)');
     expect(msg).toContain('40 of the 160 sessions where it could be seen (25%)');
     expect(msg).toContain('Departments below the floor of 33% meaningful or frontier work, 1 of 6: Finance (21%).');
   });

@@ -211,12 +211,12 @@ export default function OverviewTab({
           <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 [&>*]:border-[#EAEAEA] [&>*]:border-t [&>*]:border-l -mt-px -ml-px">
             {[
               { label: 'Classified, total', value: stats.classifiedTotal },
-              { label: 'Classified this week', value: stats.classifiedThisWeek },
+              { label: 'Classified, last 7 days', value: stats.classifiedThisWeek },
               { label: 'Failed classifications', value: stats.failedTotal },
               { label: 'Briefings generated', value: stats.briefingsTotal },
               { label: 'Pulse events', value: stats.eventsTotal },
             ].map(s => (
-              <Figure key={s.label} label={s.label} value={s.value.toLocaleString()} />
+              <Figure key={s.label} label={s.label} value={s.value.toLocaleString('en-GB')} />
             ))}
           </div>
         </Panel>

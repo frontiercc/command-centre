@@ -15,6 +15,7 @@ import { schema } from '@/lib/db/schema';
 import { MECHANISM_TASK_TYPES } from '@/lib/finance/model-efficiency';
 import type { WorkItem } from '@/lib/pulse/frontier-view';
 import { isWorkPulseSurface } from '@/lib/pulse/work-surfaces';
+import { tierNamesOr } from '@/lib/pulse/tier-names';
 
 const TOOL_LABELS = new Set([...MECHANISM_TASK_TYPES, 'capability_creation']);
 
@@ -37,8 +38,9 @@ export function describeWork(item: WorkItem, tierNames?: { t1: string; t2: strin
   ].filter(Boolean);
   if (out.length) parts.push(out.join(', '));
   else if (f.producedOutput === true) parts.push('produced a file');
-  const tier = tierNames ? [tierNames.t1, tierNames.t2, tierNames.t3][item.tier - 1] : undefined;
-  return `${kindText(item.taskType)} (${tier ?? `Tier ${item.tier}`})${parts.length ? `: ${parts.join(', ')}` : ''}`;
+  const t = tierNamesOr(tierNames);
+  const tier = [t.t1, t.t2, t.t3][item.tier - 1] ?? t.t3;
+  return `${kindText(item.taskType)} (${tier})${parts.length ? `: ${parts.join(', ')}` : ''}`;
 }
 
 export interface DeepWorkSummary {
@@ -135,13 +137,16 @@ export function deepWorkLines(s: DeepWorkSummary, deepestTier = 'Frontier'): str
     lines.push(`Main kinds of ${deepestTier} work: ${s.topKinds.map(k => `${kindText(k.kind)} (${k.sessions} ${k.sessions === 1 ? 'session' : 'sessions'}, ${k.people} ${k.people === 1 ? 'person' : 'people'})`).join('; ')}`);
   }
   const capTotal = s.newCapabilities.reduce((a, c) => a + c.count, 0);
+  // Only named kinds are listed: work with no kind recorded is in the total but never listed
+  // as a kind, so a briefing cannot report "39 unspecified items".
+  const named = s.newCapabilities.filter(c => c.kind !== 'unspecified work');
   lines.push(capTotal === 0
-    ? 'New capabilities detected: none'
-    : `New capabilities detected by the classifier: ${capTotal}, of which ${s.newCapabilitiesConfirmed} confirmed by a person so far. By kind of work: ${s.newCapabilities.map(c => {
+    ? 'New ways of working Claude spotted: none'
+    : `New ways of working Claude spotted: ${capTotal}, of which ${s.newCapabilitiesConfirmed} confirmed by a person so far.${named.length ? ` By kind of work: ${named.map(c => {
       const open = c.count - c.confirmed;
-      const status = [c.confirmed ? `${c.confirmed} confirmed` : null, open ? `${open} unreviewed` : null].filter(Boolean).join(', ');
+      const status = [c.confirmed ? `${c.confirmed} confirmed` : null, open ? `${open} not yet reviewed` : null].filter(Boolean).join(', ');
       return `${kindText(c.kind)} (${status})`;
-    }).join('; ')}`);
-  if (s.pendingCapabilities > 0) lines.push(`Capabilities awaiting review: ${s.pendingCapabilities}`);
+    }).join('; ')}` : ''}`);
+  if (s.pendingCapabilities > 0) lines.push(`New ways of working awaiting review: ${s.pendingCapabilities}`);
   return lines;
 }

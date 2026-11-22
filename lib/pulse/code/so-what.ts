@@ -464,14 +464,13 @@ export function rarelyUsedCard(r: RarelyUsed, decision: DecisionRecord | undefin
   body.push(r.costAMonth === null
     ? 'What that costs is not shown because no seat price is set on Admin → System.'
     : `At the Claude seat price an admin has set, that is an estimated $${Math.round(r.costAMonth).toLocaleString('en-GB')} a month (an estimate: the seat price times these people).`);
-  body.push('This counts people, not seats. Seats are held for the whole organisation, so the page cannot say how many a team holds.');
   return foundCard(
     'rarely_used',
     'rarely_used',
     EVERYONE,
     `Decide what to do about ${r.people} ${r.people === 1 ? 'person who has' : 'people who have'} hardly used it.`,
     body,
-    'Counted from sessions, over the last 90 days. No card here recommends anything about a person\'s job.',
+    'Counted from sessions, over the last 90 days.',
     { label: 'The number of people who have hardly used it', value: r.people, unit: '', lowerIsBetter: true },
     decision,
     nowS,
@@ -479,14 +478,14 @@ export function rarelyUsedCard(r: RarelyUsed, decision: DecisionRecord | undefin
 }
 
 /** A team where one or two people hold all the handed-over work. */
-export function keyPeopleCard(k: KeyPeople, decision: DecisionRecord | undefined, nowS: number, w: GroupWords = groupWords()): Card {
+export function keyPeopleCard(k: KeyPeople, decision: DecisionRecord | undefined, nowS: number, w: GroupWords = groupWords(), tool = 'Claude Code'): Card {
   return foundCard(
     'key_people',
     'key_people',
     k.department,
     `Spread what ${k.holders === 1 ? 'one person' : 'two people'} in ${k.department} ${k.holders === 1 ? 'knows' : 'know'}.`,
     [
-      `${Math.round(k.share * 100)}% of the ${w.deep} in this team of ${k.people} comes from ${k.holders === 1 ? 'one person' : 'two people'}.`,
+      `${Math.round(k.share * 100)}% of the ${w.deep} done by the ${k.people.toLocaleString('en-GB')} ${k.people === 1 ? 'person' : 'people'} in ${k.department} who use ${tool} comes from ${k.holders === 1 ? 'one person' : 'two people'}.`,
       'If they leave, the team loses it.',
     ],
     `Counted from sessions over the last ${WINDOW_DAYS} days. The people are named on the team's coaching plan.`,
@@ -505,10 +504,12 @@ export interface BuildInput {
   nowS: number;
   /** Developer Pulse's tier names; the shipped names when left out. */
   tierNames?: TierNames | null;
+  /** The tool the people use, as the page's view names it; Claude Code when left out. */
+  tool?: string;
 }
 
 /** The page: the question at the top, and a card for each choice. */
-export function buildSoWhat({ groups, decisions, asked, finds, nowS, tierNames }: BuildInput): SoWhat {
+export function buildSoWhat({ groups, decisions, asked, finds, nowS, tierNames, tool }: BuildInput): SoWhat {
   const w = groupWords(tierNames);
   const byKey = new Map(decisions.map(d => [`${d.card}:${d.department}`, d]));
   const teams = groups.map(g => g.department);
@@ -529,7 +530,7 @@ export function buildSoWhat({ groups, decisions, asked, finds, nowS, tierNames }
     const expand = expandCard(finds.waves, byKey.get(`expand:${EVERYONE}`), nowS, w);
     if (expand) found.push(expand);
     if (finds.rarelyUsed) found.push(rarelyUsedCard(finds.rarelyUsed, byKey.get(`rarely_used:${EVERYONE}`), nowS));
-    for (const k of finds.keyPeople) found.push(keyPeopleCard(k, byKey.get(`key_people:${k.department}`), nowS, w));
+    for (const k of finds.keyPeople) found.push(keyPeopleCard(k, byKey.get(`key_people:${k.department}`), nowS, w, tool));
     // At most MAX_FOUND undecided cards; a decided card is never dropped by the limit, so its
     // follow-up still comes back (as on Work Pulse).
     const seen = new Set<string>();

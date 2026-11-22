@@ -43,27 +43,27 @@ export default function CodeProductivityStrip({ metrics }: { metrics: CodeMetric
       label: 'Engaged time · 30 days',
       value: hasAny ? formatDuration(engagedTotal) : null,
       sublabel: 'Active AI-assisted engineering time',
-      hint: `${formatDuration(m?.active_time_user_s ?? 0)} interacting · ${formatDuration(m?.active_time_cli_s ?? 0)} processing`,
+      hint: `${formatDuration(m?.active_time_user_s ?? 0)} people at the keyboard · ${formatDuration(m?.active_time_cli_s ?? 0)} Claude working`,
     },
     {
       label: 'Code output · 30 days',
-      value: hasAny ? `+${(m?.lines_added ?? 0).toLocaleString()}` : null,
+      value: hasAny ? `+${(m?.lines_added ?? 0).toLocaleString('en-GB')}` : null,
       sublabel: 'Lines added with Claude Code',
-      hint: `−${(m?.lines_removed ?? 0).toLocaleString()} removed`,
+      hint: `−${(m?.lines_removed ?? 0).toLocaleString('en-GB')} removed`,
     },
     {
       label: 'Shipping · 30 days',
       // Commits come from session data (Claude Code and Codex), not the
       // metrics stream, so they show as soon as there are any.
-      value: hasAny || commits > 0 ? String(commits) : null,
+      value: hasAny || commits > 0 ? commits.toLocaleString('en-GB') : null,
       sublabel: 'AI-assisted commits',
-      hint: `${prs} pull request${prs === 1 ? '' : 's'} opened`,
+      hint: `${prs.toLocaleString('en-GB')} pull request${prs === 1 ? '' : 's'} opened`,
     },
     {
       label: 'Edit acceptance · 30 days',
       value: acceptRate === null ? null : `${acceptRate}%`,
       sublabel: 'Edits accepted vs rejected',
-      hint: decisions > 0 ? `${accepts} accepted · ${rejects} rejected` : 'No edit decisions in the window',
+      hint: decisions > 0 ? `${accepts.toLocaleString('en-GB')} accepted · ${rejects.toLocaleString('en-GB')} rejected` : 'No edit decisions in the window',
     },
   ];
 

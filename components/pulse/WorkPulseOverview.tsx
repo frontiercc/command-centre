@@ -11,13 +11,13 @@
 import Link from 'next/link';
 import { useEffect, useState, type ReactNode } from 'react';
 import { Tag, B, Muted, LOAD_FAILED } from '@/components/precision/ui';
-import { DASH, shareWords, cap } from '@/components/dashboard/QuestionCard';
+import { DASH, shareWords, sharePair, cap } from '@/components/dashboard/QuestionCard';
 import { cleanTitle } from '@/components/pulse/CapabilityLog';
 import type { ByProductData } from '@/components/pulse/ByProductPanel';
 import type { SessionOutputReport } from '@/components/pulse/SessionOutputCard';
 import type { HumanTimeSummary } from '@/components/pulse/HumanTimeCard';
 import type { ActNextItem, DeptProcessBoxItem } from '@/components/pulse/ActNextPanel';
-import { depthColumns, depthSentence, DepthChart, DepthSwitch, type DepthWindow, type TierWeek } from '@/components/pulse/DepthChart';
+import { depthColumns, depthDirection, depthSentence, DepthChart, DepthSwitch, type DepthWindow, type TierWeek } from '@/components/pulse/DepthChart';
 import { deepWords, tierNamesOr, type TierNames } from '@/lib/pulse/tier-names';
 import { FAMILY_LABEL, PRODUCT_FAMILY, PRODUCT_LABEL, type WorkProduct } from '@/lib/pulse/cowork/products';
 import { NEW_WAYS_OF_WORKING } from '@/lib/pulse/cowork/coaching-words';
@@ -107,14 +107,21 @@ function numberWord(n: number): string {
 export type OrgDepthWindow = 13 | 26 | 52;
 const ORG_WINDOWS: DepthWindow[] = [13, 26, 52];
 
-interface DeptTrend { dept: string; thenVsNow: { then: number; now: number; deltaPp: number; arrow: 'up' | 'flat' | 'down' } | null }
+/** The weeks each end of a then-vs-now compares (lib/pulse/delegation.ts: up to 4, half the weeks with data). */
+const weeksWord = (dataWeeks?: number) => { const k = Math.max(1, Math.min(4, Math.floor((dataWeeks ?? 8) / 2))); return k === 1 ? 'week' : `${k} weeks`; };
+interface DeptTrend { dept: string; thenVsNow: { then: number; now: number; deltaPp: number; arrow: 'up' | 'flat' | 'down'; dataWeeks?: number } | null }
 
 export function BiggerJobs({ weeks, departments, product, window, onWindow, names }: {
   weeks: TierWeek[]; departments: DeptTrend[]; product: string; window: OrgDepthWindow; onWindow: (w: OrgDepthWindow) => void; names?: TierNames;
 }) {
   const t = tierNamesOr(names);
   const cols = depthColumns(weeks, window, Math.floor(Date.now() / 1000));
-  const falling = departments.filter(d => d.thenVsNow?.arrow === 'down').sort((a, b) => a.thenVsNow!.deltaPp - b.thenVsNow!.deltaPp);
+  // Only departments moving against the organisation: falling when it rises, rising when it falls.
+  const dir = depthDirection(cols, window);
+  const against = dir === 'up' ? 'down' : dir === 'down' ? 'up' : null;
+  const falling = against === null ? [] : departments
+    .filter(d => d.thenVsNow?.arrow === against)
+    .sort((a, b) => Math.abs(b.thenVsNow!.deltaPp) - Math.abs(a.thenVsNow!.deltaPp));
   const others = falling.length === 1 ? ` ${falling[0].dept} is going the other way.` : falling.length > 1 ? ` ${falling.length} departments are going the other way.` : '';
   return (
     <Frame
@@ -131,8 +138,8 @@ export function BiggerJobs({ weeks, departments, product, window, onWindow, name
           {falling.slice(0, 3).map(d => (
             <div key={d.dept} className="flex gap-2.5 items-center py-1 text-[13px]">
               <Link href={`/pulse/dept?dept=${encodeURIComponent(d.dept)}`} className="text-[#0A0A0A] hover:text-[#1F6F8B]">{d.dept}</Link>
-              <span className="text-[#777777]">{deepWords(names)} work is now {words(d.thenVsNow!.now)} of tasks</span>
-              <span className="ml-auto text-[#333333]">down from {words(d.thenVsNow!.then)}</span>
+              <span className="text-[#777777]">{deepWords(names)} work was {sharePair(d.thenVsNow!.now, d.thenVsNow!.then)[0]} of tasks in the last {weeksWord(d.thenVsNow!.dataWeeks)}</span>
+              <span className="ml-auto text-[#333333]">{against} from {sharePair(d.thenVsNow!.now, d.thenVsNow!.then)[1]} in the first {weeksWord(d.thenVsNow!.dataWeeks)}</span>
             </div>
           ))}
         </div>
@@ -279,8 +286,9 @@ export function Products({ data, names, loading = false }: { data: ByProductData
 
 /* ── 7: New ways of working ─────────────────────────────────────── */
 
-interface Candidate { id: number; title: string; detected_at: number; department: string | null; display_name: string | null }
+interface Candidate { id: number; title: string; detected_at: number; department: string | null; display_name: string | null; description?: string | null }
 
+/** `confirmedRecent` is the number confirmed in the last 30 days, by the date each was confirmed (the signals panel's figure). */
 export function NewWaysOfWorking({ confirmedTotal, confirmedRecent, vendor }: { confirmedTotal: number | null; confirmedRecent: number; vendor: Vendor }) {
   const [list, setList] = useState<Candidate[] | null>(null);
   const [busy, setBusy] = useState<number | null>(null);
@@ -295,14 +303,14 @@ export function NewWaysOfWorking({ confirmedTotal, confirmedRecent, vendor }: { 
     load();
   };
   const oldest = [...list].sort((a, b) => a.detected_at - b.detected_at);
-  const days = (s: number) => { const d = Math.floor((Date.now() / 1000 - s) / 86400); return d <= 0 ? 'today' : `${d} ${d === 1 ? 'day' : 'days'}`; };
+  const days = (s: number) => { const d = Math.floor((Date.now() / 1000 - s) / 86400); return d <= 0 ? 'under a day' : `${d} ${d === 1 ? 'day' : 'days'}`; };
   return (
     <Frame
       title="New ways of working"
-      period="Last quarter"
-      answer={list.length > 0
-        ? <><b>{list.length}</b> {list.length === 1 ? 'is' : 'are'} waiting for your review. {confirmedRecent === 0 ? 'None were' : `${confirmedRecent} ${confirmedRecent === 1 ? 'was' : 'were'}`} confirmed in the last quarter.</>
-        : <>Nothing is waiting for review. {confirmedRecent === 0 ? 'None were' : `${confirmedRecent} ${confirmedRecent === 1 ? 'was' : 'were'}`} confirmed in the last quarter.</>}
+      answer={<>
+        {list.length > 0 ? <><b>{list.length.toLocaleString('en-GB')}</b> {list.length === 1 ? 'is' : 'are'} waiting for your review.</> : <>Nothing is waiting for review.</>}
+        {' '}{confirmedRecent === 0 ? 'None were' : `${confirmedRecent.toLocaleString('en-GB')} ${confirmedRecent === 1 ? 'was' : 'were'}`} confirmed in the last 30 days.
+      </>}
       note={NEW_WAYS_OF_WORKING}
     >
       {oldest.length > 0 && (
@@ -310,8 +318,8 @@ export function NewWaysOfWorking({ confirmedTotal, confirmedRecent, vendor }: { 
           <div className="text-[12px] font-semibold text-[#333333] mb-0.5">Waiting for review, oldest first</div>
           {oldest.slice(0, 3).map(c => (
             <div key={c.id} className="flex items-center gap-2.5 py-1.5 border-b border-[#F2F2F2] last:border-b-0 text-[13px]">
-              <span className="min-w-0 truncate text-[#0A0A0A]">{cleanTitle(c.title)}</span>
-              <span className="text-[#777777] whitespace-nowrap">{c.department ? `${c.department} · ` : ''}{days(c.detected_at)}</span>
+              <span className="min-w-0 truncate text-[#0A0A0A]" title={c.description ?? undefined}>{c.description ?? cleanTitle(c.title)}</span>
+              <span className="text-[#777777] whitespace-nowrap">{c.display_name ? `${c.display_name} · ` : ''}{c.department ? `${c.department} · ` : ''}{days(c.detected_at)} ago</span>
               <span className="ml-auto flex gap-1.5 shrink-0">
                 <button type="button" disabled={busy === c.id} onClick={() => act(c.id, 'confirm')} className={`${B.secondary} !py-0.5 !px-2 !text-[12px]`}>Confirm</button>
                 <button type="button" disabled={busy === c.id} onClick={() => act(c.id, 'dismiss')} className={`${B.secondary} !py-0.5 !px-2 !text-[12px]`}>Dismiss</button>
@@ -322,7 +330,7 @@ export function NewWaysOfWorking({ confirmedTotal, confirmedRecent, vendor }: { 
       )}
       <div className="mt-1.5 text-[13px]">
         {oldest.length > 3 && <><Link href="/admin/pulse?tab=overview" className={linkCls}>and {oldest.length - 3} more</Link> · </>}
-        <Link href="#capability-log" className={linkCls}>{confirmedTotal ?? 0} confirmed so far</Link>
+        <Link href="#capability-log" className={linkCls}>{(confirmedTotal ?? 0).toLocaleString('en-GB')} confirmed in all</Link>
       </div>
     </Frame>
   );

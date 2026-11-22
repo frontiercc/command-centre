@@ -14,7 +14,7 @@ export function formatTokens(n: number): string {
 }
 
 export function formatCurrency(n: number): string {
-  if (n >= 1000) return `$${Math.round(n).toLocaleString()}`;
+  if (n >= 1000) return `$${Math.round(n).toLocaleString('en-GB')}`;
   if (n >= 100) return `$${n.toFixed(0)}`;
   return `$${n.toFixed(2)}`;
 }
@@ -149,7 +149,7 @@ export default function CodeStatStrip({ metrics, githubRepos, view = 'claude', s
         ? 'Shown only to the person, admins and managers'
         : metrics?.spend_usd === null && (metrics.input_tokens + metrics.output_tokens) > 0
           ? 'Models seen have no price set, see rates config'
-          : `${formatTokens(metrics?.input_tokens ?? 0)} in · ${formatTokens(metrics?.output_tokens ?? 0)} out`,
+          : `${formatTokens(metrics?.input_tokens ?? 0)} tokens in · ${formatTokens(metrics?.output_tokens ?? 0)} out`,
       pending: spendHidden ? 'Hidden' : metrics && metrics.spend_usd === null ? 'Unpriced' : undefined,
     },
     {
@@ -163,7 +163,7 @@ export default function CodeStatStrip({ metrics, githubRepos, view = 'claude', s
     githubRepos != null
       ? {
           label: 'Repos active · 30 days (GitHub)',
-          value: String(githubRepos.count30d),
+          value: githubRepos.count30d.toLocaleString('en-GB'),
           sublabel: githubRepos.names30d.length > 0
             ? (githubRepos.count30d > githubRepos.names30d.length
                 ? `${githubRepos.names30d.join(' · ')} · +${githubRepos.count30d - githubRepos.names30d.length} more`
@@ -184,16 +184,16 @@ export default function CodeStatStrip({ metrics, githubRepos, view = 'claude', s
             value: null,
             pending: 'Not captured',
             sublabel: 'Codebases with coding activity',
-            hint: `${metrics.session_count} session${metrics.session_count === 1 ? '' : 's'} · no repo attribution in these sessions`,
+            hint: `${metrics.session_count.toLocaleString('en-GB')} session${metrics.session_count === 1 ? '' : 's'} · no repo attribution in these sessions`,
           }
         : {
             label: 'Repos active · 30 days',
-            value: metrics == null ? null : String(metrics.repo_count),
+            value: metrics == null ? null : metrics.repo_count.toLocaleString('en-GB'),
             sublabel: 'Codebases with coding activity',
-            hint: `${metrics?.session_count ?? 0} session${(metrics?.session_count ?? 0) === 1 ? '' : 's'} · ${metrics?.commit_count ?? 0} AI-assisted commit${(metrics?.commit_count ?? 0) === 1 ? '' : 's'}`,
+            hint: `${(metrics?.session_count ?? 0).toLocaleString('en-GB')} session${(metrics?.session_count ?? 0) === 1 ? '' : 's'} · ${(metrics?.commit_count ?? 0).toLocaleString('en-GB')} AI-assisted commit${(metrics?.commit_count ?? 0) === 1 ? '' : 's'}`,
           },
     {
-      label: 'Cache efficiency',
+      label: 'Cache efficiency · 30 days',
       value: metrics?.cache_hit_ratio == null ? null : `${Math.round(metrics.cache_hit_ratio * 100)}%`,
       sublabel: 'Context served from cache, not re-billed',
       hint: 'Higher is cheaper: cache reads cost about 10% of fresh input',

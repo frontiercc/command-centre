@@ -125,8 +125,6 @@ export function buildCrosswalk(s: CodeSignals): FrameworkBox[] {
       cells: [
         codexGap({ label: 'Edit acceptance rate', value: pct(accRate), fit: 'proxy', space: 'performance',
           note: 'Trust signal, not a change-failure rate.' }),
-        { label: 'Friction index', value: pct(s.frictionIndex), fit: 'proxy', space: 'efficiency',
-          note: 'Share of tool actions that failed: a coaching signal.' },
       ],
     },
     {

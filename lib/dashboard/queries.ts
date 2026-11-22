@@ -13,6 +13,7 @@
 // count rows, rather than COUNT(DISTINCT user_id) over every prompt: same
 // figures, without sorting every prompt in the window.
 import { PC_MESSAGE } from '@/lib/pulse/classification-message';
+import { AUTOMATED_WORK_TYPE } from '@/lib/pulse/code/automated-runs';
 import { sql } from 'drizzle-orm';
 import { getTypedClient } from '@/lib/db/client';
 import { kindExpr, vendorClause, vendorExpr, codeSessionVendorClause, productExpr } from './product-sql';
@@ -123,7 +124,7 @@ export async function getSessionsPerWeekByProduct(now = nowS()): Promise<Record<
   const avg = (count: number, firstSeen: number | null): number => {
     if (!count || firstSeen == null) return 0;
     const weeks = Math.min(4, Math.max(1, Math.ceil((now - firstSeen) / WEEK)));
-    return Math.round((count / weeks) * 10) / 10;
+    return Math.round(count / weeks);
   };
 
   const [promptRows, codeRows] = await Promise.all([
@@ -159,7 +160,33 @@ export async function getSessionsPerWeekByProduct(now = nowS()): Promise<Record<
   };
   for (const r of promptRows) put(r.kind as WorkKind, r.vendor, r.sessions, r.first_at);
   for (const r of codeRows) put('code', r.vendor, r.sessions, r.first_at);
-  for (const k of KINDS) out[k].total = Math.round((out[k].claude + out[k].openai) * 10) / 10;
+  for (const k of KINDS) out[k].total = out[k].claude + out[k].openai;
+  return out;
+}
+
+/**
+ * The automated runs inside the Code box's figure: sessions a script started (labelled by the rule in
+ * lib/pulse/code/automated-runs.ts), averaged a week the same way, so the box can say how many of its
+ * sessions were not typed by a person.
+ */
+export async function getAutomatedCodeRunsPerWeek(now = nowS()): Promise<VendorSplit> {
+  const windowStart = now - 28 * DAY;
+  const WEEK = 7 * DAY;
+  const rows = await rawAll<{ vendor: string; runs: number | string; first_at: number | string | null }>(sql`
+    SELECT CASE WHEN ${sql.raw(codeSessionVendorClause('openai', 'css.'))} THEN 'openai' ELSE 'claude' END AS vendor,
+           COUNT(CASE WHEN css.last_at >= ${windowStart} THEN 1 END) AS runs,
+           MIN(css.first_at) AS first_at
+    FROM code_session_stats css
+    JOIN code_session_classifications c ON c.session_id = css.session_id AND c.work_type = ${AUTOMATED_WORK_TYPE}
+    GROUP BY 1
+  `);
+  const out: VendorSplit = { total: 0, claude: 0, openai: 0 };
+  for (const r of rows) {
+    const firstAt = r.first_at == null ? null : Number(r.first_at);
+    const weeks = firstAt == null ? 1 : Math.min(4, Math.max(1, Math.ceil((now - firstAt) / WEEK)));
+    out[r.vendor === 'openai' ? 'openai' : 'claude'] = Math.round(Number(r.runs) / weeks);
+  }
+  out.total = out.claude + out.openai;
   return out;
 }
 

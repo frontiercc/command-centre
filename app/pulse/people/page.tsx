@@ -56,7 +56,7 @@ function PeopleInner() {
         {error ? <Notice tone="error">{error}</Notice> : !data ? <LoadingSpinner /> : (
           <Panel
             title={title}
-            badge={<Tag tone="measured">Measured</Tag>}
+            badge={<Tag tone="neutral">AI-judged</Tag>}
             subtitle={`${day(data.start)} to ${day(data.end - 1)}${data.departmentOnly ? ` · ${data.departmentOnly} only` : ''}`}
             flush
           >

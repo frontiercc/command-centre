@@ -27,6 +27,8 @@ interface SessionRow {
   repo: string | null;
   git_branch: string | null;
   first_at: number;
+  /** Measured active time in seconds; null when not measured. */
+  active_secs?: number | string | null;
   last_at: number;
   user_msg_count: number;
   assistant_turns: number;
@@ -68,14 +70,23 @@ interface UserListRow {
   products?: string[];
 }
 
-function formatDuration(first: number, last: number): string {
-  const mins = Math.max(1, Math.round((last - first) / 60));
-  if (mins < 60) return `${mins}m`;
-  return `${Math.floor(mins / 60)}h ${mins % 60}m`;
+/**
+ * How long a session was worked on: its measured active time (gaps of 30 minutes or less), never
+ * the time it stayed open. With no active time measured, the dates it spanned.
+ */
+function sessionLength(s: { first_at: number; last_at: number; active_secs?: number | string | null }): string {
+  if (s.active_secs !== null && s.active_secs !== undefined) {
+    const mins = Math.round(Number(s.active_secs) / 60);
+    if (mins < 1) return 'under 1m active';
+    if (mins < 60) return `${mins}m active`;
+    return `${Math.floor(mins / 60).toLocaleString('en-GB')}h ${mins % 60}m active`;
+  }
+  const a = formatDate(s.first_at), b = formatDate(s.last_at);
+  return a === b ? a : `${a} to ${b}`;
 }
 
 function formatDate(epoch: number): string {
-  return new Date(epoch * 1000).toLocaleDateString(undefined, { month: 'short', day: 'numeric' });
+  return new Date(epoch * 1000).toLocaleDateString('en-GB', { day: 'numeric', month: 'short' });
 }
 
 function CodeUsersContent() {
@@ -266,7 +277,7 @@ function CodeUsersContent() {
                               )}
                             </span>
                             <span className="block text-[13px] text-[#8F8F8F] tabular-nums">
-                              {s.repo ? `${formatDate(s.last_at)} · ` : ''}{formatDuration(s.first_at, s.last_at)} · {s.user_msg_count} prompts · {s.tool_use_count} actions
+                              {s.repo ? `${formatDate(s.last_at)} · ` : ''}{sessionLength(s)} · {s.user_msg_count.toLocaleString('en-GB')} prompts · {s.tool_use_count.toLocaleString('en-GB')} actions
                             </span>
                           </div>
                           <div className="shrink-0 text-right flex flex-col items-end gap-0.5">
@@ -274,7 +285,7 @@ function CodeUsersContent() {
                               {data.spendHidden ? 'hidden' : s.spend_usd === null ? (s.input_tokens + s.output_tokens === 0 ? 'not measured' : 'not priced') : formatCurrency(s.spend_usd)}
                             </span>
                             <span className="text-[13px] text-[#8F8F8F] tabular-nums">{formatTokens(s.input_tokens + s.output_tokens)} tokens</span>
-                            <Tag>{s.source === 'codex' ? 'Codex' : s.source === 'otel' ? 'OTel' : 'Agent'}</Tag>
+                            {s.source === 'codex' && <Tag>Codex</Tag>}
                           </div>
                         </li>
                       ))}

@@ -331,6 +331,12 @@ export async function buildOrgSummary(vendor: Vendor, quarterly: boolean) {
       }
     : null;
   const frontierHalfPeople = frontierHalfSplit ? frontierHalfSplit.claude + frontierHalfSplit.openai : halfOf(frontierByPerson);
+  // The share of frontier tasks those people actually did (at least half), so the card can say it exactly.
+  const topSum = (ns: number[], k: number) => ns.slice(0, k).reduce((x, y) => x + y, 0);
+  const frontierHalfTasks = frontierHalfSplit
+    ? topSum(frontierRows.filter(r => r.v === 'claude').map(r => r.n), frontierHalfSplit.claude)
+      + topSum(frontierRows.filter(r => r.v === 'openai').map(r => r.n), frontierHalfSplit.openai)
+    : topSum(frontierByPerson, frontierHalfPeople);
 
   // Tasks by depth over the same window, for the strip's share of real work.
   const windowTier = await rawGet<{ t1: number | string | null; t2: number | string | null; t3: number | string | null }>(client, sql`
@@ -342,6 +348,15 @@ export async function buildOrgSummary(vendor: Vendor, quarterly: boolean) {
       AND ${sql.raw(vendorClause(vendor, 'cm.'))}
   `);
 
+  // Retention deletes old prompts and their judgements, so a quarter can reach back past the
+  // oldest task still kept; the panel then says which weeks it really covers.
+  const keptRow = await rawGet<{ first_at: number | string | null }>(client, sql`
+    SELECT MIN(pc.msg_occurred_at) AS first_at FROM pulse_classifications pc WHERE pc.classifier_status = 'classified'
+  `);
+  const firstKept = keptRow?.first_at == null ? null : Number(keptRow.first_at);
+  // Only worth saying when at least a week of the window is missing.
+  const keptFrom = firstKept !== null && firstKept > bStart + 7 * 86400 ? firstKept : null;
+
   const dashboard = {
     window: quarterly ? 'quarter' as const : 'month' as const,
     weeks,
@@ -349,13 +364,20 @@ export async function buildOrgSummary(vendor: Vendor, quarterly: boolean) {
     deepPeople30d: Number(deepPeopleRow?.n ?? 0),
     deepPeopleWeeks: weeks.map((_, i) => deepPeopleByWeek.get(i) ?? 0),
     frontierPeople30d: frontierByPerson.length,
+    frontierTasks30d: frontierTotal,
+    frontierHalfShare: frontierTotal > 0 ? frontierHalfTasks / frontierTotal : null,
+    keptFrom,
     frontierHalfPeople: frontierTotal > 0 ? frontierHalfPeople : null,
     frontierHalfSplit,
     frontierTopShare: frontierTotal > 0 ? frontierByPerson[0] / frontierTotal : null,
     otiWeeks: await weekAvg('oti', 'user'),
     orsWeeks: await weekAvg('ors', 'function'),
     tierWeeks: weeks.map((_, i) => tierByWeek.get(i) ?? null),
-    priorTierCounts: { t1: Number(priorTier?.t1 ?? 0), t2: Number(priorTier?.t2 ?? 0), t3: Number(priorTier?.t3 ?? 0) },
+    // When retention has removed more than a week of the period before, there is too little left to
+    // compare with, so no comparison is given (the cards then show this period only).
+    priorTierCounts: firstKept !== null && firstKept > pStart + 7 * 86400
+      ? { t1: 0, t2: 0, t3: 0 }
+      : { t1: Number(priorTier?.t1 ?? 0), t2: Number(priorTier?.t2 ?? 0), t3: Number(priorTier?.t3 ?? 0) },
     capabilityWeeks: weeks.map((_, i) => capByWeek.get(i) ?? 0),
     capabilitiesRecent: Number(capCounts?.recent ?? 0),
     capabilitiesPending: Number(capCounts?.pending ?? 0),

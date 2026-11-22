@@ -142,7 +142,7 @@ export default function CapabilityQueue({ onCountChange }: CapabilityQueueProps)
       <div className="px-4 pt-3 pb-3 flex flex-col gap-1">
         <Muted>
           {queueTab === 'pending'
-            ? 'Confirm capability events to start tracking them. Dismiss false positives.'
+            ? 'Confirm the new ways of working that are real; dismiss the rest.'
             : 'Dismissed candidates. Restore any that were dismissed in error.'}
         </Muted>
         {msg && (
@@ -158,7 +158,7 @@ export default function CapabilityQueue({ onCountChange }: CapabilityQueueProps)
         <div className="px-4 pb-4">
           <Muted>
             {queueTab === 'pending'
-              ? 'No pending candidates. Capability events will appear here after the classifier runs.'
+              ? 'Nothing waiting for review.'
               : 'No dismissed candidates.'}
           </Muted>
         </div>

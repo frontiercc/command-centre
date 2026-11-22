@@ -124,10 +124,10 @@ export default function CollectorConnection({ address: initialAddress, token }: 
         <div className="flex flex-wrap items-start gap-2 py-1.5">
           <span className="w-[150px] shrink-0 text-[13px] text-[#4D4D4D]">Bearer token</span>
           <p className="m-0 min-w-0 flex-1 text-[13px] text-[#4D4D4D]">
-            Not shown here: this installation gives it to the collector only. It is
-            <code className="mx-1 font-mono">OTEL_ENDPOINT_SECRET</code>, kept where the collector&apos;s settings
+            Not shown here: this installation gives it to the collector only. It is{' '}
+            <code className="font-mono">OTEL_ENDPOINT_SECRET</code>, kept where the collector&apos;s settings
             are: in <code className="font-mono">.env</code> with Docker, in AWS Secrets Manager or in Azure Key Vault.
-            Replace <code className="mx-1 font-mono">{PLACEHOLDER}</code>with it below.
+            Replace <code className="font-mono">{PLACEHOLDER}</code> with it below.
           </p>
         </div>
       )}
@@ -151,9 +151,9 @@ export default function CollectorConnection({ address: initialAddress, token }: 
 
       <p className="mt-3 mb-1.5 text-[13px] font-medium text-[#0A0A0A]">Cowork</p>
       <p className="m-0 text-[13px] text-[#4D4D4D]">
-        In Claude&apos;s Organization settings, under Data and Privacy → Monitoring, enter the collector address, the protocol
-        <code className="mx-1 font-mono">http/json</code>and the header
-        <code className="mx-1 font-mono">Authorization=Bearer</code>followed by the bearer token.
+        In Claude&apos;s Organization settings, under Data and Privacy → Monitoring, enter the collector address, the protocol{' '}
+        <code className="font-mono">http/json</code> and the header{' '}
+        <code className="font-mono">Authorization=Bearer</code> followed by the bearer token.
       </p>
 
       <p className="mt-3 mb-1.5 text-[13px] font-medium text-[#0A0A0A]">Claude in Office/Google</p>

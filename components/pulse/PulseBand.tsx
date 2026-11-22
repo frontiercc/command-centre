@@ -19,6 +19,7 @@ import { useAskPageNote } from '@/components/ask/useAskAvailable';
 import { deepWords, tierNamesOr, type TierNames } from '@/lib/pulse/tier-names';
 import { NEW_WAYS_OF_WORKING } from '@/lib/pulse/cowork/coaching-words';
 import { QuestionCard, DASH, DASH_SHADES, shareWords, cap } from '@/components/dashboard/QuestionCard';
+import { skillLabel, connectorLabel } from '@/components/dashboard/tool-names';
 
 type Tier = { t1: number; t2: number; t3: number };
 
@@ -48,6 +49,12 @@ export interface OrgSummary {
     deepPeople30d?: number;
     deepPeopleWeeks?: number[];
     frontierPeople30d?: number;
+    /** Frontier tasks in the window, the total "half" is half of. */
+    frontierTasks30d?: number;
+    /** The share of frontier tasks done by the frontierHalfPeople. */
+    frontierHalfShare?: number | null;
+    /** The first day judged tasks are kept from, when that is inside the window (older ones were deleted by retention). */
+    keptFrom?: number | null;
     frontierHalfPeople?: number | null;
     /** On All, the half-the-work count for each product; frontierHalfPeople is their sum. */
     frontierHalfSplit?: { claude: number; openai: number } | null;
@@ -71,7 +78,8 @@ export function WorkPulsePanel({ data, product, title = 'Work Pulse', actions = 
   // The review queue is an admin page and only admins confirm other people's work, so only they get the link.
   const isAdmin = useSessionRole() === 'admin';
   const q = d?.window === 'quarter';
-  const span = q ? 'the last quarter' : 'the last 30 days';
+  const keptDay = d?.keptFrom ? new Date(d.keptFrom * 1000).toLocaleDateString('en-GB', { day: 'numeric', month: 'short', timeZone: 'UTC' }) : null;
+  const span = keptDay ? `the weeks since ${keptDay}` : q ? 'the last quarter' : 'the last 30 days';
   const prior = q ? 'the quarter before' : 'the 30 days before';
   // Tell Ask the data's drawer which window this panel shows.
   useAskPageNote('work-pulse', d ? `The Work Pulse panel shows ${q ? 'the last quarter (the last 13 completed weeks)' : 'the last 30 days'}.` : null);
@@ -81,9 +89,7 @@ export function WorkPulsePanel({ data, product, title = 'Work Pulse', actions = 
   const people = d?.deepPeople30d ?? null;
   const active = d?.activePeople30d ?? null;
   const half = d?.frontierHalfPeople ?? null;
-  const shareChange = now !== null && before !== null
-    ? (Math.round(now * 100) === Math.round(before * 100) ? `the same as ${prior}` : `${now > before ? 'up' : 'down'} from ${shareWords(before) === 'half' ? 'about half' : shareWords(before)} ${prior}`)
-    : null;
+  const frontierTasks = d?.frontierTasks30d ?? null;
   const answer = people !== null && active !== null && people > 0
     ? <><b>{people} of {active}</b> people handed {product} {deepName} work in {span}{now !== null ? <>, and <b>{shareWords(now)}</b> {shareWords(now) === 'all' ? '' : 'of all '}the tasks they gave it were {deepName}</> : null}.</>
     : now !== null
@@ -94,7 +100,11 @@ export function WorkPulsePanel({ data, product, title = 'Work Pulse', actions = 
       <div className="flex items-baseline gap-2 flex-wrap">
         <h2 className="m-0 text-[14px] font-semibold text-[#0A0A0A]">{title}</h2>
         <Tag tone="neutral">AI-judged</Tag>
-        <span className="ml-auto text-[12px] text-[#8F8F8F]">{q ? 'Last quarter against the quarter before' : 'Last 30 days against the 30 before'}</span>
+        <span className="ml-auto text-[12px] text-[#8F8F8F]">{keptDay
+          ? `Since ${keptDay}: older tasks are not kept`
+          : before !== null
+            ? (q ? 'Last quarter against the quarter before' : 'Last 30 days against the 30 before')
+            : (q ? 'Last quarter' : 'Last 30 days')}</span>
       </div>
       {answer && <p className="m-0 mt-2 text-[14px] leading-[22px] text-[#1A1A1A] [&_b]:font-semibold">{answer}</p>}
       <div className="grid grid-cols-2 xl:grid-cols-4 gap-2.5 mt-3">
@@ -113,9 +123,11 @@ export function WorkPulsePanel({ data, product, title = 'Work Pulse', actions = 
         />
         <QuestionCard
           question={`Tasks that are ${deepName}`}
-          value={now !== null ? `${(tc.t2 + tc.t3).toLocaleString('en-GB')} of ${total(tc).toLocaleString('en-GB')}` : undefined}
+          value={now !== null ? `${(tc.t2 + tc.t3).toLocaleString('en-GB')} (${pct(now)}) of ${total(tc).toLocaleString('en-GB')}` : undefined}
           unit="tasks"
-          change={now !== null ? `${shareWords(now)}${shareChange ? `, ${shareChange}` : ''}` : undefined}
+          change={now !== null && before !== null
+            ? (Math.round(now * 100) === Math.round(before * 100) ? `the same as ${prior}` : `${now > before ? 'up' : 'down'} from ${pct(before)} ${prior}`)
+            : undefined}
           trend={d?.tierWeeks.map(t => (t ? deep(t) : null))}
           notMeasured={now === null ? `No classified work in ${span}` : undefined}
           todo={actions && now !== null && before !== null
@@ -138,15 +150,9 @@ export function WorkPulsePanel({ data, product, title = 'Work Pulse', actions = 
           todo={actions && d ? (d.capabilitiesPending > 0 ? (isAdmin ? 'Confirm the ones that are real, below.' : 'Each person, or an admin, confirms the ones that are real.') : 'Nothing waiting for review.') : undefined}
         />
         <QuestionCard
-          question={`${t.t3} work rests on`}
-          value={half !== null ? (half === 1 ? 'One person' : `${half} people`) : undefined}
-          sub={half !== null && d ? <>{d.frontierHalfSplit
-            ? <>{d.frontierHalfSplit.claude} on Claude and {d.frontierHalfSplit.openai} on ChatGPT do half of each one&apos;s {t.t3.toLowerCase()} work, out of {d.frontierPeople30d} doing any.</>
-            : <>They do half of it, out of {d.frontierPeople30d} doing any.</>} <Link href={`/pulse/people?list=frontier-half&window=${q ? 'quarter' : 'month'}`} className="text-[#1F6F8B] font-medium hover:underline">See who</Link></> : undefined}
+          question={`${t.t3} work`}
+          value={half !== null && d ? <span className="text-[14px] leading-5 font-normal tracking-normal">{(d.frontierPeople30d ?? 0).toLocaleString('en-GB')} people did {(frontierTasks ?? 0).toLocaleString('en-GB')} {t.t3.toLowerCase()} tasks. {half.toLocaleString('en-GB')} of them did 50% of those tasks.</span> : undefined}
           notMeasured={half === null ? `No ${t.t3.toLowerCase()} work in ${span}` : undefined}
-          todo={actions && d?.frontierTopShare != null
-            ? <>If the busiest person left, {d.frontierTopShare < 0.15 ? `${Math.round(d.frontierTopShare * 100)}%` : shareWords(d.frontierTopShare)} of it would go. <Link href={`/pulse/people?list=frontier-half&window=${q ? 'quarter' : 'month'}`} className="text-[#1F6F8B] font-medium hover:underline">See who</Link></>
-            : undefined}
         />
       </div>
       <p className="m-0 mt-3 pt-2.5 border-t border-dashed border-[#EAEAEA] text-[12px] text-[#8F8F8F]">
@@ -176,7 +182,7 @@ function DepthPanel({ now, before, product, names }: { now: Tier; before: Tier |
         {t.t2 > 0 && <span style={{ flex: t.t2, background: T2 }} title={`${tn.t2} ${pct(t.t2 / total(t))}`} />}
         {t.t3 > 0 && <span style={{ flex: t.t3, background: T3 }} title={`${tn.t3} ${pct(t.t3 / total(t))}`} />}
       </div>
-      <span className={`text-right tabular-nums ${bold ? 'font-semibold text-[#0A0A0A]' : 'text-[#666666]'}`}>{pct(deep(t)!)}</span>
+      <span className={`text-right tabular-nums ${bold ? 'font-semibold text-[#0A0A0A]' : 'text-[#666666]'}`}>{pct(f(t))}</span>
     </div>
   );
   return (
@@ -184,7 +190,7 @@ function DepthPanel({ now, before, product, names }: { now: Tier; before: Tier |
       <div className="flex items-baseline gap-2">
         <h2 className="m-0 text-[14px] font-semibold text-[#0A0A0A]">How deep is the work?</h2>
         <Tag tone="neutral">AI-judged</Tag>
-        <span className="ml-auto text-[12px] text-[#8F8F8F]">30 days</span>
+        <span className="ml-auto text-[12px] text-[#8F8F8F]">Last 30 days</span>
       </div>
       <p className="m-0 mt-2 mb-2 text-[14px] leading-[22px] text-[#1A1A1A] [&_b]:font-semibold">{answer}</p>
       {hasBefore && row('30 days before', before!, false)}
@@ -193,7 +199,6 @@ function DepthPanel({ now, before, product, names }: { now: Tier; before: Tier |
         <span className="inline-flex items-center gap-1.5"><span className="w-2.5 h-2.5 rounded-[2px]" style={{ background: T1 }} />{tn.t1}</span>
         <span className="inline-flex items-center gap-1.5"><span className="w-2.5 h-2.5 rounded-[2px]" style={{ background: T2 }} />{tn.t2}</span>
         <span className="inline-flex items-center gap-1.5"><span className="w-2.5 h-2.5 rounded-[2px]" style={{ background: T3 }} />{tn.t3}</span>
-        <span className="ml-auto">right: {deepWords(names)}</span>
       </div>
     </section>
   );
@@ -202,10 +207,13 @@ function DepthPanel({ now, before, product, names }: { now: Tier; before: Tier |
 /* ── 13: Which skills and connectors are spreading? ─────────────── */
 
 function formatName(kind: 'skills' | 'connectors', name: string): string {
-  return kind === 'skills' ? name.replace(':', ' · ') : name.replace(/^mcp__/, '').replace(/_/g, ' ');
+  // Claude Code sends custom_skill for a person's own skill when tool details are off; here it
+  // stands for everyone's own skills together.
+  if (kind === 'skills' && name === 'custom_skill') return 'Own skills (names not sent)';
+  return kind === 'skills' ? skillLabel(name) : connectorLabel(name);
 }
 
-function SpreadPanel({ skills, connectors, activePeople, split }: { skills: { total: number; rows: SpreadRow[] }; connectors: { total: number; rows: SpreadRow[] }; activePeople: number; split?: { claude: number; openai: number } | null }) {
+function SpreadPanel({ skills, connectors, activePeople, split, product }: { skills: { total: number; rows: SpreadRow[] }; connectors: { total: number; rows: SpreadRow[] }; activePeople: number; split?: { claude: number; openai: number } | null; product: string }) {
   const [kind, setKind] = useState<'skills' | 'connectors'>('skills');
   const list = kind === 'skills' ? skills : connectors;
   const one = kind === 'skills' ? 'skill' : 'connector';
@@ -235,7 +243,7 @@ function SpreadPanel({ skills, connectors, activePeople, split }: { skills: { to
       {rows.length > 0 && (
         <div>
           <div className="grid grid-cols-[minmax(0,1fr)_minmax(0,1.2fr)_90px] gap-3 text-[12px] text-[#8F8F8F] py-1 border-b border-[#EAEAEA]">
-            <span>{kind === 'skills' ? 'Skill' : 'Connector'}</span><span>Using it, of {activePeople.toLocaleString('en-GB')} product users</span><span className="text-right">Change</span>
+            <span>{kind === 'skills' ? 'Skill' : 'Connector'}</span><span>People using it, of {activePeople.toLocaleString('en-GB')}</span><span className="text-right">Change</span>
           </div>
           {rows.map(r => {
             const grew = r.people - r.priorPeople;
@@ -253,7 +261,8 @@ function SpreadPanel({ skills, connectors, activePeople, split }: { skills: { to
         </div>
       )}
       <p className="m-0 mt-3 pt-2.5 border-t border-dashed border-[#EAEAEA] text-[12px] text-[#8F8F8F]">
-        {split && split.openai > 0 ? `${activePeople.toLocaleString('en-GB')} product users: ${split.claude.toLocaleString('en-GB')} on Claude, ${split.openai.toLocaleString('en-GB')} on ChatGPT (someone using both counts in each). ` : ''}
+        {`${activePeople.toLocaleString('en-GB')} people used ${product === 'ChatGPT' ? 'ChatGPT' : product === 'Claude' ? 'Claude Cowork and apps' : 'Claude Cowork and apps or ChatGPT'} in the last 30 days. `}
+        {split && split.openai > 0 ? `${split.claude.toLocaleString('en-GB')} on Claude, ${split.openai.toLocaleString('en-GB')} on ChatGPT (someone using both counts in each). ` : ''}
         Bars count the people using each {one}, not how often it was used, so one that is spreading stands out. Change is against the 30 days before; new means first used in the last 30 days.
         {list.total > rows.length ? ` Top ${rows.length} of ${list.total} shown.` : ''} <Link href="/library" className="text-[#1F6F8B] font-medium hover:underline">See all on the S&amp;C Board</Link>
       </p>
@@ -313,7 +322,7 @@ export default function PulseBand({ children, vendor = 'all', showVendor = false
       {children}
 
       {!loading && hasData && data?.dashboard && (
-        <SpreadPanel skills={data.dashboard.skillSpread} connectors={data.dashboard.connectorSpread} activePeople={data.dashboard.activePeople30d} split={data.dashboard.activePeopleByVendor30d} />
+        <SpreadPanel skills={data.dashboard.skillSpread} connectors={data.dashboard.connectorSpread} activePeople={data.dashboard.activePeople30d} split={data.dashboard.activePeopleByVendor30d} product={product} />
       )}
     </div>
   );

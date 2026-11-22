@@ -12,6 +12,7 @@
 import Link from 'next/link';
 import { Panel, T, Muted } from '@/components/precision/ui';
 import { SURFACE_COLOR, PRODUCT_COLOR } from '@/lib/ui/chart-colours';
+import { usdWhole } from '@/lib/finance/spend-review-format';
 
 export interface LeaderboardEntry {
   userId: string;
@@ -24,7 +25,7 @@ export interface LeaderboardEntry {
   codexUsd?: number;
 }
 
-const fmtUsd = (n: number) => n.toLocaleString('en-US', { style: 'currency', currency: 'USD' });
+const fmtUsd = usdWhole;
 
 /** Each product's share of a person's spend, in the shared product colours. */
 function SplitBar({ parts }: { parts: Array<{ usd: number; colour: string }> }) {

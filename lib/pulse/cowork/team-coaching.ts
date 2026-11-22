@@ -43,12 +43,12 @@ export interface CoworkCoachingPlan {
 }
 
 const pct = (v: number) => `${Math.round(v * 100)}%`;
-const plural = (c: number, one: string, many: string) => `${c} ${c === 1 ? one : many}`;
+const plural = (c: number, one: string, many: string) => `${c.toLocaleString('en-GB')} ${c === 1 ? one : many}`;
 const list = (xs: string[]) => (xs.length <= 1 ? xs.join('') : `${xs.slice(0, -1).join(', ')} and ${xs[xs.length - 1]}`);
 
 /** The figure in words, for the "did it work" line. */
 export function metricWords(metric: string | null): string | null {
-  if (metric === 'deep_share') return `Work the classifier judged ${MEANINGFUL_WORK} or better`;
+  if (metric === 'deep_share') return `Work Claude judged ${MEANINGFUL_WORK} or better`;
   if (metric === 'hardly_used_share') return 'People who have hardly used it';
   if (metric === 'produced_nothing_share') return 'Sessions that produced nothing';
   return null;
@@ -145,7 +145,7 @@ export function teamParts(t: CoworkTeamFigures, f: CoworkCoachingFigures): { whe
     actions.push({
       key: 'stuck',
       text: `Sit with ${names} once and hand over one whole piece of work together, start to finish.`,
-      because: `${plural(t.stuck[0].prompts, 'prompt', 'prompts')} from ${t.stuck.length === 1 ? 'them' : 'the first of them'}, and only ${pct(t.stuck[0].deepShare)} went beyond a single answer.`,
+      because: `${t.stuck[0].name}: ${plural(t.stuck[0].prompts, 'prompt', 'prompts')}, and only ${pct(t.stuck[0].deepShare)} went beyond a single answer.`,
       metric: 'deep_share',
     });
   }
@@ -173,7 +173,7 @@ export function teamParts(t: CoworkTeamFigures, f: CoworkCoachingFigures): { whe
 
   // Sessions that ended with nothing saved, sent or published.
   if (t.producedNothing && t.producedNothing.share >= PRODUCED_NOTHING_SHARE) {
-    workOn.push(`${t.producedNothing.sessions} of ${t.producedNothing.measured} sessions ended with nothing saved, sent or published.`);
+    workOn.push(`${t.producedNothing.sessions.toLocaleString('en-GB')} of ${t.producedNothing.measured.toLocaleString('en-GB')} sessions ended with nothing saved, sent or published.`);
     actions.push({
       key: 'produced_nothing',
       text: 'Take a session that ended with nothing saved, and ask for the finished document, not the answer to a question.',
@@ -205,7 +205,7 @@ export function teamParts(t: CoworkTeamFigures, f: CoworkCoachingFigures): { whe
   }
 
   if (t.capabilities > 0) {
-    workOn.push(`${plural(t.capabilities, 'new way of working', 'new ways of working')} came up in the team in the last 30 days.`);
+    workOn.push(`Claude flagged ${plural(t.capabilities, 'prompt', 'prompts')} in the team as a possible new way of working in the last 30 days.`);
   }
 
   if (t.champions.length > 0) {

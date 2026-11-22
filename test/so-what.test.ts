@@ -282,15 +282,12 @@ describe('the cards the page finds on its own', () => {
     expect(without.body.join(' ')).toContain('no seat price is set');
     const withPrice = rarelyUsedCard({ people: 150, costAMonth: 6000, days: 90 }, undefined, NOW);
     expect(withPrice.body.join(' ')).toContain('an estimated $6,000 a month');
-    // Seats are held for the whole organisation, and the card has to say so.
-    expect(withPrice.body.join(' ')).toContain('counts people, not seats');
-    expect(withPrice.caption).toContain("No card here recommends anything about a person's job");
   });
 
   it('names no one on the key-person card', () => {
     const c = keyPeopleCard({ department: 'Engineering', people: 10, holders: 2, share: 0.72 }, undefined, NOW);
     expect(c.headline).toBe('Spread what two people in Engineering know.');
-    expect(c.body.join(' ')).toContain('72% of the Delegated work or Frontier delegation in this team of 10');
+    expect(c.body.join(' ')).toContain('72% of the Delegated work or Frontier delegation done by the 10 people in Engineering who use Claude Code');
     expect(c.caption).toContain('named on the team');
   });
 

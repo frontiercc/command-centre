@@ -167,13 +167,13 @@ describe('spend review (postgres)', () => {
       const { suggestionKey } = await import('@/lib/finance/spend-review');
       expect(row.routeCount).toBe(new Set(review.work.flatMap(w => w.routes.map(suggestionKey))).size);
       expect(row.routeCount).toBe(2);
-      expect(row.mainWork).toMatchObject({ label: 'Structured Report', surface: 'cowork' });
+      expect(row.mainWork).toMatchObject({ label: 'Structured report', surface: 'cowork' });
       expect(row.mainWork!.share).toBeCloseTo(30 / 35, 6);
       expect(row.unpricedOnly).toBe(false);
       expect(index.summary.peopleWithRoutes).toBe(1);
       // Toby has 5 sessions this month: under the 10 the efficiency board needs.
       expect(index.efficiency).toEqual([]);
-      expect(index.summary.topWork[0]).toMatchObject({ label: 'Structured Report', surface: 'cowork' });
+      expect(index.summary.topWork[0]).toMatchObject({ label: 'Structured report', surface: 'cowork' });
 
       // A blank admin-side name or department never hides the users row's (seen on a production deployment).
       await db.insert(schema.adminUsers).values({ id: 'adm-toby', email: 'toby@test.local', password_hash: 'x', role: 'pulse', display_name: '', department: '', linked_cowork_user_id: 'u-toby' });

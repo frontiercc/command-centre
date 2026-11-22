@@ -851,7 +851,7 @@ export default function SystemPage() {
           </div>
 
           <div className="px-4 py-3 border-t border-[#F2F2F2] flex flex-wrap gap-x-6 gap-y-1 text-[13px] text-[#666666]">
-            <span>Last sent: <span className="text-[#0A0A0A]">{digestLastSentWeek ? new Date(Number(digestLastSentWeek) * 1000).toLocaleDateString() : 'Never'}</span></span>
+            <span>Last sent: <span className="text-[#0A0A0A]">{digestLastSentWeek ? new Date(Number(digestLastSentWeek) * 1000).toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric' }) : 'Never'}</span></span>
             <span>Status: <span className="text-[#0A0A0A]">{digestNextSendPreview || 'not available'}</span></span>
           </div>
 
@@ -1001,7 +1001,7 @@ export default function SystemPage() {
                       {connectorTokens.map((t) => (
                         <tr key={t.id} className={T.row}>
                           <td className={cx(T.td, 'font-medium text-[#0A0A0A]')}>{t.name}</td>
-                          <td className={cx(T.tdMute, 'tabular-nums whitespace-nowrap')}>{new Date(t.createdAt * 1000).toLocaleDateString()}</td>
+                          <td className={cx(T.tdMute, 'tabular-nums whitespace-nowrap')}>{new Date(t.createdAt * 1000).toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric' })}</td>
                           <td className={cx(T.tdMute, 'tabular-nums whitespace-nowrap')}>
                             {t.lastUsedAt ? new Date(t.lastUsedAt * 1000).toLocaleString() : 'Never'}
                           </td>

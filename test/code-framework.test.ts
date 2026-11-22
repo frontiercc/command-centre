@@ -73,7 +73,7 @@ describe('buildCrosswalk', () => {
   it('counts coverage from framework cells only: AI-specific cells count on neither side', () => {
     const cover = Object.fromEntries(buildCrosswalk(full).map(b => [b.dimension, frameworkCoverage(b)]));
     expect(cover.speed).toEqual({ covered: 3, total: 5 });
-    expect(cover.quality).toEqual({ covered: 2, total: 4 });
+    expect(cover.quality).toEqual({ covered: 1, total: 3 });
     expect(cover.effectiveness).toEqual({ covered: 1, total: 2 });
     expect(cover.impact).toEqual({ covered: 1, total: 2 });
     // A cell with no figure is not covered.

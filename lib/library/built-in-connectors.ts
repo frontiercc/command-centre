@@ -2,7 +2,7 @@
 // SPDX-License-Identifier: Apache-2.0
 
 import { sql, type SQL } from 'drizzle-orm';
-import { BUILT_IN_CONNECTOR_NAMES, BUILT_IN_SKILL_NAMES, normToolName } from '@/lib/finance/spend-review-builtins';
+import { BUILT_IN_CONNECTOR_NAMES, BUILT_IN_SKILL_NAMES, isBuiltInTool, normToolName } from '@/lib/finance/spend-review-builtins';
 
 /**
  * Connectors that are part of Claude itself, never shown on the S&C Board or counted in it:
@@ -14,12 +14,13 @@ import { BUILT_IN_CONNECTOR_NAMES, BUILT_IN_SKILL_NAMES, normToolName } from '@/
 const HIDDEN = [...new Set([...BUILT_IN_CONNECTOR_NAMES, 'Claude_in_Chrome', 'Claude_Preview'].map(normToolName))];
 
 export function isBoardHiddenConnector(name: string | null | undefined): boolean {
-  return !!name && HIDDEN.includes(normToolName(name));
+  return !!name && (HIDDEN.includes(normToolName(name)) || isBuiltInTool('connector', name));
 }
 
-/** SQL: `column` (a connector name) is not one of Claude's own. */
+/** SQL: `column` (a connector name) is not one of Claude's own; every ccd_ server is (isBuiltInTool). */
 export function notBoardHiddenConnector(column: SQL): SQL {
-  return sql`lower(regexp_replace(trim(${column}), '[[:space:]_]+', '-', 'g')) NOT IN (${sql.join(HIDDEN.map(n => sql`${n}`), sql`, `)})`;
+  const norm = sql`lower(regexp_replace(trim(${column}), '[[:space:]_]+', '-', 'g'))`;
+  return sql`(${norm} NOT IN (${sql.join(HIDDEN.map(n => sql`${n}`), sql`, `)}) AND ${norm} NOT LIKE 'ccd-%')`;
 }
 
 /**

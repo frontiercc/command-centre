@@ -14,6 +14,7 @@
 // card needs, then every card at once (each card's own queries also run side by
 // side, waiting only where one query needs another's result). The database
 // pool queues whatever does not fit at once.
+import { isBuiltInTool } from '@/lib/finance/spend-review-builtins';
 import { codeUsageIn, OPEN_END, readCodeUsage } from '@/lib/pulse/code/usage-daily';
 import { getCodeWorkTypeDefinitions } from '@/lib/pulse/code/tier-config';
 import { codeWorkTypeLabel, codeWorkTypeDefinition } from '@/lib/pulse/code/work-type-labels';
@@ -300,7 +301,7 @@ export async function buildCodeOrgSummary(vendorParam: string | null) {
         .where(and(gte(csi.occurred_at, thirtyDaysAgo), sessionVendor))
         .groupBy(csi.skill_name)
         .orderBy(desc(sql`COUNT(*)`))
-        .limit(10),
+        .limit(40),
       client
         .select({ mcp_server: cmi.mcp_server, uses: sql<number | string>`COUNT(*)` })
         .from(cmi)
@@ -316,7 +317,7 @@ export async function buildCodeOrgSummary(vendorParam: string | null) {
         ))
         .groupBy(cmi.mcp_server)
         .orderBy(desc(sql`COUNT(*)`))
-        .limit(10),
+        .limit(40),
       // Language Mix: edit-decision counts by language (from the OTel metrics stream).
       // The repo-free "what are people working on" axis.
       client
@@ -336,10 +337,11 @@ export async function buildCodeOrgSummary(vendorParam: string | null) {
         repo: r.repo, sessions: Number(r.sessions), tokens: Number(r.tokens), commits: Number(r.commits),
       })),
       darkRepos: darkReposRaw.map(r => ({ repo: r.repo, last_seen: Number(r.last_seen) })),
-      topSkills: topSkillsRaw.map(r => ({
+      // Claude's own tools are left out, so the lists show what people chose to bring in.
+      topSkills: topSkillsRaw.filter(r => !isBuiltInTool('skill', r.skill_name)).slice(0, 10).map(r => ({
         skill_name: r.skill_name, uses: Number(r.uses), agent_chained: Number(r.agent_chained),
       })),
-      topConnectors: topConnectorsRaw.map(r => ({ mcp_server: r.mcp_server, uses: Number(r.uses) })),
+      topConnectors: topConnectorsRaw.filter(r => !isBuiltInTool('connector', r.mcp_server)).slice(0, 10).map(r => ({ mcp_server: r.mcp_server, uses: Number(r.uses) })),
       languageMix: withClaude ? languageMixRaw.map(r => ({ language: r.language as string, edits: Number(r.edits) })) : [],
     };
   };

@@ -113,7 +113,7 @@ function TeamCoaching() {
                 <b>{plan.sessions.toLocaleString('en-GB')} sessions</b> from {plan.people} {plan.people === 1 ? 'person' : 'people'} in the last 30 days.
               </>}
               note={tiers
-                ? `Multi-step work is a session the classifier judged "${tiers.t2}" or "${tiers.t3}": it carried out a task across several actions, rather than answering one question. A session it judged "${tiers.t1}" does not count. Those names are set on Admin → Developer Pulse → Tiers.`
+                ? `Multi-step work is a session Claude judged "${tiers.t2}" or "${tiers.t3}": it carried out a task across several actions, rather than answering one question. A session Claude judged "${tiers.t1}" does not count.`
                 : undefined}
             >
               {plan.where.map((t, i) => <p key={i} className="m-0 py-0.5 text-[13px] leading-5 text-[#333333]">{t}</p>)}
@@ -159,12 +159,11 @@ function TeamCoaching() {
                 answer={plan.learnFrom.length === 0
                   ? <>Nobody in this team is handing over much yet. The people to learn from are in other teams.</>
                   : <><b>{plan.learnFrom[0].name}</b> hands over the most, on {pct(plan.learnFrom[0].deepShare)} of their sessions.</>}
-                note="Named because this page is for admins and managers only."
               >
                 {plan.learnFrom.map(c => (
                   <div key={c.name} className="flex items-baseline gap-2.5 py-1.5 border-b border-[#F2F2F2] last:border-b-0 text-[13px]">
                     <span className="min-w-0 truncate text-[#0A0A0A]">{c.name}</span>
-                    <span className="text-[#777777] whitespace-nowrap">{c.sessions} {c.sessions === 1 ? 'session' : 'sessions'}</span>
+                    <span className="text-[#777777] whitespace-nowrap">{c.sessions.toLocaleString('en-GB')} {c.sessions === 1 ? 'session' : 'sessions'}</span>
                     <span className="ml-auto tabular-nums text-[#333333]">{pct(c.deepShare)}</span>
                   </div>
                 ))}
@@ -177,14 +176,14 @@ function TeamCoaching() {
                 tag="AI estimate"
                 period="Last 30 days"
                 answer={<>
-                  By hand, the team&rsquo;s {plan.figures.freed.sessions} estimated sessions would have taken about{' '}
+                  By hand, the team&rsquo;s {plan.figures.freed.sessions.toLocaleString('en-GB')} estimated sessions would have taken about{' '}
                   <b>{Math.round(plan.figures.freed.byHandHours).toLocaleString('en-GB')} hours</b>, against{' '}
-                  <b>{Math.round(plan.figures.freed.aiHours).toLocaleString('en-GB')} hours</b> with the assistant
+                  <b>{Math.round(plan.figures.freed.aiHours).toLocaleString('en-GB')} hours</b> with Claude Code
                   {plan.figures.freed.topKind ? <>, most of it on {plan.figures.freed.topKind.toLowerCase()}</> : null}.
                 </>}
-                note="Claude's estimate per session, against measured active time. Only sessions carrying both are counted."
+                note="Claude's estimate of each session done by hand, against measured active time."
               >
-                {[['With the assistant', plan.figures.freed.aiHours, false] as const, ['By hand (estimate)', plan.figures.freed.byHandHours, true] as const].map(([l, h, est]) => (
+                {[['With Claude Code', plan.figures.freed.aiHours, false] as const, ['By hand (estimate)', plan.figures.freed.byHandHours, true] as const].map(([l, h, est]) => (
                   <div key={l} className="grid grid-cols-[minmax(0,150px)_minmax(0,1fr)_64px] gap-2.5 items-center py-[3px] text-[13px]">
                     <span className="text-[#333333]">{l}</span>
                     <Track value={h / Math.max(plan.figures.freed!.byHandHours, 1)} striped={est} />
@@ -200,7 +199,6 @@ function TeamCoaching() {
               answer={plan.actions.length === 0
                 ? <>Nothing to suggest: this team is within reach of everything the figures look at.</>
                 : <><b>{plan.actions.length} {plan.actions.length === 1 ? 'thing' : 'things'}</b> worth trying, each tied to the figure it should move.</>}
-              note="Marking one done records the figure as it stands today, for the team and the organisation, so the page can tell you later whether it moved."
             >
               {plan.actions.map(a => (
                 <div key={a.key} className="py-2 border-b border-[#F2F2F2] last:border-b-0">

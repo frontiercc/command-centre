@@ -34,15 +34,6 @@ interface DeactivatedUser {
 
 type Tab = 'active' | 'deactivated';
 
-function captureBadge(source: string | null): { label: string; title: string } {
-  if (source === 'otel') return { label: 'OTel', title: 'Monitored via OpenTelemetry' };
-  if (source === 'compliance') return { label: 'Anthropic Compliance API', title: 'Synced via the Anthropic Compliance API' };
-  if (source === 'openai') return { label: 'OpenAI Compliance API', title: "First seen through OpenAI's Compliance API (ChatGPT or Codex)" };
-  // People first seen by the retired local agent say so, as the Audit Log does.
-  if (source === 'agent' || source === 'local-agent') return { label: 'Agent', title: 'First seen by the retired local agent' };
-  return { label: 'Telemetry', title: 'Monitored via telemetry' };
-}
-
 /** Quiet row action (Deactivate). */
 const ROW_ACTION =
   'inline-flex items-center justify-center text-[13px] font-medium px-2.5 py-1 rounded-[10px] text-[#666666] hover:text-[#0A0A0A] hover:bg-[#F2F2F2] disabled:opacity-50 disabled:cursor-not-allowed';
@@ -54,7 +45,7 @@ function deleteClass(armed: boolean): string {
     : 'inline-flex items-center justify-center text-[13px] font-medium px-2.5 py-1 rounded-[10px] text-[#8F8F8F] hover:text-[#B42318] hover:bg-[#FFF5F4] disabled:opacity-50 disabled:cursor-not-allowed';
 }
 
-/** Adoption health as a status pill (active / shallow / inactive). */
+/** Activity status as a pill (active / shallow / inactive). */
 function healthTone(value: string): 'good' | 'warn' | 'neutral' {
   if (value === 'active') return 'good';
   if (value === 'shallow') return 'warn';
@@ -170,7 +161,7 @@ export default function UsersPage() {
 
   return (
     <>
-      <TopBar title="User Insights" subtitle="User adoption and engagement tracking" />
+      <TopBar title="User Insights" subtitle="Who is using Claude and how much" />
       <PageBody>
         <Tabs tabs={tabs} value={tab} onChange={setTab} label="User status" />
 
@@ -192,19 +183,17 @@ export default function UsersPage() {
                       <th className={T.th}>Last active</th>
                       <th className={T.th}>Main product</th>
                       <th className={T.thRight}>Messages (7d)</th>
-                      <th className={T.th}>Adoption</th>
+                      <th className={T.th}>Status</th>
                       <th className={T.thRight}>Alerts</th>
                       <th className={T.th}><span className="sr-only">Actions</span></th>
                     </tr>
                   </thead>
                   <tbody>
                     {users.map(user => {
-                      const badge = captureBadge(user.source);
                       return (
                         <tr key={user.id} className={T.row}>
                           <td className={T.td}>
                             <div className="flex items-center gap-2">
-                              <Tag tone="measured" title={badge.title}>{badge.label}</Tag>
                               <div className="min-w-0">
                                 <Link href={`/admin/users/${user.id}`} className="text-[#0A0A0A] font-medium hover:text-[#1F6F8B] hover:underline">
                                   {user.display_name || user.email}
@@ -219,7 +208,7 @@ export default function UsersPage() {
                           <td className={T.td}>
                             <Tag>{user.primary_surface}</Tag>
                           </td>
-                          <td className={cx(T.tdRight, 'font-medium')}>{user.messages_7d}</td>
+                          <td className={cx(T.tdRight, 'font-medium')}>{Number(user.messages_7d).toLocaleString('en-GB')}</td>
                           <td className={T.td}>
                             <Pill tone={healthTone(user.adoption_health)}>{user.adoption_health}</Pill>
                           </td>
@@ -287,7 +276,6 @@ export default function UsersPage() {
                       <tr key={user.id} className={T.row}>
                         <td className={T.td}>
                           <div className="flex items-center gap-2">
-                            {user.source === 'otel' && <Tag tone="measured">OTel</Tag>}
                             <div className="min-w-0">
                               <span className="text-[#4D4D4D] font-medium">{user.display_name || user.email}</span>
                               {user.display_name && (

@@ -78,6 +78,7 @@ export async function GET(request: NextRequest) {
       finds: scope.teams.length > 1 ? await getFinds(vendor, (card, department) => kept.has(`${card}\u0000${department}`)) : undefined,
       nowS: Math.floor(Date.now() / 1000),
       tierNames: await codeTierNames(),
+      tool: vendor === 'openai' ? 'Codex' : vendor === 'all' ? 'Claude Code or Codex' : 'Claude Code',
     });
     return NextResponse.json({ ...out, department: scope.department });
   } catch (err) {
