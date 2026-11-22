@@ -331,6 +331,12 @@ export async function buildOrgSummary(vendor: Vendor, quarterly: boolean) {
       }
     : null;
   const frontierHalfPeople = frontierHalfSplit ? frontierHalfSplit.claude + frontierHalfSplit.openai : halfOf(frontierByPerson);
+  // The share of frontier tasks those people actually did (at least half), so the card can say it exactly.
+  const topSum = (ns: number[], k: number) => ns.slice(0, k).reduce((x, y) => x + y, 0);
+  const frontierHalfTasks = frontierHalfSplit
+    ? topSum(frontierRows.filter(r => r.v === 'claude').map(r => r.n), frontierHalfSplit.claude)
+      + topSum(frontierRows.filter(r => r.v === 'openai').map(r => r.n), frontierHalfSplit.openai)
+    : topSum(frontierByPerson, frontierHalfPeople);
 
   // Tasks by depth over the same window, for the strip's share of real work.
   const windowTier = await rawGet<{ t1: number | string | null; t2: number | string | null; t3: number | string | null }>(client, sql`
@@ -359,6 +365,7 @@ export async function buildOrgSummary(vendor: Vendor, quarterly: boolean) {
     deepPeopleWeeks: weeks.map((_, i) => deepPeopleByWeek.get(i) ?? 0),
     frontierPeople30d: frontierByPerson.length,
     frontierTasks30d: frontierTotal,
+    frontierHalfShare: frontierTotal > 0 ? frontierHalfTasks / frontierTotal : null,
     keptFrom,
     frontierHalfPeople: frontierTotal > 0 ? frontierHalfPeople : null,
     frontierHalfSplit,

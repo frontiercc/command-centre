@@ -50,6 +50,8 @@ export interface OrgSummary {
     frontierPeople30d?: number;
     /** Frontier tasks in the window, the total "half" is half of. */
     frontierTasks30d?: number;
+    /** The share of frontier tasks done by the frontierHalfPeople. */
+    frontierHalfShare?: number | null;
     /** The first day judged tasks are kept from, when that is inside the window (older ones were deleted by retention). */
     keptFrom?: number | null;
     frontierHalfPeople?: number | null;
@@ -148,11 +150,10 @@ export function WorkPulsePanel({ data, product, title = 'Work Pulse', actions = 
           todo={actions && d ? (d.capabilitiesPending > 0 ? (isAdmin ? 'Confirm the ones that are real, below.' : 'Each person, or an admin, confirms the ones that are real.') : 'Nothing waiting for review.') : undefined}
         />
         <QuestionCard
-          question={`Half the ${t.t3.toLowerCase()} tasks come from`}
-          value={half !== null ? (half === 1 ? 'One person' : `${half} people`) : undefined}
-          sub={half !== null && d ? <>{d.frontierPeople30d} {d.frontierPeople30d === 1 ? 'person' : 'people'} did {frontierTasks !== null ? `${frontierTasks.toLocaleString('en-GB')} ` : ''}{t.t3.toLowerCase()} tasks. {d.frontierHalfSplit
-            ? <>{d.frontierHalfSplit.claude} on Claude and {d.frontierHalfSplit.openai} on ChatGPT did half of each product&apos;s.</>
-            : <>{half === 1 ? 'One of them' : `${half} of them`} did half of those tasks.</>} {seeWho}</> : undefined}
+          question={`${t.t3} work`}
+          value={half !== null && d ? `${d.frontierPeople30d} ${d.frontierPeople30d === 1 ? 'person' : 'people'}` : undefined}
+          unit={half !== null && frontierTasks !== null ? `did ${frontierTasks.toLocaleString('en-GB')} ${t.t3.toLowerCase()} ${frontierTasks === 1 ? 'task' : 'tasks'}` : undefined}
+          sub={half !== null && d ? <>{half} of these people did {Math.round((d.frontierHalfShare ?? 0.5) * 100)}% of those tasks. {seeWho}</> : undefined}
           notMeasured={half === null ? `No ${t.t3.toLowerCase()} work in ${span}` : undefined}
           todo={actions && d?.frontierTopShare != null
             ? <>The busiest person did {Math.round(d.frontierTopShare * 100)}% of those tasks. {seeWho}</>
