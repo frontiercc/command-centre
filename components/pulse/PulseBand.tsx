@@ -93,7 +93,6 @@ export function WorkPulsePanel({ data, product, title = 'Work Pulse', actions = 
     ? (Math.round(now * 100) === Math.round(before * 100) ? `the same as ${prior}` : `${now > before ? 'up' : 'down'} from ${beforeSaid === 'half' ? 'about half' : beforeSaid} ${prior}`)
     : null;
   const frontierTasks = d?.frontierTasks30d ?? null;
-  const seeWho = <Link href={`/pulse/people?list=frontier-half&window=${q ? 'quarter' : 'month'}`} className="text-[#1F6F8B] font-medium hover:underline">See who</Link>;
   const answer = people !== null && active !== null && people > 0
     ? <><b>{people} of {active}</b> people handed {product} {deepName} work in {span}{now !== null ? <>, and <b>{shareWords(now)}</b> {shareWords(now) === 'all' ? '' : 'of all '}the tasks they gave it were {deepName}</> : null}.</>
     : now !== null
@@ -151,13 +150,8 @@ export function WorkPulsePanel({ data, product, title = 'Work Pulse', actions = 
         />
         <QuestionCard
           question={`${t.t3} work`}
-          value={half !== null && d ? `${d.frontierPeople30d} ${d.frontierPeople30d === 1 ? 'person' : 'people'}` : undefined}
-          unit={half !== null && frontierTasks !== null ? `did ${frontierTasks.toLocaleString('en-GB')} ${t.t3.toLowerCase()} ${frontierTasks === 1 ? 'task' : 'tasks'}` : undefined}
-          sub={half !== null && d ? <>{half} of these people did {Math.round((d.frontierHalfShare ?? 0.5) * 100)}% of those tasks. {seeWho}</> : undefined}
+          value={half !== null && d ? <span className="text-[14px] leading-5 font-medium tracking-normal">{(d.frontierPeople30d ?? 0).toLocaleString('en-GB')} people did {(frontierTasks ?? 0).toLocaleString('en-GB')} {t.t3.toLowerCase()} tasks. {half.toLocaleString('en-GB')} of them did 50% of those tasks.</span> : undefined}
           notMeasured={half === null ? `No ${t.t3.toLowerCase()} work in ${span}` : undefined}
-          todo={actions && d?.frontierTopShare != null
-            ? <>The busiest person did {Math.round(d.frontierTopShare * 100)}% of those tasks. {seeWho}</>
-            : undefined}
         />
       </div>
       <p className="m-0 mt-3 pt-2.5 border-t border-dashed border-[#EAEAEA] text-[12px] text-[#8F8F8F]">
