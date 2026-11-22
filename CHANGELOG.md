@@ -1,5 +1,12 @@
 # Changelog
 
+## 1.4.9 (2026-11-22)
+
+- Plainer wording on the Dashboard, Work Pulse, Developer Pulse and FinOps.
+- Frontier work box: "7 people did 14 frontier tasks. 3 of them did 50% of those tasks."
+- The Work Pulse overview counts active users in the last 30 days, the same as the Dashboard.
+- No migrations.
+
 ## 1.4.8 (2026-11-21)
 
 - **Faster pages that add up spend and tokens:** Spend Review, Model Efficiency, Developer Pulse, FinOps, Value, Claude Sub Agents and the Work Pulse model mix read daily totals instead of adding up every model call. A scheduled job adds new calls to the totals every 5 minutes (migrations 0063, 0064). Today and the part-days at each end of a period are still read from the calls themselves, so the figures are unchanged.
