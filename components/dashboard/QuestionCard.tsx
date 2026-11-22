@@ -114,7 +114,10 @@ export function shareWords(v: number): string {
 export function sharePair(now: number, before: number): [string, string] {
   const a = shareWords(now);
   const b = shareWords(before);
-  return a.endsWith('%') || b.endsWith('%') ? [`${Math.round(now * 100)}%`, `${Math.round(before * 100)}%`] : [a, b];
+  // Percentages when either has no word form, or when both round to the same words but differ
+  // ("three in four, down from three in four" says nothing).
+  const same = a === b && Math.round(now * 100) !== Math.round(before * 100);
+  return a.endsWith('%') || b.endsWith('%') || same ? [`${Math.round(now * 100)}%`, `${Math.round(before * 100)}%`] : [a, b];
 }
 export const cap = (t: string) => t.charAt(0).toUpperCase() + t.slice(1);
 
