@@ -679,8 +679,16 @@ async function runCodeHourlyAggregationInner(client: TypedClient): Promise<void>
   // its last activity fell in, which overstated 30-day spend and commits.
   // Claude Code sessions are therefore re-summed per window from their model
   // calls (code_assistant_meta) and prompts made inside the window; Codex
-  // sessions keep their whole totals and are placed by last_at, as before.
+  // sessions keep their whole totals and are placed by last_at, as before. So
+  // does a Claude Code session with no model calls left at all (retention
+  // deletes calls by their own date, the session row by its last activity):
+  // its stored totals are all there is.
   const sessionInfo = new Map(allSessions.map(s => [s.session_id, s]));
+  const withCalls = new Set((await rawAll<{ session_id: string }>(client, sql`
+    SELECT DISTINCT cam.session_id FROM code_assistant_meta cam
+    JOIN code_session_stats css ON css.session_id = cam.session_id
+    WHERE css.last_at >= ${priorPeriodStart}`)).map(r => r.session_id));
+  const wholeTotals = allSessions.filter(s => !isCodexSession(s) && !withCalls.has(s.session_id));
   type ModelTotals = Record<string, { input: number; output: number; cache_creation: number; cache_read: number }>;
   async function windowSessions(start: number, end: number): Promise<SessionRow[]> {
     const calls = await rawAll<{
@@ -737,15 +745,17 @@ async function runCodeHourlyAggregationInner(client: TypedClient): Promise<void>
         m.input += inp; m.output += outp; m.cache_creation += cw; m.cache_read += cr;
       }
     }
+    const whole = new Set(wholeTotals.map(s => s.session_id));
     for (const p of prompts) {
-      if (isCodexSession(p)) continue;
+      if (isCodexSession(p) || whole.has(p.session_id)) continue;
       rowFor(p.session_id, p.user_id).row.user_msg_count += Number(p.n ?? 0);
     }
     const claude: SessionRow[] = [...rows.values()].map(({ row, models }) => ({
       ...row, models_json: Object.keys(models).length > 0 ? JSON.stringify(models) : null,
     }));
-    const codex = allSessions.filter(s => isCodexSession(s) && s.last_at >= start && s.last_at < end);
-    return [...claude, ...codex];
+    const byLastAt = (s: { last_at: number }) => s.last_at >= start && s.last_at < end;
+    const codex = allSessions.filter(s => isCodexSession(s) && byLastAt(s));
+    return [...claude, ...wholeTotals.filter(byLastAt), ...codex];
   }
 
   // The last 30 days (the headline figures), the 30 days before them (what
