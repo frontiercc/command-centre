@@ -18,7 +18,7 @@ import { useSessionRole } from '@/components/shared/useSessionRole';
 import { useAskPageNote } from '@/components/ask/useAskAvailable';
 import { deepWords, tierNamesOr, type TierNames } from '@/lib/pulse/tier-names';
 import { NEW_WAYS_OF_WORKING } from '@/lib/pulse/cowork/coaching-words';
-import { QuestionCard, DASH, DASH_SHADES, shareWords, sharePair, cap } from '@/components/dashboard/QuestionCard';
+import { QuestionCard, DASH, DASH_SHADES, shareWords, cap } from '@/components/dashboard/QuestionCard';
 
 type Tier = { t1: number; t2: number; t3: number };
 
@@ -88,10 +88,6 @@ export function WorkPulsePanel({ data, product, title = 'Work Pulse', actions = 
   const people = d?.deepPeople30d ?? null;
   const active = d?.activePeople30d ?? null;
   const half = d?.frontierHalfPeople ?? null;
-  const [nowSaid, beforeSaid] = now !== null && before !== null ? sharePair(now, before) : [now !== null ? shareWords(now) : '', ''];
-  const shareChange = now !== null && before !== null
-    ? (Math.round(now * 100) === Math.round(before * 100) ? `the same as ${prior}` : `${now > before ? 'up' : 'down'} from ${beforeSaid === 'half' ? 'about half' : beforeSaid} ${prior}`)
-    : null;
   const frontierTasks = d?.frontierTasks30d ?? null;
   const answer = people !== null && active !== null && people > 0
     ? <><b>{people} of {active}</b> people handed {product} {deepName} work in {span}{now !== null ? <>, and <b>{shareWords(now)}</b> {shareWords(now) === 'all' ? '' : 'of all '}the tasks they gave it were {deepName}</> : null}.</>
@@ -124,9 +120,11 @@ export function WorkPulsePanel({ data, product, title = 'Work Pulse', actions = 
         />
         <QuestionCard
           question={`Tasks that are ${deepName}`}
-          value={now !== null ? `${(tc.t2 + tc.t3).toLocaleString('en-GB')} of ${total(tc).toLocaleString('en-GB')}` : undefined}
+          value={now !== null ? `${(tc.t2 + tc.t3).toLocaleString('en-GB')} (${pct(now)}) of ${total(tc).toLocaleString('en-GB')}` : undefined}
           unit="tasks"
-          change={now !== null ? `${nowSaid}${shareChange ? `, ${shareChange}` : ''}` : undefined}
+          change={now !== null && before !== null
+            ? (Math.round(now * 100) === Math.round(before * 100) ? `the same as ${prior}` : `${now > before ? 'up' : 'down'} from ${pct(before)} ${prior}`)
+            : undefined}
           trend={d?.tierWeeks.map(t => (t ? deep(t) : null))}
           notMeasured={now === null ? `No classified work in ${span}` : undefined}
           todo={actions && now !== null && before !== null
