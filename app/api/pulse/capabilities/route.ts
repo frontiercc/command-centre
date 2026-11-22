@@ -29,6 +29,7 @@ export async function GET(request: NextRequest) {
   const pe = schema.pulseEvents;
   const u = schema.users;
   const pc = schema.pulseClassifications;
+  const sd = schema.coworkSessionDescriptions;
 
   const scopeUser = request.nextUrl.searchParams.get('scope') === 'user';
   const statusFilter = request.nextUrl.searchParams.get('status') === 'dismissed' ? 'dismissed' : 'candidate';
@@ -60,15 +61,23 @@ export async function GET(request: NextRequest) {
     .select({
       id: pe.id, title: pe.title, body: pe.body, tier: pe.tier, detected_at: pe.detected_at, status: pe.status,
       user_id: pe.user_id, display_name: u.display_name, email: u.email, department: u.department, task_type: pc.task_type,
+      // What the session did, in one sentence (the session description job), so an item is named by its
+      // work, not its category. Visible here only to an admin (everyone) or the person (their own).
+      description: sd.description,
     })
     .from(pe)
     .leftJoin(u, eq(u.id, pe.user_id))
     .leftJoin(pc, eq(pc.cowork_message_id, pe.cowork_message_id))
+    .leftJoin(sd, eq(sd.session_id, pc.msg_session_id))
     .where(whereClause)
     .orderBy(desc(pe.detected_at))
     .limit(100);
 
-  return NextResponse.json({ candidates, pendingCount: candidates.length, tierNames: await getTierNames() });
+  const descriptionsOn = (await getConfigValue('pulseSessionDescriptionsEnabled')) !== 'false';
+  return NextResponse.json({
+    candidates: descriptionsOn ? candidates : candidates.map(c => ({ ...c, description: null })),
+    pendingCount: candidates.length, tierNames: await getTierNames(),
+  });
 }
 
 // PATCH — confirm, dismiss, or restore a capability event

@@ -143,7 +143,7 @@ function buildVerdicts(d: OrgSummary, vendor: Vendor): Verdict[] {
 
   const autonomy = m?.autonomy_ratio ?? null;
   const subagentPct = d.subagentShare != null ? Math.round(d.subagentShare * 100) : null;
-  const subagentNote = subagentPct != null ? ` ${subagentPct}% of its steps were handed to helper agents.` : '';
+  const subagentNote = subagentPct ? ` ${subagentPct}% of its steps were handed to helper agents.` : '';
   const commits = m?.commit_count ?? 0;
   const darkCount = d.darkRepos.length;
   const activeCount = m?.repo_count ?? 0;
@@ -159,7 +159,7 @@ function buildVerdicts(d: OrgSummary, vendor: Vendor): Verdict[] {
         : `${formatCurrency(m.spend_usd)} in the last 30 days across ${m.session_count} sessions` +
           (spendPerSession !== null ? ` (${formatCurrency(spendPerSession)} per session)` : '') +
           (spendTrend ? `, ${spendTrend} against the 30 days before` : '') +
-          '. Spend is context, not a verdict: read it alongside autonomy and shipping.',
+          '.',
       trend: d.trends?.spend,
       change: spendPct,
       estimateBadge: d.spendIsPartlyEstimated
@@ -178,7 +178,7 @@ function buildVerdicts(d: OrgSummary, vendor: Vendor): Verdict[] {
       plain: (autonomy == null
         ? 'No activity to judge yet.'
         : autonomy >= 3
-          ? `${w.actor} takes ${autonomy.toFixed(1)} actions per human instruction: developers are supervising delegated work, not dictating keystrokes.`
+          ? `${w.actor} takes ${autonomy.toFixed(1)} actions for each instruction a person gives: developers are supervising delegated work, not dictating keystrokes.`
           : autonomy >= 1
             ? `${w.actor} takes ${autonomy.toFixed(1)} actions per instruction: delegation is forming but still hands-on.`
             : `Under one action per instruction: ${w.actor === 'The AI' ? 'AI' : w.actor} is being used as a conversational aid more than a delegate. Expect this to rise as trust builds.`) + subagentNote,
@@ -342,8 +342,7 @@ function SpendConcentrationCard({ data }: { data: OrgSummary['spendConcentration
     <Panel title="Spend concentration" subtitle="30 days" flush>
       <div className="px-4 pt-3">
         <Muted>
-          Share of total Code spend held by the top spenders, across {data.spenderCount} active users: a key-person and
-          automation-runaway signal, not a verdict.
+          Share of Claude Code spend from the people who spend most, out of {data.spenderCount} people who used it.
         </Muted>
       </div>
       <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 p-4">
@@ -611,28 +610,6 @@ export default function CodePulseOverviewPage() {
             <EfficiencyCard metrics={data!.metrics} claude={claudeRow} codexView={view === 'openai'} />
 
             <SpendConcentrationCard data={data?.spendConcentration ?? null} />
-
-            {(data?.highFrictionSessions?.length ?? 0) > 0 ? (
-              <Panel title="High-friction sessions" subtitle="Last 7 days" flush>
-                <div className="px-4 pt-3 pb-2">
-                  <Muted>Sessions where over a quarter of tool actions failed: a coaching signal, not a fault list.</Muted>
-                </div>
-                <ul className="m-0 p-0 list-none">
-                  {data!.highFrictionSessions.map(s => (
-                    <li key={s.session_id} className="flex items-center justify-between gap-3 px-4 py-2.5 border-t border-[#F2F2F2] text-[14px]">
-                      <span className="text-[#0A0A0A] truncate min-w-0">
-                        {s.repo ? <><span className="font-mono text-[13px]">{s.repo}</span><span className="text-[#8F8F8F]"> · </span></> : null}
-                        <span className="font-medium">{s.user_display_name ?? 'unknown user'}</span>
-                        <span className="text-[#8F8F8F]"> · {new Date(s.last_at * 1000).toLocaleDateString('en-GB', { day: 'numeric', month: 'short' })}</span>
-                      </span>
-                      <span className="text-[13px] text-[#B54708] tabular-nums shrink-0">
-                        {s.error_count}/{s.tool_use_count} actions failed ({Math.round((s.error_count / s.tool_use_count) * 100)}%)
-                      </span>
-                    </li>
-                  ))}
-                </ul>
-              </Panel>
-            ) : <Panel title="High-friction sessions" subtitle="Last 7 days"><Muted>No high-friction sessions in the last 7 days.</Muted></Panel>}
 
             <Muted>
               The Work mix, the By hand estimate and the AI summary are judged; everything else is measured from

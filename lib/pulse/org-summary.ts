@@ -373,7 +373,11 @@ export async function buildOrgSummary(vendor: Vendor, quarterly: boolean) {
     otiWeeks: await weekAvg('oti', 'user'),
     orsWeeks: await weekAvg('ors', 'function'),
     tierWeeks: weeks.map((_, i) => tierByWeek.get(i) ?? null),
-    priorTierCounts: { t1: Number(priorTier?.t1 ?? 0), t2: Number(priorTier?.t2 ?? 0), t3: Number(priorTier?.t3 ?? 0) },
+    // When retention has removed more than a week of the period before, there is too little left to
+    // compare with, so no comparison is given (the cards then show this period only).
+    priorTierCounts: firstKept !== null && firstKept > pStart + 7 * 86400
+      ? { t1: 0, t2: 0, t3: 0 }
+      : { t1: Number(priorTier?.t1 ?? 0), t2: Number(priorTier?.t2 ?? 0), t3: Number(priorTier?.t3 ?? 0) },
     capabilityWeeks: weeks.map((_, i) => capByWeek.get(i) ?? 0),
     capabilitiesRecent: Number(capCounts?.recent ?? 0),
     capabilitiesPending: Number(capCounts?.pending ?? 0),

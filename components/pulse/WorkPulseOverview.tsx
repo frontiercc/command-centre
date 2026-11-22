@@ -107,7 +107,9 @@ function numberWord(n: number): string {
 export type OrgDepthWindow = 13 | 26 | 52;
 const ORG_WINDOWS: DepthWindow[] = [13, 26, 52];
 
-interface DeptTrend { dept: string; thenVsNow: { then: number; now: number; deltaPp: number; arrow: 'up' | 'flat' | 'down' } | null }
+/** The weeks each end of a then-vs-now compares (lib/pulse/delegation.ts: up to 4, half the weeks with data). */
+const weeksWord = (dataWeeks?: number) => { const k = Math.max(1, Math.min(4, Math.floor((dataWeeks ?? 8) / 2))); return k === 1 ? 'week' : `${k} weeks`; };
+interface DeptTrend { dept: string; thenVsNow: { then: number; now: number; deltaPp: number; arrow: 'up' | 'flat' | 'down'; dataWeeks?: number } | null }
 
 export function BiggerJobs({ weeks, departments, product, window, onWindow, names }: {
   weeks: TierWeek[]; departments: DeptTrend[]; product: string; window: OrgDepthWindow; onWindow: (w: OrgDepthWindow) => void; names?: TierNames;
@@ -131,8 +133,8 @@ export function BiggerJobs({ weeks, departments, product, window, onWindow, name
           {falling.slice(0, 3).map(d => (
             <div key={d.dept} className="flex gap-2.5 items-center py-1 text-[13px]">
               <Link href={`/pulse/dept?dept=${encodeURIComponent(d.dept)}`} className="text-[#0A0A0A] hover:text-[#1F6F8B]">{d.dept}</Link>
-              <span className="text-[#777777]">{deepWords(names)} work was {sharePair(d.thenVsNow!.now, d.thenVsNow!.then)[0]} of tasks in the latest weeks</span>
-              <span className="ml-auto text-[#333333]">down from {sharePair(d.thenVsNow!.now, d.thenVsNow!.then)[1]} at the start</span>
+              <span className="text-[#777777]">{deepWords(names)} work was {sharePair(d.thenVsNow!.now, d.thenVsNow!.then)[0]} of tasks in the last {weeksWord(d.thenVsNow!.dataWeeks)}</span>
+              <span className="ml-auto text-[#333333]">down from {sharePair(d.thenVsNow!.now, d.thenVsNow!.then)[1]} in the first {weeksWord(d.thenVsNow!.dataWeeks)}</span>
             </div>
           ))}
         </div>
@@ -279,7 +281,7 @@ export function Products({ data, names, loading = false }: { data: ByProductData
 
 /* ── 7: New ways of working ─────────────────────────────────────── */
 
-interface Candidate { id: number; title: string; detected_at: number; department: string | null; display_name: string | null }
+interface Candidate { id: number; title: string; detected_at: number; department: string | null; display_name: string | null; description?: string | null }
 
 export function NewWaysOfWorking({ confirmedTotal, confirmedRecent, vendor }: { confirmedTotal: number | null; confirmedRecent: number; vendor: Vendor }) {
   const [list, setList] = useState<Candidate[] | null>(null);
@@ -310,7 +312,7 @@ export function NewWaysOfWorking({ confirmedTotal, confirmedRecent, vendor }: { 
           <div className="text-[12px] font-semibold text-[#333333] mb-0.5">Waiting for review, oldest first</div>
           {oldest.slice(0, 3).map(c => (
             <div key={c.id} className="flex items-center gap-2.5 py-1.5 border-b border-[#F2F2F2] last:border-b-0 text-[13px]">
-              <span className="min-w-0 truncate text-[#0A0A0A]">{cleanTitle(c.title)}</span>
+              <span className="min-w-0 truncate text-[#0A0A0A]" title={c.description ?? undefined}>{c.description ?? cleanTitle(c.title)}</span>
               <span className="text-[#777777] whitespace-nowrap">{c.display_name ? `${c.display_name} · ` : ''}{c.department ? `${c.department} · ` : ''}{days(c.detected_at)} ago</span>
               <span className="ml-auto flex gap-1.5 shrink-0">
                 <button type="button" disabled={busy === c.id} onClick={() => act(c.id, 'confirm')} className={`${B.secondary} !py-0.5 !px-2 !text-[12px]`}>Confirm</button>

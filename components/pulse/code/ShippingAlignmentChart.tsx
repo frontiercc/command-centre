@@ -126,7 +126,7 @@ export default function ShippingAlignmentChart({ series, children, codexPresent 
               : <>Daily commits on the GitHub-tracked repos beside commits made inside {tool} sessions: same-day volumes, measured on both sides, not attribution.</>}
           {' '}
           {anySplit
-            ? <>A GitHub commit counts as made with a tool when its author email belongs to a Command Centre person (commit author mapping covers other addresses) and that person&apos;s Claude Code or Codex activity recorded a commit within 15 minutes of it. Commits made with a tool that is not connected count as no AI tool recorded.{anyTotalOnly ? ' Days synced before this matching show the GitHub total only.' : ''}</>
+            ? <>A GitHub commit counts as made with a tool when the same person&apos;s tool recorded a commit within 15 minutes of it.{anyTotalOnly ? ' Earlier days show the GitHub total only.' : ''}</>
             : <>Different denominators: AI coding activity is org-wide; GitHub commits cover the tracked repos only. Commits made with each tool appear after the next GitHub sync.</>}
         </Muted>
         <svg

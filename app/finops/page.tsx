@@ -568,7 +568,7 @@ export default function CostChargebackPage() {
                 label={<span className="inline-flex items-center gap-2">Caching saved {estimateTag}</span>}
                 value={report.cacheSavingsUsd != null ? fmtUsd(report.cacheSavingsUsd) : notShown('Not measured')}
                 tone="judged"
-                sub={report.cacheSavingsUsd != null ? 'what re-read conversation would have cost at full price' : undefined}
+                sub={report.cacheSavingsUsd != null ? 'what re-read conversation would have cost at full price, so it can be more than the spend' : undefined}
               />
             </Strip>
 
