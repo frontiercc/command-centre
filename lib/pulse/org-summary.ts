@@ -348,7 +348,8 @@ export async function buildOrgSummary(vendor: Vendor, quarterly: boolean) {
     SELECT MIN(pc.msg_occurred_at) AS first_at FROM pulse_classifications pc WHERE pc.classifier_status = 'classified'
   `);
   const firstKept = keptRow?.first_at == null ? null : Number(keptRow.first_at);
-  const keptFrom = firstKept !== null && firstKept > bStart ? firstKept : null;
+  // Only worth saying when at least a week of the window is missing.
+  const keptFrom = firstKept !== null && firstKept > bStart + 7 * 86400 ? firstKept : null;
 
   const dashboard = {
     window: quarterly ? 'quarter' as const : 'month' as const,

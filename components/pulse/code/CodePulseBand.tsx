@@ -114,7 +114,7 @@ export default function CodePulseBand({ vendor = 'all' }: { vendor?: 'all' | 'cl
         <QuestionCard
           question="How many repos does it reach?"
           value={repos !== null ? String(repos) : undefined}
-          unit={repos !== null ? (ghRepos !== undefined && (m?.repo_count ?? 0) === 0 ? `of ${data.githubOverlay?.trackedRepoCount ?? 0} tracked on GitHub` : 'repos') : undefined}
+          unit={repos !== null ? (ghRepos !== undefined && (m?.repo_count ?? 0) === 0 ? `of ${data.githubOverlay?.trackedRepoCount ?? 0} tracked on GitHub` : repos === 1 ? 'repo' : 'repos') : undefined}
           notMeasured={repos === null ? <>Connect GitHub to see repos. <Link href="/admin/code-pulse?tab=github" className="text-[#1F6F8B] hover:underline">Set up</Link></> : undefined}
         />
       </div>
