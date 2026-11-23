@@ -1,5 +1,11 @@
 # Changelog
 
+## 1.4.10 (2026-11-23)
+
+- Every list you pick from (people, departments, teams, cost centres) is in alphabetical order.
+- The person dropdown on Work Pulse Users shows name and department only, and each page opens on the first name.
+- No migrations.
+
 ## 1.4.9 (2026-11-22)
 
 - Plainer wording on every page: percentages, separators, whole dollars, plain tool names.
