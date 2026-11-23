@@ -22,6 +22,7 @@ import type { CoworkCoachingPlan, CoworkMetric } from '@/lib/pulse/cowork/team-c
 import type { PlanAction } from '@/lib/pulse/coaching-core';
 import type { ProducedSession } from '@/lib/pulse/cowork/coaching-figures';
 import { PRODUCT_FAMILY, PRODUCT_LABEL, type WorkProduct } from '@/lib/pulse/cowork/products';
+import { sortLabels } from '@/lib/ui/alphabetical';
 
 interface Data {
   teams: string[];
@@ -150,7 +151,7 @@ function TeamCoaching() {
                 onChange={e => { setDepartment(e.target.value); load(e.target.value); }}
                 className={cx(B.select, 'min-w-[240px] text-[14px]')}
               >
-                {data!.teams.map(t => <option key={t} value={t}>{t}</option>)}
+                {sortLabels(data!.teams).map(t => <option key={t} value={t}>{t}</option>)}
               </select>
             }
           />

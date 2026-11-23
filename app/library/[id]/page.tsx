@@ -14,6 +14,7 @@ import {
   PageBody, Toolbar, Panel, Strip, Figure, BarRow, Tag, Pill, B, Notice, Muted, deltaTone, cx,
 } from '@/components/precision/ui';
 import { sharedGet } from '@/components/shared/shared-get';
+import { sortLabels } from '@/lib/ui/alphabetical';
 
 interface DayCount { day: string; cnt: number; }
 interface TopUser  { user_id: string; display_name: string | null; cnt: number; }
@@ -138,7 +139,7 @@ export default function LibraryDetailPage({ params }: { params: Promise<{ id: st
     fetch('/api/users')
       .then(r => r.ok ? r.json() : [])
       .then((rows: Array<{ department?: string | null }>) => {
-        const depts = [...new Set(rows.map(u => u.department).filter((d): d is string => Boolean(d)))].sort();
+        const depts = sortLabels([...new Set(rows.map(u => u.department).filter((d): d is string => Boolean(d)))]);
         setDepartments(depts);
       })
       .catch(() => {});

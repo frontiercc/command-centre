@@ -17,6 +17,7 @@ import { PageBody, Toolbar, Panel, PanelFoot, SubHead, T, Tag, Pill, B, Notice, 
 import { useConnectedProducts } from '@/components/shared/VendorSwitch';
 import { labelForUseCaseSurface } from '@/lib/usecases/dept-boxes';
 import { sharedGet } from '@/components/shared/shared-get';
+import { sortByLabel } from '@/lib/ui/alphabetical';
 
 interface WeekActivity {
   weekStart: number;
@@ -522,7 +523,7 @@ export default function UseCaseDetailPage() {
                     className={inputCls}
                   >
                     <option value="">Unassigned</option>
-                    {users.map(u => (
+                    {sortByLabel(users, userLabel).map(u => (
                       <option key={u.id} value={u.id}>{userLabel(u)}</option>
                     ))}
                   </select>

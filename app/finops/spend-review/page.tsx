@@ -19,6 +19,7 @@ import { useAskPageNote } from '@/components/ask/useAskAvailable';
 import { prettyModel } from '@/components/finance/ModelEfficiencySection';
 import type { SpendReviewTopRoute, EfficiencyReach } from '@/lib/finance/spend-review';
 import { topTierName } from '@/lib/pulse/tier-names';
+import { sortLabels } from '@/lib/ui/alphabetical';
 
 type Surface = SpendReviewSurface;
 interface LimitRow { period: string; limit: number | null; spend: number; currency: string; source: string; shareUsed: number | null }
@@ -409,7 +410,7 @@ function SpendReviewIndex() {
 
   const limitsOn = data?.limits.status === 'ok' && data.isCurrentMonth && !openaiOnly;
   const nearShare = data?.nearLimitShare ?? 0.8;
-  const departments = useMemo(() => [...new Set((data?.people ?? []).map(p => p.department).filter((d): d is string => !!d))].sort(), [data]);
+  const departments = useMemo(() => sortLabels([...new Set((data?.people ?? []).map(p => p.department).filter((d): d is string => !!d))]), [data]);
 
   const pace = data?.isCurrentMonth ? monthElapsed(data.period) : 1;
   const defaultSort = useMemo<{ key: SortKey; desc: boolean }>(() => ({ key: limitsOn ? 'limit' : 'spend', desc: true }), [limitsOn]);

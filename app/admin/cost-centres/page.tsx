@@ -9,6 +9,7 @@ import LoadingSpinner from '@/components/shared/LoadingSpinner';
 import { useToast } from '@/components/shared/ToastProvider';
 import { PageBody, Panel, T, B, Empty, Notice, Muted, cx } from '@/components/precision/ui';
 import { Field } from '@/components/admin/precision-admin';
+import { sortByLabel } from '@/lib/ui/alphabetical';
 
 interface CostCentre {
   id: number;
@@ -343,7 +344,7 @@ export default function CostCentresAdminPage() {
                             className={cx(B.select, 'w-full max-w-xs')}
                           >
                             <option value="">Unmapped</option>
-                            {centres.map(centre => (
+                            {sortByLabel(centres, c => c.name).map(centre => (
                               <option key={centre.id} value={centre.id}>
                                 {centre.name}{centre.code ? ` (${centre.code})` : ''}
                               </option>

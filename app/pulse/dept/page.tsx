@@ -25,6 +25,7 @@ import { PageBody, Toolbar, Notice, B, cx } from '@/components/precision/ui';
 import { useVendor, useOpenAiOnly, VendorSwitch } from '@/components/shared/VendorSwitch';
 import { WORK_PULSE_VENDOR_LABELS } from '@/lib/dashboard/vendor';
 import { useAskPageNote } from '@/components/ask/useAskAvailable';
+import { sortByLabel } from '@/lib/ui/alphabetical';
 
 // Based on DeptPulseData from app/pulse/dept/[dept]/page.tsx (a redirect-only
 // legacy page) but intentionally diverges: `delegation?` exists only here.
@@ -102,7 +103,7 @@ export default function DeptPickerPage() {
         // Auto-select first dept if nothing in URL
         if (!searchParams.get('dept') && list.length > 0) {
           const params = new URLSearchParams(searchParams.toString());
-          params.set('dept', list[0].dept);
+          params.set('dept', sortByLabel(list, d => d.dept)[0].dept);
           router.replace(`/pulse/dept?${params.toString()}`);
         }
       })
@@ -167,7 +168,7 @@ export default function DeptPickerPage() {
                   className={cx(B.select, 'min-w-[240px] text-[14px]')}
                 >
                   {depts.length === 0 && <option value="">No departments found</option>}
-                  {depts.map(d => (
+                  {sortByLabel(depts, d => d.dept).map(d => (
                     <option key={d.dept} value={d.dept}>
                       {d.dept} ({d.member_count} member{d.member_count !== 1 ? 's' : ''})
                     </option>

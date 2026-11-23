@@ -23,8 +23,9 @@ import type { TierNames } from '@/lib/pulse/tier-names';
 import { PageBody, Toolbar, Notice, B, cx, Muted } from '@/components/precision/ui';
 import { useVendor, useOpenAiOnly, VendorSwitch } from '@/components/shared/VendorSwitch';
 import { WORK_PULSE_VENDOR_LABELS } from '@/lib/dashboard/vendor';
-import { deepShareOf, deepWords, withTierNames } from '@/lib/pulse/tier-names';
+import { withTierNames } from '@/lib/pulse/tier-names';
 import { sharedGet } from '@/components/shared/shared-get';
+import { sortByLabel } from '@/lib/ui/alphabetical';
 
 interface PersonalPulseData {
   /** Parts of the response that failed to build, so their panels say so. */
@@ -111,7 +112,7 @@ export default function UsersPickerPage() {
         setUsers(list);
         if (!searchParams.get('userId') && list.length > 0) {
           const params = new URLSearchParams(searchParams.toString());
-          params.set('userId', list[0].id);
+          params.set('userId', sortByLabel(list, u => u.display_name ?? u.email)[0].id);
           router.replace(`/pulse/users?${params.toString()}`);
         }
       })
@@ -192,14 +193,10 @@ export default function UsersPickerPage() {
                   {users.length === 0 && (
                     <option value="">No users with Pulse data</option>
                   )}
-                  {users.map(u => (
+                  {sortByLabel(users, u => u.display_name ?? u.email).map(u => (
                     <option key={u.id} value={u.id}>
                       {u.display_name ?? u.email}
                       {u.department ? ` · ${u.department}` : ''}
-                      {(() => {
-                        const share = deepShareOf(u.tier_1_count, u.tier_2_count, u.tier_3_count);
-                        return share === null ? '' : ` (${Math.round(share * 100)}% ${deepWords(pulseData?.tierNames)})`;
-                      })()}
                     </option>
                   ))}
                 </select>

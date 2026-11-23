@@ -14,6 +14,7 @@ import { PageBody, Panel, Pill, Tag, Muted, T, B, cx } from '@/components/precis
 import { ToggleRow } from '@/components/admin/precision-admin';
 import DepartmentSyncPanel from '@/components/admin/DepartmentSyncPanel';
 import { sharedGet } from '@/components/shared/shared-get';
+import { sortByLabel, sortLabels } from '@/lib/ui/alphabetical';
 
 type TestStatus = 'idle' | 'testing' | 'success' | 'error';
 
@@ -143,12 +144,12 @@ export default function SecurityPage() {
   // department data pushed onto its monitored users. Same union rule the rest
   // of the platform uses (users.department ∪ admin_users.department).
   const allDepartments = useMemo(
-    () => [
+    () => sortLabels([
       ...new Set([
         ...departments,
         ...adminUsers.map(u => u.department).filter((d): d is string => Boolean(d)),
       ]),
-    ].sort(),
+    ]),
     [departments, adminUsers],
   );
 
@@ -264,7 +265,7 @@ export default function SecurityPage() {
     const loadDepartments = fetch('/api/users')
       .then(r => r.json())
       .then((rows: Array<{ department?: string | null }>) => {
-        const depts = [...new Set(rows.map(u => u.department).filter((d): d is string => Boolean(d)))].sort();
+        const depts = sortLabels([...new Set(rows.map(u => u.department).filter((d): d is string => Boolean(d)))]);
         setDepartments(depts);
       })
       .catch(() => {});
@@ -1011,7 +1012,7 @@ export default function SecurityPage() {
                               title="Link this sign-in to the same person in Claude telemetry"
                             >
                               <option value="">Not linked</option>
-                              {agents.map(a => (
+                              {sortByLabel(agents, a => a.display_name ?? a.id).map(a => (
                                 <option key={a.id} value={a.id}>
                                   {a.display_name ?? a.id}
                                 </option>

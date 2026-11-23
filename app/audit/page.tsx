@@ -25,6 +25,7 @@ import { isOpenAiOnly, openAiConnected } from '@/lib/sources/connected-shared';
 import { STRIPPED_MARKER, shownContent } from '@/lib/retention/marker';
 import { formatDuration } from '@/components/pulse/code/CodeStatStrip';
 import { sharedGet } from '@/components/shared/shared-get';
+import { compareLabels, sortLabels } from '@/lib/ui/alphabetical';
 
 interface AuditEvent {
   id: string;
@@ -461,7 +462,7 @@ export default function AuditPage() {
   // Derive sorted unique department list from loaded users
   const departments = useMemo(() => {
     const depts = users.map(u => u.department).filter((d): d is string => Boolean(d));
-    return Array.from(new Set(depts)).sort();
+    return sortLabels(Array.from(new Set(depts)));
   }, [users]);
 
   // The picker lists well over a hundred people, so it is sorted by the label
@@ -470,7 +471,7 @@ export default function AuditPage() {
   // sort where a reader expects, and case never splits the list in two.
   const sortedUsers = useMemo(
     () => [...users].sort((a, b) =>
-      (a.display_name || a.email).localeCompare(b.display_name || b.email, undefined, { sensitivity: 'base' })),
+      compareLabels(a.display_name || a.email, b.display_name || b.email)),
     [users],
   );
 

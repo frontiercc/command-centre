@@ -21,6 +21,7 @@ import { PageBody, Toolbar, Panel, Tag, Empty, Muted, Notice, B, cx, LOAD_FAILED
 import { useVendor, useOpenAiOnly, VendorSwitch } from '@/components/shared/VendorSwitch';
 import { DEVELOPER_PULSE_VENDOR_LABELS, type Vendor } from '@/lib/dashboard/vendor';
 import { useSessionRole } from '@/components/shared/useSessionRole';
+import { sortByLabel } from '@/lib/ui/alphabetical';
 
 interface SessionRow {
   session_id: string;
@@ -132,7 +133,7 @@ function CodeUsersContent() {
         // Default to the first user (highest spend) when none selected
         if (!searchParams.get('userId') && list.length > 0) {
           const params = new URLSearchParams(searchParams.toString());
-          params.set('userId', list[0].user_id);
+          params.set('userId', sortByLabel(list, u => u.display_name ?? u.email ?? '')[0].user_id);
           router.replace(`/pulse/code/users?${params.toString()}`);
         }
       })
@@ -189,7 +190,7 @@ function CodeUsersContent() {
                 >
                   {users.length === 0 && !notInView && <option value="">No users with {viewLabel} activity</option>}
                   {notInView && <option value={selectedUserId}>{data?.displayName ?? 'This person'} · no {viewLabel} activity</option>}
-                  {users.map(u => (
+                  {sortByLabel(users, u => u.display_name ?? u.email ?? '').map(u => (
                     <option key={u.user_id} value={u.user_id}>
                       {u.display_name ?? u.email}{u.department ? ` · ${u.department}` : ''}
                       {codexPresent && !openaiOnly && (u.products?.length ?? 0) > 0 ? ` · ${u.products!.map(p => p === 'codex' ? 'Codex' : 'Claude Code').join(', ')}` : ''}

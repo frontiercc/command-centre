@@ -13,6 +13,7 @@ import { useCorePlatformGuard } from '@/components/shared/useCorePlatformGuard';
 import { effectiveCodeHumanTime } from '@/lib/pulse/human-time';
 import { sharedGet } from '@/components/shared/shared-get';
 import { fetchConfigOnce } from '@/lib/client/config-once';
+import { sortLabels } from '@/lib/ui/alphabetical';
 
 interface Report {
   id: string;
@@ -83,7 +84,7 @@ export default function ReportsPage() {
   );
   const departments = useMemo(() => {
     const depts = users.map(u => u.department).filter((d): d is string => Boolean(d));
-    return Array.from(new Set(depts)).sort();
+    return sortLabels(Array.from(new Set(depts)));
   }, [users]);
 
   const fetchReports = () => {
