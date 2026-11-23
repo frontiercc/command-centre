@@ -16,6 +16,7 @@ import type { TierNames } from '@/lib/pulse/tier-names';
 import { PageBody, Toolbar, Panel, Notice, Empty, Muted, B, cx, LOAD_FAILED } from '@/components/precision/ui';
 import { useVendor, useOpenAiOnly, VendorSwitch } from '@/components/shared/VendorSwitch';
 import { DEVELOPER_PULSE_VENDOR_LABELS } from '@/lib/dashboard/vendor';
+import { sortByLabel } from '@/lib/ui/alphabetical';
 
 interface DeptListRow {
   department: string;
@@ -77,7 +78,7 @@ function DeptContent() {
         setDepts(list);
         if (!searchParams.get('dept') && list.length > 0) {
           const params = new URLSearchParams(searchParams.toString());
-          params.set('dept', list[0].department);
+          params.set('dept', sortByLabel(list, d => d.department)[0].department);
           router.replace(`/pulse/code/dept?${params.toString()}`);
         }
       })
@@ -136,7 +137,7 @@ function DeptContent() {
               >
                 {depts.length === 0 && !notInView && <option value="">No departments with {viewLabel} activity</option>}
                 {notInView && <option value={selectedDept}>{selectedDept} · no {viewLabel} activity</option>}
-                {depts.map(d => (
+                {sortByLabel(depts, d => d.department).map(d => (
                   <option key={d.department} value={d.department}>
                     {d.department} · {d.member_count} {d.member_count === 1 ? 'person' : 'people'}
                   </option>

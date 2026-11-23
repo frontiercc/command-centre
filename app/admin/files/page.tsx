@@ -11,6 +11,7 @@ import FileCategoryMixCard, { type FileCategoryMixItem } from '@/components/puls
 import { PageBody, Toolbar, Panel, Segmented, Tag, T, B, Empty, Notice, cx } from '@/components/precision/ui';
 import { useConnectedProducts } from '@/components/shared/VendorSwitch';
 import { openAiConnected } from '@/lib/sources/connected-shared';
+import { sortLabels } from '@/lib/ui/alphabetical';
 
 const DAY_OPTIONS = [
   { label: '7 days', value: 7 },
@@ -118,7 +119,7 @@ export default function AdminFilesPage() {
               className={B.select}
             >
               <option value="">All departments</option>
-              {depts.map(d => <option key={d} value={d}>{d}</option>)}
+              {sortLabels(depts).map(d => <option key={d} value={d}>{d}</option>)}
             </select>
           )}
 

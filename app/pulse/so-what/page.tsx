@@ -14,6 +14,7 @@ import LoadingSpinner from '@/components/shared/LoadingSpinner';
 import { PageBody, Panel, Notice, Tag, B, cx } from '@/components/precision/ui';
 import { linkCls } from '@/components/pulse/WorkPulseOverview';
 import type { Card, Choice, GroupWords, SoWhat } from '@/lib/pulse/cowork/so-what';
+import { sortLabels } from '@/lib/ui/alphabetical';
 
 const day = (s: number) => new Date(s * 1000).toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric' });
 const pct = (v: number | null) => (v === null ? 'not measured' : `${Math.round(v * 100)}%`);
@@ -163,7 +164,7 @@ function SoWhatBody() {
                 className={cx(B.select, 'min-w-[220px] text-[14px]')}
               >
                 <option value="">Pick a team</option>
-                {(data?.teams ?? []).map(t => <option key={t} value={t}>{t}</option>)}
+                {sortLabels(data?.teams ?? []).map(t => <option key={t} value={t}>{t}</option>)}
               </select>
             </label>
             <label className="flex flex-col gap-1.5">

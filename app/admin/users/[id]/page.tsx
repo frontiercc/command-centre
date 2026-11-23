@@ -13,6 +13,7 @@ import { PageBody, Panel, Strip, Figure, Pill, Dot, SEVERITY_COLOR, Notice, Empt
 import { useConnectedProducts } from '@/components/shared/VendorSwitch';
 import { isOpenAiOnly, openAiConnected } from '@/lib/sources/connected-shared';
 import { PRODUCTS, type ProductCounts } from '@/lib/dashboard/vendor';
+import { sortLabels } from '@/lib/ui/alphabetical';
 
 /** Adoption health as a status pill (active / shallow / inactive). */
 function healthTone(value: string): 'good' | 'warn' | 'neutral' {
@@ -112,7 +113,7 @@ export default function UserDetailPage() {
         const fromAccounts = (adminData?.users ?? [])
           .map((u: { department?: string | null }) => u.department);
         setKnownDepartments(
-          [...new Set([...fromMonitored, ...fromAccounts].filter((d): d is string => Boolean(d)))].sort(),
+          sortLabels([...new Set([...fromMonitored, ...fromAccounts].filter((d): d is string => Boolean(d)))]),
         );
       })
       .catch(() => {});
@@ -133,7 +134,7 @@ export default function UserDetailPage() {
         // reload — it is now a real department as far as the rest of the app
         // is concerned.
         if (department) {
-          setKnownDepartments(prev => (prev.includes(department) ? prev : [...prev, department].sort()));
+          setKnownDepartments(prev => (prev.includes(department) ? prev : sortLabels([...prev, department])));
         }
         setDeptAddingNew(false);
         setEditing(false);

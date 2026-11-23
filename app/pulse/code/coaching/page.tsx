@@ -17,6 +17,7 @@ import { tierNamesOr } from '@/lib/pulse/tier-names';
 import CoachingDone from '@/components/pulse/CoachingDone';
 import { BEYOND_QUICK } from '@/lib/pulse/code/coaching-words';
 import type { CoachingPlan, PlanAction } from '@/lib/pulse/code/team-coaching';
+import { sortLabels } from '@/lib/ui/alphabetical';
 
 interface Data { teams: string[]; department: string | null; plan: CoachingPlan | null; checkAfterDays: number; /** Off hides What it freed. */ humanTimeOn?: boolean }
 
@@ -88,7 +89,7 @@ function TeamCoaching() {
                 onChange={e => { setDepartment(e.target.value); load(e.target.value); }}
                 className={cx(B.select, 'min-w-[240px] text-[14px]')}
               >
-                {data!.teams.map(t => <option key={t} value={t}>{t}</option>)}
+                {sortLabels(data!.teams).map(t => <option key={t} value={t}>{t}</option>)}
               </select>
             }
           />

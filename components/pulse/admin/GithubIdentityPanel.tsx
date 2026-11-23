@@ -5,6 +5,7 @@
 
 import { useEffect, useState } from 'react';
 import { Panel, Notice, Muted, SubHead, B, cx } from '@/components/precision/ui';
+import { sortByLabel } from '@/lib/ui/alphabetical';
 
 interface Mapping { identity: string; user_id: string; display_name: string }
 interface Unmatched { identity: string; commit_count: number }
@@ -93,7 +94,7 @@ export default function GithubIdentityPanel({ onToast }: { onToast: (msg: string
                     className={cx(B.select, 'shrink-0 max-w-[200px]')}
                   >
                     <option value="">Map to user…</option>
-                    {users.map(usr => <option key={usr.id} value={usr.id}>{usr.display_name || usr.email}</option>)}
+                    {sortByLabel(users, usr => usr.display_name || usr.email).map(usr => <option key={usr.id} value={usr.id}>{usr.display_name || usr.email}</option>)}
                   </select>
                   <button
                     type="button"
