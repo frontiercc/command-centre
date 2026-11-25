@@ -1,5 +1,10 @@
 # Changelog
 
+## 1.4.12 (2026-11-25)
+
+- Next.js 15.5.29, which fixes three Next.js security advisories.
+- No migrations.
+
 ## 1.4.11 (2026-11-25)
 
 - The Analytics API pull reads every page of people, not just the first 100.
