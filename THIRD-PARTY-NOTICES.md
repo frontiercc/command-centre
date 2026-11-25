@@ -704,53 +704,53 @@ Licence: BlueOak-1.0.0.
 
 - copyright in it.
 
-### @next/env 15.5.28
+### @next/env 15.5.29
 
 Licence: MIT. Source: https://github.com/vercel/next.js.
 
-### @next/swc-darwin-arm64 15.5.28
+### @next/swc-darwin-arm64 15.5.29
 
 Licence: MIT.
 
 Installed on some machines only; licence taken from package-lock.json.
 
-### @next/swc-darwin-x64 15.5.28
+### @next/swc-darwin-x64 15.5.29
 
 Licence: MIT.
 
 Installed on some machines only; licence taken from package-lock.json.
 
-### @next/swc-linux-arm64-gnu 15.5.28
+### @next/swc-linux-arm64-gnu 15.5.29
 
 Licence: MIT.
 
 Installed on some machines only; licence taken from package-lock.json.
 
-### @next/swc-linux-arm64-musl 15.5.28
+### @next/swc-linux-arm64-musl 15.5.29
 
 Licence: MIT.
 
 Installed on some machines only; licence taken from package-lock.json.
 
-### @next/swc-linux-x64-gnu 15.5.28
+### @next/swc-linux-x64-gnu 15.5.29
 
 Licence: MIT.
 
 Installed on some machines only; licence taken from package-lock.json.
 
-### @next/swc-linux-x64-musl 15.5.28
+### @next/swc-linux-x64-musl 15.5.29
 
 Licence: MIT.
 
 Installed on some machines only; licence taken from package-lock.json.
 
-### @next/swc-win32-arm64-msvc 15.5.28
+### @next/swc-win32-arm64-msvc 15.5.29
 
 Licence: MIT.
 
 Installed on some machines only; licence taken from package-lock.json.
 
-### @next/swc-win32-x64-msvc 15.5.28
+### @next/swc-win32-x64-msvc 15.5.29
 
 Licence: MIT.
 
@@ -2245,7 +2245,7 @@ Licence: MIT. Source: https://github.com/ai/nanoid.
 - Copyright 2017 Andrey Sitnik <andrey@sitnik.ru>
 - COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER LIABILITY, WHETHER
 
-### next 15.5.28
+### next 15.5.29
 
 Licence: MIT. Source: https://github.com/vercel/next.js.
 
