@@ -8,7 +8,7 @@
 //   node scripts/openai-mock/server.mjs              # listens on 4010
 //   node scripts/openai-mock/server.mjs --write out  # also writes the files available now to out/
 //
-// Settings (environment): OPENAI_MOCK_PORT (4010), OPENAI_MOCK_DAYS of
+// Settings (environment): OPENAI_MOCK_PORT (4010; 0 picks a free port), OPENAI_MOCK_DAYS of
 // history (14), OPENAI_MOCK_SEED (42), OPENAI_MOCK_RATE_LIMIT (100 a minute),
 // OPENAI_MOCK_FROZEN (off; 1 lists only the files available at start-up).
 // The data runs 24 hours past start-up
@@ -24,6 +24,9 @@ import path from 'node:path';
 import { buildEvents, buildFiles, WORKSPACE_ID, ORGANIZATION_ID } from './data.mjs';
 
 const PORT = Number(process.env.OPENAI_MOCK_PORT || 4010);
+// The port actually listened on: differs from PORT when PORT is 0 (tests use 0 so
+// the system picks a free port instead of guessing one that may be taken).
+let port = PORT;
 const DAYS = Number(process.env.OPENAI_MOCK_DAYS || 14);
 const SEED = Number(process.env.OPENAI_MOCK_SEED || 42);
 // Per key, per method and route, as documented. Tests raise it to run at full speed.
@@ -108,7 +111,7 @@ function redirectToFile(req, res, fileId, allowedHere, grants) {
   const token = randomBytes(16).toString('hex');
   signed.set(token, { fileId, expires: Date.now() + SIGNED_URL_TTL_MS });
   // Built from the Host the caller used, so the link also works from inside Docker.
-  res.writeHead(307, { location: `http://${req.headers.host || `localhost:${PORT}`}/signed/${token}` });
+  res.writeHead(307, { location: `http://${req.headers.host || `localhost:${port}`}/signed/${token}` });
   res.end();
 }
 
@@ -126,7 +129,7 @@ function maxEventTime(res, url, allowedHere, grants) {
 }
 
 const server = http.createServer((req, res) => {
-  const url = new URL(req.url, `http://localhost:${PORT}`);
+  const url = new URL(req.url, `http://localhost:${port}`);
   if (req.method !== 'GET') return fail(res, 405, 'Method not allowed');
 
   // Signed download links carry no Authorization header, like a real signed URL.
@@ -178,9 +181,10 @@ if (writeIdx > -1) {
 }
 
 server.listen(PORT, () => {
+  port = server.address().port;
   const now = available(startedAt);
   const count = (t) => now.filter((f) => f.event_type === t).length;
-  console.log(`Mock OpenAI Compliance Logs Platform on http://localhost:${PORT}/v1`);
+  console.log(`Mock OpenAI Compliance Logs Platform on http://localhost:${port}/v1`);
   console.log(`  workspace_id    ${WORKSPACE_ID}`);
   console.log(`  organization_id ${ORGANIZATION_ID}`);
   console.log(`  keys            mock-admin-key (all), mock-costs-key (COSTS only)`);
