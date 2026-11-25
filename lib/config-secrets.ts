@@ -22,7 +22,7 @@ export const SECRET_KEYS: Record<string, SecretKeyDef> = {
   anthropicAdminApiKey: { label: 'Admin API key', associatedKeys: [] },
   anthropicAnalyticsApiKey: {
     label: 'Analytics API key',
-    associatedKeys: ['analyticsLastDate'],
+    associatedKeys: ['analyticsLastDate', 'anthropicSeatCount', 'anthropicSeatCountCheckedOn'],
   },
   complianceAccessKey: {
     label: 'Compliance Access Key',

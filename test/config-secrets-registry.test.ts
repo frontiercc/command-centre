@@ -33,8 +33,8 @@ describe('config-secrets registry', () => {
     ]));
   });
 
-  it('analytics key resets its date cursor', () => {
-    expect(SECRET_KEYS.anthropicAnalyticsApiKey.associatedKeys).toEqual(['analyticsLastDate']);
+  it('analytics key resets its date cursor and seat count', () => {
+    expect(SECRET_KEYS.anthropicAnalyticsApiKey.associatedKeys).toEqual(['analyticsLastDate', 'anthropicSeatCount', 'anthropicSeatCountCheckedOn']);
   });
 
   it('github key resets its last-sync bookmark', () => {

@@ -51,6 +51,9 @@ let codeUsageLastAt = 0;
 const CODE_USAGE_EVERY_MS = 5 * 60 * 1000;
 let keptRefreshInFlight = false;
 let keptRefreshLastAt = 0;
+// The drift check reads Anthropic's cost, which Anthropic refreshes every 4 to 24 hours.
+let financeDriftLastAt = 0;
+const FINANCE_DRIFT_EVERY_MS = 60 * 60 * 1000;
 
 /**
  * Wall-clock budget per SCHEDULED classifier drain. Bounds when a pass may
@@ -388,10 +391,14 @@ async function runCycle(): Promise<void> {
   });
 
   // FinOps v2 — reconciliation-drift alert (self-guards on chargebackEnabled).
-  // Not awaited, as before; its outcome is still recorded.
-  void runJob('finance_drift_alert', 'FinOps reconciliation-drift alert', async () => {
-    await runFinanceDriftAlert();
-  });
+  // Not awaited, as before; its outcome is still recorded. Hourly, not every
+  // cycle: each run calls Anthropic's cost API.
+  if (Date.now() - financeDriftLastAt >= FINANCE_DRIFT_EVERY_MS) {
+    financeDriftLastAt = Date.now();
+    void runJob('finance_drift_alert', 'FinOps reconciliation-drift alert', async () => {
+      await runFinanceDriftAlert();
+    });
+  }
 
   // Developer Pulse session-digest classifier — opt-in judged layer, every 30 min
   // (drains its backlog)

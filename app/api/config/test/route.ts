@@ -84,9 +84,11 @@ export async function POST(request: NextRequest) {
       configKey: 'complianceAccessKey',
       endpoint: 'https://api.anthropic.com/v1/compliance/apps/chats?limit=1',
     },
-    // Same Admin API key, checked for the read:spend_limits scope (Spend Review).
-    anthropicAdminApiKeySpendLimits: {
-      configKey: 'anthropicAdminApiKey',
+    // The Analytics API key, checked for the read:spend_limits scope (Spend
+    // Review). Spend limits need a Claude Enterprise key; a Console admin key
+    // cannot read them.
+    anthropicAnalyticsApiKeySpendLimits: {
+      configKey: 'anthropicAnalyticsApiKey',
       endpoint: 'https://api.anthropic.com/v1/organizations/spend_limits/effective?limit=1',
     },
   };
@@ -113,7 +115,7 @@ export async function POST(request: NextRequest) {
 
     if (res.ok) return NextResponse.json({ ok: true });
     if (res.status === 401) return NextResponse.json({ ok: false, error: 'Invalid key' });
-    if (res.status === 403) return NextResponse.json({ ok: false, error: key === 'anthropicAdminApiKeySpendLimits' ? 'Key is valid but cannot read spend limits: it needs read:spend_limits, an Enterprise plan and usage credits turned on' : 'Key is valid but missing the required scope or plan' });
+    if (res.status === 403) return NextResponse.json({ ok: false, error: key === 'anthropicAnalyticsApiKeySpendLimits' ? 'Key is valid but cannot read spend limits: it needs read:spend_limits, an Enterprise plan and usage credits turned on' : 'Key is valid but missing the required scope or plan' });
     // Anything else, 404 included, is a failure: say so with the status Anthropic gave.
     const hint = key === 'anthropicAiApiKey' ? ' Check it was created inside a workspace in the Claude Console.' : '';
     return NextResponse.json({ ok: false, error: `Anthropic did not accept the key (status ${res.status}).${hint}` });

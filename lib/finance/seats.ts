@@ -4,7 +4,8 @@
 /**
  * Wasted-seats estimate for FinOps (Workflow Impact package).
  *
- * Compares the admin-set `licensedSeats` count against the number of DISTINCT
+ * Compares the admin-set `licensedSeats` count (or, when none is set, the seat
+ * count Anthropic's Analytics API reports) against the number of DISTINCT
  * users who have shown ANY activity (Cowork or Chat) in the trailing 30 days,
  * and — when an admin-set monthly seat price is configured — turns the
  * unused-seat count into a rough $ figure. This is deliberately an ESTIMATE,
@@ -64,15 +65,28 @@ export function computeSeats(licensed: number, active: number, priceUsd: number 
 }
 
 /**
- * null when `licensedSeats` is unset/invalid (not finite or <= 0) — mirrors
- * the dashboard's existing licensedSeats gate (app/api/dashboard/route.ts).
- * Short-circuits before any DB query in that case.
+ * Pure. The seat count to compare against: the admin-set `licensedSeats`
+ * when it is valid, else the seat count Anthropic's Analytics API last
+ * reported (lib/anthropic/analytics.ts), else null.
+ */
+export function resolveLicensedSeats(adminSet: string | undefined, anthropicReported: string | undefined): number | null {
+  for (const raw of [adminSet, anthropicReported]) {
+    const n = Number(raw);
+    if (raw && Number.isFinite(n) && n > 0) return n;
+  }
+  return null;
+}
+
+/**
+ * null when neither seat count is set — mirrors the dashboard's existing
+ * licensedSeats gate (app/api/dashboard/route.ts). Short-circuits before any
+ * DB query in that case.
  */
 export async function getSeatsSummary(nowS: number): Promise<SeatsSummary | null> {
   const config = await getAllConfig();
 
-  const licensed = Number(config.licensedSeats);
-  if (!Number.isFinite(licensed) || licensed <= 0) return null;
+  const licensed = resolveLicensedSeats(config.licensedSeats, config.anthropicSeatCount);
+  if (licensed === null) return null;
 
   const priceRaw = Number(config.finopsSeatPriceMonthly);
   const price = priceRaw > 0 ? priceRaw : null;

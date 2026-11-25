@@ -642,7 +642,7 @@ export default function SystemPage() {
                 max={3600}
               />
             </Field>
-            <Field label="Claude licensed seats (optional)" hint="Shown as the Active Users denominator on the dashboard. Blank to hide.">
+            <Field label="Claude licensed seats (optional)" hint="Shown as the Active Users denominator on the dashboard and used for unused seats on FinOps. Blank to hide on the dashboard; FinOps then uses the seat count from the Analytics API key.">
               <input
                 type="number"
                 value={licensedSeats}

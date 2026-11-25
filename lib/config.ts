@@ -30,6 +30,8 @@ export interface AppConfig {
   acceptableUsePolicy: string;
   complianceLastCursor: string;
   analyticsLastDate: string;
+  anthropicSeatCount: string;
+  anthropicSeatCountCheckedOn: string;
   retentionCoworkDays: number;
   retentionOtelDays: number;
   retentionComplianceDays: number;
@@ -386,6 +388,8 @@ export const CONFIG_KEYS: Record<keyof AppConfig, string> = {
   acceptableUsePolicy: 'acceptable_use_policy',
   complianceLastCursor: 'compliance_last_cursor',
   analyticsLastDate: 'analytics_last_date',
+  anthropicSeatCount: 'anthropic_seat_count',
+  anthropicSeatCountCheckedOn: 'anthropic_seat_count_checked_on',
   retentionCoworkDays: 'retention_cowork_days',
   retentionOtelDays: 'retention_otel_days',
   retentionComplianceDays: 'retention_compliance_days',
@@ -795,6 +799,8 @@ export async function getAllConfig(): Promise<AppConfig> {
     acceptableUsePolicy: resolve('acceptableUsePolicy'),
     complianceLastCursor: resolve('complianceLastCursor'),
     analyticsLastDate: resolve('analyticsLastDate'),
+    anthropicSeatCount: resolve('anthropicSeatCount'),
+    anthropicSeatCountCheckedOn: resolve('anthropicSeatCountCheckedOn'),
     retentionCoworkDays: parseInt(resolve('retentionCoworkDays', '90'), 10),
     retentionOtelDays: parseInt(resolve('retentionOtelDays', '30'), 10),
     retentionComplianceDays: parseInt(resolve('retentionComplianceDays', '365'), 10),

@@ -2,156 +2,125 @@
 // SPDX-License-Identifier: Apache-2.0
 
 /**
- * Enterprise Admin API cost client — pulls org-level Anthropic API spend from
- * the Cost Report endpoint (see
- * https://platform.claude.com/docs/en/build-with-claude/admin-api) via the
- * Admin API key (`sk-ant-admin01`) and maps it into the `EnterpriseCost` shape
- * the FinOps v2 UI renders.
+ * Anthropic's own cost figures for a month, from the Usage and Cost Analytics
+ * API (GET /v1/organizations/analytics/cost, beta header
+ * `analytics-usage-cost-2026-08-24`; docs:
+ * https://platform.claude.com/docs/en/manage-claude/usage-cost-analytics-api),
+ * mapped into the `EnterpriseCost` shape the FinOps drift check compares
+ * against Command Centre's own spend.
  *
- * ASSUMPTION (no live Enterprise Analytics key was available
- * to confirm against a real tenant; validate before trusting
- * this mapping in production):
+ * Key: the Analytics API key (a claude.ai key with `read:analytics`, which a
+ * Claude Enterprise organisation needs), else the Admin API key (a Claude
+ * Console organisation). Checked live against a Claude Enterprise
+ * organisation on 2026-11-25:
  *
- *   The Anthropic Cost Report API returns bucketed usage/cost grouped by
- *   dimensions such as model, cost_type, context_window, token_type and
- *   service_tier — it has NO native "surface" (chat/code/cowork) dimension,
- *   since that split is a CCC concept, not an Anthropic one. We ASSUME the
- *   org tags each Workspace with a name that identifies one of CCC's three
- *   surfaces (e.g. a Workspace literally named "Chat", "Code" or "Cowork")
- *   and that the raw bucket carries that name through as `surface_label`.
- *   If a live tenant doesn't set this up, `mapRawToEnterpriseCost` degrades
- *   gracefully — any bucket with a missing/unrecognised `surface_label`
- *   falls into `chat` (Anthropic's own Console/API usage has always been
- *   chat-surface by default) rather than being silently dropped, so
- *   `bySurface` totals always reconcile with `byModel` / `byType` totals.
+ *   - Each row carries a `group` (the dimensions asked for) and a `cost`.
+ *     `cost.amount` is a decimal string in CENTS ("2470.59" is $24.71).
+ *   - `group.product` names the product: chat, claude_code and cowork map to
+ *     Command Centre's three surfaces. Every other product (the Messages API,
+ *     Claude Design, Office agents, Smart Reports, the unified Chat and Cowork
+ *     experience...) is counted in `otherUsd` and the breakdowns, never in a
+ *     surface, so the drift check compares like with like.
+ *   - There are no token counts on this endpoint, only cost.
+ *   - Without `time_bucket_width` the range comes back as one total per group.
+ *     The range may span at most 31 days, which a calendar month never exceeds.
  *
- *   `amount_usd` is assumed pre-converted to USD (the real API returns a
- *   decimal string amount + currency code; a production implementation
- *   would parse/convert non-USD amounts before they reach this mapper).
- *
- *   `service_tier` is assumed to carry Anthropic's tier values
- *   ('priority' | 'standard' | 'batch'); we treat 'priority' as "fast mode"
- *   and fold 'standard' + 'batch' into "standard mode" (the EnterpriseCost
- *   shape has no separate batch bucket).
+ * Anthropic refreshes these figures within 4 to 24 hours and revises them for
+ * about 7 days after a month ends.
  */
 import { getConfigValue } from '@/lib/config';
 import { withBackoff } from '@/lib/ingestion/scheduler';
-import type { CodeTokens } from '@/lib/finance/chargeback';
 
-const COST_REPORT_URL = 'https://api.anthropic.com/v1/organizations/cost_report';
+const COST_URL = 'https://api.anthropic.com/v1/organizations/analytics/cost';
+const COST_BETA = 'analytics-usage-cost-2026-08-24';
+/** Pages of up to 1,000 rows; a month of grouped totals is a few hundred. */
+const MAX_PAGES = 20;
+const GROUP_BY = ['product', 'model', 'context_window', 'speed', 'cost_type', 'token_type'];
 
-/** ASSUMED raw shape of one bucket in the Cost Report API response — see file header. */
-interface RawCostBucket {
-  /** ASSUMED workspace-name-derived surface tag — see file header. */
-  surface_label?: string;
-  model: string;
-  cost_type: 'tokens' | 'web_search' | 'code_execution';
-  context_window: '0-200k' | '200k-1M';
-  token_type: 'uncached_input_tokens' | 'cache_read_input_tokens' | 'cache_creation_input_tokens' | 'output_tokens';
-  service_tier: 'priority' | 'standard' | 'batch';
-  amount_usd: number;
-  token_count: number;
+/** One row of the cost endpoint, as returned live (the fields read here). */
+export interface RawCostRow {
+  group?: {
+    product?: string | null;
+    model?: string | null;
+    context_window?: string | null;
+    speed?: string | null;
+    cost_type?: string | null;
+    token_type?: string | null;
+  };
+  cost?: { amount?: string | null; currency?: string | null };
 }
 
-/** ASSUMED raw Cost Report API response envelope — see file header. */
-interface RawCostReport {
-  data: Array<{
-    starting_at: string;
-    ending_at: string;
-    results: RawCostBucket[];
-  }>;
+interface RawCostPage {
+  data?: RawCostRow[];
+  has_more?: boolean;
+  next_page?: string | null;
 }
 
 export interface EnterpriseCost {
   bySurface: {
-    chat: { usd: number; tokens: CodeTokens };
-    code: { usd: number; tokens: CodeTokens };
-    cowork: { usd: number; tokens: CodeTokens };
+    chat: { usd: number };
+    code: { usd: number };
+    cowork: { usd: number };
   };
+  /** Products with no Command Centre surface (Messages API, Claude Design, Office agents...). */
+  otherUsd: number;
   byModel: Array<{ model: string; usd: number }>;
-  byType: { tokens: number; webSearch: number; codeExecution: number };
+  byType: { tokens: number; webSearch: number; codeExecution: number; sessionUsage: number };
   /** 0-200k vs 200k-1M context window, in USD. */
   contextWindow: { standardUsd: number; longUsd: number };
-  tokenTypes: { uncachedInput: number; cachedInput: number; cacheCreation: number; output: number };
+  /** Token cost by token type, in USD (the endpoint has costs, not counts). */
+  tokenTypeUsd: { uncachedInput: number; cachedInput: number; cacheCreation: number; output: number };
   fastModeUsd: number;
   standardModeUsd: number;
 }
 
-function emptySurface(): { usd: number; tokens: CodeTokens } {
-  return { usd: 0, tokens: { input: 0, output: 0, cacheWrite: 0, cacheRead: 0 } };
+const SURFACE_FOR_PRODUCT: Record<string, 'chat' | 'code' | 'cowork'> = {
+  chat: 'chat',
+  claude_code: 'code',
+  cowork: 'cowork',
+};
+
+/** Cents as a decimal string → dollars. Anything unreadable is 0. */
+function centsToUsd(raw: string | null | undefined): number {
+  const n = Number(raw);
+  return Number.isFinite(n) ? n / 100 : 0;
 }
 
-function surfaceKey(label: string | undefined): 'chat' | 'code' | 'cowork' {
-  const norm = (label ?? '').toLowerCase();
-  if (norm === 'code') return 'code';
-  if (norm === 'cowork') return 'cowork';
-  return 'chat'; // unrecognised/missing label → chat (see ASSUMPTION above)
-}
-
-/** Maps the ASSUMED raw Cost Report response into `EnterpriseCost`. Never throws on unknown enum values — unrecognised buckets are counted in totals but skipped from the dimension they don't match. */
-function mapRawToEnterpriseCost(raw: RawCostReport): EnterpriseCost {
-  const bySurface = { chat: emptySurface(), code: emptySurface(), cowork: emptySurface() };
+/** Maps the cost endpoint's rows into `EnterpriseCost`. Never throws on unknown values. */
+export function mapCostRows(rows: RawCostRow[]): EnterpriseCost {
+  const bySurface = { chat: { usd: 0 }, code: { usd: 0 }, cowork: { usd: 0 } };
+  let otherUsd = 0;
   const modelUsd = new Map<string, number>();
-  const byType = { tokens: 0, webSearch: 0, codeExecution: 0 };
+  const byType = { tokens: 0, webSearch: 0, codeExecution: 0, sessionUsage: 0 };
   const contextWindow = { standardUsd: 0, longUsd: 0 };
-  const tokenTypes = { uncachedInput: 0, cachedInput: 0, cacheCreation: 0, output: 0 };
+  const tokenTypeUsd = { uncachedInput: 0, cachedInput: 0, cacheCreation: 0, output: 0 };
   let fastModeUsd = 0;
   let standardModeUsd = 0;
 
-  const buckets = raw?.data?.flatMap((window) => window.results ?? []) ?? [];
+  for (const row of rows) {
+    const usd = centsToUsd(row.cost?.amount);
+    const g = row.group ?? {};
 
-  for (const bucket of buckets) {
-    const usd = bucket.amount_usd ?? 0;
-    const tokenCount = bucket.token_count ?? 0;
+    const surface = g.product ? SURFACE_FOR_PRODUCT[g.product] : undefined;
+    if (surface) bySurface[surface].usd += usd;
+    else otherUsd += usd;
 
-    // bySurface
-    const surface = bySurface[surfaceKey(bucket.surface_label)];
-    surface.usd += usd;
-    switch (bucket.token_type) {
-      case 'uncached_input_tokens':
-        surface.tokens.input += tokenCount;
-        break;
-      case 'cache_read_input_tokens':
-        surface.tokens.cacheRead += tokenCount;
-        break;
-      case 'cache_creation_input_tokens':
-        surface.tokens.cacheWrite += tokenCount;
-        break;
-      case 'output_tokens':
-        surface.tokens.output += tokenCount;
-        break;
-    }
+    if (g.model) modelUsd.set(g.model, (modelUsd.get(g.model) ?? 0) + usd);
 
-    // byModel
-    modelUsd.set(bucket.model, (modelUsd.get(bucket.model) ?? 0) + usd);
+    if (g.cost_type === 'tokens') byType.tokens += usd;
+    else if (g.cost_type === 'web_search') byType.webSearch += usd;
+    else if (g.cost_type === 'code_execution') byType.codeExecution += usd;
+    else if (g.cost_type === 'session_usage') byType.sessionUsage += usd;
 
-    // byType
-    if (bucket.cost_type === 'tokens') byType.tokens += usd;
-    else if (bucket.cost_type === 'web_search') byType.webSearch += usd;
-    else if (bucket.cost_type === 'code_execution') byType.codeExecution += usd;
+    if (g.context_window === '0-200k') contextWindow.standardUsd += usd;
+    else if (g.context_window === '200k-1M') contextWindow.longUsd += usd;
 
-    // contextWindow
-    if (bucket.context_window === '0-200k') contextWindow.standardUsd += usd;
-    else if (bucket.context_window === '200k-1M') contextWindow.longUsd += usd;
+    if (g.token_type === 'uncached_input_tokens') tokenTypeUsd.uncachedInput += usd;
+    else if (g.token_type === 'cache_read_input_tokens') tokenTypeUsd.cachedInput += usd;
+    else if (g.token_type?.startsWith('cache_creation')) tokenTypeUsd.cacheCreation += usd;
+    else if (g.token_type === 'output_tokens') tokenTypeUsd.output += usd;
 
-    // tokenTypes (counts)
-    switch (bucket.token_type) {
-      case 'uncached_input_tokens':
-        tokenTypes.uncachedInput += tokenCount;
-        break;
-      case 'cache_read_input_tokens':
-        tokenTypes.cachedInput += tokenCount;
-        break;
-      case 'cache_creation_input_tokens':
-        tokenTypes.cacheCreation += tokenCount;
-        break;
-      case 'output_tokens':
-        tokenTypes.output += tokenCount;
-        break;
-    }
-
-    // fast (priority) vs standard (standard + batch) mode
-    if (bucket.service_tier === 'priority') fastModeUsd += usd;
+    if (g.speed === 'fast') fastModeUsd += usd;
     else standardModeUsd += usd;
   }
 
@@ -159,7 +128,24 @@ function mapRawToEnterpriseCost(raw: RawCostReport): EnterpriseCost {
     .map(([model, usd]) => ({ model, usd }))
     .sort((a, b) => b.usd - a.usd || a.model.localeCompare(b.model));
 
-  return { bySurface, byModel, byType, contextWindow, tokenTypes, fastModeUsd, standardModeUsd };
+  return { bySurface, otherUsd, byModel, byType, contextWindow, tokenTypeUsd, fastModeUsd, standardModeUsd };
+}
+
+/** `period` (YYYY-MM) → the month's UTC bounds, the end capped at `now`. null when the month has not started. */
+export function periodRange(period: string, now: Date = new Date()): { startingAt: string; endingAt: string } | null {
+  const m = /^(\d{4})-(\d{2})$/.exec(period);
+  if (!m) return null;
+  const start = new Date(Date.UTC(Number(m[1]), Number(m[2]) - 1, 1));
+  const nextMonth = new Date(Date.UTC(Number(m[1]), Number(m[2]), 1));
+  const end = nextMonth < now ? nextMonth : now;
+  if (end <= start) return null;
+  const iso = (d: Date) => d.toISOString().replace(/\.\d{3}Z$/, 'Z');
+  return { startingAt: iso(start), endingAt: iso(end) };
+}
+
+/** The key the cost endpoint is called with: the Analytics API key, else the Admin API key. */
+export async function costApiKey(): Promise<string> {
+  return (await getConfigValue('anthropicAnalyticsApiKey')) || (await getConfigValue('anthropicAdminApiKey'));
 }
 
 async function defaultFetchJson(url: string, apiKey: string): Promise<unknown> {
@@ -169,12 +155,13 @@ async function defaultFetchJson(url: string, apiKey: string): Promise<unknown> {
         'x-api-key': apiKey,
         'Content-Type': 'application/json',
         'anthropic-version': '2023-06-01',
+        'anthropic-beta': COST_BETA,
       },
     });
 
     if (!response.ok) {
       const text = await response.text();
-      throw new Error(`Enterprise Analytics cost API error ${response.status}: ${text}`);
+      throw new Error(`Anthropic cost API error ${response.status}: ${text}`);
     }
 
     return response.json();
@@ -182,49 +169,64 @@ async function defaultFetchJson(url: string, apiKey: string): Promise<unknown> {
 }
 
 /**
- * Fetches org-level Anthropic API spend for `period` (YYYY-MM) from the
- * Admin API Cost Report endpoint and maps it to `EnterpriseCost`.
- * Returns `null` when no `anthropicAdminApiKey` is configured — callers
- * should use `getEnterpriseCost` for the full live/mock/none selector.
+ * Fetches Anthropic's reported cost for `period` (YYYY-MM), every page, and
+ * maps it to `EnterpriseCost`. Returns `null` when neither key is set or the
+ * month has not started — callers should use `getEnterpriseCost` for the full
+ * live/mock/none selector.
  */
 export async function fetchEnterpriseCost(
   period: string,
-  deps: { fetchJson?: (url: string) => Promise<unknown> } = {}
+  deps: { fetchJson?: (url: string) => Promise<unknown>; now?: Date } = {}
 ): Promise<EnterpriseCost | null> {
-  const apiKey = await getConfigValue('anthropicAdminApiKey');
+  const apiKey = await costApiKey();
   if (!apiKey) return null;
+  const range = periodRange(period, deps.now);
+  if (!range) return null;
 
   const fetchJson = deps.fetchJson ?? ((url: string) => defaultFetchJson(url, apiKey));
 
-  const url =
-    `${COST_REPORT_URL}?starting_at=${period}-01T00:00:00Z` +
-    `&group_by[]=model&group_by[]=cost_type&group_by[]=context_window&group_by[]=token_type&group_by[]=service_tier`;
+  const rows: RawCostRow[] = [];
+  let page: string | undefined;
+  for (let n = 0; n < MAX_PAGES; n++) {
+    const url = new URL(COST_URL);
+    url.searchParams.set('starting_at', range.startingAt);
+    url.searchParams.set('ending_at', range.endingAt);
+    for (const g of GROUP_BY) url.searchParams.append('group_by[]', g);
+    url.searchParams.set('limit', '1000');
+    if (page) url.searchParams.set('page', page);
 
-  const raw = (await fetchJson(url)) as RawCostReport;
-  return mapRawToEnterpriseCost(raw);
+    const body = (await fetchJson(url.toString())) as RawCostPage;
+    rows.push(...(body?.data ?? []));
+    const next = body?.has_more !== false && typeof body?.next_page === 'string' && body.next_page ? body.next_page : undefined;
+    if (!next || next === page) break;
+    page = next;
+  }
+
+  return mapCostRows(rows);
 }
 
 /**
  * Deterministic fixture used when `getEnterpriseCost` resolves to the mock
- * source. Numbers are internally consistent (bySurface, byModel, byType,
- * contextWindow and fast/standard mode all sum to the same $3,013.50 grand
- * total) so the Phase-B UI's cross-checks look sane in a demo. Chat is kept
- * non-zero so the Chat tile lights up.
+ * source. Numbers are internally consistent (bySurface + otherUsd, byModel,
+ * byType, contextWindow and fast/standard mode all sum to the same $3,013.50
+ * grand total, and tokenTypeUsd to byType.tokens) so cross-checks look sane in
+ * a demo. Chat is kept non-zero so the Chat tile lights up.
  */
 export const MOCK_ENTERPRISE_COST: EnterpriseCost = {
   bySurface: {
-    chat: { usd: 842.5, tokens: { input: 1_200_000, output: 380_000, cacheWrite: 45_000, cacheRead: 210_000 } },
-    code: { usd: 1560.25, tokens: { input: 3_400_000, output: 890_000, cacheWrite: 120_000, cacheRead: 560_000 } },
-    cowork: { usd: 610.75, tokens: { input: 980_000, output: 310_000, cacheWrite: 38_000, cacheRead: 175_000 } },
+    chat: { usd: 842.5 },
+    code: { usd: 1560.25 },
+    cowork: { usd: 610.75 },
   },
+  otherUsd: 0,
   byModel: [
     { model: 'claude-opus-4-6-20260115', usd: 1680.4 },
     { model: 'claude-sonnet-5-20260115', usd: 980.6 },
     { model: 'claude-haiku-4-5-20251001', usd: 352.5 },
   ],
-  byType: { tokens: 2850.5, webSearch: 120.3, codeExecution: 42.7 },
+  byType: { tokens: 2850.5, webSearch: 120.3, codeExecution: 42.7, sessionUsage: 0 },
   contextWindow: { standardUsd: 2703.5, longUsd: 310.0 },
-  tokenTypes: { uncachedInput: 5_580_000, cachedInput: 945_000, cacheCreation: 203_000, output: 1_580_000 },
+  tokenTypeUsd: { uncachedInput: 900, cachedInput: 450.5, cacheCreation: 300, output: 1200 },
   fastModeUsd: 450.0,
   standardModeUsd: 2563.5,
 };
@@ -236,7 +238,7 @@ export interface EnterpriseCostResult {
 
 /**
  * The ONE entry point report assembly should call. Resolves the source:
- *   1. `anthropicAdminApiKey` set → live fetch
+ *   1. the Analytics API key or the Admin API key set → live fetch
  *   2. else `financeEnterpriseMock === 'true'` AND demo permitted → fixture
  *   3. else → dormant (`data: null`)
  *
@@ -247,10 +249,9 @@ export interface EnterpriseCostResult {
  */
 export async function getEnterpriseCost(
   period: string,
-  deps: { fetchJson?: (url: string) => Promise<unknown> } = {}
+  deps: { fetchJson?: (url: string) => Promise<unknown>; now?: Date } = {}
 ): Promise<EnterpriseCostResult> {
-  const apiKey = await getConfigValue('anthropicAdminApiKey');
-  if (apiKey) {
+  if (await costApiKey()) {
     const data = await fetchEnterpriseCost(period, deps);
     return { data, source: 'live' };
   }

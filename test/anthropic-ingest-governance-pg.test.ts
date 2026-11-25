@@ -138,11 +138,21 @@ async function runSpec(): Promise<void> {
     global.fetch = vi.fn(async (url: string | URL) => {
       const u = url.toString();
       requestedUrls.push(u);
+      // The live API's shape: no `has_more`, only `next_page` (null on the
+      // last page). Reading `has_more` used to stop after page 1.
       if (u.includes(`page=${PAGE2_CURSOR}`)) {
-        return jsonResponse({ data: [anaFull], has_more: false, next_page: null });
+        return jsonResponse({ data: [anaFull], next_page: null });
       }
       if (u.includes('/v1/organizations/analytics/users')) {
-        return jsonResponse({ data: [anaStale], has_more: true, next_page: PAGE2_CURSOR });
+        return jsonResponse({ data: [anaStale], next_page: PAGE2_CURSOR });
+      }
+      if (u.includes('/v1/organizations/analytics/summaries')) {
+        // Organisation totals per day; the most recent day's seat count is kept.
+        return jsonResponse({ data: [
+          { starting_at: '2026-11-17T00:00:00Z', assigned_seat_count: 8 },
+          { starting_at: '2026-11-19T00:00:00Z', assigned_seat_count: 10 },
+          { starting_at: '2026-11-18T00:00:00Z', assigned_seat_count: 9 },
+        ], next_page: null });
       }
       throw new Error(`unexpected fetch in Section B: ${u}`);
     }) as unknown as typeof fetch;
@@ -153,12 +163,17 @@ async function runSpec(): Promise<void> {
 
     expect(await cfg.getConfigValue('analyticsLastDate')).toBe(maxDateStr);
 
-    // Every request hit the real endpoint with a date param.
-    expect(requestedUrls.length).toBe(2);
-    for (const u of requestedUrls) {
-      expect(u).toContain('/v1/organizations/analytics/users');
-      expect(u).toContain('date=');
-    }
+    // Both pages of the day hit the real endpoint with a date param.
+    const userUrls = requestedUrls.filter(u => u.includes('/v1/organizations/analytics/users'));
+    expect(userUrls.length).toBe(2);
+    for (const u of userUrls) expect(u).toContain('date=');
+
+    // The seat count is read once and taken from the most recent day.
+    const summaryUrls = requestedUrls.filter(u => u.includes('/v1/organizations/analytics/summaries'));
+    expect(summaryUrls.length).toBe(1);
+    expect(summaryUrls[0]).toContain('starting_date=');
+    expect(requestedUrls.length).toBe(3);
+    expect(await cfg.getConfigValue('anthropicSeatCount')).toBe('10');
 
     // ON CONFLICT DO UPDATE: exactly ONE row for (user_ana1, maxDateStr),
     // holding page 2's values (excluded.* wins over page 1's) — the full
@@ -190,6 +205,8 @@ async function runSpec(): Promise<void> {
     const secondRun = await analytics.ingestAnalyticsSnapshots();
     expect(secondRun.snapshotsUpserted).toBe(0);
     expect(secondRun.errors).toEqual([]);
+    // Nor does it ask for the seat count again the same day.
+    expect(requestedUrls.length).toBe(3);
 
     // ════════════════════════════════════════════════════════════════════
     // SECTION C — generateGovernanceReport: converted raw-.prepare COUNT

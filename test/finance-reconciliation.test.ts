@@ -37,14 +37,15 @@ describe('buildReconciliation', () => {
     // code $80 (CCC over-estimates by 25%), cowork $0 (zero-guard case).
     const enterprise: EnterpriseCost = {
       bySurface: {
-        chat: { usd: 30, tokens: tokens() },
-        code: { usd: 80, tokens: tokens() },
-        cowork: { usd: 0, tokens: tokens() },
+        chat: { usd: 30 },
+        code: { usd: 80 },
+        cowork: { usd: 0 },
       },
+      otherUsd: 0,
       byModel: [],
-      byType: { tokens: 0, webSearch: 0, codeExecution: 0 },
+      byType: { tokens: 0, webSearch: 0, codeExecution: 0, sessionUsage: 0 },
       contextWindow: { standardUsd: 0, longUsd: 0 },
-      tokenTypes: { uncachedInput: 0, cachedInput: 0, cacheCreation: 0, output: 0 },
+      tokenTypeUsd: { uncachedInput: 0, cachedInput: 0, cacheCreation: 0, output: 0 },
       fastModeUsd: 0,
       standardModeUsd: 0,
     };
@@ -67,9 +68,10 @@ describe('buildReconciliation', () => {
     // cowork: anthropicUsd is 0 → deltaPct null (guarded, never Infinity/NaN).
     expect(bySurface.cowork).toEqual({ surface: 'cowork', cccUsd: 50, anthropicUsd: 0, deltaPct: null });
 
-    // totalDeltaPct over summed totals: cccTotal = 0+100+50 = 150 (null treated as 0),
-    // anthropicTotal = 30+80+0 = 110 → (150-110)/110*100 = 36.3636...
-    expect(result.totalDeltaPct).toBeCloseTo(36.363636363636, 6);
+    // totalDeltaPct over the surfaces Command Centre measures (code, cowork):
+    // chat has no Command Centre figure, so Anthropic's $30 of chat stays out.
+    // cccTotal = 100+50 = 150, anthropicTotal = 80+0 = 80 → (150-80)/80*100 = 87.5.
+    expect(result.totalDeltaPct).toBeCloseTo(87.5, 6);
   });
 
   it('returns null totalDeltaPct when the summed Anthropic total is zero', () => {
@@ -81,14 +83,15 @@ describe('buildReconciliation', () => {
     };
     const enterprise: EnterpriseCost = {
       bySurface: {
-        chat: { usd: 0, tokens: tokens() },
-        code: { usd: 0, tokens: tokens() },
-        cowork: { usd: 0, tokens: tokens() },
+        chat: { usd: 0 },
+        code: { usd: 0 },
+        cowork: { usd: 0 },
       },
+      otherUsd: 0,
       byModel: [],
-      byType: { tokens: 0, webSearch: 0, codeExecution: 0 },
+      byType: { tokens: 0, webSearch: 0, codeExecution: 0, sessionUsage: 0 },
       contextWindow: { standardUsd: 0, longUsd: 0 },
-      tokenTypes: { uncachedInput: 0, cachedInput: 0, cacheCreation: 0, output: 0 },
+      tokenTypeUsd: { uncachedInput: 0, cachedInput: 0, cacheCreation: 0, output: 0 },
       fastModeUsd: 0,
       standardModeUsd: 0,
     };

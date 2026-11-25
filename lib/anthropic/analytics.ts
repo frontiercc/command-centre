@@ -59,8 +59,21 @@ interface AnalyticsUserRecord {
 
 interface AnalyticsApiResponse {
   data: AnalyticsUserRecord[];
-  has_more: boolean;
+  // The live API sends no `has_more`, only `next_page` (null on the last
+  // page). Kept optional so an explicit `has_more: false` still stops.
+  has_more?: boolean;
   next_page?: string | null;
+}
+
+/**
+ * The cursor for the next page, or undefined when this is the last page.
+ * Follows `next_page` alone: reading `has_more` stopped every day after its
+ * first 100 people, because the live API never sends it.
+ */
+export function nextAnalyticsPage(response: Pick<AnalyticsApiResponse, 'has_more' | 'next_page'>): string | undefined {
+  if (response.has_more === false) return undefined;
+  const next = response.next_page;
+  return typeof next === 'string' && next.length > 0 ? next : undefined;
 }
 
 /**
@@ -271,8 +284,10 @@ export async function ingestAnalyticsSnapshots(): Promise<{
           }
         });
 
-        hasMore = response.has_more && !!response.next_page;
-        page = response.next_page ?? undefined;
+        const next = nextAnalyticsPage(response);
+        // A cursor that repeats would loop forever; treat it as the end.
+        hasMore = next !== undefined && next !== page;
+        page = next;
       }
 
       // Update last ingested date after each successful day
@@ -286,5 +301,62 @@ export async function ingestAnalyticsSnapshots(): Promise<{
     currentDate.setDate(currentDate.getDate() + 1);
   }
 
+  try {
+    await refreshAnthropicSeatCount(apiKey);
+  } catch (err) {
+    const message = err instanceof Error ? err.message : String(err);
+    errors.push(`seat count: ${message}`);
+    console.error('[Analytics Ingest] Error reading the seat count:', message);
+  }
+
   return { snapshotsUpserted: totalUpserted, errors };
+}
+
+interface AnalyticsSummaryRow {
+  starting_at: string;
+  assigned_seat_count?: number;
+}
+
+// The summaries endpoint answers up to its latest available day when no
+// ending date is given, so a week back always reaches it.
+const SEAT_LOOKBACK_DAYS = 7;
+
+/**
+ * Store Anthropic's assigned seat count (the latest day of the summaries
+ * endpoint) for FinOps' unused-seats line, which uses it when no licensed
+ * seats figure has been set by hand. Asks at most once a UTC day, the
+ * check date written first so a failing call is not retried every cycle
+ * against the API's 60 requests a minute.
+ */
+export async function refreshAnthropicSeatCount(apiKey: string, now: Date = new Date()): Promise<void> {
+  const today = now.toISOString().split('T')[0];
+  if ((await getConfigValue('anthropicSeatCountCheckedOn')) === today) return;
+  await setConfigValue('anthropicSeatCountCheckedOn', today);
+
+  const from = new Date(now.getTime() - SEAT_LOOKBACK_DAYS * 24 * 60 * 60 * 1000).toISOString().split('T')[0];
+  const body = await withBackoff(async () => {
+    const url = new URL(`${ANALYTICS_API_BASE}/summaries`);
+    url.searchParams.set('starting_date', from);
+    const response = await fetch(url.toString(), {
+      headers: {
+        'x-api-key': apiKey,
+        'Content-Type': 'application/json',
+        'anthropic-version': '2023-06-01',
+      },
+    });
+    if (!response.ok) {
+      const text = await response.text();
+      throw new Error(`Analytics API error ${response.status}: ${text}`);
+    }
+    return response.json() as Promise<{ data?: AnalyticsSummaryRow[] }>;
+  });
+
+  const latest = (body.data ?? []).reduce<AnalyticsSummaryRow | undefined>(
+    (best, row) => (!best || row.starting_at > best.starting_at ? row : best),
+    undefined,
+  );
+  const seats = Number(latest?.assigned_seat_count);
+  if (Number.isFinite(seats) && seats > 0) {
+    await setConfigValue('anthropicSeatCount', String(seats));
+  }
 }
