@@ -79,11 +79,11 @@ export function limitsNotice(status: LimitsStatus): string | null {
   switch (status) {
     case 'ok': return null;
     case 'not_configured':
-      return "To see each person's Anthropic spend limit and their requests for more usage, add an Admin API key with the read:spend_limits scope under Admin → Access & Keys.";
+      return "To see each person's Anthropic spend limit and their requests for more usage, add an Analytics API key with the read:spend_limits scope under Admin → Access & Keys.";
     case 'missing_scope':
-      return "The Admin API key can't read spend limits. It needs the read:spend_limits scope, a Claude Enterprise plan, and usage credits turned on for the organisation.";
+      return "The Analytics API key can't read spend limits. It needs the read:spend_limits scope, a Claude Enterprise plan, and usage credits turned on for the organisation.";
     case 'invalid_key':
-      return 'Anthropic rejected the Admin API key. Check it under Admin → Access & Keys.';
+      return 'Anthropic rejected the key used for spend limits. Check the Analytics API key under Admin → Access & Keys.';
     case 'not_available':
       return 'Spend limits are not available for this Anthropic organisation.';
     default:

@@ -141,7 +141,7 @@ The Hub container runs as a non-root user on a Node.js 22 Alpine image that carr
 | Metrics Connector tokens | BI tools and MCP clients | 256-bit random, stored as a SHA-256 hash, shown once | Organisation-level aggregates only, never per-person data or prompt text; revocable by an administrator |
 | Compliance Access Key | Hub pulling Claude.ai chats | Encrypted in the database | Created by you with read scopes only; Command Centre makes only read requests |
 | Claude API key | Hub AI features | Encrypted in the database, or from an environment variable | Removing it stops all model calls |
-| Analytics API key and Admin API key (on the roadmap) | Hub reading usage counts, the cost report and spend limits | Encrypted in the database | Created by you; Command Centre makes only read requests |
+| Analytics API key, and Admin API key (on the roadmap) | Hub reading usage counts, the cost report and spend limits | Encrypted in the database | Created by you; Command Centre makes only read requests |
 | OpenAI Admin API key | Hub reading ChatGPT and Codex activity from OpenAI's Compliance API | Encrypted in the database, or from the `OPENAI_ADMIN_API_KEY` environment variable | Created by you with read permissions; Command Centre makes only read requests. The key goes only to OpenAI's API, never to the download links it returns |
 | GitHub token | Hub reading repository activity | Encrypted in the database | Read scope is sufficient |
 

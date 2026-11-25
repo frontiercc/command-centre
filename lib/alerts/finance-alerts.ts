@@ -79,5 +79,8 @@ export async function runFinanceDriftAlert(nowS: number = Math.floor(Date.now() 
     });
   } catch (err) {
     console.error('[FinanceAlerts] reconciliation drift check failed:', err instanceof Error ? err.message : err);
+    // Rethrown so the scheduler records the failure in System health; it was
+    // swallowed, so a rejected call showed as a successful run.
+    throw err;
   }
 }

@@ -45,8 +45,12 @@ export function buildReconciliation(surfaces: SurfaceSummary, enterprise: Enterp
     return { surface, cccUsd, anthropicUsd, deltaPct: guardedDeltaPct(cccUsd, anthropicUsd) };
   });
 
-  const cccTotal = SURFACES.reduce((sum, surface) => sum + (surfaces[surface].usd ?? 0), 0);
-  const anthropicTotal = SURFACES.reduce((sum, surface) => sum + enterprise.bySurface[surface].usd, 0);
+  // Only the surfaces Command Centre measures. Claude Chat has no spend of
+  // its own here (`usd: null`), so counting Anthropic's Chat cost would read
+  // as drift on every organisation that uses Chat.
+  const measured = SURFACES.filter((surface) => surfaces[surface].usd !== null);
+  const cccTotal = measured.reduce((sum, surface) => sum + (surfaces[surface].usd ?? 0), 0);
+  const anthropicTotal = measured.reduce((sum, surface) => sum + enterprise.bySurface[surface].usd, 0);
   const totalDeltaPct = anthropicTotal === 0 ? null : ((cccTotal - anthropicTotal) / anthropicTotal) * 100;
 
   return { available: true, perSurface, totalDeltaPct };

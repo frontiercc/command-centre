@@ -9,11 +9,13 @@ vi.mock('@/lib/config', () => ({
   getConfigValue: (key: string) => cfg[key] ?? '',
 }));
 
-import { fetchEnterpriseCost, getEnterpriseCost, MOCK_ENTERPRISE_COST } from '@/lib/finance/enterprise-cost';
+import { fetchEnterpriseCost, getEnterpriseCost, periodRange, MOCK_ENTERPRISE_COST } from '@/lib/finance/enterprise-cost';
 
 const ORIGINAL_NODE_ENV = process.env.NODE_ENV;
+const NOW = new Date('2026-11-25T18:00:00Z');
 
 beforeEach(() => {
+  cfg.anthropicAnalyticsApiKey = '';
   cfg.anthropicAdminApiKey = '';
   cfg.financeEnterpriseMock = 'false';
 });
@@ -23,133 +25,120 @@ afterEach(() => {
   vi.unstubAllEnvs();
 });
 
-/** A canned raw Cost Report bucket set exercising every dimension. */
-const CANNED_RESPONSE = {
+/** Rows in the live shape of GET /v1/organizations/analytics/cost: amounts are cents as decimal strings. */
+function row(group: Record<string, string | null>, cents: string) {
+  return { group, cost: { amount: cents, currency: 'USD', list_amount: cents, requests: 1 } };
+}
+
+const PAGE_1 = {
   data: [
-    {
-      starting_at: '2026-07-01T00:00:00Z',
-      ending_at: '2026-07-02T00:00:00Z',
-      results: [
-        {
-          surface_label: 'Chat',
-          model: 'claude-opus-4-6-20260115',
-          cost_type: 'tokens',
-          context_window: '0-200k',
-          token_type: 'uncached_input_tokens',
-          service_tier: 'standard',
-          amount_usd: 10,
-          token_count: 1000,
-        },
-        {
-          surface_label: 'Code',
-          model: 'claude-sonnet-5-20260115',
-          cost_type: 'tokens',
-          context_window: '200k-1M',
-          token_type: 'cache_read_input_tokens',
-          service_tier: 'priority',
-          amount_usd: 5,
-          token_count: 500,
-        },
-        {
-          surface_label: 'Cowork',
-          model: 'claude-haiku-4-5-20251001',
-          cost_type: 'web_search',
-          context_window: '0-200k',
-          token_type: 'output_tokens',
-          service_tier: 'standard',
-          amount_usd: 2,
-          token_count: 200,
-        },
-        {
-          // no surface_label → falls into 'chat' per the graceful-degrade rule
-          model: 'claude-sonnet-5-20260115',
-          cost_type: 'code_execution',
-          context_window: '0-200k',
-          token_type: 'cache_creation_input_tokens',
-          service_tier: 'batch',
-          amount_usd: 1,
-          token_count: 100,
-        },
-      ],
-    },
+    row({ product: 'chat', model: 'claude-opus-5-5', context_window: '0-200k', speed: 'standard', cost_type: 'tokens', token_type: 'uncached_input_tokens' }, '1000'),
+    row({ product: 'claude_code', model: 'claude-sonnet-5', context_window: '200k-1M', speed: 'fast', cost_type: 'tokens', token_type: 'cache_read_input_tokens' }, '500'),
+    row({ product: 'cowork', model: 'claude-haiku-4-5-20251001', context_window: null, speed: null, cost_type: 'web_search', token_type: null }, '200'),
   ],
+  has_more: true,
+  next_page: 'page-2',
+  data_refreshed_at: '2026-11-25T17:54:22Z',
+};
+
+const PAGE_2 = {
+  data: [
+    row({ product: 'cowork', model: 'claude-sonnet-5', context_window: '0-200k', speed: 'standard', cost_type: 'tokens', token_type: 'cache_creation.ephemeral_1h_input_tokens' }, '300'),
+    // A product Command Centre has no surface for: counted in otherUsd and the breakdowns only.
+    row({ product: 'claude_design', model: 'claude-sonnet-5', context_window: '0-200k', speed: 'standard', cost_type: 'tokens', token_type: 'output_tokens' }, '100'),
+    row({ product: 'cowork', model: null, context_window: null, speed: null, cost_type: 'session_usage', token_type: null }, '50'),
+  ],
+  has_more: false,
+  next_page: null,
 };
 
 describe('fetchEnterpriseCost', () => {
-  it('maps a canned Enterprise Analytics response into EnterpriseCost', async () => {
-    cfg.anthropicAdminApiKey = 'test-key';
-    const fetchJson = vi.fn().mockResolvedValue(CANNED_RESPONSE);
+  it('reads every page and maps cents to dollars by product, model and type', async () => {
+    cfg.anthropicAnalyticsApiKey = 'analytics-key';
+    const fetchJson = vi.fn(async (url: string) => (url.includes('page=page-2') ? PAGE_2 : PAGE_1));
 
-    const result = await fetchEnterpriseCost('2026-07', { fetchJson });
+    const cost = (await fetchEnterpriseCost('2026-11', { fetchJson, now: NOW }))!;
 
-    expect(fetchJson).toHaveBeenCalledTimes(1);
-    expect(result).not.toBeNull();
-    const cost = result!;
+    expect(fetchJson).toHaveBeenCalledTimes(2);
+    const first = new URL(fetchJson.mock.calls[0][0]);
+    expect(first.pathname).toBe('/v1/organizations/analytics/cost');
+    expect(first.searchParams.get('starting_at')).toBe('2026-11-01T00:00:00Z');
+    expect(first.searchParams.get('ending_at')).toBe('2026-11-25T18:00:00Z');
+    // Only the group_by values the endpoint accepts (the old cost report rejected `model`).
+    expect(first.searchParams.getAll('group_by[]')).toEqual(['product', 'model', 'context_window', 'speed', 'cost_type', 'token_type']);
+    expect(new URL(fetchJson.mock.calls[1][0]).searchParams.get('page')).toBe('page-2');
 
-    // per-surface $ — the unlabeled bucket (amount_usd=1) folds into chat.
-    expect(cost.bySurface.chat.usd).toBe(11);
-    expect(cost.bySurface.chat.tokens.input).toBe(1000);
-    expect(cost.bySurface.chat.tokens.cacheWrite).toBe(100);
+    expect(cost.bySurface).toEqual({ chat: { usd: 10 }, code: { usd: 5 }, cowork: { usd: 5.5 } });
+    expect(cost.otherUsd).toBe(1);
 
-    expect(cost.bySurface.code.usd).toBe(5);
-    expect(cost.bySurface.code.tokens.cacheRead).toBe(500);
-
-    expect(cost.bySurface.cowork.usd).toBe(2);
-    expect(cost.bySurface.cowork.tokens.output).toBe(200);
-
-    // by-model
-    expect(cost.byModel).toEqual(
-      expect.arrayContaining([
-        { model: 'claude-opus-4-6-20260115', usd: 10 },
-        { model: 'claude-sonnet-5-20260115', usd: 6 }, // 5 (code) + 1 (unlabeled)
-        { model: 'claude-haiku-4-5-20251001', usd: 2 },
-      ])
-    );
-
-    // by cost_type
-    expect(cost.byType).toEqual({ tokens: 15, webSearch: 2, codeExecution: 1 });
-
-    // by context window
-    expect(cost.contextWindow).toEqual({ standardUsd: 13, longUsd: 5 });
-
-    // by token type (counts)
-    expect(cost.tokenTypes).toEqual({
-      uncachedInput: 1000,
-      cachedInput: 500,
-      cacheCreation: 100,
-      output: 200,
-    });
-
-    // fast (priority) vs standard (standard + batch) mode
+    expect(cost.byModel).toEqual([
+      { model: 'claude-opus-5-5', usd: 10 },
+      { model: 'claude-sonnet-5', usd: 9 },
+      { model: 'claude-haiku-4-5-20251001', usd: 2 },
+    ]);
+    expect(cost.byType).toEqual({ tokens: 19, webSearch: 2, codeExecution: 0, sessionUsage: 0.5 });
+    expect(cost.contextWindow).toEqual({ standardUsd: 14, longUsd: 5 });
+    expect(cost.tokenTypeUsd).toEqual({ uncachedInput: 10, cachedInput: 5, cacheCreation: 3, output: 1 });
     expect(cost.fastModeUsd).toBe(5);
-    expect(cost.standardModeUsd).toBe(13);
+    expect(cost.standardModeUsd).toBe(16.5);
   });
 
-  it('returns null when no Analytics API key is configured', async () => {
-    cfg.anthropicAdminApiKey = '';
+  it('falls back to the Admin API key when no Analytics API key is set', async () => {
+    cfg.anthropicAdminApiKey = 'admin-key';
+    const fetchJson = vi.fn(async () => PAGE_2);
+
+    const cost = await fetchEnterpriseCost('2026-11', { fetchJson, now: NOW });
+
+    expect(cost).not.toBeNull();
+    expect(fetchJson).toHaveBeenCalledTimes(1);
+  });
+
+  it('returns null without calling Anthropic when neither key is set', async () => {
     const fetchJson = vi.fn();
 
-    const result = await fetchEnterpriseCost('2026-07', { fetchJson });
+    const result = await fetchEnterpriseCost('2026-11', { fetchJson, now: NOW });
 
     expect(result).toBeNull();
     expect(fetchJson).not.toHaveBeenCalled();
+  });
+
+  it('stops when a page repeats its cursor', async () => {
+    cfg.anthropicAnalyticsApiKey = 'analytics-key';
+    const fetchJson = vi.fn(async () => ({ ...PAGE_1, next_page: 'same' }));
+
+    await fetchEnterpriseCost('2026-11', { fetchJson, now: NOW });
+
+    expect(fetchJson).toHaveBeenCalledTimes(2);
+  });
+});
+
+describe('periodRange', () => {
+  it('covers a past month in full', () => {
+    expect(periodRange('2026-10', NOW)).toEqual({ startingAt: '2026-10-01T00:00:00Z', endingAt: '2026-11-01T00:00:00Z' });
+  });
+
+  it('ends a month in progress at now', () => {
+    expect(periodRange('2026-11', NOW)).toEqual({ startingAt: '2026-11-01T00:00:00Z', endingAt: '2026-11-25T18:00:00Z' });
+  });
+
+  it('is null for a month not yet started or a malformed period', () => {
+    expect(periodRange('2026-12', NOW)).toBeNull();
+    expect(periodRange('November', NOW)).toBeNull();
   });
 });
 
 describe('getEnterpriseCost selector', () => {
   it('resolves to live when an Analytics API key is set', async () => {
-    cfg.anthropicAdminApiKey = 'test-key';
-    const fetchJson = vi.fn().mockResolvedValue(CANNED_RESPONSE);
+    cfg.anthropicAnalyticsApiKey = 'analytics-key';
+    const fetchJson = vi.fn(async () => PAGE_2);
 
-    const result = await getEnterpriseCost('2026-07', { fetchJson });
+    const result = await getEnterpriseCost('2026-11', { fetchJson, now: NOW });
 
     expect(result.source).toBe('live');
-    expect(result.data).not.toBeNull();
-    expect(result.data!.bySurface.chat.usd).toBe(11);
+    expect(result.data!.bySurface.cowork.usd).toBe(3.5);
   });
 
   it('resolves to mock when no key + flag on + non-production', async () => {
-    cfg.anthropicAdminApiKey = '';
     cfg.financeEnterpriseMock = 'true';
     vi.stubEnv('NODE_ENV', 'development');
 
@@ -161,16 +150,12 @@ describe('getEnterpriseCost selector', () => {
   });
 
   it('resolves to none when no key + mock flag off', async () => {
-    cfg.anthropicAdminApiKey = '';
-    cfg.financeEnterpriseMock = 'false';
-
     const result = await getEnterpriseCost('2026-07');
 
     expect(result).toEqual({ data: null, source: 'none' });
   });
 
   it('resolves to none when mock flag on but NODE_ENV is production and no allow-mock env (production-safe)', async () => {
-    cfg.anthropicAdminApiKey = '';
     cfg.financeEnterpriseMock = 'true';
     vi.stubEnv('NODE_ENV', 'production');
     vi.stubEnv('CCC_FINOPS_ALLOW_MOCK', '');
@@ -181,7 +166,6 @@ describe('getEnterpriseCost selector', () => {
   });
 
   it('resolves to mock in production ONLY when CCC_FINOPS_ALLOW_MOCK=1 is explicitly set (opt-in demo)', async () => {
-    cfg.anthropicAdminApiKey = '';
     cfg.financeEnterpriseMock = 'true';
     vi.stubEnv('NODE_ENV', 'production');
     vi.stubEnv('CCC_FINOPS_ALLOW_MOCK', '1');
@@ -190,5 +174,16 @@ describe('getEnterpriseCost selector', () => {
 
     expect(result.source).toBe('mock');
     expect(result.data).toEqual(MOCK_ENTERPRISE_COST);
+  });
+
+  it('keeps the mock fixture internally consistent', () => {
+    const m = MOCK_ENTERPRISE_COST;
+    const total = m.bySurface.chat.usd + m.bySurface.code.usd + m.bySurface.cowork.usd + m.otherUsd;
+    expect(m.byModel.reduce((s, x) => s + x.usd, 0)).toBeCloseTo(total, 6);
+    expect(m.byType.tokens + m.byType.webSearch + m.byType.codeExecution + m.byType.sessionUsage).toBeCloseTo(total, 6);
+    expect(m.contextWindow.standardUsd + m.contextWindow.longUsd).toBeCloseTo(total, 6);
+    expect(m.fastModeUsd + m.standardModeUsd).toBeCloseTo(total, 6);
+    const t = m.tokenTypeUsd;
+    expect(t.uncachedInput + t.cachedInput + t.cacheCreation + t.output).toBeCloseTo(m.byType.tokens, 6);
   });
 });

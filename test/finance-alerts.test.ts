@@ -44,14 +44,15 @@ vi.mock('@/lib/finance/chargeback', () => ({
 // Mutable enterprise-cost stub — null `data` simulates "unavailable" (no key / no live tenant).
 let enterpriseData: EnterpriseCost | null = {
   bySurface: {
-    chat: { usd: 0, tokens: tokens() },
-    code: { usd: 100, tokens: tokens() },
-    cowork: { usd: 0, tokens: tokens() },
+    chat: { usd: 0 },
+    code: { usd: 100 },
+    cowork: { usd: 0 },
   },
+  otherUsd: 0,
   byModel: [],
-  byType: { tokens: 0, webSearch: 0, codeExecution: 0 },
+  byType: { tokens: 0, webSearch: 0, codeExecution: 0, sessionUsage: 0 },
   contextWindow: { standardUsd: 0, longUsd: 0 },
-  tokenTypes: { uncachedInput: 0, cachedInput: 0, cacheCreation: 0, output: 0 },
+  tokenTypeUsd: { uncachedInput: 0, cachedInput: 0, cacheCreation: 0, output: 0 },
   fastModeUsd: 0,
   standardModeUsd: 0,
 };
@@ -83,14 +84,15 @@ beforeEach(async () => {
   };
   enterpriseData = {
     bySurface: {
-      chat: { usd: 0, tokens: tokens() },
-      code: { usd: 100, tokens: tokens() },
-      cowork: { usd: 0, tokens: tokens() },
+      chat: { usd: 0 },
+      code: { usd: 100 },
+      cowork: { usd: 0 },
     },
+    otherUsd: 0,
     byModel: [],
-    byType: { tokens: 0, webSearch: 0, codeExecution: 0 },
+    byType: { tokens: 0, webSearch: 0, codeExecution: 0, sessionUsage: 0 },
     contextWindow: { standardUsd: 0, longUsd: 0 },
-    tokenTypes: { uncachedInput: 0, cachedInput: 0, cacheCreation: 0, output: 0 },
+    tokenTypeUsd: { uncachedInput: 0, cachedInput: 0, cacheCreation: 0, output: 0 },
     fastModeUsd: 0,
     standardModeUsd: 0,
   };

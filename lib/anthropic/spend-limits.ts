@@ -7,13 +7,14 @@
 //   GET /v1/organizations/spend_limits/effective          each member's limit + spend this period
 //   GET /v1/organizations/spend_limit_increase_requests   members' "Request more usage" clicks
 //
-// Needs an Admin API key with `read:spend_limits` (config key
-// `anthropicAdminApiKey`). Dormant without one: no call is made. CCC never
+// Needs a Claude Enterprise key with `read:spend_limits`: the Analytics API
+// key (config key `anthropicAnalyticsApiKey`), else the Admin API key field
+// (see spendLimitsApiKey). Dormant without one: no call is made. CCC never
 // calls the write endpoints (set/delete a limit, approve/deny a request) —
 // changing anything in a customer's Anthropic account is a separate decision.
 //
-// UNVERIFIED against a live tenant until the sandbox smoke (the shapes below
-// follow the published API reference).
+// Checked live on 2026-11-25: both endpoints accept a Claude Enterprise
+// Analytics API key. The response shapes below follow the API reference.
 //
 // Amounts are decimal strings in MINOR units (cents for USD) and may carry
 // fractional cents. `amount: null` on an effective row means NO LIMIT, `"0"`
@@ -256,12 +257,23 @@ export async function fetchSpendLimits(apiKey: string, nowMs: number = Date.now(
 let cache: { key: string; at: number; snapshot: SpendLimitsSnapshot } | null = null;
 
 /**
+ * The key spend limits are read with: the Analytics API key (a claude.ai
+ * Claude Enterprise key, which can carry `read:spend_limits`), else whatever
+ * is in the Admin API key field. Anthropic's docs say spend limits are not
+ * available to Claude Console organisations, so a Console admin key cannot
+ * read them; the fallback keeps an Enterprise key saved in that field working.
+ */
+export async function spendLimitsApiKey(): Promise<string> {
+  return ((await getConfigValue('anthropicAnalyticsApiKey')) || (await getConfigValue('anthropicAdminApiKey')) || '').trim();
+}
+
+/**
  * The current snapshot, from cache when fresh. `not_configured` (and no call)
- * when no admin key is saved. Only an `ok` snapshot is cached, so a fixed key
+ * when neither key is saved. Only an `ok` snapshot is cached, so a fixed key
  * or a newly granted scope shows on the next page load.
  */
 export async function getSpendLimits(opts: { force?: boolean } = {}): Promise<SpendLimitsSnapshot> {
-  const apiKey = (await getConfigValue('anthropicAdminApiKey'))?.trim();
+  const apiKey = await spendLimitsApiKey();
   if (!apiKey) return { status: 'not_configured', fetchedAt: null, members: [], pendingRequests: [] };
   const now = Date.now();
   if (!opts.force && cache && cache.key === apiKey && now - cache.at < CACHE_TTL_MS) return cache.snapshot;

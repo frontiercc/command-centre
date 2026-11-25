@@ -1493,35 +1493,35 @@ export default function SecurityPage() {
                 onChange={setAnthropicAdminApiKey}
                 testStatus={testStatuses.anthropicAdminApiKey ?? 'idle'}
                 onTest={() => testConnection('anthropicAdminApiKey', anthropicAdminApiKey)}
-                hint="Admin API key (sk-ant-admin01). Unlocks usage/cost reports and, on Claude Enterprise with the read:spend_limits scope, each person's spend limit and requests for more usage on Spend Review. Not chat content or Enterprise analytics."
+                hint="Admin API key (sk-ant-admin01) from a Claude Console organisation, created at platform.claude.com/settings/admin-keys. Used for Anthropic's cost figures when no Analytics API key is set. On Claude Enterprise use the Analytics API key instead."
                 configKey="anthropicAdminApiKey"
                 onRemoved={() => { setAnthropicAdminApiKey(''); loadedSecretsRef.current.delete('anthropicAdminApiKey'); }}
               />
-              <div className="flex items-center gap-3 flex-wrap">
-                <button
-                  type="button"
-                  onClick={() => testConnection('anthropicAdminApiKeySpendLimits', anthropicAdminApiKey)}
-                  disabled={!anthropicAdminApiKey || testStatuses.anthropicAdminApiKeySpendLimits === 'testing'}
-                  className={cx(B.link, 'disabled:text-[#B3B3B3] disabled:no-underline')}
-                >
-                  {testStatuses.anthropicAdminApiKeySpendLimits === 'testing' ? 'Checking spend limits access…' : 'Check spend limits access'}
-                </button>
-                {testStatuses.anthropicAdminApiKeySpendLimits === 'success' && <span className="text-[13px] text-[#1A7F37]">The key can read spend limits.</span>}
-                {testStatuses.anthropicAdminApiKeySpendLimits === 'error' && <span className="text-[13px] text-[#B42318]">The key can&apos;t read spend limits. It needs read:spend_limits, a Claude Enterprise plan and usage credits turned on.</span>}
-              </div>
             </div>
-            <div className="pt-5 border-t border-[#F2F2F2]">
+            <div className="flex flex-col gap-2 pt-5 border-t border-[#F2F2F2]">
               <ApiKeyField
-                label="Analytics API Key (on the roadmap)"
+                label="Analytics API Key"
                 value={anthropicAnalyticsApiKey}
                 onChange={setAnthropicAnalyticsApiKey}
                 testStatus={testStatuses.anthropicAnalyticsApiKey ?? 'idle'}
                 onTest={() => testConnection('anthropicAnalyticsApiKey', anthropicAnalyticsApiKey)}
-                hint="Analytics API key, created by the Primary Owner in claude.ai at claude.ai/analytics/api-keys. Enterprise plan only. Needs the read:analytics scope. Feeds per-user adoption snapshots."
+                hint="Analytics API key, created by the Primary Owner in claude.ai at claude.ai/analytics/api-keys. Enterprise plan only. With read:analytics it feeds per-user adoption snapshots, Anthropic's cost for the FinOps drift check, and the seat count FinOps uses when no licensed seats figure is set. Add read:spend_limits to show each person's spend limit on Spend Review."
                 configKey="anthropicAnalyticsApiKey"
-                resetsNote="last ingested date (next key re-backfills)"
+                resetsNote="last ingested date, seat count (next key re-backfills)"
                 onRemoved={() => { setAnthropicAnalyticsApiKey(''); loadedSecretsRef.current.delete('anthropicAnalyticsApiKey'); }}
               />
+              <div className="flex items-center gap-3 flex-wrap">
+                <button
+                  type="button"
+                  onClick={() => testConnection('anthropicAnalyticsApiKeySpendLimits', anthropicAnalyticsApiKey)}
+                  disabled={!anthropicAnalyticsApiKey || testStatuses.anthropicAnalyticsApiKeySpendLimits === 'testing'}
+                  className={cx(B.link, 'disabled:text-[#B3B3B3] disabled:no-underline')}
+                >
+                  {testStatuses.anthropicAnalyticsApiKeySpendLimits === 'testing' ? 'Checking spend limits access…' : 'Check spend limits access'}
+                </button>
+                {testStatuses.anthropicAnalyticsApiKeySpendLimits === 'success' && <span className="text-[13px] text-[#1A7F37]">The key can read spend limits.</span>}
+                {testStatuses.anthropicAnalyticsApiKeySpendLimits === 'error' && <span className="text-[13px] text-[#B42318]">The key can&apos;t read spend limits. It needs read:spend_limits, a Claude Enterprise plan and usage credits turned on.</span>}
+              </div>
             </div>
           </div>
         </Panel>

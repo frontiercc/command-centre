@@ -1,5 +1,14 @@
 # Changelog
 
+## 1.4.11 (2026-11-25)
+
+- The Analytics API pull reads every page of people, not just the first 100.
+- FinOps uses Anthropic's seat count when no licensed seats figure is entered.
+- The Analytics API key is no longer marked "on the roadmap".
+- The FinOps check against Anthropic's cost works: it uses the Analytics API key, compares Claude Code and Cowork only, and runs hourly.
+- Spend Review reads Anthropic spend limits with the Analytics API key.
+- No migrations.
+
 ## 1.4.10 (2026-11-23)
 
 - Every list you pick from (people, departments, teams, cost centres) is in alphabetical order.
