@@ -14,7 +14,6 @@ import { spawn, type ChildProcess } from 'node:child_process';
 import path from 'node:path';
 
 const ROOT = path.resolve(__dirname, '..');
-const PORT = 41000 + Math.floor(Math.random() * 2000);
 const WORKSPACE_ID = '7f3c2a10-5b1e-4c8d-9a6f-0e2d4b8c1a55';
 const ORGANIZATION_ID = 'org-MockAcmeCorp000000000000';
 
@@ -23,17 +22,20 @@ let server: ChildProcess;
 beforeAll(async () => {
   server = spawn(process.execPath, [path.join(ROOT, 'scripts/openai-mock/server.mjs')], {
     // Frozen: no file appears mid-test, so the repeat and resumed runs see exactly what the first run saw.
-    env: { ...process.env, OPENAI_MOCK_PORT: String(PORT), OPENAI_MOCK_DAYS: '5', OPENAI_MOCK_RATE_LIMIT: '1000000', OPENAI_MOCK_FROZEN: '1' },
+    env: { ...process.env, OPENAI_MOCK_PORT: '0', OPENAI_MOCK_DAYS: '5', OPENAI_MOCK_RATE_LIMIT: '1000000', OPENAI_MOCK_FROZEN: '1' },
     stdio: ['ignore', 'pipe', 'pipe'],
   });
-  await new Promise<void>((resolve, reject) => {
+  // Port 0: the system picks a free port and the mock prints it. A random fixed
+  // port could already be in use on the CI runner, and the mock then exited.
+  const port = await new Promise<string>((resolve, reject) => {
     const timer = setTimeout(() => reject(new Error('mock server did not start')), 30_000);
     server.stdout!.on('data', (d: Buffer) => {
-      if (d.toString().includes('Mock OpenAI')) { clearTimeout(timer); resolve(); }
+      const m = /Mock OpenAI .*localhost:(\d+)\/v1/.exec(d.toString());
+      if (m) { clearTimeout(timer); resolve(m[1]); }
     });
     server.on('exit', (code) => { clearTimeout(timer); reject(new Error(`mock server exited ${code}`)); });
   });
-  process.env.CCC_OPENAI_API_BASE_URL = `http://localhost:${PORT}/v1`;
+  process.env.CCC_OPENAI_API_BASE_URL = `http://localhost:${port}/v1`;
 }, 40_000);
 
 afterAll(() => {
