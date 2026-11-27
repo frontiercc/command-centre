@@ -136,6 +136,10 @@ function ModelSelect({
       {!loading && models.length === 0 && value !== '' && <option value={value}>{value}</option>}
       {!loading && models.length > 0 && (
         <>
+          {/* A saved model the list does not offer shows as itself, never as the first model in the list. */}
+          {value !== '' && !models.some(m => m.id === value) && (
+            <option value={value}>{value} ({models.some(m => (m as { via?: string }).via === 'bedrock') ? 'not available through Amazon Bedrock' : 'not in your key’s model list'})</option>
+          )}
           {FAMILIES.map(family => {
             const group = models.filter(m => m.id.toLowerCase().includes(family));
             if (!group.length) return null;

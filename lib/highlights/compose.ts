@@ -23,6 +23,7 @@ import { queueAiCall } from '@/lib/ingestion/scheduler';
 import { redactPii } from '@/lib/pii/detect';
 import { CONTENT_FULL_CHARS } from '@/lib/otel/content-limits';
 import type { HighlightsInput, HighlightsWorkItem } from '@/lib/highlights/gather';
+import { getClaudeCredential } from '@/lib/anthropic/credential';
 
 export interface ComposedHighlights { subject: string; deliverables: { itemIndex: number; sentence: string }[] }
 
@@ -84,7 +85,7 @@ export function validateComposed(parsed: unknown, workItems: HighlightsWorkItem[
 
 export async function composeHighlights(input: HighlightsInput): Promise<ComposedHighlights | null> {
   if (input.workItems.length === 0) return null;
-  const apiKey = await getConfigValue('anthropicAiApiKey');
+  const apiKey = await getClaudeCredential();
   if (!apiKey) return null;
   const model = (await getConfigValue('highlightsModel')) || 'claude-sonnet-5';
 

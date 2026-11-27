@@ -24,8 +24,8 @@ import { extractText } from '@/lib/anthropic/constants';
 import { redactPii } from '@/lib/pii/detect';
 import { fenceUntrusted, UNTRUSTED_TEXT_RULE } from '@/lib/anthropic/untrusted';
 import { getCoreAiModel } from '@/lib/anthropic/model';
-import { getConfigValue } from '@/lib/config';
 import { queueAiCall } from '@/lib/ingestion/scheduler';
+import { getClaudeCredential } from '@/lib/anthropic/credential';
 
 export type PiiVerdict = 'confirmed' | 'dismissed';
 
@@ -114,7 +114,7 @@ export async function confirmPiiMatch(
   maskedValue: string,
 ): Promise<PiiVerdictResult> {
   try {
-    const apiKey = await getConfigValue('anthropicAiApiKey');
+    const apiKey = await getClaudeCredential();
     if (!apiKey) return { verdict: 'confirmed', reason: null };
 
     const client = createAnthropicClient(apiKey);

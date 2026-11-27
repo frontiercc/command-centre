@@ -35,6 +35,7 @@ import { createGroundedJson, paragraphsShape, pctChange, pctOf } from '@/lib/ant
 import { hasCodexData, pickCodeMetricsSource } from '@/lib/pulse/code/vendor-view';
 import { buildDailyWindow } from '@/lib/pulse/code/shipping-alignment';
 import { briefingCount, briefingUsd, wholeShares } from '@/lib/pulse/briefings/format';
+import { getClaudeCredential } from '@/lib/anthropic/credential';
 
 export const CODE_BRIEFING_SCOPE_ID = 'code-org';
 
@@ -218,7 +219,7 @@ async function buildDataSummary(codexPresent: boolean): Promise<string> {
 }
 
 export async function generateCodeBriefing(): Promise<CodeBriefingRow> {
-  const apiKey = await getConfigValue('anthropicAiApiKey');
+  const apiKey = await getClaudeCredential();
   if (!apiKey) throw new Error('No AI API key configured');
 
   const codexPresent = await visibleOpenAi(hasCodexData());

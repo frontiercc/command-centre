@@ -6,11 +6,12 @@
 // The settings themselves are saved through /api/config like every other admin page.
 import { NextRequest, NextResponse } from 'next/server';
 import { getAdminSession } from '@/lib/auth/admin-auth';
-import { getAllConfig, getConfigValue } from '@/lib/config';
+import { getAllConfig } from '@/lib/config';
 import { logAccess } from '@/lib/audit/log';
 import { errorResponse } from '@/lib/api/errors';
 import { ASK_MODEL } from '@/lib/ask/run';
 import { monthStart, outcomesThisMonth, recentQuestions, spendThisMonth } from '@/lib/ask/log';
+import { getClaudeCredential } from '@/lib/anthropic/credential';
 
 export const dynamic = 'force-dynamic';
 
@@ -28,7 +29,7 @@ export async function GET(request: NextRequest) {
     const nowS = Math.floor(Date.now() / 1000);
     return NextResponse.json({
       enabled: cfg.askEnabled === true,
-      hasKey: !!(await getConfigValue('anthropicAiApiKey')),
+      hasKey: !!(await getClaudeCredential()),
       model: ASK_MODEL,
       monthlyCapUsd: cfg.askMonthlyCapUsd,
       retentionDays: cfg.askLogRetentionDays,

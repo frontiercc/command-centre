@@ -33,6 +33,7 @@ import { extractNumbers, ungroundedNumbers } from '@/lib/anthropic/grounded-narr
 import { redactPii } from '@/lib/pii/detect';
 import { queueAiCall } from '@/lib/ingestion/scheduler';
 import { isWorkPulseSurface } from '@/lib/pulse/work-surfaces';
+import { getClaudeCredential } from '@/lib/anthropic/credential';
 
 const DAY = 86400;
 export const WINDOW_DAYS = 30;
@@ -134,7 +135,7 @@ Reply again with one sentence that follows every rule above.`;
 }
 
 async function callRealModel(prompt: string): Promise<{ text: string; model: string }> {
-  const apiKey = await getConfigValue('anthropicAiApiKey');
+  const apiKey = await getClaudeCredential();
   if (!apiKey) throw new Error('No AI API key configured');
   const model = await getCoreAiModel();
   const client = createAnthropicClient(apiKey);

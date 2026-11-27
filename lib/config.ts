@@ -19,6 +19,7 @@ import { getTypedClient } from './db/client';
 import { schema } from './db/schema';
 import { withTx } from './db/with-tx';
 import { decryptSecret, encryptSecret, isEncrypted } from './auth/secrets';
+import { isBedrockProvider } from '@/lib/bedrock/settings';
 
 export interface AppConfig {
   anthropicAdminApiKey: string;
@@ -151,6 +152,12 @@ export interface AppConfig {
   // Core AI model — the four original AI consumers (Intelligence Briefing,
   // anomaly detection, governance Reports, intent AI-assessment). Default Haiku.
   coreAiModel: string;
+  // How the hub reaches Claude: 'anthropic' (API key, the default) or 'bedrock' (Amazon Bedrock). Env AI_PROVIDER.
+  aiProvider: string;
+  // AWS region for Bedrock, e.g. 'eu-west-2'. Env BEDROCK_REGION.
+  bedrockRegion: string;
+  // Amazon Bedrock API key, required with Bedrock (the hub signs in with nothing else). Sensitive.
+  bedrockApiKey: string;
   // OTI v2: interpretation thresholds JSON {"progress":1.2,"uplift":1.5}, provisional.
   otiThresholds: string;
   // Dept benchmark: absolute DDS floor below which a department is flagged "needs support" (provisional).
@@ -468,6 +475,9 @@ export const CONFIG_KEYS: Record<keyof AppConfig, string> = {
   setupFirstOpenaiAt: 'setup_first_openai_at',
   humanTimeMinSessionsForRatio: 'human_time_min_sessions_for_ratio',
   coreAiModel: 'core_ai_model',
+  aiProvider: 'ai_provider',
+  bedrockRegion: 'bedrock_region',
+  bedrockApiKey: 'bedrock_api_key',
   otiThresholds: 'oti_thresholds',
   ddsSupportFloor: 'dds_support_floor',
   pulseClassifierLastRun: 'pulse_classifier_last_run',
@@ -634,6 +644,7 @@ const SENSITIVE_KEYS = new Set<keyof AppConfig>([
   'anthropicAdminApiKey',
   'anthropicAnalyticsApiKey',
   'anthropicAiApiKey',
+  'bedrockApiKey',
   'otelEndpointSecret',
   'archiveAccessKeyId',
   'archiveSecretAccessKey',
@@ -716,6 +727,8 @@ const ENV_FALLBACKS: Partial<Record<keyof AppConfig, string>> = {
   ingestIntervalSeconds: 'INGEST_INTERVAL_SECONDS',
   complianceAccessKey: 'COMPLIANCE_ACCESS_KEY',
   openaiAdminApiKey: 'OPENAI_ADMIN_API_KEY',
+  aiProvider: 'AI_PROVIDER',
+  bedrockRegion: 'BEDROCK_REGION',
 };
 
 /**
@@ -884,6 +897,9 @@ export async function getAllConfig(): Promise<AppConfig> {
     setupFirstOpenaiAt: resolve('setupFirstOpenaiAt'),
     humanTimeMinSessionsForRatio: resolve('humanTimeMinSessionsForRatio', '20'),
     coreAiModel: resolve('coreAiModel', CLAUDE_MODEL),
+    aiProvider: resolve('aiProvider', 'anthropic'),
+    bedrockRegion: resolve('bedrockRegion'),
+    bedrockApiKey: resolve('bedrockApiKey'),
     otiThresholds: resolve('otiThresholds', '{"progress":1.2,"uplift":1.5}'),
     ddsSupportFloor: resolve('ddsSupportFloor', '1.5'),
     pulseClassifierLastRun: resolve('pulseClassifierLastRun'),
@@ -1120,8 +1136,11 @@ export async function getDataSourceStatus(): Promise<DataSourceStatus> {
   const complianceApi = !!complianceKey;
   const analyticsApi = !!analyticsKey;
 
+  // AI features are on with an Anthropic key, or with Amazon Bedrock chosen.
   const aiKey = await getConfigValue('anthropicAiApiKey');
-  const aiFeatures = !!aiKey;
+  const aiFeatures = isBedrockProvider(await getConfigValue('aiProvider'))
+    ? !!(await getConfigValue('bedrockRegion')).trim() && !!(await getConfigValue('bedrockApiKey')).trim()
+    : !!aiKey;
   const openai = !!(await getConfigValue('openaiAdminApiKey'));
   const openaiShown = (await getConfigValue('openaiShown')) !== 'false';
   const mode = complianceApi || analyticsApi ? 'enterprise' : 'max';

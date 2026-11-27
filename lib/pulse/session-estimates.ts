@@ -34,6 +34,7 @@ import { queueAiCall } from '@/lib/ingestion/scheduler';
 import { coworkHumanTimeInstruction, parseHumanMinutes, type HumanMinutes } from '@/lib/pulse/human-time';
 import { isWorkPulseSurface } from '@/lib/pulse/work-surfaces';
 import { rollupChatgptSessionTime } from '@/lib/pulse/chatgpt-session-time';
+import { getClaudeCredential } from '@/lib/anthropic/credential';
 
 const DAY = 86400;
 export const WINDOW_DAYS = 30;
@@ -83,7 +84,7 @@ Your previous reply was not accepted. Reply with ONLY a JSON object of three who
 }
 
 async function callRealModel(prompt: string): Promise<{ text: string }> {
-  const apiKey = await getConfigValue('anthropicAiApiKey');
+  const apiKey = await getClaudeCredential();
   if (!apiKey) throw new Error('No AI API key configured');
   const model = await getCoreAiModel();
   const client = createAnthropicClient(apiKey);

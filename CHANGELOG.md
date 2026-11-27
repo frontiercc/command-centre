@@ -1,5 +1,11 @@
 # Changelog
 
+## 1.5.0 (2026-11-27)
+
+- Claude through Amazon Bedrock: on Admin → Access & Keys → AI features, choose Amazon Bedrock and enter an AWS region and a Bedrock API key, and every AI feature runs on Claude in your own AWS account instead of with an Anthropic API key. The Test button makes one short call and says which region and model answered. The model drop-downs list the Claude models Bedrock serves. The hub signs in to Bedrock only with the key saved there.
+- Anthropic SDK 0.120.0, and the Amazon Bedrock SDK 0.36.0.
+- No migrations.
+
 ## 1.4.12 (2026-11-25)
 
 - Next.js 15.5.29, which fixes three Next.js security advisories.

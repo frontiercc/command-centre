@@ -26,6 +26,7 @@ import { runProcessMiningJob } from '@/lib/usecases/process-mining';
 import { runFinanceDriftAlert } from '@/lib/alerts/finance-alerts';
 import { runAlertSlackSweepJob } from '@/lib/alerts/slack-sweep';
 import { runSystemHealthAlertsJob } from '@/lib/alerts/system-health-alerts';
+import { getClaudeCredential } from '@/lib/anthropic/credential';
 
 let schedulerRunning = false;
 let schedulerTimeout: NodeJS.Timeout | null = null;
@@ -138,7 +139,7 @@ async function claimUseCaseJudgeRun(): Promise<boolean> {
 async function claimAnomalyDetectionRun(): Promise<boolean> {
   try {
     if (anomalyRunInFlight) return false;
-    if (!(await getConfigValue('anthropicAiApiKey'))) return false;
+    if (!(await getClaudeCredential())) return false;
     // Nothing to raise when every alert type the detector produces is off on
     // Admin → Risk Scoring, so make no model call.
     const cfg = await getAllConfig();
@@ -431,7 +432,7 @@ async function runCycle(): Promise<void> {
 
   // Developer Pulse weekly briefing — Sundays at or after 22:00, once per week
   await runJob('code_weekly_briefing', 'Code briefing', async () => {
-    if (await getConfigValue('codePulseEnabled') === 'false' || !(await getConfigValue('anthropicAiApiKey'))) return JOB_SKIPPED;
+    if (await getConfigValue('codePulseEnabled') === 'false' || !(await getClaudeCredential())) return JOB_SKIPPED;
     const d = new Date();
     if (d.getDay() !== 0 || d.getHours() < 22) return JOB_SKIPPED;
     const lastRun = await getConfigValue('codeBriefingLastRun');

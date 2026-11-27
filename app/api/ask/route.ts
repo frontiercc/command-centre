@@ -7,12 +7,13 @@
 // lookups, outcome and cost. The answer text is returned, never stored.
 import { NextRequest, NextResponse } from 'next/server';
 import { getAdminSession } from '@/lib/auth/admin-auth';
-import { getConfigValue, getAllConfig } from '@/lib/config';
+import { getAllConfig } from '@/lib/config';
 import { logAccess } from '@/lib/audit/log';
 import { errorResponse } from '@/lib/api/errors';
 import { createAnthropicClient } from '@/lib/anthropic/client';
 import { askQuestion, ASK_MODEL, type AskTurn } from '@/lib/ask/run';
 import { costOf, logQuestion, spendThisMonth } from '@/lib/ask/log';
+import { getClaudeCredential } from '@/lib/anthropic/credential';
 
 export const dynamic = 'force-dynamic';
 
@@ -30,7 +31,7 @@ export async function GET(request: NextRequest) {
     // Every role may ask whether it is available; only an admin ever gets a yes.
     if (session.role !== 'admin') return NextResponse.json({ available: false });
     const cfg = await getAllConfig();
-    const hasKey = !!(await getConfigValue('anthropicAiApiKey'));
+    const hasKey = !!(await getClaudeCredential());
     return NextResponse.json({ available: cfg.askEnabled === true && hasKey, enabled: cfg.askEnabled === true, hasKey });
   } catch (err) {
     return errorResponse('ask GET', err);
@@ -60,7 +61,7 @@ export async function POST(request: NextRequest) {
 
     const cfg = await getAllConfig();
     if (cfg.askEnabled !== true) return NextResponse.json({ error: 'Ask the data is turned off. An admin can turn it on in Admin, Ask the data.' }, { status: 409 });
-    const apiKey = await getConfigValue('anthropicAiApiKey');
+    const apiKey = await getClaudeCredential();
     if (!apiKey) return NextResponse.json({ error: 'No Claude API key is set. Add one in Admin → Access & Keys.' }, { status: 409 });
 
     const nowS = Math.floor(Date.now() / 1000);

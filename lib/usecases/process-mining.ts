@@ -35,6 +35,7 @@ import {
 import type { DeptCorpus } from '@/lib/usecases/process-corpus';
 import type { QualBar, ValidProcessCandidate } from '@/lib/usecases/process-validate';
 import type { ProcessCanvas } from '@/lib/usecases/suggestion-store';
+import { getClaudeCredential } from '@/lib/anthropic/credential';
 
 export const SYSTEM_PROMPT = `You identify the recurring BUSINESS PROCESSES a department hands to its AI assistant, from numbered excerpts of that department's real prompts.
 A process is a specific job the department repeats, done the same way each time, that produces a named output ("month-end variance commentary", "client billing pack assembly", "weekly timesheet chase list"). Only suggest work like that. Never suggest a general activity (building or editing slides and decks, writing code, research, finding or retrieving documents, drafting documents, answering questions as they come up), personal development (career plans, exam or certification study), or a one-off project, however many sessions it took.
@@ -156,7 +157,7 @@ export async function synthesiseDeptProcesses(
   onFailure?: (reason: string) => void,
 ): Promise<ValidProcessCandidate[]> {
   if (corpus.excerpts.length === 0) return [];
-  const apiKey = await getConfigValue('anthropicAiApiKey');
+  const apiKey = await getClaudeCredential();
   if (!apiKey) return [];
   const model = (await getConfigValue('processMiningModel'))
     || (await getConfigValue('useCasesIdeateModel'))

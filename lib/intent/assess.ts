@@ -16,6 +16,7 @@ import { getConfigValue } from '@/lib/config';
 import { queueAiCall } from '@/lib/ingestion/scheduler';
 import { fenceUntrusted, UNTRUSTED_TEXT_RULE } from '@/lib/anthropic/untrusted';
 import type { IntentMatch, IntentAssessment } from './types';
+import { getClaudeCredential } from '@/lib/anthropic/credential';
 
 export const INTENT_SYSTEM_PROMPT = `You are a security analyst assessing the risk of a user request made to an AI assistant in a corporate environment.
 
@@ -72,7 +73,7 @@ export async function assessIntent(
   messageText: string,
   matches: IntentMatch[],
 ): Promise<IntentAssessment> {
-  const apiKey = await getConfigValue('anthropicAiApiKey');
+  const apiKey = await getClaudeCredential();
   if (!apiKey) {
     return {
       severity: matches[0]?.defaultSeverity || 'medium',

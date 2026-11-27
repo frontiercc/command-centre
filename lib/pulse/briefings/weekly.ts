@@ -12,9 +12,9 @@ import { describeWork, kindText } from '@/lib/pulse/briefings/deep-work-facts';
 import { buildProductFacts } from '@/lib/pulse/briefings/product-facts';
 import { getTypedClient } from '@/lib/db/client';
 import { schema } from '@/lib/db/schema';
-import { getConfigValue } from '@/lib/config';
 import { getTierNames } from '@/lib/pulse/tier-config';
 import { tierLines, producedLine } from '@/lib/pulse/briefings/described-facts';
+import { getClaudeCredential } from '@/lib/anthropic/credential';
 import {
   WEEKLY_BRIEFING_SYSTEM,
   buildWeeklyBriefingUserMessage,
@@ -22,7 +22,7 @@ import {
 } from './prompts/weekly';
 
 async function getClient(): Promise<Anthropic> {
-  const apiKey = await getConfigValue('anthropicAiApiKey');
+  const apiKey = await getClaudeCredential();
   if (!apiKey) throw new Error('No AI API key configured');
   return createAnthropicClient(apiKey);
 }
