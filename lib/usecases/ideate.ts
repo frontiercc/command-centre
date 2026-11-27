@@ -27,6 +27,7 @@ import { schema } from '@/lib/db/schema';
 import { getConfigValue } from '@/lib/config';
 import { extractText, stripCodeFences, parseModelJson } from '@/lib/anthropic/constants';
 import { queueAiCall } from '@/lib/ingestion/scheduler';
+import { getClaudeCredential } from '@/lib/anthropic/credential';
 
 export interface OrgGrounding {
   topSkills: string[];
@@ -64,7 +65,7 @@ const UNDERUSED_CONNECTORS_LIMIT = 10;
 const CODE_WORK_TYPES_LIMIT = 10;
 
 async function getClient(): Promise<Anthropic> {
-  const apiKey = await getConfigValue('anthropicAiApiKey');
+  const apiKey = await getClaudeCredential();
   if (!apiKey) throw new Error('No AI API key configured');
   return createAnthropicClient(apiKey);
 }

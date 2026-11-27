@@ -40,6 +40,7 @@ import { listUseCases, type UseCase } from '@/lib/usecases/queries';
 import { addSessionMatch, refreshWeekFromJunction, removeSessionMatches } from '@/lib/usecases/weeks';
 import { signalMatches } from '@/lib/usecases/signal-match';
 import { thinkingOff } from '@/lib/anthropic/thinking';
+import { getClaudeCredential } from '@/lib/anthropic/credential';
 
 export const JUDGE_IDLE_SECS = 30 * 60;
 export const JUDGE_WINDOW_DAYS = 91; // 13 weeks: the governance window, and the history a newly confirmed use case gets
@@ -289,7 +290,7 @@ export async function runUseCaseJudgeJob(opts?: { nowS?: number }): Promise<Judg
   const cfg = await getAllConfig() as unknown as Record<string, string | undefined>;
   const contentOn = cfg.useCasesSuggestUseContent === 'true';
   const model = (cfg.useCaseJudgeModel ?? '').trim() || 'claude-sonnet-5';
-  const apiKey = contentOn ? await getConfigValue('anthropicAiApiKey') : '';
+  const apiKey = contentOn ? await getClaudeCredential() : '';
 
   const live = await loadLiveUseCases();
 

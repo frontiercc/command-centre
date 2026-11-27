@@ -9,7 +9,7 @@ import { SECRET_KEYS, SENSITIVE_KEYS } from '@/lib/config-secrets';
 describe('config-secrets registry', () => {
   it('covers all 14 sensitive keys', () => {
     expect(new Set(SENSITIVE_KEYS)).toEqual(new Set([
-      'anthropicAdminApiKey', 'anthropicAnalyticsApiKey', 'anthropicAiApiKey',
+      'anthropicAdminApiKey', 'anthropicAnalyticsApiKey', 'anthropicAiApiKey', 'bedrockApiKey',
       'otelEndpointSecret', 'archiveAccessKeyId', 'archiveSecretAccessKey',
       'smtpPassword', 'digestSlackWebhookUrl', 'ssoClientSecret', 'dxApiKey',
       'complianceAccessKey', 'githubToken',

@@ -21,6 +21,7 @@ import { createAnthropicClient } from '@/lib/anthropic/client';
 import { getConfigValue } from '@/lib/config';
 import { extractText, stripCodeFences, parseModelJson } from '@/lib/anthropic/constants';
 import { queueAiCall } from '@/lib/ingestion/scheduler';
+import { getClaudeCredential } from '@/lib/anthropic/credential';
 
 export interface ExtractedUseCase {
   title: string;
@@ -33,7 +34,7 @@ export interface ExtractedUseCase {
 }
 
 async function getClient(): Promise<Anthropic> {
-  const apiKey = await getConfigValue('anthropicAiApiKey');
+  const apiKey = await getClaudeCredential();
   if (!apiKey) throw new Error('No AI API key configured');
   return createAnthropicClient(apiKey);
 }

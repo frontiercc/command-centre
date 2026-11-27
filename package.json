@@ -1,6 +1,6 @@
 {
   "name": "command-centre",
-  "version": "1.4.12",
+  "version": "1.5.0",
   "description": "Measures whether teams using Claude are becoming more productive, from the telemetry Claude already sends.",
   "license": "Apache-2.0",
   "author": "Lee James",
@@ -27,7 +27,8 @@
     "reset-password": "node scripts/reset-admin-password.mjs"
   },
   "dependencies": {
-    "@anthropic-ai/sdk": "^0.99.0",
+    "@anthropic-ai/bedrock-sdk": "0.36.0",
+    "@anthropic-ai/sdk": "0.120.0",
     "@aws-sdk/client-s3": "^3.1019.0",
     "archiver": "^7.0.1",
     "drizzle-orm": "^0.45.2",

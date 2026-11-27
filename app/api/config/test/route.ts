@@ -6,6 +6,8 @@ import { logError } from '@/lib/api/errors';
 import { getConfigValue } from '@/lib/config';
 import { requireAdmin } from '@/lib/auth/admin-auth';
 import { listLogFiles, OpenAiApiError, type OpenAiEventType } from '@/lib/openai/client';
+import { testBedrockConnection } from '@/lib/bedrock/test';
+import { getCoreAiModel } from '@/lib/anthropic/model';
 
 /**
  * OpenAI's Admin API key is checked by listing one file of each log type the
@@ -56,7 +58,18 @@ export async function POST(request: NextRequest) {
   if (!(await requireAdmin(request))) {
     return NextResponse.json({ error: 'Forbidden: admin role required' }, { status: 403 });
   }
-  const { key, value, workspaceId, organizationId } = await request.json();
+  const { key, value, workspaceId, organizationId, region } = await request.json();
+
+  // Amazon Bedrock: one short call with the Core AI model, signed with the key
+  // from the form, or the saved one when the form still shows it masked.
+  if (key === 'bedrockApiKey') {
+    const typed = typeof value === 'string' && value.trim() && !value.includes('••••••••') ? value.trim() : '';
+    const result = await testBedrockConnection({
+      region: typeof region === 'string' && region.trim() ? region.trim() : String((await getConfigValue('bedrockRegion')) ?? ''),
+      apiKey: typed || String((await getConfigValue('bedrockApiKey')) ?? ''),
+    }, await getCoreAiModel());
+    return NextResponse.json(result.ok ? { ok: true, note: result.message } : { ok: false, error: result.message });
+  }
 
   if (key === 'openaiAdminApiKey') {
     return testOpenAiKey(

@@ -13,10 +13,11 @@ import { schema } from '@/lib/db/schema';
 import { buildProductFacts } from '@/lib/pulse/briefings/product-facts';
 import { buildDeepWorkSummary, deepWorkLines } from '@/lib/pulse/briefings/deep-work-facts';
 import { workByProductFacts } from '@/lib/pulse/briefings/work-by-product';
-import { getAllConfig, getConfigValue } from '@/lib/config';
+import { getAllConfig } from '@/lib/config';
 import { listOpenDeptBoxes } from '@/lib/usecases/suggestion-store';
 import { getTierNames } from '@/lib/pulse/tier-config';
 import { tierLines, producedLine, departmentsBelowFloor } from '@/lib/pulse/briefings/described-facts';
+import { getClaudeCredential } from '@/lib/anthropic/credential';
 import {
   CIO_BRIEFING_SYSTEM,
   buildCioBriefingUserMessage,
@@ -24,7 +25,7 @@ import {
 } from './prompts/cio';
 
 async function getClient(): Promise<Anthropic> {
-  const apiKey = await getConfigValue('anthropicAiApiKey');
+  const apiKey = await getClaudeCredential();
   if (!apiKey) throw new Error('No AI API key configured');
   return createAnthropicClient(apiKey);
 }

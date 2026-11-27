@@ -6,6 +6,8 @@ import { errorResponse } from '@/lib/api/errors';
 import { createAnthropicClient } from '@/lib/anthropic/client';
 import { getAdminSession } from '@/lib/auth/admin-auth';
 import { getConfigValue } from '@/lib/config';
+import { isBedrockProvider } from '@/lib/bedrock/settings';
+import { BEDROCK_CLAUDE_MODELS } from '@/lib/bedrock/models';
 
 export const dynamic = 'force-dynamic';
 
@@ -14,6 +16,9 @@ export async function GET(request: NextRequest) {
   if (!session.authenticated || session.role !== 'admin') {
     return NextResponse.json({ error: 'Forbidden' }, { status: 403 });
   }
+
+  // Through Amazon Bedrock the pickers offer the Claude models Bedrock serves.
+  if (isBedrockProvider(await getConfigValue('aiProvider'))) return NextResponse.json({ models: BEDROCK_CLAUDE_MODELS.map(m => ({ ...m, via: 'bedrock' })) });
 
   const apiKey = await getConfigValue('anthropicAiApiKey');
   if (!apiKey) {

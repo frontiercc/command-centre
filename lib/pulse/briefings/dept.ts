@@ -13,9 +13,9 @@ import { schema } from '@/lib/db/schema';
 import { buildProductFacts } from '@/lib/pulse/briefings/product-facts';
 import { buildDeepWorkSummary, deepWorkLines } from '@/lib/pulse/briefings/deep-work-facts';
 import { workByProductFacts } from '@/lib/pulse/briefings/work-by-product';
-import { getConfigValue } from '@/lib/config';
 import { getTierNames } from '@/lib/pulse/tier-config';
 import { tierLines, producedLine } from '@/lib/pulse/briefings/described-facts';
+import { getClaudeCredential } from '@/lib/anthropic/credential';
 import {
   DEPT_BRIEFING_SYSTEM,
   buildDeptBriefingUserMessage,
@@ -23,7 +23,7 @@ import {
 } from './prompts/dept';
 
 async function getClient(): Promise<Anthropic> {
-  const apiKey = await getConfigValue('anthropicAiApiKey');
+  const apiKey = await getClaudeCredential();
   if (!apiKey) throw new Error('No AI API key configured');
   return createAnthropicClient(apiKey);
 }

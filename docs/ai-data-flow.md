@@ -66,6 +66,8 @@ The Hub runs where you run it: with Docker Compose, on a machine you choose; on 
 
 Command Centre's AI features call the Anthropic API with your organisation's key, so where Anthropic processes those calls follows your organisation's agreement with Anthropic and the settings of the Anthropic workspace that holds the key.
 
+With **Connect to Claude through** set to **Amazon Bedrock**, the same calls, with the same content, go instead to Amazon Bedrock in your AWS account, in the region you set, through Amazon's cross-region inference profile for that geography (EU, US or Asia Pacific). Your agreement with AWS governs them, and no Anthropic API key is used.
+
 Model calls are the main path by which prompt-derived text leaves your infrastructure; Slack, described under Sub-processors, is the other. The optional archive taken before retention deletes data writes expiring records, including stored prompts, to an Amazon S3 bucket you name.
 
 The application makes no call to Anthropic beyond those listed in this document and none to the Command Centre project. The destinations the Hub calls, depending on which features you use, are these.
@@ -73,6 +75,7 @@ The application makes no call to Anthropic beyond those listed in this document 
 | Destination | Purpose | Data leaving your infrastructure |
 |---|---|---|
 | `api.anthropic.com` | Model calls, model list, key tests, and the Compliance, Analytics and Admin API pulls | As described in this document |
+| `bedrock-runtime.<region>.amazonaws.com` | Model calls and the key test, only with Amazon Bedrock chosen | As described in this document, plus the Bedrock API key |
 | Your Slack incoming-webhook URLs | Weekly Digest, high-priority alerts, Weekly Highlights | Described under Sub-processors |
 | Your SMTP relay | Weekly Digest email, password reset email | Described under Sub-processors |
 | `api.chatgpt.com`, and the short-lived download links it returns | Reading ChatGPT and Codex activity from OpenAI's Compliance API | To `api.chatgpt.com`: the OpenAI Admin API key, your workspace and organisation IDs, and how far the sync has read. The download links receive no key |

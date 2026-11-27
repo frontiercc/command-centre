@@ -16,6 +16,7 @@ import { getTypedClient } from '@/lib/db/client';
 import { schema } from '@/lib/db/schema';
 import { getConfigValue } from '@/lib/config';
 import { getConnectedProducts, isOpenAiOnly, openAiConnected } from '@/lib/sources/connected';
+import { getClaudeCredential } from '@/lib/anthropic/credential';
 
 /** The sample organisation's people (scripts/demo/acme-people.json). */
 export const SAMPLE_EMAIL_PATTERN = '%@acmecorp.example';
@@ -78,7 +79,7 @@ export async function getSetupStatus(): Promise<SetupStatus> {
     rubricSaved, adminDept, userDept, sampleLoaded,
   ] = await Promise.all([
     getConfigValue('setupGuideHidden'),
-    getConfigValue('anthropicAiApiKey'),
+    getClaudeCredential(),
     getConfigValue('setupFirstCodeAt'),
     getConfigValue('setupFirstCoworkAt'),
     getConfigValue('setupRubricReviewed'),

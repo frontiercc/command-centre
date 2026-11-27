@@ -2,21 +2,21 @@
 
 Frontier Command Centre uses the open-source packages below when it runs. Development-only tools are not listed. This file is generated from package-lock.json and the installed packages by `npm run notices`, and CI checks it is current. For each package it gives the version, licence and source, the copyright lines from the package's licence file and, where the package ships one, its NOTICE file. The text of each licence follows the list.
 
-414 packages:
+451 packages:
 
 | Licence | Packages |
 |---|---|
-| MIT | 247 |
-| Apache-2.0 | 119 |
+| MIT | 240 |
+| Apache-2.0 | 162 |
 | ISC | 14 |
 | LGPL-3.0-or-later | 10 |
 | BlueOak-1.0.0 | 6 |
 | BSD-2-Clause | 4 |
 | Apache-2.0 AND LGPL-3.0-or-later | 3 |
 | BSD-3-Clause | 3 |
+| 0BSD | 2 |
 | (MIT AND Zlib) | 1 |
 | (MIT OR GPL-3.0-or-later) | 1 |
-| 0BSD | 1 |
 | Apache-2.0 AND LGPL-3.0-or-later AND MIT | 1 |
 | BSD | 1 |
 | CC-BY-4.0 | 1 |
@@ -25,11 +25,25 @@ Frontier Command Centre uses the open-source packages below when it runs. Develo
 
 ## Packages
 
-### @anthropic-ai/sdk 0.99.0
+### @anthropic-ai/bedrock-sdk 0.36.0
 
 Licence: MIT. Source: https://github.com/anthropics/anthropic-sdk-typescript.
 
 - Copyright 2023 Anthropic, PBC.
+
+### @anthropic-ai/sdk 0.120.0
+
+Licence: MIT. Source: https://github.com/anthropics/anthropic-sdk-typescript.
+
+- Copyright 2023 Anthropic, PBC.
+
+### @aws-crypto/crc32 3.0.0
+
+Licence: Apache-2.0. Source: git@github.com:aws/aws-sdk-js-crypto-helpers.
+
+- copyright notice that is included in or attached to the work
+- copyright license to reproduce, prepare Derivative Works of,
+- (c) You must retain, in the Source form of any Derivative Works
 
 ### @aws-crypto/crc32 5.2.0
 
@@ -63,6 +77,14 @@ Licence: Apache-2.0. Source: git@github.com:aws/aws-sdk-js-crypto-helpers.
 - copyright license to reproduce, prepare Derivative Works of,
 - (c) You must retain, in the Source form of any Derivative Works
 
+### @aws-crypto/sha256-js 4.0.0
+
+Licence: Apache-2.0. Source: git@github.com:aws/aws-sdk-js-crypto-helpers.
+
+- copyright notice that is included in or attached to the work
+- copyright license to reproduce, prepare Derivative Works of,
+- (c) You must retain, in the Source form of any Derivative Works
+
 ### @aws-crypto/sha256-js 5.2.0
 
 Licence: Apache-2.0. Source: git@github.com:aws/aws-sdk-js-crypto-helpers.
@@ -79,6 +101,22 @@ Licence: Apache-2.0. Source: git@github.com:aws/aws-sdk-js-crypto-helpers.
 - copyright license to reproduce, prepare Derivative Works of,
 - (c) You must retain, in the Source form of any Derivative Works
 
+### @aws-crypto/util 3.0.0
+
+Licence: Apache-2.0. Source: git@github.com:aws/aws-sdk-js-crypto-helpers.
+
+- copyright notice that is included in or attached to the work
+- copyright license to reproduce, prepare Derivative Works of,
+- (c) You must retain, in the Source form of any Derivative Works
+
+### @aws-crypto/util 4.0.0
+
+Licence: Apache-2.0. Source: git@github.com:aws/aws-sdk-js-crypto-helpers.
+
+- copyright notice that is included in or attached to the work
+- copyright license to reproduce, prepare Derivative Works of,
+- (c) You must retain, in the Source form of any Derivative Works
+
 ### @aws-crypto/util 5.2.0
 
 Licence: Apache-2.0. Source: git@github.com:aws/aws-sdk-js-crypto-helpers.
@@ -86,6 +124,15 @@ Licence: Apache-2.0. Source: git@github.com:aws/aws-sdk-js-crypto-helpers.
 - copyright notice that is included in or attached to the work
 - copyright license to reproduce, prepare Derivative Works of,
 - (c) You must retain, in the Source form of any Derivative Works
+
+### @aws-sdk/client-bedrock-runtime 3.1178.0
+
+Licence: Apache-2.0. Source: https://github.com/aws/aws-sdk-js-v3.
+
+- copyright notice that is included in or attached to the work
+- copyright license to reproduce, prepare Derivative Works of,
+- (c) You must retain, in the Source form of any Derivative Works
+- Copyright 2018-2023 Amazon.com, Inc. or its affiliates. All Rights Reserved.
 
 ### @aws-sdk/client-s3 3.1035.0
 
@@ -96,7 +143,7 @@ Licence: Apache-2.0. Source: https://github.com/aws/aws-sdk-js-v3.
 - (c) You must retain, in the Source form of any Derivative Works
 - Copyright 2018-2020 Amazon.com, Inc. or its affiliates. All Rights Reserved.
 
-### @aws-sdk/core 3.974.4
+### @aws-sdk/core 3.981.2
 
 Licence: Apache-2.0. Source: https://github.com/aws/aws-sdk-js-v3.
 
@@ -114,7 +161,7 @@ Licence: Apache-2.0. Source: https://github.com/aws/aws-sdk-js-v3.
 - (c) You must retain, in the Source form of any Derivative Works
 - Copyright 2018-2020 Amazon.com, Inc. or its affiliates. All Rights Reserved.
 
-### @aws-sdk/credential-provider-env 3.972.30
+### @aws-sdk/credential-provider-cognito-identity 3.972.85
 
 Licence: Apache-2.0. Source: https://github.com/aws/aws-sdk-js-v3.
 
@@ -123,11 +170,7 @@ Licence: Apache-2.0. Source: https://github.com/aws/aws-sdk-js-v3.
 - (c) You must retain, in the Source form of any Derivative Works
 - Copyright 2018-2020 Amazon.com, Inc. or its affiliates. All Rights Reserved.
 
-### @aws-sdk/credential-provider-http 3.972.32
-
-Licence: Apache-2.0. Source: https://github.com/aws/aws-sdk-js-v3.
-
-### @aws-sdk/credential-provider-ini 3.972.34
+### @aws-sdk/credential-provider-env 3.972.86
 
 Licence: Apache-2.0. Source: https://github.com/aws/aws-sdk-js-v3.
 
@@ -136,11 +179,11 @@ Licence: Apache-2.0. Source: https://github.com/aws/aws-sdk-js-v3.
 - (c) You must retain, in the Source form of any Derivative Works
 - Copyright 2018-2020 Amazon.com, Inc. or its affiliates. All Rights Reserved.
 
-### @aws-sdk/credential-provider-login 3.972.34
+### @aws-sdk/credential-provider-http 3.972.88
 
 Licence: Apache-2.0. Source: https://github.com/aws/aws-sdk-js-v3.
 
-### @aws-sdk/credential-provider-node 3.972.35
+### @aws-sdk/credential-provider-ini 3.973.32
 
 Licence: Apache-2.0. Source: https://github.com/aws/aws-sdk-js-v3.
 
@@ -149,7 +192,20 @@ Licence: Apache-2.0. Source: https://github.com/aws/aws-sdk-js-v3.
 - (c) You must retain, in the Source form of any Derivative Works
 - Copyright 2018-2020 Amazon.com, Inc. or its affiliates. All Rights Reserved.
 
-### @aws-sdk/credential-provider-process 3.972.30
+### @aws-sdk/credential-provider-login 3.972.94
+
+Licence: Apache-2.0. Source: https://github.com/aws/aws-sdk-js-v3.
+
+### @aws-sdk/credential-provider-node 3.972.99
+
+Licence: Apache-2.0. Source: https://github.com/aws/aws-sdk-js-v3.
+
+- copyright notice that is included in or attached to the work
+- copyright license to reproduce, prepare Derivative Works of,
+- (c) You must retain, in the Source form of any Derivative Works
+- Copyright 2018-2020 Amazon.com, Inc. or its affiliates. All Rights Reserved.
+
+### @aws-sdk/credential-provider-process 3.972.86
 
 Licence: Apache-2.0. Source: https://github.com/aws/aws-sdk-js-v3.
 
@@ -158,7 +214,7 @@ Licence: Apache-2.0. Source: https://github.com/aws/aws-sdk-js-v3.
 - (c) You must retain, in the Source form of any Derivative Works
 - Copyright 2019 Amazon.com, Inc. or its affiliates. All Rights Reserved.
 
-### @aws-sdk/credential-provider-sso 3.972.34
+### @aws-sdk/credential-provider-sso 3.973.30
 
 Licence: Apache-2.0. Source: https://github.com/aws/aws-sdk-js-v3.
 
@@ -167,7 +223,25 @@ Licence: Apache-2.0. Source: https://github.com/aws/aws-sdk-js-v3.
 - (c) You must retain, in the Source form of any Derivative Works
 - Copyright 2019 Amazon.com, Inc. or its affiliates. All Rights Reserved.
 
-### @aws-sdk/credential-provider-web-identity 3.972.34
+### @aws-sdk/credential-provider-web-identity 3.972.92
+
+Licence: Apache-2.0. Source: https://github.com/aws/aws-sdk-js-v3.
+
+- copyright notice that is included in or attached to the work
+- copyright license to reproduce, prepare Derivative Works of,
+- (c) You must retain, in the Source form of any Derivative Works
+- Copyright 2019 Amazon.com, Inc. or its affiliates. All Rights Reserved.
+
+### @aws-sdk/credential-providers 3.1178.0
+
+Licence: Apache-2.0. Source: https://github.com/aws/aws-sdk-js-v3.
+
+- copyright notice that is included in or attached to the work
+- copyright license to reproduce, prepare Derivative Works of,
+- (c) You must retain, in the Source form of any Derivative Works
+- Copyright 2018-2020 Amazon.com, Inc. or its affiliates. All Rights Reserved.
+
+### @aws-sdk/eventstream-handler-node 3.972.43
 
 Licence: Apache-2.0. Source: https://github.com/aws/aws-sdk-js-v3.
 
@@ -177,6 +251,15 @@ Licence: Apache-2.0. Source: https://github.com/aws/aws-sdk-js-v3.
 - Copyright 2019 Amazon.com, Inc. or its affiliates. All Rights Reserved.
 
 ### @aws-sdk/middleware-bucket-endpoint 3.972.10
+
+Licence: Apache-2.0. Source: https://github.com/aws/aws-sdk-js-v3.
+
+- copyright notice that is included in or attached to the work
+- copyright license to reproduce, prepare Derivative Works of,
+- (c) You must retain, in the Source form of any Derivative Works
+- Copyright 2018-2020 Amazon.com, Inc. or its affiliates. All Rights Reserved.
+
+### @aws-sdk/middleware-eventstream 3.972.39
 
 Licence: Apache-2.0. Source: https://github.com/aws/aws-sdk-js-v3.
 
@@ -266,7 +349,16 @@ Licence: Apache-2.0. Source: https://github.com/aws/aws-sdk-js-v3.
 - (c) You must retain, in the Source form of any Derivative Works
 - Copyright 2019 Amazon.com, Inc. or its affiliates. All Rights Reserved.
 
-### @aws-sdk/nested-clients 3.997.2
+### @aws-sdk/middleware-websocket 3.972.68
+
+Licence: Apache-2.0. Source: https://github.com/aws/aws-sdk-js-v3.
+
+- copyright notice that is included in or attached to the work
+- copyright license to reproduce, prepare Derivative Works of,
+- (c) You must retain, in the Source form of any Derivative Works
+- Copyright 2019 Amazon.com, Inc. or its affiliates. All Rights Reserved.
+
+### @aws-sdk/nested-clients 3.998.5
 
 Licence: Apache-2.0. Source: https://github.com/aws/aws-sdk-js-v3.
 
@@ -279,7 +371,7 @@ Licence: Apache-2.0. Source: https://github.com/aws/aws-sdk-js-v3.
 - (c) You must retain, in the Source form of any Derivative Works
 - Copyright 2018-2020 Amazon.com, Inc. or its affiliates. All Rights Reserved.
 
-### @aws-sdk/signature-v4-multi-region 3.996.21
+### @aws-sdk/signature-v4-multi-region 3.996.52
 
 Licence: Apache-2.0. Source: https://github.com/aws/aws-sdk-js-v3.
 
@@ -288,7 +380,7 @@ Licence: Apache-2.0. Source: https://github.com/aws/aws-sdk-js-v3.
 - (c) You must retain, in the Source form of any Derivative Works
 - Copyright 2019 Amazon.com, Inc. or its affiliates. All Rights Reserved.
 
-### @aws-sdk/token-providers 3.1035.0
+### @aws-sdk/token-providers 3.1177.0
 
 Licence: Apache-2.0. Source: https://github.com/aws/aws-sdk-js-v3.
 
@@ -297,7 +389,16 @@ Licence: Apache-2.0. Source: https://github.com/aws/aws-sdk-js-v3.
 - (c) You must retain, in the Source form of any Derivative Works
 - Copyright 2018-2020 Amazon.com, Inc. or its affiliates. All Rights Reserved.
 
-### @aws-sdk/types 3.973.8
+### @aws-sdk/token-providers 3.1178.0
+
+Licence: Apache-2.0. Source: https://github.com/aws/aws-sdk-js-v3.
+
+- copyright notice that is included in or attached to the work
+- copyright license to reproduce, prepare Derivative Works of,
+- (c) You must retain, in the Source form of any Derivative Works
+- Copyright 2018-2020 Amazon.com, Inc. or its affiliates. All Rights Reserved.
+
+### @aws-sdk/types 3.975.1
 
 Licence: Apache-2.0. Source: https://github.com/aws/aws-sdk-js-v3.
 
@@ -351,7 +452,16 @@ Licence: Apache-2.0. Source: https://github.com/aws/aws-sdk-js-v3.
 - (c) You must retain, in the Source form of any Derivative Works
 - Copyright 2018-2020 Amazon.com, Inc. or its affiliates. All Rights Reserved.
 
-### @aws-sdk/xml-builder 3.972.18
+### @aws-sdk/util-utf8-browser 3.259.0
+
+Licence: Apache-2.0. Source: https://github.com/aws/aws-sdk-js-v3.
+
+- copyright notice that is included in or attached to the work
+- copyright license to reproduce, prepare Derivative Works of,
+- (c) You must retain, in the Source form of any Derivative Works
+- Copyright 2018-2020 Amazon.com, Inc. or its affiliates. All Rights Reserved.
+
+### @aws-sdk/xml-builder 3.972.43
 
 Licence: Apache-2.0. Source: https://github.com/aws/aws-sdk-js-v3.
 
@@ -361,6 +471,14 @@ Licence: Apache-2.0. Source: https://github.com/aws/aws-sdk-js-v3.
 - Copyright 2018-2020 Amazon.com, Inc. or its affiliates. All Rights Reserved.
 
 ### @aws/lambda-invoke-store 0.2.4
+
+Licence: Apache-2.0. Source: https://github.com/awslabs/aws-lambda-invoke-store.
+
+- copyright notice that is included in or attached to the work
+- copyright license to reproduce, prepare Derivative Works of,
+- (c) You must retain, in the Source form of any Derivative Works
+
+### @aws/lambda-invoke-store 0.3.0
 
 Licence: Apache-2.0. Source: https://github.com/awslabs/aws-lambda-invoke-store.
 
@@ -756,9 +874,22 @@ Licence: MIT.
 
 Installed on some machines only; licence taken from package-lock.json.
 
-### @nodable/entities 3.1.0
+### @opentelemetry/api 1.10.0
 
-Licence: MIT. Source: https://github.com/nodable/val-parsers.
+Licence: Apache-2.0. Source: https://github.com/open-telemetry/opentelemetry-js.
+
+- copyright notice that is included in or attached to the work
+- copyright license to reproduce, prepare Derivative Works of,
+- (c) You must retain, in the Source form of any Derivative Works
+
+### @smithy/abort-controller 2.2.0
+
+Licence: Apache-2.0. Source: https://github.com/awslabs/smithy-typescript.
+
+- copyright notice that is included in or attached to the work
+- copyright license to reproduce, prepare Derivative Works of,
+- (c) You must retain, in the Source form of any Derivative Works
+- Copyright 2018-2020 Amazon.com, Inc. or its affiliates. All Rights Reserved.
 
 ### @smithy/chunked-blob-reader 5.2.2
 
@@ -787,7 +918,7 @@ Licence: Apache-2.0. Source: https://github.com/smithy-lang/smithy-typescript.
 - (c) You must retain, in the Source form of any Derivative Works
 - Copyright 2018-2020 Amazon.com, Inc. or its affiliates. All Rights Reserved.
 
-### @smithy/core 3.23.16
+### @smithy/core 3.41.1
 
 Licence: Apache-2.0. Source: https://github.com/smithy-lang/smithy-typescript.
 
@@ -796,9 +927,18 @@ Licence: Apache-2.0. Source: https://github.com/smithy-lang/smithy-typescript.
 - (c) You must retain, in the Source form of any Derivative Works
 - Copyright 2019 Amazon.com, Inc. or its affiliates. All Rights Reserved.
 
-### @smithy/credential-provider-imds 4.2.14
+### @smithy/credential-provider-imds 4.5.2
 
 Licence: Apache-2.0. Source: https://github.com/smithy-lang/smithy-typescript.
+
+- copyright notice that is included in or attached to the work
+- copyright license to reproduce, prepare Derivative Works of,
+- (c) You must retain, in the Source form of any Derivative Works
+- Copyright 2018-2020 Amazon.com, Inc. or its affiliates. All Rights Reserved.
+
+### @smithy/eventstream-codec 2.2.0
+
+Licence: Apache-2.0. Source: https://github.com/awslabs/smithy-typescript.
 
 - copyright notice that is included in or attached to the work
 - copyright license to reproduce, prepare Derivative Works of,
@@ -832,9 +972,27 @@ Licence: Apache-2.0. Source: https://github.com/smithy-lang/smithy-typescript.
 - (c) You must retain, in the Source form of any Derivative Works
 - Copyright 2019 Amazon.com, Inc. or its affiliates. All Rights Reserved.
 
+### @smithy/eventstream-serde-node 2.2.0
+
+Licence: Apache-2.0. Source: https://github.com/awslabs/smithy-typescript.
+
+- copyright notice that is included in or attached to the work
+- copyright license to reproduce, prepare Derivative Works of,
+- (c) You must retain, in the Source form of any Derivative Works
+- Copyright 2019 Amazon.com, Inc. or its affiliates. All Rights Reserved.
+
 ### @smithy/eventstream-serde-node 4.2.14
 
 Licence: Apache-2.0. Source: https://github.com/smithy-lang/smithy-typescript.
+
+- copyright notice that is included in or attached to the work
+- copyright license to reproduce, prepare Derivative Works of,
+- (c) You must retain, in the Source form of any Derivative Works
+- Copyright 2019 Amazon.com, Inc. or its affiliates. All Rights Reserved.
+
+### @smithy/eventstream-serde-universal 2.2.0
+
+Licence: Apache-2.0. Source: https://github.com/awslabs/smithy-typescript.
 
 - copyright notice that is included in or attached to the work
 - copyright license to reproduce, prepare Derivative Works of,
@@ -850,7 +1008,16 @@ Licence: Apache-2.0. Source: https://github.com/smithy-lang/smithy-typescript.
 - (c) You must retain, in the Source form of any Derivative Works
 - Copyright 2019 Amazon.com, Inc. or its affiliates. All Rights Reserved.
 
-### @smithy/fetch-http-handler 5.3.17
+### @smithy/fetch-http-handler 2.5.0
+
+Licence: Apache-2.0. Source: https://github.com/awslabs/smithy-typescript.
+
+- copyright notice that is included in or attached to the work
+- copyright license to reproduce, prepare Derivative Works of,
+- (c) You must retain, in the Source form of any Derivative Works
+- Copyright 2018-2020 Amazon.com, Inc. or its affiliates. All Rights Reserved.
+
+### @smithy/fetch-http-handler 5.8.1
 
 Licence: Apache-2.0. Source: https://github.com/smithy-lang/smithy-typescript.
 
@@ -904,6 +1071,15 @@ Licence: Apache-2.0. Source: https://github.com/awslabs/smithy-typescript.
 - (c) You must retain, in the Source form of any Derivative Works
 - Copyright 2018-2020 Amazon.com, Inc. or its affiliates. All Rights Reserved.
 
+### @smithy/is-array-buffer 3.0.0
+
+Licence: Apache-2.0. Source: https://github.com/awslabs/smithy-typescript.
+
+- copyright notice that is included in or attached to the work
+- copyright license to reproduce, prepare Derivative Works of,
+- (c) You must retain, in the Source form of any Derivative Works
+- Copyright 2018-2020 Amazon.com, Inc. or its affiliates. All Rights Reserved.
+
 ### @smithy/is-array-buffer 4.2.2
 
 Licence: Apache-2.0. Source: https://github.com/smithy-lang/smithy-typescript.
@@ -931,6 +1107,15 @@ Licence: Apache-2.0. Source: https://github.com/smithy-lang/smithy-typescript.
 - (c) You must retain, in the Source form of any Derivative Works
 - Copyright 2018-2020 Amazon.com, Inc. or its affiliates. All Rights Reserved.
 
+### @smithy/middleware-endpoint 2.5.1
+
+Licence: Apache-2.0. Source: https://github.com/awslabs/smithy-typescript.
+
+- copyright notice that is included in or attached to the work
+- copyright license to reproduce, prepare Derivative Works of,
+- (c) You must retain, in the Source form of any Derivative Works
+- Copyright 2018-2020 Amazon.com, Inc. or its affiliates. All Rights Reserved.
+
 ### @smithy/middleware-endpoint 4.4.31
 
 Licence: Apache-2.0. Source: https://github.com/smithy-lang/smithy-typescript.
@@ -949,6 +1134,15 @@ Licence: Apache-2.0. Source: https://github.com/smithy-lang/smithy-typescript.
 - (c) You must retain, in the Source form of any Derivative Works
 - Copyright 2018-2020 Amazon.com, Inc. or its affiliates. All Rights Reserved.
 
+### @smithy/middleware-serde 2.3.0
+
+Licence: Apache-2.0. Source: https://github.com/awslabs/smithy-typescript.
+
+- copyright notice that is included in or attached to the work
+- copyright license to reproduce, prepare Derivative Works of,
+- (c) You must retain, in the Source form of any Derivative Works
+- Copyright 2019 Amazon.com, Inc. or its affiliates. All Rights Reserved.
+
 ### @smithy/middleware-serde 4.2.19
 
 Licence: Apache-2.0. Source: https://github.com/smithy-lang/smithy-typescript.
@@ -957,6 +1151,15 @@ Licence: Apache-2.0. Source: https://github.com/smithy-lang/smithy-typescript.
 - copyright license to reproduce, prepare Derivative Works of,
 - (c) You must retain, in the Source form of any Derivative Works
 - Copyright 2019 Amazon.com, Inc. or its affiliates. All Rights Reserved.
+
+### @smithy/middleware-stack 2.2.0
+
+Licence: Apache-2.0. Source: https://github.com/awslabs/smithy-typescript.
+
+- copyright notice that is included in or attached to the work
+- copyright license to reproduce, prepare Derivative Works of,
+- (c) You must retain, in the Source form of any Derivative Works
+- Copyright 2018-2020 Amazon.com, Inc. or its affiliates. All Rights Reserved.
 
 ### @smithy/middleware-stack 4.2.14
 
@@ -967,6 +1170,15 @@ Licence: Apache-2.0. Source: https://github.com/smithy-lang/smithy-typescript.
 - (c) You must retain, in the Source form of any Derivative Works
 - Copyright 2018-2020 Amazon.com, Inc. or its affiliates. All Rights Reserved.
 
+### @smithy/node-config-provider 2.3.0
+
+Licence: Apache-2.0. Source: https://github.com/awslabs/smithy-typescript.
+
+- copyright notice that is included in or attached to the work
+- copyright license to reproduce, prepare Derivative Works of,
+- (c) You must retain, in the Source form of any Derivative Works
+- Copyright 2020 Amazon.com, Inc. or its affiliates. All Rights Reserved.
+
 ### @smithy/node-config-provider 4.3.14
 
 Licence: Apache-2.0. Source: https://github.com/smithy-lang/smithy-typescript.
@@ -976,9 +1188,27 @@ Licence: Apache-2.0. Source: https://github.com/smithy-lang/smithy-typescript.
 - (c) You must retain, in the Source form of any Derivative Works
 - Copyright 2020 Amazon.com, Inc. or its affiliates. All Rights Reserved.
 
-### @smithy/node-http-handler 4.6.0
+### @smithy/node-http-handler 2.5.0
+
+Licence: Apache-2.0. Source: https://github.com/awslabs/smithy-typescript.
+
+- copyright notice that is included in or attached to the work
+- copyright license to reproduce, prepare Derivative Works of,
+- (c) You must retain, in the Source form of any Derivative Works
+- Copyright 2018-2020 Amazon.com, Inc. or its affiliates. All Rights Reserved.
+
+### @smithy/node-http-handler 4.14.2
 
 Licence: Apache-2.0. Source: https://github.com/smithy-lang/smithy-typescript.
+
+- copyright notice that is included in or attached to the work
+- copyright license to reproduce, prepare Derivative Works of,
+- (c) You must retain, in the Source form of any Derivative Works
+- Copyright 2018-2020 Amazon.com, Inc. or its affiliates. All Rights Reserved.
+
+### @smithy/property-provider 2.2.0
+
+Licence: Apache-2.0. Source: https://github.com/awslabs/smithy-typescript.
 
 - copyright notice that is included in or attached to the work
 - copyright license to reproduce, prepare Derivative Works of,
@@ -994,6 +1224,15 @@ Licence: Apache-2.0. Source: https://github.com/smithy-lang/smithy-typescript.
 - (c) You must retain, in the Source form of any Derivative Works
 - Copyright 2018-2020 Amazon.com, Inc. or its affiliates. All Rights Reserved.
 
+### @smithy/protocol-http 3.3.0
+
+Licence: Apache-2.0. Source: https://github.com/awslabs/smithy-typescript.
+
+- copyright notice that is included in or attached to the work
+- copyright license to reproduce, prepare Derivative Works of,
+- (c) You must retain, in the Source form of any Derivative Works
+- Copyright 2019 Amazon.com, Inc. or its affiliates. All Rights Reserved.
+
 ### @smithy/protocol-http 5.3.14
 
 Licence: Apache-2.0. Source: https://github.com/smithy-lang/smithy-typescript.
@@ -1003,9 +1242,18 @@ Licence: Apache-2.0. Source: https://github.com/smithy-lang/smithy-typescript.
 - (c) You must retain, in the Source form of any Derivative Works
 - Copyright 2019 Amazon.com, Inc. or its affiliates. All Rights Reserved.
 
-### @smithy/querystring-builder 4.2.14
+### @smithy/querystring-builder 2.2.0
 
-Licence: Apache-2.0. Source: https://github.com/smithy-lang/smithy-typescript.
+Licence: Apache-2.0. Source: https://github.com/awslabs/smithy-typescript.
+
+- copyright notice that is included in or attached to the work
+- copyright license to reproduce, prepare Derivative Works of,
+- (c) You must retain, in the Source form of any Derivative Works
+- Copyright 2018-2020 Amazon.com, Inc. or its affiliates. All Rights Reserved.
+
+### @smithy/querystring-parser 2.2.0
+
+Licence: Apache-2.0. Source: https://github.com/awslabs/smithy-typescript.
 
 - copyright notice that is included in or attached to the work
 - copyright license to reproduce, prepare Derivative Works of,
@@ -1030,6 +1278,15 @@ Licence: Apache-2.0. Source: https://github.com/smithy-lang/smithy-typescript.
 - (c) You must retain, in the Source form of any Derivative Works
 - Copyright 2018-2020 Amazon.com, Inc. or its affiliates. All Rights Reserved.
 
+### @smithy/shared-ini-file-loader 2.4.0
+
+Licence: Apache-2.0. Source: https://github.com/awslabs/smithy-typescript.
+
+- copyright notice that is included in or attached to the work
+- copyright license to reproduce, prepare Derivative Works of,
+- (c) You must retain, in the Source form of any Derivative Works
+- Copyright 2018-2020 Amazon.com, Inc. or its affiliates. All Rights Reserved.
+
 ### @smithy/shared-ini-file-loader 4.4.9
 
 Licence: Apache-2.0. Source: https://github.com/smithy-lang/smithy-typescript.
@@ -1039,7 +1296,16 @@ Licence: Apache-2.0. Source: https://github.com/smithy-lang/smithy-typescript.
 - (c) You must retain, in the Source form of any Derivative Works
 - Copyright 2018-2020 Amazon.com, Inc. or its affiliates. All Rights Reserved.
 
-### @smithy/signature-v4 5.3.14
+### @smithy/signature-v4 3.1.2
+
+Licence: Apache-2.0. Source: https://github.com/awslabs/smithy-typescript.
+
+- copyright notice that is included in or attached to the work
+- copyright license to reproduce, prepare Derivative Works of,
+- (c) You must retain, in the Source form of any Derivative Works
+- Copyright 2018-2020 Amazon.com, Inc. or its affiliates. All Rights Reserved.
+
+### @smithy/signature-v4 5.7.5
 
 Licence: Apache-2.0. Source: https://github.com/smithy-lang/smithy-typescript.
 
@@ -1047,6 +1313,15 @@ Licence: Apache-2.0. Source: https://github.com/smithy-lang/smithy-typescript.
 - copyright license to reproduce, prepare Derivative Works of,
 - (c) You must retain, in the Source form of any Derivative Works
 - Copyright 2018-2020 Amazon.com, Inc. or its affiliates. All Rights Reserved.
+
+### @smithy/smithy-client 2.5.1
+
+Licence: Apache-2.0. Source: https://github.com/awslabs/smithy-typescript.
+
+- copyright notice that is included in or attached to the work
+- copyright license to reproduce, prepare Derivative Works of,
+- (c) You must retain, in the Source form of any Derivative Works
+- Copyright 2019 Amazon.com, Inc. or its affiliates. All Rights Reserved.
 
 ### @smithy/smithy-client 4.12.12
 
@@ -1057,7 +1332,25 @@ Licence: Apache-2.0. Source: https://github.com/smithy-lang/smithy-typescript.
 - (c) You must retain, in the Source form of any Derivative Works
 - Copyright 2019 Amazon.com, Inc. or its affiliates. All Rights Reserved.
 
-### @smithy/types 4.14.1
+### @smithy/types 2.12.0
+
+Licence: Apache-2.0. Source: https://github.com/awslabs/smithy-typescript.
+
+- copyright notice that is included in or attached to the work
+- copyright license to reproduce, prepare Derivative Works of,
+- (c) You must retain, in the Source form of any Derivative Works
+- Copyright 2019 Amazon.com, Inc. or its affiliates. All Rights Reserved.
+
+### @smithy/types 3.7.2
+
+Licence: Apache-2.0. Source: https://github.com/awslabs/smithy-typescript.
+
+- copyright notice that is included in or attached to the work
+- copyright license to reproduce, prepare Derivative Works of,
+- (c) You must retain, in the Source form of any Derivative Works
+- Copyright 2019 Amazon.com, Inc. or its affiliates. All Rights Reserved.
+
+### @smithy/types 4.20.0
 
 Licence: Apache-2.0. Source: https://github.com/smithy-lang/smithy-typescript.
 
@@ -1066,9 +1359,27 @@ Licence: Apache-2.0. Source: https://github.com/smithy-lang/smithy-typescript.
 - (c) You must retain, in the Source form of any Derivative Works
 - Copyright 2019 Amazon.com, Inc. or its affiliates. All Rights Reserved.
 
+### @smithy/url-parser 2.2.0
+
+Licence: Apache-2.0. Source: https://github.com/awslabs/smithy-typescript.
+
+- copyright notice that is included in or attached to the work
+- copyright license to reproduce, prepare Derivative Works of,
+- (c) You must retain, in the Source form of any Derivative Works
+- Copyright 2018-2020 Amazon.com, Inc. or its affiliates. All Rights Reserved.
+
 ### @smithy/url-parser 4.2.14
 
 Licence: Apache-2.0. Source: https://github.com/smithy-lang/smithy-typescript.
+
+- copyright notice that is included in or attached to the work
+- copyright license to reproduce, prepare Derivative Works of,
+- (c) You must retain, in the Source form of any Derivative Works
+- Copyright 2018-2020 Amazon.com, Inc. or its affiliates. All Rights Reserved.
+
+### @smithy/util-base64 2.3.0
+
+Licence: Apache-2.0. Source: https://github.com/awslabs/smithy-typescript.
 
 - copyright notice that is included in or attached to the work
 - copyright license to reproduce, prepare Derivative Works of,
@@ -1103,6 +1414,15 @@ Licence: Apache-2.0. Source: https://github.com/smithy-lang/smithy-typescript.
 - Copyright 2018-2020 Amazon.com, Inc. or its affiliates. All Rights Reserved.
 
 ### @smithy/util-buffer-from 2.2.0
+
+Licence: Apache-2.0. Source: https://github.com/awslabs/smithy-typescript.
+
+- copyright notice that is included in or attached to the work
+- copyright license to reproduce, prepare Derivative Works of,
+- (c) You must retain, in the Source form of any Derivative Works
+- Copyright 2018-2020 Amazon.com, Inc. or its affiliates. All Rights Reserved.
+
+### @smithy/util-buffer-from 3.0.0
 
 Licence: Apache-2.0. Source: https://github.com/awslabs/smithy-typescript.
 
@@ -1156,6 +1476,24 @@ Licence: Apache-2.0. Source: https://github.com/smithy-lang/smithy-typescript.
 - (c) You must retain, in the Source form of any Derivative Works
 - Copyright 2021 Amazon.com, Inc. or its affiliates. All Rights Reserved.
 
+### @smithy/util-hex-encoding 2.2.0
+
+Licence: Apache-2.0. Source: https://github.com/awslabs/smithy-typescript.
+
+- copyright notice that is included in or attached to the work
+- copyright license to reproduce, prepare Derivative Works of,
+- (c) You must retain, in the Source form of any Derivative Works
+- Copyright 2018-2020 Amazon.com, Inc. or its affiliates. All Rights Reserved.
+
+### @smithy/util-hex-encoding 3.0.0
+
+Licence: Apache-2.0. Source: https://github.com/awslabs/smithy-typescript.
+
+- copyright notice that is included in or attached to the work
+- copyright license to reproduce, prepare Derivative Works of,
+- (c) You must retain, in the Source form of any Derivative Works
+- Copyright 2018-2020 Amazon.com, Inc. or its affiliates. All Rights Reserved.
+
 ### @smithy/util-hex-encoding 4.2.2
 
 Licence: Apache-2.0. Source: https://github.com/smithy-lang/smithy-typescript.
@@ -1164,6 +1502,24 @@ Licence: Apache-2.0. Source: https://github.com/smithy-lang/smithy-typescript.
 - copyright license to reproduce, prepare Derivative Works of,
 - (c) You must retain, in the Source form of any Derivative Works
 - Copyright 2018-2020 Amazon.com, Inc. or its affiliates. All Rights Reserved.
+
+### @smithy/util-middleware 2.2.0
+
+Licence: Apache-2.0. Source: https://github.com/awslabs/smithy-typescript.
+
+- copyright notice that is included in or attached to the work
+- copyright license to reproduce, prepare Derivative Works of,
+- (c) You must retain, in the Source form of any Derivative Works
+- Copyright 2021 Amazon.com, Inc. or its affiliates. All Rights Reserved.
+
+### @smithy/util-middleware 3.0.11
+
+Licence: Apache-2.0. Source: https://github.com/awslabs/smithy-typescript.
+
+- copyright notice that is included in or attached to the work
+- copyright license to reproduce, prepare Derivative Works of,
+- (c) You must retain, in the Source form of any Derivative Works
+- Copyright 2021 Amazon.com, Inc. or its affiliates. All Rights Reserved.
 
 ### @smithy/util-middleware 4.2.14
 
@@ -1183,6 +1539,15 @@ Licence: Apache-2.0. Source: https://github.com/smithy-lang/smithy-typescript.
 - (c) You must retain, in the Source form of any Derivative Works
 - Copyright 2021 Amazon.com, Inc. or its affiliates. All Rights Reserved.
 
+### @smithy/util-stream 2.2.0
+
+Licence: Apache-2.0. Source: https://github.com/awslabs/smithy-typescript.
+
+- copyright notice that is included in or attached to the work
+- copyright license to reproduce, prepare Derivative Works of,
+- (c) You must retain, in the Source form of any Derivative Works
+- Copyright 2018-2020 Amazon.com, Inc. or its affiliates. All Rights Reserved.
+
 ### @smithy/util-stream 4.5.24
 
 Licence: Apache-2.0. Source: https://github.com/smithy-lang/smithy-typescript.
@@ -1192,9 +1557,18 @@ Licence: Apache-2.0. Source: https://github.com/smithy-lang/smithy-typescript.
 - (c) You must retain, in the Source form of any Derivative Works
 - Copyright 2018-2020 Amazon.com, Inc. or its affiliates. All Rights Reserved.
 
-### @smithy/util-uri-escape 4.2.2
+### @smithy/util-uri-escape 2.2.0
 
-Licence: Apache-2.0. Source: https://github.com/smithy-lang/smithy-typescript.
+Licence: Apache-2.0. Source: https://github.com/awslabs/smithy-typescript.
+
+- copyright notice that is included in or attached to the work
+- copyright license to reproduce, prepare Derivative Works of,
+- (c) You must retain, in the Source form of any Derivative Works
+- Copyright 2018-2020 Amazon.com, Inc. or its affiliates. All Rights Reserved.
+
+### @smithy/util-uri-escape 3.0.0
+
+Licence: Apache-2.0. Source: https://github.com/awslabs/smithy-typescript.
 
 - copyright notice that is included in or attached to the work
 - copyright license to reproduce, prepare Derivative Works of,
@@ -1202,6 +1576,15 @@ Licence: Apache-2.0. Source: https://github.com/smithy-lang/smithy-typescript.
 - Copyright 2018-2020 Amazon.com, Inc. or its affiliates. All Rights Reserved.
 
 ### @smithy/util-utf8 2.3.0
+
+Licence: Apache-2.0. Source: https://github.com/awslabs/smithy-typescript.
+
+- copyright notice that is included in or attached to the work
+- copyright license to reproduce, prepare Derivative Works of,
+- (c) You must retain, in the Source form of any Derivative Works
+- Copyright 2018-2020 Amazon.com, Inc. or its affiliates. All Rights Reserved.
+
+### @smithy/util-utf8 3.0.0
 
 Licence: Apache-2.0. Source: https://github.com/awslabs/smithy-typescript.
 
@@ -1343,12 +1726,6 @@ Licence: MIT. Source: https://github.com/chalk/ansi-regex.
 Licence: MIT. Source: https://github.com/chalk/ansi-styles.
 
 - Copyright (c) Sindre Sorhus <sindresorhus@gmail.com> (sindresorhus.com)
-
-### anynum 1.0.1
-
-Licence: MIT. Source: https://github.com/NaturalIntelligence/anynum.
-
-- Copyright (c) 2026 Natural Intelligence
 
 ### archiver 7.0.1
 
@@ -1730,18 +2107,6 @@ Licence: MIT. Source: https://github.com/mafintosh/fast-fifo.
 
 Licence: Unlicense. Source: https://github.com/dchest/fast-sha256-js.
 
-### fast-xml-builder 1.3.2
-
-Licence: MIT. Source: https://github.com/NaturalIntelligence/fast-xml-builder.
-
-- Copyright (c) 2026 Natural Intelligence
-
-### fast-xml-parser 5.12.0
-
-Licence: MIT. Source: https://github.com/NaturalIntelligence/fast-xml-parser.
-
-- Copyright (c) 2017 Amit Kumar Gupta
-
 ### find-up 4.1.0
 
 Licence: MIT. Source: https://github.com/sindresorhus/find-up.
@@ -1857,12 +2222,6 @@ Licence: MIT. Source: https://github.com/sindresorhus/is-plain-obj.
 Licence: MIT. Source: https://github.com/sindresorhus/is-stream.
 
 - Copyright (c) Sindre Sorhus <sindresorhus@gmail.com> (https://sindresorhus.com)
-
-### is-unsafe 2.0.3
-
-Licence: MIT. Source: https://github.com/NaturalIntelligence/is-unsafe.
-
-- Copyright (c) 2026 Natural Intelligence
 
 ### isarray 1.0.0
 
@@ -2317,12 +2676,6 @@ Licence: MIT. Source: https://github.com/sindresorhus/path-exists.
 
 - Copyright (c) Sindre Sorhus <sindresorhus@gmail.com> (sindresorhus.com)
 
-### path-expression-matcher 1.6.2
-
-Licence: MIT. Source: https://github.com/NaturalIntelligence/path-expression-matcher.
-
-- Copyright (c) 2024
-
 ### path-scurry 3.0.0
 
 Licence: BlueOak-1.0.0. Source: https://github.com/isaacs/path-scurry.
@@ -2618,12 +2971,6 @@ Licence: MIT. Source: https://github.com/chalk/strip-ansi.
 
 - Copyright (c) Sindre Sorhus <sindresorhus@gmail.com> (sindresorhus.com)
 
-### strnum 2.5.1
-
-Licence: MIT. Source: https://github.com/NaturalIntelligence/strnum.
-
-- Copyright (c) 2021 Natural Intelligence
-
 ### style-to-js 1.1.21
 
 Licence: MIT. Source: https://github.com/remarkablemark/style-to-js.
@@ -2679,6 +3026,12 @@ Licence: MIT. Source: https://github.com/wooorm/trough.
 Licence: MIT. Source: https://github.com/ThomasAribart/ts-algebra.
 
 - Copyright (c) 2020 Thomas Aribart
+
+### tslib 1.14.1
+
+Licence: 0BSD. Source: https://github.com/Microsoft/tslib.
+
+- Copyright (c) Microsoft Corporation.
 
 ### tslib 2.8.1
 
@@ -2769,12 +3122,6 @@ Licence: ISC. Source: https://github.com/nexdrew/which-module.
 Licence: MIT. Source: https://github.com/chalk/wrap-ansi.
 
 - Copyright (c) Sindre Sorhus <sindresorhus@gmail.com> (sindresorhus.com)
-
-### xml-naming 0.3.0
-
-Licence: MIT. Source: https://github.com/NaturalIntelligence/xml-naming.
-
-- Copyright (c) 2026 Natural Intelligence
 
 ### xmlbuilder 10.1.1
 
@@ -3598,7 +3945,7 @@ copy of the Program in return for a fee.
 
 ### 0BSD
 
-As included with tslib@2.8.1.
+As included with tslib@1.14.1.
 
 ~~~text
 Permission to use, copy, modify, and/or distribute this software for any
@@ -3615,7 +3962,7 @@ PERFORMANCE OF THIS SOFTWARE.
 
 ### Apache-2.0
 
-As included with @aws-crypto/crc32@5.2.0.
+As included with @aws-crypto/crc32@3.0.0.
 
 ~~~text
 Apache License
@@ -5226,7 +5573,7 @@ Library.
 
 ### MIT
 
-As included with @anthropic-ai/sdk@0.99.0.
+As included with @anthropic-ai/bedrock-sdk@0.36.0.
 
 ~~~text
 Permission is hereby granted, free of charge, to any person obtaining a copy of this software and associated documentation files (the "Software"), to deal in the Software without restriction, including without limitation the rights to use, copy, modify, merge, publish, distribute, sublicense, and/or sell copies of the Software, and to permit persons to whom the Software is furnished to do so, subject to the following conditions:

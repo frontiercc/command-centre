@@ -14,6 +14,7 @@ import { v4 as uuidv4 } from 'uuid';
 import { queueAiCall } from '@/lib/ingestion/scheduler';
 import { replaceUserIdsWithNames } from '@/lib/alerts/person-label';
 import { getOpenAiActivityByPerson, type OpenAiPersonActivity } from '@/lib/openai/activity-by-person';
+import { getClaudeCredential } from '@/lib/anthropic/credential';
 import {
   getRecentComplianceEvents,
   getRecentOtelEvents,
@@ -37,7 +38,7 @@ import {
 } from '@/lib/reports/compliance-sections';
 
 async function getClient(): Promise<Anthropic> {
-  const apiKey = await getConfigValue('anthropicAiApiKey');
+  const apiKey = await getClaudeCredential();
   if (!apiKey) throw new Error('No AI API key configured');
   return createAnthropicClient(apiKey);
 }

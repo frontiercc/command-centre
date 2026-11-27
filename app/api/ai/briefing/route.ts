@@ -30,6 +30,7 @@ import { isOtelConfigured } from '@/lib/config';
 import { getTypedClient } from '@/lib/db/client';
 import { schema } from '@/lib/db/schema';
 import { ORG_SCOPE_ID } from '@/lib/pulse/code/aggregator';
+import { getClaudeCredential } from '@/lib/anthropic/credential';
 import {
   getActiveUsersByVendor,
   getSessionsThisWeekByProduct,
@@ -75,7 +76,7 @@ export async function GET(request: NextRequest) {
     return NextResponse.json({ error: 'Forbidden' }, { status: 403 });
   }
   await logAccess({ actorId: session.userId!, actorEmail: session.email!, actorIp: request.headers.get('x-forwarded-for') || undefined, resource: 'ai/briefing', action: 'READ', outcome: 'success' });
-  const apiKey = await getConfigValue('anthropicAiApiKey');
+  const apiKey = await getClaudeCredential();
   if (!apiKey) {
     return NextResponse.json({ error: 'No AI API key configured' }, { status: 400 });
   }

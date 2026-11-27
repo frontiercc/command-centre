@@ -20,6 +20,7 @@ import {
   type UserHistory,
 } from '@/lib/pulse/prompts/tier-classification';
 import { isWorkPulseSurface, classifiableSource, classifyChatgptOn } from '@/lib/pulse/work-surfaces';
+import { getClaudeCredential } from '@/lib/anthropic/credential';
 
 // ─── Phase 3 raw-execution facade (mirrors lib/db/queries.ts's rawAll) ────────
 // Reserved for the one query below that's clearer as raw SQL (a NOT IN
@@ -74,7 +75,7 @@ type TypedClient = Awaited<ReturnType<typeof getTypedClient>>;
 // ─── Anthropic client ────────────────────────────────────────────────────────
 
 async function getClient(): Promise<Anthropic> {
-  const apiKey = await getConfigValue('anthropicAiApiKey');
+  const apiKey = await getClaudeCredential();
   if (!apiKey) throw new Error('No AI API key configured');
   return createAnthropicClient(apiKey);
 }

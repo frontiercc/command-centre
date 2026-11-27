@@ -19,6 +19,7 @@ import { and, desc, eq, gte, like, sql } from 'drizzle-orm';
 import { getTypedClient } from '@/lib/db/client';
 import { schema } from '@/lib/db/schema';
 import { getConfigValue, getUnreadableSecretKeys } from '@/lib/config';
+import { isBedrockProvider } from '@/lib/bedrock/settings';
 import { JOB_CATALOG } from '@/lib/health/job-catalog';
 import { OPENAI_SOURCES } from '@/lib/openai/sources';
 import { readOpenAiLastArrivals } from '@/lib/health/openai-arrivals';
@@ -183,10 +184,14 @@ export async function getSystemHealth(nowS: number = Math.floor(Date.now() / 100
       integrations.push({ key: i.key, label: i.label, status: 'failing', lastSucceededAt: null, lastFailedAt: null, lastError: "The stored key cannot be decrypted with this server's encryption key. Re-enter it, or restore the key it was saved with." });
       continue;
     }
-    if (!(await getConfigValue(i.key))) continue;
+    // Through Amazon Bedrock there is no Anthropic key: the AI features row
+    // still shows, named for Bedrock, and follows the same jobs.
+    const viaBedrock = i.key === 'anthropicAiApiKey' && isBedrockProvider(await getConfigValue('aiProvider'));
+    if (viaBedrock ? !(await getConfigValue('bedrockApiKey')) : !(await getConfigValue(i.key))) continue;
+    const label = viaBedrock ? 'Amazon Bedrock (AI features)' : i.label;
     const used = jobs.filter(x => i.jobs.includes(x.name));
     if (used.length === 0) {
-      integrations.push({ key: i.key, label: i.label, status: 'untracked', lastSucceededAt: null, lastFailedAt: null, lastError: null });
+      integrations.push({ key: i.key, label, status: 'untracked', lastSucceededAt: null, lastFailedAt: null, lastError: null });
       continue;
     }
     // Several jobs share one key (both classifiers use the Anthropic key):
@@ -196,7 +201,7 @@ export async function getSystemHealth(nowS: number = Math.floor(Date.now() / 100
     const lastSucceededAt = maxOf(used.map(x => x.lastSucceededAt));
     integrations.push({
       key: i.key,
-      label: i.label,
+      label,
       status: failingJob ? 'failing' : lastSucceededAt !== null ? 'ok' : 'not_run',
       lastSucceededAt,
       lastFailedAt: failingJob ? failingJob.lastFailedAt : maxOf(used.map(x => x.lastFailedAt)),

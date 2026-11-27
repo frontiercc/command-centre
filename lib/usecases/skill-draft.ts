@@ -13,7 +13,6 @@
 import { createAnthropicClient, LONG_AI_CALL_TIMEOUT_MS } from '@/lib/anthropic/client';
 import { getTypedClient } from '@/lib/db/client';
 import { schema } from '@/lib/db/schema';
-import { getConfigValue } from '@/lib/config';
 import { extractText } from '@/lib/anthropic/constants';
 import { getCoreAiModel } from '@/lib/anthropic/model';
 import { thinkingOff } from '@/lib/anthropic/thinking';
@@ -21,6 +20,7 @@ import { queueAiCall } from '@/lib/ingestion/scheduler';
 import { filterCheckableSystemNames, findVerbatimRuns, parseRawDraft, validateSkillDraft, SKILL_SECTIONS, type ValidationResult } from '@/lib/usecases/skill-draft-validate';
 import { distinctPromptCount, type SkillCorpus } from '@/lib/usecases/skill-corpus';
 import type { ProcessCanvas } from '@/lib/usecases/suggestion-store';
+import { getClaudeCredential } from '@/lib/anthropic/credential';
 
 export interface DraftUseCaseFacts { title: string; description: string | null; departments: string[] }
 export interface CanvasFacts { story: string; rhythm: string; systems: string[]; tierNote: string | null }
@@ -162,7 +162,7 @@ export function buildSkillDraftPrompt(uc: DraftUseCaseFacts, canvas: CanvasFacts
 }
 
 const defaultCallModel: CallModel = async ({ model, system, user }) => {
-  const apiKey = await getConfigValue('anthropicAiApiKey');
+  const apiKey = await getClaudeCredential();
   if (!apiKey) throw new Error('No AI API key configured');
   const client = createAnthropicClient(apiKey, { timeoutMs: LONG_AI_CALL_TIMEOUT_MS });
   const off = thinkingOff(model);

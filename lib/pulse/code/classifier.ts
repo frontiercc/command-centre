@@ -32,6 +32,7 @@ import { fenceUntrusted } from '@/lib/anthropic/untrusted';
 import { redactPii } from '@/lib/pii/detect';
 import { codexActionCounts } from '@/lib/pulse/code/aggregator';
 import { markAutomatedRuns } from '@/lib/pulse/code/automated-runs';
+import { getClaudeCredential } from '@/lib/anthropic/credential';
 
 export const WORK_TYPES = [
   'feature', 'bugfix', 'refactor', 'testing',
@@ -294,7 +295,7 @@ export async function runCodeClassifierJob(): Promise<{ selected: number; classi
   if ((await getConfigValue('codePulseEnabled')) === 'false') return { selected: 0, classified: 0, failed: 0 };
   if ((await getConfigValue('codeClassifierEnabled')) === 'false') return { selected: 0, classified: 0, failed: 0 };
 
-  const apiKey = await getConfigValue('anthropicAiApiKey');
+  const apiKey = await getClaudeCredential();
   if (!apiKey) {
     console.log('[CodeClassifier] No AI API key configured, skipping');
     return { selected: 0, classified: 0, failed: 0 };
@@ -616,7 +617,7 @@ export async function estimateClassifiedCodeSessions(
     if (deps?.callModel) {
       text = await deps.callModel(CODE_ESTIMATE_ONLY_SYSTEM, user);
     } else {
-      const apiKey = await getConfigValue('anthropicAiApiKey');
+      const apiKey = await getClaudeCredential();
       if (!apiKey) throw new Error('No AI API key configured');
       const model = (await getConfigValue('codeClassifierModel')) || 'claude-haiku-5-5';
       const response = await createAnthropicClient(apiKey).messages.create(withThinkingOff({

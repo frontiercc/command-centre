@@ -20,7 +20,7 @@ Several major features are off until you enable them.
 | Retention | Admin → Data | Defaults applied |
 | Alerts, thresholds, Slack alerts | Admin → Risk Scoring | Slack alerts off; Claude Code daily spend limit $100; Codex daily spend limit $500 |
 
-**Contents:** [Claude API key and models](#claude-api-key-and-models) · [Claude Chat capture through Anthropic's Compliance API](#claude-chat-capture-through-anthropics-compliance-api) · [Connect ChatGPT and Codex](#connect-chatgpt-and-codex) · [Single sign-on](#single-sign-on) · [Department sync](#department-sync) · [Email (SMTP)](#email-smtp) · [Users, roles and departments](#users-roles-and-departments) · [Cost centres, licensed seats and seat price](#cost-centres-licensed-seats-and-seat-price) · [Retention](#retention) · [Content and AI switches](#content-and-ai-switches) · [Work Pulse](#work-pulse) · [Developer Pulse and the GitHub overlay](#developer-pulse-and-the-github-overlay) · [Use Cases](#use-cases) · [Skills and Connectors Board](#skills-and-connectors-board) · [Ask the data (preview)](#ask-the-data-preview) · [Weekly Digest](#weekly-digest) · [Weekly Highlights](#weekly-highlights) · [High-priority alerts to Slack](#high-priority-alerts-to-slack) · [System health and telemetry-silence alerts](#system-health-and-telemetry-silence-alerts) · [Metrics Connector](#metrics-connector) · [Reports](#reports)
+**Contents:** [Claude API key and models](#claude-api-key-and-models) · [Claude through Amazon Bedrock](#claude-through-amazon-bedrock) · [Claude Chat capture through Anthropic's Compliance API](#claude-chat-capture-through-anthropics-compliance-api) · [Connect ChatGPT and Codex](#connect-chatgpt-and-codex) · [Single sign-on](#single-sign-on) · [Department sync](#department-sync) · [Email (SMTP)](#email-smtp) · [Users, roles and departments](#users-roles-and-departments) · [Cost centres, licensed seats and seat price](#cost-centres-licensed-seats-and-seat-price) · [Retention](#retention) · [Content and AI switches](#content-and-ai-switches) · [Work Pulse](#work-pulse) · [Developer Pulse and the GitHub overlay](#developer-pulse-and-the-github-overlay) · [Use Cases](#use-cases) · [Skills and Connectors Board](#skills-and-connectors-board) · [Ask the data (preview)](#ask-the-data-preview) · [Weekly Digest](#weekly-digest) · [Weekly Highlights](#weekly-highlights) · [High-priority alerts to Slack](#high-priority-alerts-to-slack) · [System health and telemetry-silence alerts](#system-health-and-telemetry-silence-alerts) · [Metrics Connector](#metrics-connector) · [Reports](#reports)
 
 ## Claude API key and models
 
@@ -32,6 +32,19 @@ Every AI-judged feature depends on this key, so set it first.
 Most features with their own model offer a drop-down filled from your key's model list, so those lists only fill once the key works. The defaults are sensible starting points and you can leave them: Work Pulse classifier Haiku, Developer Pulse classifier Haiku, organisation briefings Sonnet, use case session judging Sonnet, department processes Sonnet, skill drafting Sonnet. Ask the data has no model setting: it always runs on Claude Haiku 5.5.
 
 **Check:** the **Test** button reports success, and the model drop-downs on Admin → Work Pulse list models.
+
+## Claude through Amazon Bedrock
+
+Command Centre can reach Claude through Amazon Bedrock in your own AWS account instead of with an Anthropic API key.
+
+Before you start, in AWS:
+
+1. In the Amazon Bedrock console, switch on the Claude models you want, in the region you will use.
+2. Create a Bedrock API key in that region. A short-term key expires after 12 hours, so for everyday running use a long-term key.
+
+In Command Centre, go to **Admin → Access & Keys → AI features**, set **Connect to Claude through** to **Amazon Bedrock**, enter the **AWS region** and the **Bedrock API key**, select **Test**, and then **Save settings**. Every AI feature then uses Bedrock, and the model drop-downs list the Claude models Bedrock serves. The Hub signs in to Bedrock only with the key saved there, never with any other AWS sign-in on its machine. The environment variables `AI_PROVIDER=bedrock` and `BEDROCK_REGION` set the choice and region; a value saved on the page wins, and the key is always entered on the page.
+
+**Check:** the **Test** button reports which region and model answered.
 
 ## Claude Chat capture through Anthropic's Compliance API
 

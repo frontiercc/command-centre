@@ -19,6 +19,7 @@ export interface SecretKeyDef {
 
 export const SECRET_KEYS: Record<string, SecretKeyDef> = {
   anthropicAiApiKey: { label: 'Anthropic AI API key', associatedKeys: [] },
+  bedrockApiKey: { label: 'Amazon Bedrock API key', associatedKeys: [] },
   anthropicAdminApiKey: { label: 'Admin API key', associatedKeys: [] },
   anthropicAnalyticsApiKey: {
     label: 'Analytics API key',

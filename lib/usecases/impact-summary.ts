@@ -18,7 +18,6 @@ import { createAnthropicClient } from '@/lib/anthropic/client';
 import { eq } from 'drizzle-orm';
 import { getTypedClient } from '@/lib/db/client';
 import { schema } from '@/lib/db/schema';
-import { getConfigValue } from '@/lib/config';
 import { extractText } from '@/lib/anthropic/constants';
 import { getOrgBriefingModel } from '@/lib/anthropic/model';
 import { numberVariants, isGrounded } from '@/lib/anthropic/grounded-narrative';
@@ -26,6 +25,7 @@ import { redactPii } from '@/lib/pii/detect';
 import { queueAiCall } from '@/lib/ingestion/scheduler';
 import type { UseCaseImpact } from '@/lib/usecases/impact';
 import { formatModelLabel } from '@/lib/pulse/code/model-label';
+import { getClaudeCredential } from '@/lib/anthropic/credential';
 
 interface ImpactSummaryFacts {
   title: string;
@@ -163,7 +163,7 @@ Write the paragraph now. Plain prose only, no markdown, no headings, no bullet p
 }
 
 async function callRealModel(prompt: string): Promise<string> {
-  const apiKey = await getConfigValue('anthropicAiApiKey');
+  const apiKey = await getClaudeCredential();
   if (!apiKey) throw new Error('No AI API key configured');
   const model = await getOrgBriefingModel();
   const client = createAnthropicClient(apiKey);

@@ -24,7 +24,7 @@ type TestStatus = 'idle' | 'testing' | 'success' | 'error';
 // Tracked via loadedSecretsRef,
 // updated whenever /api/config is (re-)fetched.
 const SECURITY_SAVE_SECRET_FIELDS = [
-  'anthropicAiApiKey', 'anthropicAdminApiKey', 'anthropicAnalyticsApiKey',
+  'anthropicAiApiKey', 'bedrockApiKey', 'anthropicAdminApiKey', 'anthropicAnalyticsApiKey',
   'complianceAccessKey', 'otelEndpointSecret', 'openaiAdminApiKey',
 ] as const;
 
@@ -94,6 +94,10 @@ function relativeTime(value: string | number | null): string {
 export default function SecurityPage() {
   // --- API key state ---
   const [anthropicAiApiKey, setAnthropicAiApiKey] = useState('');
+  const [aiProvider, setAiProvider] = useState<'anthropic' | 'bedrock'>('anthropic');
+  const [bedrockRegion, setBedrockRegion] = useState('');
+  const [bedrockApiKey, setBedrockApiKey] = useState('');
+  const [bedrockTestMessage, setBedrockTestMessage] = useState<{ ok: boolean; text: string } | null>(null);
   const [anthropicAdminApiKey, setAnthropicAdminApiKey] = useState('');
   const [anthropicAnalyticsApiKey, setAnthropicAnalyticsApiKey] = useState('');
   const [complianceAccessKey, setComplianceAccessKey] = useState('');
@@ -218,6 +222,9 @@ export default function SecurityPage() {
       .then(r => r.json())
       .then(data => {
         setAnthropicAiApiKey(String(data.anthropicAiApiKey || ''));
+        setAiProvider(String(data.aiProvider || '').toLowerCase() === 'bedrock' ? 'bedrock' : 'anthropic');
+        setBedrockRegion(String(data.bedrockRegion || ''));
+        setBedrockApiKey(String(data.bedrockApiKey || ''));
         setAnthropicAdminApiKey(String(data.anthropicAdminApiKey || ''));
         setAnthropicAnalyticsApiKey(String(data.anthropicAnalyticsApiKey || ''));
         setComplianceAccessKey(String(data.complianceAccessKey || ''));
@@ -289,6 +296,9 @@ export default function SecurityPage() {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           anthropicAiApiKey,
+          aiProvider,
+          bedrockRegion: bedrockRegion.trim(),
+          bedrockApiKey,
           anthropicAdminApiKey,
           anthropicAnalyticsApiKey,
           complianceAccessKey,
@@ -323,6 +333,7 @@ export default function SecurityPage() {
         try {
           const cfg = await fetch('/api/config').then(r => r.json());
           setAnthropicAiApiKey(String(cfg.anthropicAiApiKey || ''));
+          setBedrockApiKey(String(cfg.bedrockApiKey || ''));
           setAnthropicAdminApiKey(String(cfg.anthropicAdminApiKey || ''));
           setAnthropicAnalyticsApiKey(String(cfg.anthropicAnalyticsApiKey || ''));
           setComplianceAccessKey(String(cfg.complianceAccessKey || ''));
@@ -348,10 +359,11 @@ export default function SecurityPage() {
       const res = await fetch('/api/config/test', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ key, value: isUnchangedMask ? undefined : value }),
+        body: JSON.stringify({ key, value: isUnchangedMask ? undefined : value, ...(key === 'bedrockApiKey' ? { region: bedrockRegion } : {}) }),
       });
       const result = await res.json();
       setTestStatuses(prev => ({ ...prev, [key]: result.ok ? 'success' : 'error' }));
+      if (key === 'bedrockApiKey') setBedrockTestMessage({ ok: Boolean(result.ok), text: String((result.ok ? result.note : result.error) || '') });
     } catch {
       setTestStatuses(prev => ({ ...prev, [key]: 'error' }));
     }
@@ -1443,16 +1455,57 @@ export default function SecurityPage() {
 
         {/* AI Features */}
         <Panel title="AI features">
-          <ApiKeyField
-            label="Claude API Key"
-            value={anthropicAiApiKey}
-            onChange={setAnthropicAiApiKey}
-            testStatus={testStatuses.anthropicAiApiKey ?? 'idle'}
-            onTest={() => testConnection('anthropicAiApiKey', anthropicAiApiKey)}
-            hint="A Claude API key created in the Claude Console (platform.claude.com) inside a workspace: a key that is not in a workspace is refused. Powers the intelligence briefing, anomaly detection, and AI-generated reports."
-            configKey="anthropicAiApiKey"
-            onRemoved={() => { setAnthropicAiApiKey(''); loadedSecretsRef.current.delete('anthropicAiApiKey'); }}
-          />
+          <div className="flex flex-col gap-5">
+            <FormField label="Connect to Claude through">
+              <select
+                value={aiProvider}
+                onChange={e => { setAiProvider(e.target.value === 'bedrock' ? 'bedrock' : 'anthropic'); setBedrockTestMessage(null); }}
+                className={cx(B.select, 'w-full text-[14px]')}
+              >
+                <option value="anthropic">Anthropic API</option>
+                <option value="bedrock">Amazon Bedrock</option>
+              </select>
+            </FormField>
+            {aiProvider === 'anthropic' ? (
+              <ApiKeyField
+                label="Claude API Key"
+                value={anthropicAiApiKey}
+                onChange={setAnthropicAiApiKey}
+                testStatus={testStatuses.anthropicAiApiKey ?? 'idle'}
+                onTest={() => testConnection('anthropicAiApiKey', anthropicAiApiKey)}
+                hint="A Claude API key created in the Claude Console (platform.claude.com) inside a workspace: a key that is not in a workspace is refused. Powers the intelligence briefing, anomaly detection, and AI-generated reports."
+                configKey="anthropicAiApiKey"
+                onRemoved={() => { setAnthropicAiApiKey(''); loadedSecretsRef.current.delete('anthropicAiApiKey'); }}
+              />
+            ) : (
+              <>
+                <FormField label="AWS region">
+                  <input
+                    type="text"
+                    value={bedrockRegion}
+                    onChange={e => setBedrockRegion(e.target.value)}
+                    className={cx(B.input, 'w-full font-mono')}
+                  />
+                </FormField>
+                <div className="flex flex-col gap-1.5">
+                  <ApiKeyField
+                    label="Bedrock API key"
+                    value={bedrockApiKey}
+                    onChange={setBedrockApiKey}
+                    testStatus={testStatuses.bedrockApiKey ?? 'idle'}
+                    onTest={() => testConnection('bedrockApiKey', bedrockApiKey)}
+                    placeholder=""
+                    hint=""
+                    configKey="bedrockApiKey"
+                    onRemoved={() => { setBedrockApiKey(''); loadedSecretsRef.current.delete('bedrockApiKey'); }}
+                  />
+                  {bedrockTestMessage && (
+                    <p className={cx('m-0 text-[13px]', bedrockTestMessage.ok ? 'text-[#1A7F37]' : 'text-[#B42318]')}>{bedrockTestMessage.text}</p>
+                  )}
+                </div>
+              </>
+            )}
+          </div>
         </Panel>
 
         {/* Claude Enterprise APIs */}
@@ -2032,7 +2085,7 @@ function ApiKeyField({
             />
           )}
       </div>
-      <span className="text-[13px] text-[#8F8F8F] leading-5">{hint}</span>
+      {hint && <span className="text-[13px] text-[#8F8F8F] leading-5">{hint}</span>}
     </div>
   );
 }

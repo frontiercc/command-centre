@@ -108,7 +108,7 @@ Command Centre is two parts that you run, plus a **PostgreSQL database**. The **
 | **Claude Chat** | Anthropic's Compliance API, using a Compliance Access Key | Claude for Enterprise |
 | **ChatGPT and Codex** | OpenAI's Compliance API, using an OpenAI Admin API key | ChatGPT Enterprise and Edu |
 
-Command Centre's own AI features, such as grading work, briefings and reports, run on Claude through Anthropic's API, using the Claude API key you enter on **Admin → Access & Keys**, whichever products you connect. They send prompts from every connected product, Claude and OpenAI alike, to Anthropic. [AI data flow](docs/ai-data-flow.md) lists every feature, what it sends and how to switch each one off.
+Command Centre's own AI features, such as grading work, briefings and reports, run on Claude through Anthropic's API, using the Claude API key you enter on **Admin → Access & Keys**, or through Amazon Bedrock in your own AWS account, whichever products you connect. They send prompts from every connected product, Claude and OpenAI alike, to Anthropic, or to Amazon Bedrock when you choose it. [AI data flow](docs/ai-data-flow.md) lists every feature, what it sends and how to switch each one off.
 
 Command Centre sees prompts only after they reach Claude, ChatGPT or Codex: it can flag them, alert on them and control who reads them, but it cannot stop or change them. Command Centre stores what people asked, never the replies of Claude, ChatGPT or Codex.
 
@@ -130,7 +130,7 @@ This runs Command Centre on your own computer with a fictional organisation's da
 - **Docker:** [Docker Desktop](https://www.docker.com/products/docker-desktop/) installed and running on Windows or macOS. Linux users can use Docker Engine with the Docker Compose plugin.
 - **Git:** [Download Git](https://git-scm.com/downloads). On macOS, running `git` may prompt you to install Apple's Command Line Tools.
 - **Ports 3001 and 4318** available on your computer.
-- **A Claude API key (optional):** the AI features need it, such as grading work, briefings and reports. Create it inside a workspace in the [Claude Console](https://platform.claude.com/settings/keys): Command Centre needs a key that belongs to a workspace. It is the only key you need to start.
+- **A Claude API key (optional):** the AI features need it, such as grading work, briefings and reports. Create it inside a workspace in the [Claude Console](https://platform.claude.com/settings/keys): Command Centre needs a key that belongs to a workspace. It is the only key you need to start. To use Claude through Amazon Bedrock in your own AWS account instead, see [Claude through Amazon Bedrock](docs/configure-command-centre.md#claude-through-amazon-bedrock).
 
 You can explore the sample data without a key, but the Dashboard briefing and Ask the data need one. [What works without a key](docs/ai-data-flow.md#running-with-ai-features-off) lists the rest.
 
